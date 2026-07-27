@@ -4,6 +4,20 @@ import { getCurrentContext } from '@/lib/auth';
 import { createClient } from '@/lib/supabase/server';
 import { formatDateTime } from '@/lib/format';
 
+type ActivityLead = {
+  id: string;
+  name: string;
+  kind: string;
+};
+
+type DashboardActivity = {
+  id: string;
+  title: string;
+  description: string | null;
+  created_at: string;
+  leads: ActivityLead | null;
+};
+
 export default async function DashboardPage() {
   const context = await getCurrentContext();
   const supabase = await createClient();
@@ -17,7 +31,17 @@ export default async function DashboardPage() {
     supabase.from('activities').select('id,title,description,created_at,leads(id,name,kind)').eq('organization_id', orgId).order('created_at', { ascending: false }).limit(8),
   ]);
 
-  const activities = (activitiesResult.data ?? []) as Array<{ id: string; title: string; description: string | null; created_at: string; leads: { id: string; name: string; kind: string } | null }>;
+  const activities: DashboardActivity[] = (activitiesResult.data ?? []).map((item) => {
+    const relatedLead = Array.isArray(item.leads) ? (item.leads[0] ?? null) : (item.leads ?? null);
+
+    return {
+      id: item.id,
+      title: item.title,
+      description: item.description,
+      created_at: item.created_at,
+      leads: relatedLead,
+    };
+  });
 
   return (
     <>
