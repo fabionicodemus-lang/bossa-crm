@@ -83,7 +83,7 @@ Acesse `http://localhost:3000`.
 
 ## 5. Publicar na Vercel
 
-1. Suba esta pasta para um repositório privado no GitHub.
+1. Suba esta pasta para um repositório no GitHub (público ou privado).
 2. Importe o repositório na Vercel.
 3. Cadastre todas as variáveis de `.env.example` em **Project Settings > Environment Variables**.
 4. Faça o deploy.
