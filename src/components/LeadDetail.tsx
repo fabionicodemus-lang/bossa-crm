@@ -34,11 +34,11 @@ export function LeadDetail({ initialLead, initialMessages, initialActivities, wh
     const supabase = createClient();
     const channel = supabase
       .channel(`lead-${lead.id}`)
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `lead_id=eq.${lead.id}` }, (payload) => {
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `lead_id=eq.${lead.id}` }, (payload: any) => {
         const item = payload.new as Message;
         setMessages((current) => current.some((m) => m.id === item.id) ? current : [...current, item]);
       })
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'activities', filter: `lead_id=eq.${lead.id}` }, (payload) => {
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'activities', filter: `lead_id=eq.${lead.id}` }, (payload: any) => {
         const item = payload.new as Activity;
         setActivities((current) => current.some((a) => a.id === item.id) ? current : [item, ...current]);
       })
