@@ -53,11 +53,13 @@ export interface AiTurn {
 }
 
 interface OpenAiResponse {
+  status?: 'completed' | 'failed' | 'in_progress' | 'cancelled' | 'queued' | 'incomplete';
+  incomplete_details?: { reason?: string } | null;
   output?: Array<{
     type?: string;
-    content?: Array<{ type?: string; text?: string }>;
+    content?: Array<{ type?: string; text?: string; refusal?: string }>;
   }>;
-  error?: { message?: string };
+  error?: { message?: string } | null;
 }
 
 const OUTPUT_SCHEMA = {
@@ -175,6 +177,15 @@ function extractOutputText(data: OpenAiResponse): string {
   return '';
 }
 
+function extractRefusal(data: OpenAiResponse): string {
+  for (const item of data.output ?? []) {
+    for (const content of item.content ?? []) {
+      if (content.type === 'refusal' && content.refusal) return content.refusal;
+    }
+  }
+  return '';
+}
+
 export async function generateAiTurn(
   lead: Lead,
   history: Array<{ role: 'user' | 'assistant'; content: string }>,
@@ -198,8 +209,10 @@ export async function generateAiTurn(
       store: false,
       instructions: buildAiInstructions(lead, context),
       input,
-      max_output_tokens: 900,
+      reasoning: { effort: 'low' },
+      max_output_tokens: 2400,
       text: {
+        verbosity: 'low',
         format: {
           type: 'json_schema',
           name: 'bossa_crm_ai_turn',
@@ -214,8 +227,25 @@ export async function generateAiTurn(
   const data = await response.json() as OpenAiResponse;
   if (!response.ok) throw new Error(data.error?.message || `OpenAI HTTP ${response.status}`);
 
+  if (data.status === 'incomplete') {
+    const reason = data.incomplete_details?.reason;
+    if (reason === 'max_output_tokens' || reason === 'max_tokens') {
+      throw new Error('A OpenAI atingiu o limite de geração antes de concluir a resposta. Tente novamente.');
+    }
+    throw new Error(`A OpenAI não concluiu a resposta${reason ? `: ${reason}` : '.'}`);
+  }
+
+  if (data.status === 'failed' || data.status === 'cancelled') {
+    throw new Error(data.error?.message || 'A OpenAI não conseguiu concluir a resposta.');
+  }
+
+  const refusal = extractRefusal(data);
+  if (refusal) throw new Error(`A OpenAI recusou esta resposta: ${refusal}`);
+
   const outputText = extractOutputText(data);
-  if (!outputText) throw new Error('A OpenAI não devolveu conteúdo estruturado.');
+  if (!outputText) {
+    throw new Error('A OpenAI respondeu sem o bloco estruturado esperado. Tente novamente; se persistir, confira o modelo configurado na Vercel.');
+  }
 
   try {
     const parsed = JSON.parse(outputText) as AiTurn;
