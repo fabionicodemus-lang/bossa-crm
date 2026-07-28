@@ -1,7 +1,7 @@
 import { after } from 'next/server';
 import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { generateAiTurn, type AiFileOption, type AiTrainingContext } from '@/lib/ai';
+import { generateAiTurn, type AiFileOption, type AiTrainingContext, type AiUsageRecord } from '@/lib/ai';
 import type { Lead, LeadKind } from '@/lib/types';
 import { decryptToken, normalizeWaId, sendWhatsAppMedia, sendWhatsAppText, type WhatsAppMediaType, verifyMetaSignature } from '@/lib/whatsapp';
 
@@ -47,6 +47,7 @@ interface MetaWebhookPayload {
 
 const CLIENT_STAGES = ['ia', 'qualificado', 'agendado'] as const;
 const BROKER_STAGES = ['n1', 'n2', 'n3', 'n4', 'n5'] as const;
+const AI_NEUTRAL_REPLY = 'Já te respondo, só um instante.';
 
 function allowedStage(kind: LeadKind, stage: string): boolean {
   return kind === 'cliente'
@@ -84,6 +85,57 @@ function mergeExtractedMetadata(current: Record<string, unknown>, extracted: Rec
   };
 }
 
+function numeric(value: unknown): number {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function mergeUsageMetadata(current: Record<string, unknown>, records: AiUsageRecord[]) {
+  const previous = current.ai_usage && typeof current.ai_usage === 'object'
+    ? current.ai_usage as Record<string, unknown>
+    : {};
+  const totals = records.reduce((acc, item) => ({
+    calls: acc.calls + 1,
+    input_tokens: acc.input_tokens + item.input_tokens,
+    cached_tokens: acc.cached_tokens + item.cached_tokens,
+    cache_write_tokens: acc.cache_write_tokens + item.cache_write_tokens,
+    output_tokens: acc.output_tokens + item.output_tokens,
+    reasoning_tokens: acc.reasoning_tokens + item.reasoning_tokens,
+    estimated_cost_usd: acc.estimated_cost_usd + item.estimated_cost_usd,
+    fallback_calls: acc.fallback_calls + (item.fallback_used ? 1 : 0),
+    compacted_calls: acc.compacted_calls + (item.compacted ? 1 : 0),
+  }), {
+    calls: 0,
+    input_tokens: 0,
+    cached_tokens: 0,
+    cache_write_tokens: 0,
+    output_tokens: 0,
+    reasoning_tokens: 0,
+    estimated_cost_usd: 0,
+    fallback_calls: 0,
+    compacted_calls: 0,
+  });
+  const latest = records.at(-1);
+
+  return {
+    ...current,
+    ai_usage: {
+      calls: numeric(previous.calls) + totals.calls,
+      input_tokens: numeric(previous.input_tokens) + totals.input_tokens,
+      cached_tokens: numeric(previous.cached_tokens) + totals.cached_tokens,
+      cache_write_tokens: numeric(previous.cache_write_tokens) + totals.cache_write_tokens,
+      output_tokens: numeric(previous.output_tokens) + totals.output_tokens,
+      reasoning_tokens: numeric(previous.reasoning_tokens) + totals.reasoning_tokens,
+      estimated_cost_usd: Number((numeric(previous.estimated_cost_usd) + totals.estimated_cost_usd).toFixed(8)),
+      fallback_calls: numeric(previous.fallback_calls) + totals.fallback_calls,
+      compacted_calls: numeric(previous.compacted_calls) + totals.compacted_calls,
+      last_model: latest?.model ?? previous.last_model ?? null,
+      last_at: new Date().toISOString(),
+    },
+    ai_attention_required: false,
+  };
+}
+
 function whatsappMediaType(file: AiFileOption): WhatsAppMediaType {
   const mime = (file.mime_type || '').toLowerCase();
   if (mime.startsWith('image/')) return 'image';
@@ -108,7 +160,7 @@ async function loadAiContext(organizationId: string, kind: LeadKind): Promise<Ai
       .eq('organization_id', organizationId)
       .eq('agent', agent)
       .order('created_at', { ascending: false })
-      .limit(30),
+      .limit(40),
     admin
       .from('ai_files')
       .select('id,category,title,description,trigger_keywords,storage_bucket,storage_path,original_name,mime_type')
@@ -128,6 +180,34 @@ async function loadAiContext(organizationId: string, kind: LeadKind): Promise<Ai
     examples: examplesResult.data ?? [],
     files: (filesResult.data ?? []) as AiFileOption[],
   };
+}
+
+async function persistAiUsage(args: {
+  organizationId: string;
+  leadId: string;
+  records: AiUsageRecord[];
+}) {
+  if (!args.records.length) return;
+  const admin = createAdminClient();
+  const { error } = await admin.from('ai_usage_logs').insert(args.records.map((item) => ({
+    organization_id: args.organizationId,
+    lead_id: args.leadId,
+    request_kind: item.request_kind,
+    model: item.model,
+    request_id: item.request_id,
+    input_tokens: item.input_tokens,
+    cached_tokens: item.cached_tokens,
+    cache_write_tokens: item.cache_write_tokens,
+    output_tokens: item.output_tokens,
+    reasoning_tokens: item.reasoning_tokens,
+    preflight_input_tokens: item.preflight_input_tokens,
+    preflight_estimated: item.preflight_estimated,
+    estimated_cost_usd: item.estimated_cost_usd,
+    fallback_used: item.fallback_used,
+    compacted: item.compacted,
+    long_context: item.long_context,
+  })));
+  if (error) console.error('[ai usage log]', error.message);
 }
 
 async function sendSelectedFiles(args: {
@@ -203,6 +283,65 @@ async function sendSelectedFiles(args: {
   }
 }
 
+async function handleAiFailure(args: {
+  organizationId: string;
+  lead: Lead;
+  connectionId: string;
+  phoneNumberId: string;
+  encryptedToken: string;
+  error: unknown;
+}) {
+  const admin = createAdminClient();
+  const destination = normalizeWaId(args.lead.phone ?? '');
+  const technicalMessage = args.error instanceof Error ? args.error.message : 'Falha desconhecida na IA.';
+  let neutralSent = false;
+
+  if (destination) {
+    try {
+      const accessToken = decryptToken(args.encryptedToken);
+      const result = await sendWhatsAppText({
+        phoneNumberId: args.phoneNumberId,
+        accessToken,
+        to: destination,
+        body: AI_NEUTRAL_REPLY,
+      });
+      neutralSent = true;
+      await admin.from('messages').insert({
+        organization_id: args.organizationId,
+        lead_id: args.lead.id,
+        whatsapp_connection_id: args.connectionId,
+        direction: 'out',
+        sender_kind: 'ia',
+        body: AI_NEUTRAL_REPLY,
+        status: 'sent',
+        whatsapp_message_id: result.messages?.[0]?.id ?? null,
+        raw_payload: { ai_fallback_message: true },
+      });
+    } catch (sendError) {
+      console.error('[whatsapp ai neutral]', sendError);
+    }
+  }
+
+  await admin.from('leads').update({
+    ai_enabled: false,
+    ai_next_action: 'O time comercial deve assumir este atendimento; a IA esgotou as tentativas.',
+    metadata: {
+      ...(args.lead.metadata || {}),
+      ai_attention_required: true,
+      ai_last_error_at: new Date().toISOString(),
+    },
+  }).eq('id', args.lead.id);
+
+  await admin.from('activities').insert({
+    organization_id: args.organizationId,
+    lead_id: args.lead.id,
+    type: 'falha_ia',
+    title: 'IA precisa de atendimento humano',
+    description: `${neutralSent ? 'O contato recebeu uma mensagem neutra. ' : ''}Erro técnico interno: ${technicalMessage}`,
+    metadata: { neutral_sent: neutralSent, requires_human: true },
+  });
+}
+
 async function processAiTurn(args: { organizationId: string; leadId: string; connectionId: string; phoneNumberId: string; encryptedToken: string }) {
   const admin = createAdminClient();
   const { data: leadData } = await admin.from('leads').select('*').eq('id', args.leadId).maybeSingle();
@@ -218,14 +357,25 @@ async function processAiTurn(args: { organizationId: string; leadId: string; con
     .eq('lead_id', lead.id)
     .neq('direction', 'system')
     .order('created_at', { ascending: true })
-    .limit(40);
+    .limit(100);
 
   const history = (historyRows ?? []).map((row) => ({
     role: row.direction === 'in' ? 'user' as const : 'assistant' as const,
     content: row.body,
   }));
-  const turn = await generateAiTurn(lead, history, context);
+
+  let turn;
+  try {
+    turn = await generateAiTurn(lead, history, context);
+  } catch (error) {
+    console.error('[whatsapp ai exhausted]', error);
+    await handleAiFailure({ ...args, lead, error });
+    return;
+  }
   if (!turn) return;
+
+  const usageRecords = turn.usage_records ?? [];
+  await persistAiUsage({ organizationId: args.organizationId, leadId: lead.id, records: usageRecords });
 
   const destination = normalizeWaId(lead.phone ?? '');
   const reply = turn.reply.trim();
@@ -248,6 +398,11 @@ async function processAiTurn(args: { organizationId: string; leadId: string; con
     body: reply,
     status: 'sent',
     whatsapp_message_id: result.messages?.[0]?.id ?? null,
+    raw_payload: {
+      ai_model: turn.model_used ?? null,
+      ai_compacted: turn.compacted ?? false,
+      ai_usage: usageRecords,
+    },
   });
 
   if (turn.attachment_ids.length) {
@@ -270,7 +425,8 @@ async function processAiTurn(args: { organizationId: string; leadId: string; con
   const nextAiEnabled = !turn.handoff && !pauseForStage;
   const score = Math.max(0, Math.min(100, Math.round(turn.score)));
   const persona = lead.kind === 'cliente' ? 'Nara' : 'Plantão';
-  const metadata = mergeExtractedMetadata(lead.metadata || {}, turn.extracted);
+  const extractedMetadata = mergeExtractedMetadata(lead.metadata || {}, turn.extracted);
+  const metadata = mergeUsageMetadata(extractedMetadata, usageRecords);
 
   const { error: updateError } = await admin.from('leads').update({
     stage: nextStage,
@@ -284,6 +440,7 @@ async function processAiTurn(args: { organizationId: string; leadId: string; con
   }).eq('id', lead.id);
   if (updateError) throw updateError;
 
+  const turnCost = usageRecords.reduce((sum, item) => sum + item.estimated_cost_usd, 0);
   await admin.from('activities').insert({
     organization_id: args.organizationId,
     lead_id: lead.id,
@@ -298,6 +455,9 @@ async function processAiTurn(args: { organizationId: string; leadId: string; con
       handoff: turn.handoff,
       attachment_ids: turn.attachment_ids,
       extracted: turn.extracted,
+      ai_model: turn.model_used,
+      ai_cost_usd: Number(turnCost.toFixed(8)),
+      ai_usage: usageRecords,
     },
   });
 }
