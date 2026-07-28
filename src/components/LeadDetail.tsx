@@ -9,6 +9,20 @@ import { createClient } from '@/lib/supabase/client';
 
 type InsertPayload<T> = { new: T };
 
+type AiUsageSummary = {
+  calls: number;
+  input_tokens: number;
+  cached_tokens: number;
+  cache_write_tokens: number;
+  output_tokens: number;
+  reasoning_tokens: number;
+  estimated_cost_usd: number;
+  fallback_calls: number;
+  compacted_calls: number;
+  last_model: string | null;
+  last_at: string | null;
+};
+
 function messageClass(message: Message) {
   if (message.direction === 'system' || message.sender_kind === 'sistema') return 'system';
   return message.direction === 'in' ? 'in' : 'out';
@@ -25,6 +39,30 @@ function scoreLabel(value: number) {
   if (value >= 75) return 'Quente';
   if (value >= 40) return 'Morno';
   return 'Frio';
+}
+
+function numberValue(value: unknown): number {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function readAiUsage(metadata: Record<string, unknown> | null | undefined): AiUsageSummary | null {
+  const raw = metadata?.ai_usage;
+  if (!raw || typeof raw !== 'object') return null;
+  const value = raw as Record<string, unknown>;
+  return {
+    calls: numberValue(value.calls),
+    input_tokens: numberValue(value.input_tokens),
+    cached_tokens: numberValue(value.cached_tokens),
+    cache_write_tokens: numberValue(value.cache_write_tokens),
+    output_tokens: numberValue(value.output_tokens),
+    reasoning_tokens: numberValue(value.reasoning_tokens),
+    estimated_cost_usd: numberValue(value.estimated_cost_usd),
+    fallback_calls: numberValue(value.fallback_calls),
+    compacted_calls: numberValue(value.compacted_calls),
+    last_model: typeof value.last_model === 'string' ? value.last_model : null,
+    last_at: typeof value.last_at === 'string' ? value.last_at : null,
+  };
 }
 
 export function LeadDetail({ initialLead, initialMessages, initialActivities, whatsappConnected, canEdit }: { initialLead: Lead; initialMessages: Message[]; initialActivities: Activity[]; whatsappConnected: boolean; canEdit: boolean }) {
@@ -55,7 +93,8 @@ export function LeadDetail({ initialLead, initialMessages, initialActivities, wh
   }, [lead.id]);
 
   const lastContact = messages.length ? formatDateTime(messages[messages.length - 1].created_at) : '—';
-  const metaEntries = useMemo(() => Object.entries(lead.metadata || {}).filter(([, value]) => value !== null && value !== ''), [lead.metadata]);
+  const metaEntries = useMemo(() => Object.entries(lead.metadata || {}).filter(([key, value]) => !['ai_usage', 'ai_attention_required', 'ai_last_error_at'].includes(key) && value !== null && value !== ''), [lead.metadata]);
+  const usage = useMemo(() => readAiUsage(lead.metadata), [lead.metadata]);
   const persona = lead.kind === 'cliente' ? 'Nara' : 'Plantão';
   const canReactivateAi = lead.kind === 'cliente' ? lead.stage === 'ia' : !['n4', 'n5'].includes(lead.stage);
 
@@ -134,7 +173,7 @@ export function LeadDetail({ initialLead, initialMessages, initialActivities, wh
           {tab === 'whatsapp' && <div className="whatsapp-panel">
             <div className="wa-head"><div className="wa-icon">☏</div><div><strong>Conversa no WhatsApp</strong><div className="faint" style={{ fontSize: 11 }}>Histórico persistido no banco</div></div><span className={`connection-pill ${whatsappConnected ? '' : 'off'}`}>{whatsappConnected ? 'Canal conectado' : 'Aguardando integração'}</span></div>
             <div className="messages">{messages.length === 0 ? <div className="empty-state">As mensagens recebidas e enviadas aparecerão aqui.</div> : messages.map((message) => <div className={`message ${messageClass(message)}`} key={message.id}><small style={{ fontWeight: 700, display: 'block', marginBottom: 3 }}>{senderLabel(message)}</small>{message.body}<span className="message-meta">{formatDateTime(message.created_at)}{message.status ? ` · ${message.status}` : ''}</span></div>)}</div>
-            {!canEdit ? <div className="blocked"><span><strong>Acesso somente para consulta.</strong><br />Seu usuário não pode enviar mensagens ou assumir o atendimento.</span></div> : lead.ai_enabled ? <div className="blocked"><span><strong>{persona} está atendendo este contato.</strong><br />Assuma a conversa antes de enviar uma mensagem humana.</span><button className="btn btn-primary btn-sm" onClick={() => void toggleAi(false)}>Assumir conversa</button></div> : !whatsappConnected ? <div className="blocked"><span><strong>WhatsApp ainda não conectado.</strong><br />Conecte o canal pela Meta para enviar e receber mensagens nesta tela.</span><button className="btn btn-ghost btn-sm" onClick={() => router.push('/configuracoes/whatsapp')}>Configurar</button></div> : <form className="composer" onSubmit={sendMessage}><textarea value={text} onChange={(e) => setText(e.target.value)} placeholder="Escreva uma mensagem…" onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); e.currentTarget.form?.requestSubmit(); } }} /><button className="btn btn-primary" disabled={loading}>{loading ? 'Enviando…' : 'Enviar'}</button></form>}
+            {!canEdit ? <div className="blocked"><span><strong>Acesso somente para consulta.</strong><br />Seu usuário não pode enviar mensagens ou assumir o atendimento.</span></div> : lead.ai_enabled ? <div className="blocked"><span><strong>{persona} está atendendo este contato.</strong><br />O envio humano está bloqueado para evitar mensagens duplicadas.</span><button className="btn btn-primary btn-sm" onClick={() => void toggleAi(false)}>Assumir conversa</button></div> : !whatsappConnected ? <div className="blocked"><span><strong>WhatsApp ainda não conectado.</strong><br />Conecte o canal pela Meta para enviar e receber mensagens nesta tela.</span><button className="btn btn-ghost btn-sm" onClick={() => router.push('/configuracoes/whatsapp')}>Configurar</button></div> : <form className="composer" onSubmit={sendMessage}><textarea value={text} onChange={(e) => setText(e.target.value)} placeholder="Escreva uma mensagem…" onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); e.currentTarget.form?.requestSubmit(); } }} /><button className="btn btn-primary" disabled={loading}>{loading ? 'Enviando…' : 'Enviar'}</button></form>}
           </div>}
 
           {tab === 'historico' && <div><div className="card-head"><h3>Todos os históricos do contato</h3></div><div className="card-body">{canEdit && <form onSubmit={addNote} style={{ marginBottom: 20 }}><div className="field"><label>Adicionar anotação comercial</label><textarea className="textarea" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Ex.: cliente pediu retorno na sexta-feira; corretor está com proposta na unidade 1701…" /></div><button className="btn btn-secondary btn-sm" disabled={loading}>Salvar anotação</button></form>}<div className="timeline">{activities.length === 0 ? <div className="empty-state">Nenhum histórico registrado.</div> : activities.map((item) => <div className="timeline-item" key={item.id}><div className="timeline-icon">•</div><div><div className="timeline-title">{item.title}</div>{item.description && <div className="timeline-desc">{item.description}</div>}<div className="timeline-time">{formatDateTime(item.created_at)}</div></div></div>)}</div></div></div>}
@@ -145,6 +184,7 @@ export function LeadDetail({ initialLead, initialMessages, initialActivities, wh
         <aside className="side-stack">
           <section className="card"><div className="card-head"><h3>Responsável</h3></div><div className="card-body">{lead.ai_enabled ? <div className="ai-state on"><strong>🤖 {persona} atendendo</strong><br />O envio humano está bloqueado para evitar mensagens duplicadas.</div> : <div className="ai-state off"><strong>👤 Comercial humano</strong><br />{persona} está pausado para este contato.</div>}</div></section>
           <section className="card"><div className="card-head"><h3>Classificação da IA</h3></div><div className="card-body info-list"><div className="info-row"><span>Classificação</span><strong>{lead.ai_classification || 'Ainda não classificado'}</strong></div><div className="info-row"><span>Score</span><strong>{scoreLabel(lead.temperature)} · {lead.temperature}/100</strong></div><div className="info-row"><span>Resumo</span><strong>{lead.ai_summary || '—'}</strong></div><div className="info-row"><span>Próxima ação</span><strong>{lead.ai_next_action || '—'}</strong></div><div className="info-row"><span>Última análise</span><strong>{lead.ai_last_classified_at ? formatDateTime(lead.ai_last_classified_at) : '—'}</strong></div></div></section>
+          <section className="card"><div className="card-head"><h3>Consumo da IA</h3></div><div className="card-body info-list">{usage ? <><div className="info-row"><span>Custo deste lead</span><strong>US$ {usage.estimated_cost_usd.toFixed(4)}</strong></div><div className="info-row"><span>Chamadas</span><strong>{usage.calls.toLocaleString('pt-BR')}</strong></div><div className="info-row"><span>Modelo mais recente</span><strong>{usage.last_model || '—'}</strong></div><div className="info-row"><span>Tokens de entrada</span><strong>{usage.input_tokens.toLocaleString('pt-BR')}</strong></div><div className="info-row"><span>Lidos do cache</span><strong>{usage.cached_tokens.toLocaleString('pt-BR')}</strong></div><div className="info-row"><span>Gravados no cache</span><strong>{usage.cache_write_tokens.toLocaleString('pt-BR')}</strong></div><div className="info-row"><span>Tokens de saída</span><strong>{usage.output_tokens.toLocaleString('pt-BR')}</strong></div><div className="info-row"><span>Uso de fallback</span><strong>{usage.fallback_calls.toLocaleString('pt-BR')}</strong></div><div className="info-row"><span>Compactações</span><strong>{usage.compacted_calls.toLocaleString('pt-BR')}</strong></div></> : <div className="empty-state">O consumo aparecerá após a primeira resposta da IA com a nova versão.</div>}</div></section>
           <section className="card"><div className="card-head"><h3>Resumo</h3></div><div className="card-body info-list"><div className="info-row"><span>Tipo</span><strong>{lead.kind === 'cliente' ? 'Cliente final' : 'Corretor'}</strong></div><div className="info-row"><span>Etapa</span><strong>{stageLabel(lead.kind, lead.stage)}</strong></div><div className="info-row"><span>Mensagens</span><strong>{messages.filter((message) => message.direction !== 'system').length}</strong></div><div className="info-row"><span>Último contato</span><strong>{lastContact}</strong></div><div className="info-row"><span>WhatsApp</span><strong>{whatsappConnected ? 'Conectado' : 'Não conectado'}</strong></div></div></section>
         </aside>
       </div>
