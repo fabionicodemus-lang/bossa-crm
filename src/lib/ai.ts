@@ -29,6 +29,23 @@ export interface AiTrainingContext {
   files?: AiFileOption[];
 }
 
+export interface AiUsageRecord {
+  request_kind: 'summary' | 'response';
+  model: string;
+  request_id: string | null;
+  input_tokens: number;
+  cached_tokens: number;
+  cache_write_tokens: number;
+  output_tokens: number;
+  reasoning_tokens: number;
+  preflight_input_tokens: number;
+  preflight_estimated: boolean;
+  estimated_cost_usd: number;
+  fallback_used: boolean;
+  compacted: boolean;
+  long_context: boolean;
+}
+
 export interface AiTurn {
   reply: string;
   classification: string;
@@ -50,24 +67,96 @@ export interface AiTurn {
     region: string;
     client_status: string;
   };
+  usage_records?: AiUsageRecord[];
+  model_used?: string;
+  compacted?: boolean;
 }
 
 type ChatMessage = { role: 'user' | 'assistant'; content: string };
+type InputTextBlock = {
+  type: 'input_text';
+  text: string;
+  prompt_cache_breakpoint?: { mode: 'explicit' };
+};
+type InputMessage = {
+  type: 'message';
+  role: 'system' | 'developer' | 'user' | 'assistant';
+  content: InputTextBlock[];
+};
+
+type OpenAiUsage = {
+  input_tokens?: number;
+  output_tokens?: number;
+  total_tokens?: number;
+  input_tokens_details?: {
+    cached_tokens?: number;
+    cache_write_tokens?: number;
+  };
+  output_tokens_details?: {
+    reasoning_tokens?: number;
+  };
+};
 
 interface OpenAiResponse {
+  id?: string;
+  model?: string;
   status?: 'completed' | 'failed' | 'in_progress' | 'cancelled' | 'queued' | 'incomplete';
   incomplete_details?: { reason?: string } | null;
   output?: Array<{
     type?: string;
     content?: Array<{ type?: string; text?: string; refusal?: string }>;
   }>;
+  usage?: OpenAiUsage;
   error?: { message?: string } | null;
+}
+
+type CountResponse = { input_tokens?: number; error?: { message?: string } | null };
+
+type ModelSettings = {
+  primary: string;
+  fallback: string;
+  reasoningEffort: string;
+  maxOutputTokens: number;
+  verbosity: string;
+  timeoutMs: number;
+};
+
+type RequestOptions = {
+  model: string;
+  input: InputMessage[];
+  schema?: ReturnType<typeof outputSchema>;
+  requestKind: AiUsageRecord['request_kind'];
+  compacted: boolean;
+  fallbackUsed: boolean;
+  promptCacheKey?: string;
+  maxOutputTokens?: number;
+  reasoningEffort?: string;
+  verbosity?: string;
+};
+
+type RequestResult = {
+  data: OpenAiResponse;
+  usage: AiUsageRecord;
+  outputText: string;
+};
+
+export class OpenAiExhaustedError extends Error {
+  readonly causes: string[];
+
+  constructor(causes: string[]) {
+    super('A OpenAI e o modelo alternativo não conseguiram concluir o atendimento.');
+    this.name = 'OpenAiExhaustedError';
+    this.causes = causes;
+  }
 }
 
 const CLIENT_CLASSIFICATIONS = ['frio', 'morno', 'quente', 'agendamento', 'sem_interesse'] as const;
 const CLIENT_STAGES = ['novo', 'ia', 'qualificado', 'agendado', 'negociacao', 'fechado'] as const;
 const BROKER_CLASSIFICATIONS = ['cadastrado', 'curioso', 'ativo', 'negociando', 'parceiro'] as const;
 const BROKER_STAGES = ['n1', 'n2', 'n3', 'n4', 'n5'] as const;
+const LONG_CONTEXT_THRESHOLD = 272_000;
+const MAX_HISTORY_BEFORE_COMPACTION = 25;
+const RECENT_MESSAGES_TO_KEEP = 10;
 
 const NARA_TRIAGE_DEFAULTS: Record<string, string> = {
   triagem_objetivo: 'Antes de qualificar, descubra se o contato é realmente um possível comprador de imóvel novo da Bossa ou se pertence a outro tipo de atendimento.',
@@ -78,6 +167,25 @@ const NARA_TRIAGE_DEFAULTS: Record<string, string> = {
   triagem_outros: 'Fornecedor, prestador, candidato a vaga, currículo, imprensa, vizinho, cobrança, spam e assuntos institucionais não seguem para qualificação. Colete somente o mínimo necessário e transfira ou encerre educadamente.',
   triagem_saida: 'A qualificação só pode começar quando houver evidência de que o contato é um possível comprador. Se ainda existir dúvida, continue somente a triagem, com uma pergunta por vez.',
 };
+
+function envNumber(name: string, fallback: number, min: number, max: number): number {
+  const raw = process.env[name];
+  if (!raw) return fallback;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.max(min, Math.min(max, Math.round(parsed)));
+}
+
+export function openAiSettings(): ModelSettings {
+  return {
+    primary: process.env.OPENAI_MODEL?.trim() || 'gpt-5.6-terra',
+    fallback: process.env.OPENAI_MODEL_FALLBACK?.trim() || 'gpt-5.6-luna',
+    reasoningEffort: process.env.OPENAI_REASONING_EFFORT?.trim() || 'low',
+    maxOutputTokens: envNumber('OPENAI_MAX_OUTPUT_TOKENS', 2400, 128, 128_000),
+    verbosity: process.env.OPENAI_VERBOSITY?.trim() || 'low',
+    timeoutMs: envNumber('OPENAI_TIMEOUT_MS', 25_000, 3_000, 55_000),
+  };
+}
 
 function outputSchema(lead: Lead) {
   const classifications = lead.kind === 'cliente' ? CLIENT_CLASSIFICATIONS : BROKER_CLASSIFICATIONS;
@@ -114,7 +222,7 @@ function outputSchema(lead: Lead) {
       },
     },
     required: ['reply', 'classification', 'score', 'stage', 'summary', 'next_action', 'handoff', 'attachment_ids', 'extracted'],
-  };
+  } as const;
 }
 
 function recordText(value: unknown): string {
@@ -195,8 +303,12 @@ function fileInstructions(files: AiFileOption[]): string {
   return `\n\nBIBLIOTECA DE ARQUIVOS DISPONÍVEIS:\n${JSON.stringify(catalog)}\n\nREGRAS PARA ARQUIVOS:\n- Use attachment_ids somente com IDs exatamente presentes na biblioteca acima.\n- Selecione no máximo 3 arquivos e apenas quando o contato pedir material ou quando o envio ajudar diretamente a conversa.\n- Escolha pelo empreendimento, categoria, título, descrição e palavras-chave.\n- Não diga que enviou ou vai enviar um arquivo sem incluir o ID correspondente em attachment_ids.\n- Não repita o mesmo arquivo na mesma resposta.\n- Tabela, condição comercial e disponibilidade podem ficar desatualizadas: envie somente quando solicitado e deixe claro que o comercial confirma a condição vigente.\n- Se não existir material adequado, use attachment_ids vazio e diga que o comercial vai providenciar ou confirmar.\n- Não envie arquivos em uma conversa que já exige handoff imediato, salvo quando for um material público claramente solicitado e seguro.`;
 }
 
+/**
+ * Retorna somente o prefixo fixo. Dados do lead e histórico são adicionados depois
+ * do breakpoint de cache por buildRequestInput().
+ */
 export function buildAiInstructions(lead: Lead, context: AiTrainingContext): string {
-  const shared = `Você atende pelo WhatsApp da Bossa Empreendimentos. Responda sempre em português brasileiro, de forma humana, natural, calorosa e objetiva. Use no máximo duas frases curtas e uma pergunta por mensagem. Nunca invente preço, disponibilidade, metragem, condição de pagamento, prazo de entrega ou informação que não esteja na base atual ou em mensagem do próprio contato. Leia o histórico inteiro, reconheça o que já foi respondido e faça a conversa avançar; nunca repita a mesma pergunta ou resposta. Quando faltar uma informação comercial específica, diga que o time da Bossa vai confirmar. Analise toda a conversa, produza a resposta, classifique o contato e selecione arquivos somente quando fizer sentido. Contato: ${lead.name}. Etapa atual: ${lead.stage}. Dados atuais: ${JSON.stringify(lead.metadata || {})}.`;
+  const shared = 'Você atende pelo WhatsApp da Bossa Empreendimentos. Responda sempre em português brasileiro, de forma humana, natural, calorosa e objetiva. Use no máximo duas frases curtas e uma pergunta por mensagem. Nunca invente preço, disponibilidade, metragem, condição de pagamento, prazo de entrega ou informação que não esteja na base atual ou em mensagem do próprio contato. Leia o histórico inteiro, reconheça o que já foi respondido e faça a conversa avançar; nunca repita a mesma pergunta ou resposta. Quando faltar uma informação comercial específica, diga que o time da Bossa vai confirmar. Analise toda a conversa, produza a resposta, classifique o contato e selecione arquivos somente quando fizer sentido.';
   const training = trainingInstructions(context);
   const files = fileInstructions(context.files ?? []);
 
@@ -206,6 +318,34 @@ export function buildAiInstructions(lead: Lead, context: AiTrainingContext): str
   }
 
   return `${shared}\n\nVocê é o Plantão institucional dos corretores parceiros da Bossa. Nunca use nome próprio. Seja prático, direto e de igual para igual, como colega de mercado. Identifique imobiliária, CRECI, região, se o corretor tem cliente ativo, qual empreendimento interessa e qual ajuda precisa. O plantão pode enviar materiais públicos disponíveis na biblioteca, como tabela, book, plantas, imagens, vídeos e andamento de obra. Nunca negocie comissão, nunca confirme disponibilidade de unidade, nunca reserve unidade e nunca aceite proposta.\n\nClassificação e etapas permitidas para corretores:\n- n1 / cadastrado: contato novo, perfil ainda incompleto ou sem interação comercial.\n- n2 / curioso: pediu material, tabela ou informações, mas ainda não informou cliente ativo.\n- n3 / ativo: possui cliente ativo, apresenta os produtos ou demonstra atuação comercial concreta.\n- n4 / negociando: existe cliente em visita, proposta, reserva, escolha de unidade ou negociação; marque handoff=true.\n- n5 / parceiro: relacionamento recorrente, histórico de vendas ou parceria consolidada; use somente quando houver evidência clara e marque handoff=true.\nUse classificação cadastrado, curioso, ativo, negociando ou parceiro. Ao chegar em n4 ou n5, o atendimento automático será pausado para o time comercial continuar.${training}${files}`;
+}
+
+function dynamicLeadContext(lead: Lead): string {
+  return `DADOS DINÂMICOS DESTA CONVERSA:\nContato: ${lead.name}.\nEtapa atual: ${lead.stage}.\nDados atuais: ${JSON.stringify(lead.metadata || {})}.`;
+}
+
+function inputMessage(role: InputMessage['role'], text: string, cacheBreakpoint = false): InputMessage {
+  const block: InputTextBlock = { type: 'input_text', text };
+  if (cacheBreakpoint) block.prompt_cache_breakpoint = { mode: 'explicit' };
+  return { type: 'message', role, content: [block] };
+}
+
+function buildRequestInput(
+  lead: Lead,
+  context: AiTrainingContext,
+  history: ChatMessage[],
+  summary: string,
+  supportsExplicitCache: boolean,
+): InputMessage[] {
+  const latest = history.at(-1);
+  const prior = latest?.role === 'user' ? history.slice(0, -1) : history;
+  const input: InputMessage[] = [
+    inputMessage('system', buildAiInstructions(lead, context), supportsExplicitCache),
+    inputMessage('system', `${dynamicLeadContext(lead)}${summary ? `\n\nRESUMO DA CONVERSA ATÉ AQUI:\n${summary}` : ''}`),
+    ...prior.map((item) => inputMessage(item.role, item.content)),
+  ];
+  if (latest) input.push(inputMessage(latest.role, latest.content));
+  return input;
 }
 
 function normalizeText(value: string): string {
@@ -444,6 +584,10 @@ function enforceNaraTriage(turn: AiTurn, lead: Lead, history: ChatMessage[], con
   return turn;
 }
 
+function supportsExplicitCaching(model: string): boolean {
+  return /^gpt-5\.(?:[6-9]|\d{2,})/.test(model);
+}
+
 function extractOutputText(data: OpenAiResponse): string {
   for (const item of data.output ?? []) {
     for (const content of item.content ?? []) {
@@ -462,68 +606,256 @@ function extractRefusal(data: OpenAiResponse): string {
   return '';
 }
 
-export async function generateAiTurn(
-  lead: Lead,
-  history: ChatMessage[],
-  context: AiTrainingContext = {},
-): Promise<AiTurn | null> {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) return null;
-  const model = process.env.OPENAI_MODEL || 'gpt-5-mini';
-  const input = history.slice(-24).map((item) => ({ role: item.role, content: item.content }));
-  if (input.length === 0) return null;
+function pricingFor(model: string) {
+  if (model.startsWith('gpt-5.6-luna')) return { input: 1, cached: 0.1, write: 1.25, output: 6 };
+  if (model.startsWith('gpt-5.6-terra')) return { input: 2.5, cached: 0.25, write: 3.125, output: 15 };
+  if (model.startsWith('gpt-5.6-sol') || model === 'gpt-5.6') return { input: 5, cached: 0.5, write: 6.25, output: 30 };
+  if (model.startsWith('gpt-5-mini')) return { input: 0.25, cached: 0.025, write: 0.25, output: 2 };
+  return { input: 2.5, cached: 0.25, write: 3.125, output: 15 };
+}
 
-  const response = await fetch('https://api.openai.com/v1/responses', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-    body: JSON.stringify({
-      model,
-      store: false,
-      instructions: buildAiInstructions(lead, context),
-      input,
-      reasoning: { effort: 'low' },
-      max_output_tokens: 2400,
-      text: {
-        verbosity: 'low',
-        format: {
-          type: 'json_schema',
-          name: lead.kind === 'cliente' ? 'bossa_crm_nara_turn' : 'bossa_crm_plantao_turn',
-          description: 'Resposta de WhatsApp, classificação comercial e arquivos selecionados para o contato.',
-          strict: true,
-          schema: outputSchema(lead),
-        },
+function buildUsage(
+  data: OpenAiResponse,
+  options: RequestOptions,
+  preflightInputTokens: number,
+  preflightEstimated: boolean,
+): AiUsageRecord {
+  const inputTokens = Math.max(0, data.usage?.input_tokens ?? preflightInputTokens);
+  const cachedTokens = Math.max(0, data.usage?.input_tokens_details?.cached_tokens ?? 0);
+  const cacheWriteTokens = Math.max(0, data.usage?.input_tokens_details?.cache_write_tokens ?? 0);
+  const outputTokens = Math.max(0, data.usage?.output_tokens ?? 0);
+  const reasoningTokens = Math.max(0, data.usage?.output_tokens_details?.reasoning_tokens ?? 0);
+  const uncachedTokens = Math.max(0, inputTokens - cachedTokens - cacheWriteTokens);
+  const longContext = inputTokens > LONG_CONTEXT_THRESHOLD;
+  const pricing = pricingFor(data.model || options.model);
+  const inputMultiplier = longContext ? 2 : 1;
+  const outputMultiplier = longContext ? 1.5 : 1;
+  const cost = (
+    uncachedTokens * pricing.input * inputMultiplier
+    + cachedTokens * pricing.cached * inputMultiplier
+    + cacheWriteTokens * pricing.write * inputMultiplier
+    + outputTokens * pricing.output * outputMultiplier
+  ) / 1_000_000;
+
+  return {
+    request_kind: options.requestKind,
+    model: data.model || options.model,
+    request_id: data.id || null,
+    input_tokens: inputTokens,
+    cached_tokens: cachedTokens,
+    cache_write_tokens: cacheWriteTokens,
+    output_tokens: outputTokens,
+    reasoning_tokens: reasoningTokens,
+    preflight_input_tokens: preflightInputTokens,
+    preflight_estimated: preflightEstimated,
+    estimated_cost_usd: Number(cost.toFixed(8)),
+    fallback_used: options.fallbackUsed,
+    compacted: options.compacted,
+    long_context: longContext,
+  };
+}
+
+async function fetchJson(url: string, body: unknown, timeoutMs: number): Promise<Response> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
       },
-    }),
-  });
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
 
+function requestPayload(options: RequestOptions) {
+  const settings = openAiSettings();
+  const is56 = supportsExplicitCaching(options.model);
+  const payload: Record<string, unknown> = {
+    model: options.model,
+    store: false,
+    input: options.input,
+    reasoning: { effort: options.reasoningEffort || settings.reasoningEffort },
+    max_output_tokens: options.maxOutputTokens || settings.maxOutputTokens,
+    text: options.schema
+      ? {
+          verbosity: options.verbosity || settings.verbosity,
+          format: {
+            type: 'json_schema',
+            name: 'bossa_crm_ai_turn',
+            description: 'Resposta de WhatsApp, classificação comercial e arquivos selecionados para o contato.',
+            strict: true,
+            schema: options.schema,
+          },
+        }
+      : { verbosity: options.verbosity || settings.verbosity },
+  };
+  if (is56 && options.promptCacheKey) {
+    payload.prompt_cache_key = options.promptCacheKey;
+    payload.prompt_cache_options = { mode: 'explicit', ttl: '30m' };
+  }
+  return payload;
+}
+
+async function countInputTokens(options: RequestOptions): Promise<{ tokens: number; estimated: boolean }> {
+  const payload = requestPayload(options);
+  const settings = openAiSettings();
+  const countPayload = {
+    model: payload.model,
+    input: payload.input,
+    text: payload.text,
+  };
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      const response = await fetchJson('https://api.openai.com/v1/responses/input_tokens', countPayload, settings.timeoutMs);
+      const data = await response.json() as CountResponse;
+      if (!response.ok || !Number.isFinite(data.input_tokens)) {
+        throw new Error(data.error?.message || `OpenAI token count HTTP ${response.status}`);
+      }
+      return { tokens: Math.max(0, Number(data.input_tokens)), estimated: false };
+    } catch (error) {
+      lastError = error;
+      if (attempt === 0) await new Promise((resolve) => setTimeout(resolve, 500));
+    }
+  }
+  const approximate = Math.max(1, Math.ceil(JSON.stringify(countPayload).length / 4));
+  console.warn('[openai token count] usando estimativa local após falha', lastError);
+  return { tokens: approximate, estimated: true };
+}
+
+async function runRequest(options: RequestOptions): Promise<RequestResult> {
+  const settings = openAiSettings();
+  const payload = requestPayload(options);
+  const preflight = await countInputTokens(options);
+  const response = await fetchJson('https://api.openai.com/v1/responses', payload, settings.timeoutMs);
   const data = await response.json() as OpenAiResponse;
   if (!response.ok) throw new Error(data.error?.message || `OpenAI HTTP ${response.status}`);
   if (data.status === 'incomplete') {
     const reason = data.incomplete_details?.reason;
-    if (reason === 'max_output_tokens' || reason === 'max_tokens') {
-      throw new Error('A OpenAI atingiu o limite de geração antes de concluir a resposta. Tente novamente.');
-    }
     throw new Error(`A OpenAI não concluiu a resposta${reason ? `: ${reason}` : '.'}`);
   }
   if (data.status === 'failed' || data.status === 'cancelled') {
     throw new Error(data.error?.message || 'A OpenAI não conseguiu concluir a resposta.');
   }
-
   const refusal = extractRefusal(data);
   if (refusal) throw new Error(`A OpenAI recusou esta resposta: ${refusal}`);
   const outputText = extractOutputText(data);
-  if (!outputText) {
-    throw new Error('A OpenAI respondeu sem o bloco estruturado esperado. Tente novamente; se persistir, confira o modelo configurado na Vercel.');
+  if (!outputText) throw new Error('A OpenAI respondeu sem texto utilizável.');
+  return {
+    data,
+    outputText,
+    usage: buildUsage(data, options, preflight.tokens, preflight.estimated),
+  };
+}
+
+async function runWithRetryAndFallback(
+  buildOptions: (model: string, fallbackUsed: boolean) => RequestOptions,
+): Promise<RequestResult> {
+  const settings = openAiSettings();
+  const errors: string[] = [];
+  const primaryOptions = buildOptions(settings.primary, false);
+
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      return await runRequest(primaryOptions);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      errors.push(`${settings.primary} tentativa ${attempt + 1}: ${message}`);
+      if (attempt === 0) await new Promise((resolve) => setTimeout(resolve, 800));
+    }
   }
 
+  if (settings.fallback && settings.fallback !== settings.primary) {
+    try {
+      return await runRequest(buildOptions(settings.fallback, true));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      errors.push(`${settings.fallback}: ${message}`);
+    }
+  }
+
+  throw new OpenAiExhaustedError(errors);
+}
+
+async function summarizeOldHistory(
+  history: ChatMessage[],
+): Promise<{ summary: string; recent: ChatMessage[]; usage: AiUsageRecord }> {
+  const old = history.slice(0, -RECENT_MESSAGES_TO_KEEP);
+  const recent = history.slice(-RECENT_MESSAGES_TO_KEEP);
+  const transcript = old.map((item) => `${item.role === 'user' ? 'Contato' : 'Atendimento'}: ${item.content}`).join('\n');
+  const result = await runWithRetryAndFallback((model, fallbackUsed) => ({
+    model,
+    input: [
+      inputMessage('system', 'Resuma a conversa de atendimento imobiliário em português brasileiro. Preserve fatos, empreendimento citado, finalidade, tipologia, orçamento, prazo, decisores, objeções, promessas, pendências e o que já foi perguntado ou respondido. Não invente nada. Produza um bloco curto de contexto, sem saudação.'),
+      inputMessage('user', transcript),
+    ],
+    requestKind: 'summary',
+    compacted: true,
+    fallbackUsed,
+    maxOutputTokens: 700,
+    reasoningEffort: 'low',
+    verbosity: 'low',
+  }));
+  console.info(`[openai context] compactação aplicada: ${old.length} mensagens resumidas; ${recent.length} mantidas integralmente.`);
+  return { summary: result.outputText.trim(), recent, usage: result.usage };
+}
+
+export async function generateAiTurn(
+  lead: Lead,
+  history: ChatMessage[],
+  context: AiTrainingContext = {},
+): Promise<AiTurn | null> {
+  if (!process.env.OPENAI_API_KEY) return null;
+  if (history.length === 0) return null;
+
+  const usageRecords: AiUsageRecord[] = [];
+  let compacted = false;
+  let summary = '';
+  let effectiveHistory = history;
+
+  if (history.length > MAX_HISTORY_BEFORE_COMPACTION) {
+    const compact = await summarizeOldHistory(history);
+    summary = compact.summary;
+    effectiveHistory = compact.recent;
+    usageRecords.push(compact.usage);
+    compacted = true;
+  }
+
+  const result = await runWithRetryAndFallback((model, fallbackUsed) => {
+    const explicitCache = supportsExplicitCaching(model);
+    return {
+      model,
+      input: buildRequestInput(lead, context, effectiveHistory, summary, explicitCache),
+      schema: outputSchema(lead),
+      requestKind: 'response',
+      compacted,
+      fallbackUsed,
+      promptCacheKey: explicitCache ? `bossa:${lead.organization_id}:${lead.kind}:atendimento-v1` : undefined,
+    };
+  });
+  usageRecords.push(result.usage);
+
   try {
-    const parsed = JSON.parse(outputText) as AiTurn;
+    const parsed = JSON.parse(result.outputText) as AiTurn;
     const allowedIds = new Set((context.files ?? []).map((file) => file.id));
     parsed.attachment_ids = [...new Set(parsed.attachment_ids ?? [])]
       .filter((id) => allowedIds.has(id))
       .slice(0, 3);
-    return lead.kind === 'cliente' ? enforceNaraTriage(parsed, lead, history, context) : parsed;
-  } catch {
+    const finalTurn = lead.kind === 'cliente'
+      ? enforceNaraTriage(parsed, lead, effectiveHistory, context)
+      : parsed;
+    finalTurn.usage_records = usageRecords;
+    finalTurn.model_used = result.usage.model;
+    finalTurn.compacted = compacted;
+    return finalTurn;
+  } catch (error) {
+    if (error instanceof OpenAiExhaustedError) throw error;
     throw new Error('A resposta estruturada da OpenAI não pôde ser interpretada.');
   }
 }
