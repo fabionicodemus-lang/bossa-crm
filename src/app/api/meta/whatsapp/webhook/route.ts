@@ -1,8 +1,8 @@
 import { after } from 'next/server';
 import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { generateAiReply } from '@/lib/ai';
-import type { Lead } from '@/lib/types';
+import { generateAiTurn } from '@/lib/ai';
+import type { Lead, LeadKind } from '@/lib/types';
 import { decryptToken, normalizeWaId, sendWhatsAppText, verifyMetaSignature } from '@/lib/whatsapp';
 
 export const maxDuration = 60;
@@ -45,6 +45,21 @@ interface MetaWebhookPayload {
   }>;
 }
 
+const CLIENT_STAGES = ['ia', 'qualificado', 'agendado'] as const;
+const BROKER_STAGES = ['n1', 'n2', 'n3', 'n4', 'n5'] as const;
+
+function allowedStage(kind: LeadKind, stage: string): boolean {
+  return kind === 'cliente'
+    ? CLIENT_STAGES.includes(stage as (typeof CLIENT_STAGES)[number])
+    : BROKER_STAGES.includes(stage as (typeof BROKER_STAGES)[number]);
+}
+
+function aiMayRespond(lead: Lead): boolean {
+  if (!lead.ai_enabled) return false;
+  if (lead.kind === 'cliente') return lead.stage === 'ia';
+  return !['n4', 'n5'].includes(lead.stage);
+}
+
 function messageBody(message: MetaMessage): string {
   if (message.type === 'text') return String(message.text?.body ?? '');
   if (message.type === 'button') return String(message.button?.text ?? '');
@@ -58,11 +73,22 @@ function messageBody(message: MetaMessage): string {
   return `[Mensagem ${message.type || 'desconhecida'}]`;
 }
 
-async function processAiReply(args: { organizationId: string; leadId: string; connectionId: string; phoneNumberId: string; encryptedToken: string }) {
+function mergeExtractedMetadata(current: Record<string, unknown>, extracted: Record<string, string>) {
+  const previous = current.ai_extracted && typeof current.ai_extracted === 'object'
+    ? current.ai_extracted as Record<string, unknown>
+    : {};
+  const useful = Object.fromEntries(Object.entries(extracted).filter(([, value]) => value.trim() !== ''));
+  return {
+    ...current,
+    ai_extracted: { ...previous, ...useful },
+  };
+}
+
+async function processAiTurn(args: { organizationId: string; leadId: string; connectionId: string; phoneNumberId: string; encryptedToken: string }) {
   const admin = createAdminClient();
   const { data: leadData } = await admin.from('leads').select('*').eq('id', args.leadId).maybeSingle();
   const lead = leadData as Lead | null;
-  if (!lead || !lead.ai_enabled || lead.kind !== 'cliente' || lead.stage === 'fechado') return;
+  if (!lead || !aiMayRespond(lead)) return;
 
   const { data: historyRows } = await admin
     .from('messages')
@@ -70,16 +96,18 @@ async function processAiReply(args: { organizationId: string; leadId: string; co
     .eq('lead_id', lead.id)
     .neq('direction', 'system')
     .order('created_at', { ascending: true })
-    .limit(30);
+    .limit(40);
+
   const history = (historyRows ?? []).map((row) => ({
     role: row.direction === 'in' ? 'user' as const : 'assistant' as const,
     content: row.body,
   }));
-  const reply = await generateAiReply(lead, history);
-  if (!reply) return;
+  const turn = await generateAiTurn(lead, history);
+  if (!turn) return;
 
   const destination = normalizeWaId(lead.phone ?? '');
-  if (!destination) return;
+  const reply = turn.reply.trim();
+  if (!destination || !reply) return;
 
   const result = await sendWhatsAppText({
     phoneNumberId: args.phoneNumberId,
@@ -87,6 +115,7 @@ async function processAiReply(args: { organizationId: string; leadId: string; co
     to: destination,
     body: reply,
   });
+
   await admin.from('messages').insert({
     organization_id: args.organizationId,
     lead_id: lead.id,
@@ -96,6 +125,43 @@ async function processAiReply(args: { organizationId: string; leadId: string; co
     body: reply,
     status: 'sent',
     whatsapp_message_id: result.messages?.[0]?.id ?? null,
+  });
+
+  const nextStage = allowedStage(lead.kind, turn.stage) ? turn.stage : lead.stage;
+  const pauseForStage = lead.kind === 'cliente'
+    ? nextStage !== 'ia'
+    : ['n4', 'n5'].includes(nextStage);
+  const nextAiEnabled = !turn.handoff && !pauseForStage;
+  const score = Math.max(0, Math.min(100, Math.round(turn.score)));
+  const persona = lead.kind === 'cliente' ? 'Nara' : 'Plantão';
+  const metadata = mergeExtractedMetadata(lead.metadata || {}, turn.extracted);
+
+  const { error: updateError } = await admin.from('leads').update({
+    stage: nextStage,
+    temperature: score,
+    ai_enabled: nextAiEnabled,
+    ai_classification: turn.classification,
+    ai_summary: turn.summary,
+    ai_next_action: turn.next_action,
+    ai_last_classified_at: new Date().toISOString(),
+    metadata,
+  }).eq('id', lead.id);
+  if (updateError) throw updateError;
+
+  await admin.from('activities').insert({
+    organization_id: args.organizationId,
+    lead_id: lead.id,
+    type: 'classificacao_ia',
+    title: `${persona} classificou o contato como ${turn.classification}`,
+    description: `${turn.summary}${turn.next_action ? ` Próxima ação: ${turn.next_action}` : ''}`,
+    metadata: {
+      persona: persona.toLowerCase(),
+      classification: turn.classification,
+      score,
+      stage: nextStage,
+      handoff: turn.handoff,
+      extracted: turn.extracted,
+    },
   });
 }
 
@@ -107,7 +173,7 @@ export async function POST(request: Request) {
     }
     const payload = JSON.parse(rawBody) as MetaWebhookPayload;
     const admin = createAdminClient();
-    const aiJobs: Array<Parameters<typeof processAiReply>[0]> = [];
+    const aiJobs: Array<Parameters<typeof processAiTurn>[0]> = [];
 
     for (const entry of payload.entry ?? []) {
       for (const change of entry.changes ?? []) {
@@ -131,7 +197,7 @@ export async function POST(request: Request) {
         for (const message of value.messages ?? []) {
           const waId = normalizeWaId(String(message.from ?? value.contacts?.[0]?.wa_id ?? ''));
           if (!waId) continue;
-          const kind = connection.channel === 'clientes' ? 'cliente' : 'corretor';
+          const kind: LeadKind = connection.channel === 'clientes' ? 'cliente' : 'corretor';
           let { data: lead } = await admin
             .from('leads')
             .select('*')
@@ -151,7 +217,7 @@ export async function POST(request: Request) {
               source: 'WhatsApp',
               company: kind === 'corretor' ? 'Não informada' : null,
               temperature: 0,
-              ai_enabled: kind === 'cliente',
+              ai_enabled: true,
               metadata: {},
             }).select('*').single();
             if (error) throw error;
@@ -174,15 +240,15 @@ export async function POST(request: Request) {
             created_at: message.timestamp ? new Date(Number(message.timestamp) * 1000).toISOString() : new Date().toISOString(),
           }, { onConflict: 'whatsapp_message_id', ignoreDuplicates: true }).select('id').maybeSingle();
           if (messageError) throw messageError;
-          if (!storedMessage) continue; // webhook repetido: não responder duas vezes
+          if (!storedMessage) continue;
 
           await admin.from('leads').update({
             name: lead.name === lead.phone && contactName ? contactName : lead.name,
             updated_at: new Date().toISOString(),
-            ai_enabled: lead.stage === 'fechado' ? false : lead.ai_enabled,
           }).eq('id', lead.id);
 
-          if (kind === 'cliente' && lead.ai_enabled && lead.stage !== 'fechado') {
+          const typedLead = lead as Lead;
+          if (aiMayRespond(typedLead)) {
             aiJobs.push({
               organizationId: connection.organization_id,
               leadId: lead.id,
@@ -198,7 +264,7 @@ export async function POST(request: Request) {
     if (aiJobs.length) {
       after(async () => {
         for (const job of aiJobs) {
-          try { await processAiReply(job); } catch (error) { console.error('[whatsapp ai]', error); }
+          try { await processAiTurn(job); } catch (error) { console.error('[whatsapp ai]', error); }
         }
       });
     }

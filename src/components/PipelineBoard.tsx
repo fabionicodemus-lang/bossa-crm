@@ -46,7 +46,7 @@ export function PipelineBoard({ initialLeads, kind, organizationId, canEdit }: {
     if (!current || current.stage === stage) return;
 
     const before = leads;
-    setLeads((items) => items.map((lead) => lead.id === id ? { ...lead, stage, ai_enabled: kind === 'cliente' && stage === 'ia' } : lead));
+    setLeads((items) => items.map((lead) => lead.id === id ? { ...lead, stage, ai_enabled: kind === 'cliente' ? stage === 'ia' : lead.ai_enabled && !['n4', 'n5'].includes(stage) } : lead));
     const response = await fetch(`/api/leads/${id}/stage`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ stage }) });
     if (!response.ok) {
       setLeads(before);
@@ -116,9 +116,9 @@ export function PipelineBoard({ initialLeads, kind, organizationId, canEdit }: {
               {stageLeads.map((lead) => <Link href={`/leads/${lead.id}`} key={lead.id} className="lead-card" draggable={canEdit} onDragStart={(event) => { setDragId(lead.id); event.dataTransfer.effectAllowed = 'move'; }} onDragEnd={() => { setDragId(null); setOverStage(null); }}>
                 <div className="lead-name">{lead.name}</div>
                 <div className="lead-sub">{kind === 'cliente' ? lead.enterprise || 'Empreendimento não informado' : lead.company || 'Autônomo'}</div>
-                <div className="lead-meta"><span className="chip">{kind === 'cliente' ? lead.source || 'Sem origem' : lead.group_name || 'Sem grupo'}</span>{lead.ai_enabled && <span className="chip chip-orange">🤖 IA ativa</span>}</div>
+                <div className="lead-meta"><span className="chip">{kind === 'cliente' ? lead.source || 'Sem origem' : lead.group_name || 'Sem grupo'}</span>{lead.ai_enabled && <span className="chip chip-orange">🤖 {kind === 'cliente' ? 'Nara' : 'Plantão'} ativo</span>}{lead.ai_classification && <span className="chip">{lead.ai_classification}</span>}</div>
                 <div className="muted" style={{ fontSize: 10, marginBottom: 7 }}>{displayPhone(lead.phone)}</div>
-                {kind === 'cliente' && <div className="temp-row"><div className="temp-track"><div className="temp-fill" style={{ width: `${lead.temperature}%`, background: temperatureColor(lead.temperature) }} /></div><span className="temp-label" style={{ color: temperatureColor(lead.temperature) }}>{temperatureName(lead.temperature)} {lead.temperature}°</span></div>}
+                <div className="temp-row"><div className="temp-track"><div className="temp-fill" style={{ width: `${lead.temperature}%`, background: temperatureColor(lead.temperature) }} /></div><span className="temp-label" style={{ color: temperatureColor(lead.temperature) }}>{lead.ai_classification?.toUpperCase() || temperatureName(lead.temperature)} {lead.temperature}/100</span></div>
               </Link>)}
               {stageLeads.length === 0 && <div className="empty-state">Nenhum registro</div>}
             </div>

@@ -33,6 +33,10 @@ export interface Lead {
   creci: string | null;
   temperature: number;
   ai_enabled: boolean;
+  ai_classification: string | null;
+  ai_summary: string | null;
+  ai_next_action: string | null;
+  ai_last_classified_at: string | null;
   owner_id: string | null;
   metadata: Record<string, unknown>;
   created_at: string;
