@@ -7,6 +7,7 @@ import { PageTopbar } from '@/components/PageTopbar';
 type Agent = 'nara' | 'plantao';
 type Tab = 'simulador' | 'persona' | 'base' | 'correcoes' | 'abertura' | 'prompt';
 type ChatRole = 'user' | 'assistant';
+type FeedbackMode = 'rewrite' | 'comment';
 
 type Persona = {
   name: string;
@@ -102,14 +103,22 @@ function defaultConfig(agent: Agent): AgentConfig {
 
 function buildPrompt(agent: Agent, config: AgentConfig, examples: TrainingExample[]) {
   const base = Object.entries(config.knowledge).map(([key, value]) => `## ${key.toUpperCase()}\n${value}`).join('\n\n');
-  const approved = examples.slice(0, 20).map((item) => {
-    const ideal = item.rating === 'corrected' && item.correction ? item.correction : item.assistant_message;
-    return `Cliente/corretor: ${item.user_message}\nResposta ideal: ${ideal}`;
-  }).join('\n\n');
+  const learning = examples.slice(0, 30).map((item) => {
+    if (item.rating === 'approved') {
+      return `Contato: ${item.user_message}\nResposta aprovada: ${item.assistant_message}`;
+    }
+    if (item.rating === 'corrected' && item.correction) {
+      return `Contato: ${item.user_message}\nResposta enviada: ${item.assistant_message}\nResposta ideal reescrita pelo gestor: ${item.correction}`;
+    }
+    if (item.rating === 'rejected' && item.notes) {
+      return `Contato: ${item.user_message}\nResposta que precisa melhorar: ${item.assistant_message}\nOrientação do gestor sobre o que mudar: ${item.notes}`;
+    }
+    return '';
+  }).filter(Boolean).join('\n\n');
   const identity = agent === 'nara'
     ? 'Você atende clientes finais interessados em comprar imóveis da Bossa.'
     : 'Você atende corretores parceiros fora do horário comercial. Nunca use nome próprio; identifique-se somente como o plantão da Bossa.';
-  return `${identity}\n\n# PERSONA\nNome/identificação: ${config.persona.name}\nPapel: ${config.persona.role}\nTom: ${config.persona.tone}\nTamanho: ${config.persona.length}\nEmojis: ${config.persona.emojis}\nIdentidade: ${config.persona.identity}\n\n# ABERTURA PADRÃO\n${config.first_message}\n\n# BASE DE CONHECIMENTO\n${base}${approved ? `\n\n# EXEMPLOS APROVADOS E CORRIGIDOS\n${approved}` : ''}\n\nResponda em português brasileiro. Nunca invente dados. Quando não tiver certeza, encaminhe ao comercial.`;
+  return `${identity}\n\n# PERSONA\nNome/identificação: ${config.persona.name}\nPapel: ${config.persona.role}\nTom: ${config.persona.tone}\nTamanho: ${config.persona.length}\nEmojis: ${config.persona.emojis}\nIdentidade: ${config.persona.identity}\n\n# ABERTURA PADRÃO\n${config.first_message}\n\n# BASE DE CONHECIMENTO\n${base}${learning ? `\n\n# EXEMPLOS E ORIENTAÇÕES DO GESTOR\n${learning}` : ''}\n\nResponda em português brasileiro. Nunca invente dados. Quando não tiver certeza, encaminhe ao comercial.`;
 }
 
 async function readJson<T>(response: Response): Promise<T> {
@@ -131,7 +140,8 @@ export default function AgentTrainingPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [scenario, setScenario] = useState('');
   const [input, setInput] = useState('');
-  const [correction, setCorrection] = useState('');
+  const [feedbackText, setFeedbackText] = useState('');
+  const [feedbackMode, setFeedbackMode] = useState<FeedbackMode>('rewrite');
   const [correctingIndex, setCorrectingIndex] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -158,6 +168,8 @@ export default function AgentTrainingPage() {
     setTab('simulador');
     setMessages([]);
     setScenario('');
+    setFeedbackText('');
+    setCorrectingIndex(null);
     fetch(`/api/ai-training?agent=${agent}`, { cache: 'no-store' })
       .then((response) => readJson<{ config: AgentConfig; examples: TrainingExample[] }>(response))
       .then((data) => {
@@ -178,6 +190,17 @@ export default function AgentTrainingPage() {
 
   function updateKnowledge(key: string, value: string) {
     setConfig((current) => ({ ...current, knowledge: { ...current.knowledge, [key]: value } }));
+  }
+
+  function openFeedback(index: number, mode: FeedbackMode, currentMessage: string) {
+    setCorrectingIndex(index);
+    setFeedbackMode(mode);
+    setFeedbackText(mode === 'rewrite' ? currentMessage : '');
+  }
+
+  function closeFeedback() {
+    setCorrectingIndex(null);
+    setFeedbackText('');
   }
 
   async function saveConfig() {
@@ -220,7 +243,7 @@ export default function AgentTrainingPage() {
     const selected = scenarios.find((item) => item.key === key);
     if (!selected) return;
     setScenario(key);
-    setCorrection('');
+    setFeedbackText('');
     setCorrectingIndex(null);
     const nextMessages: ChatMessage[] = [{ role: 'user', content: selected.first }];
     setMessages(nextMessages);
@@ -236,7 +259,7 @@ export default function AgentTrainingPage() {
     await requestReply(nextMessages);
   }
 
-  async function saveExample(index: number, rating: TrainingExample['rating'], correctedText?: string) {
+  async function saveExample(index: number, rating: TrainingExample['rating'], options?: { correction?: string; notes?: string }) {
     const assistant = messages[index];
     const user = [...messages.slice(0, index)].reverse().find((item) => item.role === 'user');
     if (!assistant || assistant.role !== 'assistant' || !user) return;
@@ -252,16 +275,32 @@ export default function AgentTrainingPage() {
           user_message: user.content,
           assistant_message: assistant.content,
           rating,
-          correction: correctedText || null,
+          correction: options?.correction || null,
+          notes: options?.notes || null,
         }),
       }));
       setExamples((current) => [data.example, ...current]);
-      setCorrectingIndex(null);
-      setCorrection('');
-      setNotice(rating === 'approved' ? 'Resposta aprovada e adicionada ao treinamento.' : 'Correção salva como exemplo ideal.');
+      closeFeedback();
+      setNotice(
+        rating === 'approved'
+          ? 'Resposta aprovada e adicionada ao treinamento.'
+          : rating === 'corrected'
+            ? 'Resposta reescrita e salva como exemplo ideal.'
+            : 'Seu comentário foi salvo como orientação para a IA.',
+      );
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Não foi possível salvar o exemplo.');
     }
+  }
+
+  async function saveFeedback(index: number) {
+    const text = feedbackText.trim();
+    if (!text) return;
+    if (feedbackMode === 'rewrite') {
+      await saveExample(index, 'corrected', { correction: text });
+      return;
+    }
+    await saveExample(index, 'rejected', { notes: text });
   }
 
   async function deleteExample(id: string) {
@@ -325,13 +364,26 @@ export default function AgentTrainingPage() {
               {message.content}
               {message.role === 'assistant' && <div style={{ display: 'flex', gap: 6, marginTop: 9, flexWrap: 'wrap' }}>
                 <button className="btn btn-ghost btn-sm" onClick={() => saveExample(index, 'approved')}>👍 Aprovar</button>
-                <button className="btn btn-ghost btn-sm" onClick={() => { setCorrectingIndex(index); setCorrection(message.content); }}>✏️ Corrigir</button>
+                <button className="btn btn-ghost btn-sm" onClick={() => openFeedback(index, 'rewrite', message.content)}>✏️ Reescrever resposta</button>
+                <button className="btn btn-ghost btn-sm" onClick={() => openFeedback(index, 'comment', message.content)}>💬 Comentar o que mudar</button>
               </div>}
               {correctingIndex === index && <div style={{ marginTop: 9 }}>
-                <textarea className="textarea" value={correction} onChange={(event) => setCorrection(event.target.value)} />
+                <div className="info-box" style={{ marginBottom: 8 }}>
+                  {feedbackMode === 'rewrite'
+                    ? <><strong>Reescreva a resposta:</strong> edite abaixo exatamente como ela deveria ter respondido.</>
+                    : <><strong>Explique com suas palavras:</strong> diga o que ficou errado e como a IA deve agir nas próximas conversas.</>}
+                </div>
+                <textarea
+                  className="textarea"
+                  value={feedbackText}
+                  placeholder={feedbackMode === 'rewrite' ? 'Escreva a resposta ideal completa...' : 'Ex.: Não deve perguntar o orçamento logo na primeira frase; primeiro acolher e entender a finalidade.'}
+                  onChange={(event) => setFeedbackText(event.target.value)}
+                />
                 <div style={{ display: 'flex', gap: 7, justifyContent: 'flex-end' }}>
-                  <button className="btn btn-ghost btn-sm" onClick={() => setCorrectingIndex(null)}>Cancelar</button>
-                  <button className="btn btn-primary btn-sm" onClick={() => saveExample(index, 'corrected', correction.trim())} disabled={!correction.trim()}>Salvar correção</button>
+                  <button className="btn btn-ghost btn-sm" onClick={closeFeedback}>Cancelar</button>
+                  <button className="btn btn-primary btn-sm" onClick={() => saveFeedback(index)} disabled={!feedbackText.trim()}>
+                    {feedbackMode === 'rewrite' ? 'Salvar resposta corrigida' : 'Salvar comentário'}
+                  </button>
                 </div>
               </div>}
             </div>)}
@@ -347,7 +399,7 @@ export default function AgentTrainingPage() {
             {scenarios.map((item) => <button key={item.key} className={`btn ${scenario === item.key ? 'btn-secondary' : 'btn-ghost'} btn-block`} onClick={() => startScenario(item.key)} disabled={sending}>{item.name}</button>)}
           </div></section>
           <section className="card"><div className="card-head"><h3>Como treinar</h3></div><div className="card-body muted" style={{ lineHeight: 1.65, fontSize: 12 }}>
-            Inicie um cenário, converse normalmente e aprove ou corrija cada resposta. Os exemplos salvos entram no prompt final como referência de comportamento.
+            Aprove quando estiver boa. Para ajustar, você pode reescrever a resposta inteira ou apenas comentar, com suas palavras, o que deve mudar. Os dois formatos entram no treinamento.
           </div></section>
         </aside>
       </div>}
@@ -371,13 +423,18 @@ export default function AgentTrainingPage() {
       </div>}
 
       {!loading && tab === 'correcoes' && <section className="card">
-        <div className="card-head"><h3>Exemplos usados no treinamento</h3><span className="chip">{examples.length} registros</span></div>
+        <div className="card-head"><h3>Exemplos e orientações usados no treinamento</h3><span className="chip">{examples.length} registros</span></div>
         <div className="card-body">
-          {examples.length === 0 ? <div className="empty-state">Ainda não há respostas aprovadas ou corrigidas.</div> : <div className="timeline">{examples.map((item) => <div className="timeline-item" key={item.id}>
-            <div className="timeline-icon">{item.rating === 'approved' ? '👍' : item.rating === 'corrected' ? '✏️' : '👎'}</div>
+          {examples.length === 0 ? <div className="empty-state">Ainda não há respostas aprovadas, reescritas ou comentadas.</div> : <div className="timeline">{examples.map((item) => <div className="timeline-item" key={item.id}>
+            <div className="timeline-icon">{item.rating === 'approved' ? '👍' : item.rating === 'corrected' ? '✏️' : '💬'}</div>
             <div>
-              <div className="timeline-title">{item.scenario || 'Conversa livre'} · {item.rating === 'approved' ? 'Aprovada' : item.rating === 'corrected' ? 'Corrigida' : 'Rejeitada'}</div>
-              <div className="timeline-desc"><strong>Contato:</strong> {item.user_message}<br /><strong>Resposta:</strong> {item.assistant_message}{item.correction ? <><br /><strong>Resposta ideal:</strong> {item.correction}</> : null}</div>
+              <div className="timeline-title">{item.scenario || 'Conversa livre'} · {item.rating === 'approved' ? 'Aprovada' : item.rating === 'corrected' ? 'Resposta reescrita' : 'Comentário do gestor'}</div>
+              <div className="timeline-desc">
+                <strong>Contato:</strong> {item.user_message}<br />
+                <strong>Resposta enviada:</strong> {item.assistant_message}
+                {item.correction ? <><br /><strong>Resposta ideal:</strong> {item.correction}</> : null}
+                {item.notes ? <><br /><strong>O que deve mudar:</strong> {item.notes}</> : null}
+              </div>
               <div style={{ marginTop: 7 }}><button className="btn btn-ghost btn-sm" onClick={() => deleteExample(item.id)}>Excluir</button></div>
             </div>
           </div>)}</div>}
