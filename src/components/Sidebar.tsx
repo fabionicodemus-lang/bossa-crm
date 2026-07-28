@@ -20,6 +20,7 @@ const links: NavItem[] = [
   { section: 'Sistema', roles: ['admin'] },
   { href: '/treinamento/nara', icon: '🎓', label: 'Treinar a Nara', roles: ['admin'] },
   { href: '/treinamento/plantao', icon: '🌙', label: 'Treinar o Plantão', roles: ['admin'] },
+  { href: '/configuracoes/arquivos-ia', icon: '🗂️', label: 'Arquivos da IA', roles: ['admin'] },
   { href: '/configuracoes/whatsapp', icon: '📱', label: 'Canais WhatsApp', roles: ['admin'] },
   { href: '/usuarios', icon: '👥', label: 'Usuários', roles: ['admin'] },
 ];
