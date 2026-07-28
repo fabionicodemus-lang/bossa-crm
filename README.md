@@ -16,7 +16,8 @@ Este projeto substitui o protótipo HTML por uma aplicação **Next.js 16 + Supa
 - bloqueio automático da IA fora dessa etapa e para clientes fechados;
 - Meta Embedded Signup para conectar os dois números do WhatsApp;
 - webhook, envio de mensagens e armazenamento do histórico;
-- resposta automática opcional pela API da Anthropic.
+- Nara e Plantão usando a OpenAI Responses API com modelo e fallback configuráveis;
+- cache de prompt, compactação de conversas longas e consumo registrado por lead.
 
 ## 1. Requisitos
 
@@ -24,16 +25,19 @@ Este projeto substitui o protótipo HTML por uma aplicação **Next.js 16 + Supa
 - uma conta Supabase;
 - uma conta Vercel ou outro servidor compatível com Next.js;
 - para WhatsApp: aplicativo da Meta configurado para WhatsApp Business Platform;
-- para a Nara responder: chave da Anthropic.
+- para a Nara e o Plantão responderem: chave da API da OpenAI.
 
 ## 2. Banco e autenticação
 
 1. Crie um projeto novo no Supabase.
 2. Abra **SQL Editor**.
-3. Execute todo o arquivo:
+3. Execute as migrações em ordem:
 
 ```text
 supabase/migrations/001_bossa_crm.sql
+supabase/migrations/002_treinamento_nara_plantao.sql
+supabase/migrations/003_arquivos_ia.sql
+supabase/migrations/004_consumo_ia_gpt56.sql
 ```
 
 4. Em **Authentication > URL Configuration**, defina:
@@ -115,8 +119,13 @@ Os tokens são criptografados com AES-256-GCM antes de serem gravados. A tabela 
 Preencha:
 
 ```env
-ANTHROPIC_API_KEY=
-ANTHROPIC_MODEL=claude-sonnet-4-6
+OPENAI_API_KEY=
+OPENAI_MODEL=gpt-5.6-terra
+OPENAI_MODEL_FALLBACK=gpt-5.6-luna
+OPENAI_REASONING_EFFORT=low
+OPENAI_MAX_OUTPUT_TOKENS=2400
+OPENAI_VERBOSITY=low
+OPENAI_TIMEOUT_MS=25000
 ```
 
 Regras implementadas:
@@ -126,15 +135,26 @@ Regras implementadas:
 - ao sair da etapa `IA Atendendo`, a IA é pausada;
 - cliente fechado nunca é atendido automaticamente;
 - ao clicar em **Assumir conversa**, o envio humano é liberado;
-- mensagens da IA e do comercial ficam no mesmo histórico.
+- mensagens da IA e do comercial ficam no mesmo histórico;
+- cada chamada tenta o modelo principal duas vezes e depois usa o fallback;
+- em falha total, o contato recebe uma mensagem neutra e o atendimento é transferido para o time;
+- conversas com mais de 25 mensagens são compactadas, preservando as 10 mais recentes;
+- tokens, cache, modelo e custo estimado ficam registrados por lead.
+
+Para validar o modelo sem enviar mensagens reais, abra:
+
+```text
+/treinamento/teste-gpt56
+```
 
 ## 8. O que ainda depende das suas contas
 
-O código está pronto, mas a publicação real exige credenciais que só o administrador da Bossa pode fornecer:
+O código está pronto, mas a publicação real exige credenciais e configurações que só o administrador da Bossa pode fornecer:
 
 - projeto e chaves Supabase;
+- execução das migrações SQL;
 - domínio/Vercel;
 - aplicativo, Configuration ID e revisão da Meta;
-- chave Anthropic.
+- chave da API da OpenAI e variáveis do modelo.
 
 Não coloque senhas ou chaves reais dentro do código ou do GitHub.
