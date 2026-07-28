@@ -118,11 +118,17 @@ function trainingInstructions(context: AiTrainingContext): string {
     if (item.rating === 'corrected' && item.correction) {
       return `Contato: ${item.user_message}\nResposta que estava errada: ${item.assistant_message}\nResposta ideal: ${item.correction}`;
     }
+    if (item.rating === 'rejected' && item.notes) {
+      return `Contato: ${item.user_message}\nResposta que precisa melhorar: ${item.assistant_message}\nOrientação do gestor: ${item.notes}`;
+    }
     if (item.rating === 'corrected' && item.notes) {
       return `Contato: ${item.user_message}\nResposta avaliada: ${item.assistant_message}\nOrientação do gestor: ${item.notes}`;
     }
-    return `Contato: ${item.user_message}\nResposta aprovada: ${item.assistant_message}`;
-  }).join('\n\n');
+    if (item.rating === 'approved') {
+      return `Contato: ${item.user_message}\nResposta aprovada: ${item.assistant_message}`;
+    }
+    return '';
+  }).filter(Boolean).join('\n\n');
 
   const parts = [
     persona ? `PERSONALIDADE DEFINIDA PELO GESTOR:\n${persona}` : '',
@@ -148,7 +154,7 @@ function fileInstructions(files: AiFileOption[]): string {
   return `\n\nBIBLIOTECA DE ARQUIVOS DISPONÍVEIS:\n${JSON.stringify(catalog)}\n\nREGRAS PARA ARQUIVOS:\n- Use attachment_ids somente com IDs exatamente presentes na biblioteca acima.\n- Selecione no máximo 3 arquivos e apenas quando o contato pedir material ou quando o envio ajudar diretamente a conversa.\n- Escolha pelo empreendimento, categoria, título, descrição e palavras-chave.\n- Não diga que enviou ou vai enviar um arquivo sem incluir o ID correspondente em attachment_ids.\n- Não repita o mesmo arquivo na mesma resposta.\n- Tabela, condição comercial e disponibilidade podem ficar desatualizadas: envie somente quando solicitado e deixe claro que o comercial confirma a condição vigente.\n- Se não existir material adequado, use attachment_ids vazio e diga que o comercial vai providenciar ou confirmar.\n- Não envie arquivos em uma conversa que já exige handoff imediato, salvo quando for um material público claramente solicitado e seguro.`;
 }
 
-function personaInstructions(lead: Lead, context: AiTrainingContext): string {
+export function buildAiInstructions(lead: Lead, context: AiTrainingContext): string {
   const shared = `Você atende pelo WhatsApp da Bossa Empreendimentos. Responda sempre em português brasileiro, de forma humana, natural, calorosa e objetiva. Use no máximo duas frases curtas e uma pergunta por mensagem. Nunca invente preço, disponibilidade, metragem, condição de pagamento, prazo de entrega ou informação que não esteja no histórico. Quando faltar uma informação comercial específica, diga que o time da Bossa vai confirmar. Analise toda a conversa, produza a resposta, classifique o contato e selecione arquivos somente quando fizer sentido. Contato: ${lead.name}. Etapa atual: ${lead.stage}. Dados atuais: ${JSON.stringify(lead.metadata || {})}.`;
   const training = trainingInstructions(context);
   const files = fileInstructions(context.files ?? []);
@@ -190,7 +196,7 @@ export async function generateAiTurn(
     body: JSON.stringify({
       model,
       store: false,
-      instructions: personaInstructions(lead, context),
+      instructions: buildAiInstructions(lead, context),
       input,
       max_output_tokens: 900,
       text: {
