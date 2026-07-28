@@ -46,6 +46,34 @@ export async function sendWhatsAppText(args: { phoneNumberId: string; accessToke
   });
 }
 
+export type WhatsAppMediaType = 'image' | 'video' | 'audio' | 'document';
+
+export async function sendWhatsAppMedia(args: {
+  phoneNumberId: string;
+  accessToken: string;
+  to: string;
+  type: WhatsAppMediaType;
+  link: string;
+  caption?: string;
+  filename?: string;
+}) {
+  const media: Record<string, string> = { link: args.link };
+  if (args.caption && args.type !== 'audio') media.caption = args.caption.slice(0, 1024);
+  if (args.filename && args.type === 'document') media.filename = args.filename.slice(0, 240);
+
+  return graphRequest<{ messages?: Array<{ id: string }> }>(`${args.phoneNumberId}/messages`, {
+    method: 'POST',
+    accessToken: args.accessToken,
+    body: JSON.stringify({
+      messaging_product: 'whatsapp',
+      recipient_type: 'individual',
+      to: args.to,
+      type: args.type,
+      [args.type]: media,
+    }),
+  });
+}
+
 function encryptionKey() {
   const key = Buffer.from(required('WHATSAPP_TOKEN_ENCRYPTION_KEY_BASE64'), 'base64');
   if (key.length !== 32) throw new Error('WHATSAPP_TOKEN_ENCRYPTION_KEY_BASE64 deve representar 32 bytes.');
