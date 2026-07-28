@@ -130,14 +130,22 @@ async function loadExamples(supabase: Awaited<ReturnType<typeof createClient>>, 
 
 function buildPrompt(agent: Agent, config: AgentConfig, examples: ExampleRow[]) {
   const base = Object.entries(config.knowledge).map(([key, value]) => `## ${key.toUpperCase()}\n${value}`).join('\n\n');
-  const approved = examples.filter((item) => item.rating !== 'rejected').slice(0, 20).map((item) => {
-    const ideal = item.rating === 'corrected' && item.correction ? item.correction : item.assistant_message;
-    return `Contato: ${item.user_message}\nResposta ideal: ${ideal}`;
-  }).join('\n\n');
+  const learning = examples.slice(0, 30).map((item) => {
+    if (item.rating === 'approved') {
+      return `Contato: ${item.user_message}\nResposta aprovada: ${item.assistant_message}`;
+    }
+    if (item.rating === 'corrected' && item.correction) {
+      return `Contato: ${item.user_message}\nResposta enviada: ${item.assistant_message}\nResposta ideal reescrita pelo gestor: ${item.correction}`;
+    }
+    if (item.rating === 'rejected' && item.notes) {
+      return `Contato: ${item.user_message}\nResposta que precisa melhorar: ${item.assistant_message}\nOrientação do gestor sobre o que mudar: ${item.notes}`;
+    }
+    return '';
+  }).filter(Boolean).join('\n\n');
   const operation = agent === 'nara'
     ? 'Você atende clientes finais interessados em comprar imóveis da Bossa. Sua missão é qualificar com naturalidade e encaminhar para visita ou atendimento humano.'
     : 'Você atende corretores parceiros fora do horário comercial. Nunca use nome próprio. Você é somente o plantão da Bossa e deve escalar propostas, reservas e exceções.';
-  return `${operation}\n\n# PERSONA\nIdentificação: ${config.persona.name}\nPapel: ${config.persona.role}\nTom: ${config.persona.tone}\nTamanho: ${config.persona.length}\nEmojis: ${config.persona.emojis}\nIdentidade: ${config.persona.identity}\n\n# ABERTURA\n${config.first_message}\n\n# BASE DE CONHECIMENTO\n${base}${approved ? `\n\n# EXEMPLOS DE TREINAMENTO\n${approved}` : ''}\n\nFale em português brasileiro. Nunca invente preços, disponibilidade, documentos, condições ou prazos. Quando não tiver certeza, diga que o comercial confirmará.`;
+  return `${operation}\n\n# PERSONA\nIdentificação: ${config.persona.name}\nPapel: ${config.persona.role}\nTom: ${config.persona.tone}\nTamanho: ${config.persona.length}\nEmojis: ${config.persona.emojis}\nIdentidade: ${config.persona.identity}\n\n# ABERTURA\n${config.first_message}\n\n# BASE DE CONHECIMENTO\n${base}${learning ? `\n\n# EXEMPLOS E ORIENTAÇÕES DO GESTOR\n${learning}` : ''}\n\nFale em português brasileiro. Nunca invente preços, disponibilidade, documentos, condições ou prazos. Quando não tiver certeza, diga que o comercial confirmará.`;
 }
 
 function fallbackReply(agent: Agent, text: string, config: AgentConfig) {
@@ -207,8 +215,10 @@ export async function POST(request: Request) {
       const userMessage = String(body.user_message ?? '').trim().slice(0, 10000);
       const assistantMessage = String(body.assistant_message ?? '').trim().slice(0, 10000);
       const correction = body.correction ? String(body.correction).trim().slice(0, 10000) : null;
+      const notes = body.notes ? String(body.notes).trim().slice(0, 3000) : null;
       if (!rating || !userMessage || !assistantMessage) return NextResponse.json({ error: 'Exemplo incompleto.' }, { status: 400 });
       if (rating === 'corrected' && !correction) return NextResponse.json({ error: 'Informe a resposta corrigida.' }, { status: 400 });
+      if (rating === 'rejected' && !notes) return NextResponse.json({ error: 'Explique o que deve mudar na resposta.' }, { status: 400 });
       const { data, error } = await context.supabase.from('ai_training_examples').insert({
         organization_id: context.organizationId,
         agent: body.agent,
@@ -217,7 +227,7 @@ export async function POST(request: Request) {
         assistant_message: assistantMessage,
         rating,
         correction,
-        notes: body.notes ? String(body.notes).slice(0, 3000) : null,
+        notes,
         created_by: context.user.id,
       }).select('id,scenario,user_message,assistant_message,rating,correction,notes,created_at').single();
       if (error) throw error;
