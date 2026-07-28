@@ -1,9 +1,9 @@
 import { after } from 'next/server';
 import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { generateAiTurn } from '@/lib/ai';
+import { generateAiTurn, type AiFileOption, type AiTrainingContext } from '@/lib/ai';
 import type { Lead, LeadKind } from '@/lib/types';
-import { decryptToken, normalizeWaId, sendWhatsAppText, verifyMetaSignature } from '@/lib/whatsapp';
+import { decryptToken, normalizeWaId, sendWhatsAppMedia, sendWhatsAppText, type WhatsAppMediaType, verifyMetaSignature } from '@/lib/whatsapp';
 
 export const maxDuration = 60;
 
@@ -84,11 +84,133 @@ function mergeExtractedMetadata(current: Record<string, unknown>, extracted: Rec
   };
 }
 
+function whatsappMediaType(file: AiFileOption): WhatsAppMediaType {
+  const mime = (file.mime_type || '').toLowerCase();
+  if (mime.startsWith('image/')) return 'image';
+  if (mime.startsWith('video/')) return 'video';
+  if (mime.startsWith('audio/')) return 'audio';
+  return 'document';
+}
+
+async function loadAiContext(organizationId: string, kind: LeadKind): Promise<AiTrainingContext> {
+  const admin = createAdminClient();
+  const agent = kind === 'cliente' ? 'nara' : 'plantao';
+  const [configResult, examplesResult, filesResult] = await Promise.all([
+    admin
+      .from('ai_agent_configs')
+      .select('persona,knowledge,first_message,active')
+      .eq('organization_id', organizationId)
+      .eq('agent', agent)
+      .maybeSingle(),
+    admin
+      .from('ai_training_examples')
+      .select('user_message,assistant_message,rating,correction,notes')
+      .eq('organization_id', organizationId)
+      .eq('agent', agent)
+      .order('created_at', { ascending: false })
+      .limit(30),
+    admin
+      .from('ai_files')
+      .select('id,category,title,description,trigger_keywords,storage_bucket,storage_path,original_name,mime_type')
+      .eq('organization_id', organizationId)
+      .eq('active', true)
+      .in('agent', [agent, 'both'])
+      .order('created_at', { ascending: false })
+      .limit(80),
+  ]);
+
+  if (configResult.error) console.error('[ai config]', configResult.error.message);
+  if (examplesResult.error) console.error('[ai examples]', examplesResult.error.message);
+  if (filesResult.error) console.error('[ai files]', filesResult.error.message);
+
+  return {
+    config: configResult.data ?? null,
+    examples: examplesResult.data ?? [],
+    files: (filesResult.data ?? []) as AiFileOption[],
+  };
+}
+
+async function sendSelectedFiles(args: {
+  organizationId: string;
+  lead: Lead;
+  connectionId: string;
+  phoneNumberId: string;
+  accessToken: string;
+  destination: string;
+  files: AiFileOption[];
+  attachmentIds: string[];
+}) {
+  const admin = createAdminClient();
+  const selected = args.attachmentIds
+    .map((id) => args.files.find((file) => file.id === id))
+    .filter((file): file is AiFileOption => Boolean(file))
+    .slice(0, 3);
+
+  for (const file of selected) {
+    try {
+      const { data: signed, error: signedError } = await admin.storage
+        .from(file.storage_bucket)
+        .createSignedUrl(file.storage_path, 3600);
+      if (signedError || !signed?.signedUrl) throw signedError ?? new Error('Não foi possível gerar o link temporário do arquivo.');
+
+      const type = whatsappMediaType(file);
+      const result = await sendWhatsAppMedia({
+        phoneNumberId: args.phoneNumberId,
+        accessToken: args.accessToken,
+        to: args.destination,
+        type,
+        link: signed.signedUrl,
+        caption: type === 'audio' ? undefined : file.title,
+        filename: type === 'document' ? file.original_name : undefined,
+      });
+
+      await admin.from('messages').insert({
+        organization_id: args.organizationId,
+        lead_id: args.lead.id,
+        whatsapp_connection_id: args.connectionId,
+        direction: 'out',
+        sender_kind: 'ia',
+        body: `📎 ${file.title}`,
+        status: 'sent',
+        whatsapp_message_id: result.messages?.[0]?.id ?? null,
+        raw_payload: {
+          ai_file_id: file.id,
+          category: file.category,
+          original_name: file.original_name,
+          mime_type: file.mime_type,
+        },
+      });
+
+      await admin.from('activities').insert({
+        organization_id: args.organizationId,
+        lead_id: args.lead.id,
+        type: 'arquivo_ia_enviado',
+        title: `IA enviou o arquivo “${file.title}”`,
+        description: `${file.original_name} enviado automaticamente pelo WhatsApp.`,
+        metadata: { ai_file_id: file.id, category: file.category, mime_type: file.mime_type },
+      });
+    } catch (error) {
+      console.error('[whatsapp ai file]', file.id, error);
+      await admin.from('activities').insert({
+        organization_id: args.organizationId,
+        lead_id: args.lead.id,
+        type: 'falha_arquivo_ia',
+        title: `Falha ao enviar o arquivo “${file.title}”`,
+        description: error instanceof Error ? error.message : 'Erro desconhecido no envio do arquivo.',
+        metadata: { ai_file_id: file.id },
+      });
+    }
+  }
+}
+
 async function processAiTurn(args: { organizationId: string; leadId: string; connectionId: string; phoneNumberId: string; encryptedToken: string }) {
   const admin = createAdminClient();
   const { data: leadData } = await admin.from('leads').select('*').eq('id', args.leadId).maybeSingle();
   const lead = leadData as Lead | null;
   if (!lead || !aiMayRespond(lead)) return;
+
+  const context = await loadAiContext(args.organizationId, lead.kind);
+  if (context.config?.active === false) return;
 
   const { data: historyRows } = await admin
     .from('messages')
@@ -102,16 +224,17 @@ async function processAiTurn(args: { organizationId: string; leadId: string; con
     role: row.direction === 'in' ? 'user' as const : 'assistant' as const,
     content: row.body,
   }));
-  const turn = await generateAiTurn(lead, history);
+  const turn = await generateAiTurn(lead, history, context);
   if (!turn) return;
 
   const destination = normalizeWaId(lead.phone ?? '');
   const reply = turn.reply.trim();
   if (!destination || !reply) return;
 
+  const accessToken = decryptToken(args.encryptedToken);
   const result = await sendWhatsAppText({
     phoneNumberId: args.phoneNumberId,
-    accessToken: decryptToken(args.encryptedToken),
+    accessToken,
     to: destination,
     body: reply,
   });
@@ -126,6 +249,19 @@ async function processAiTurn(args: { organizationId: string; leadId: string; con
     status: 'sent',
     whatsapp_message_id: result.messages?.[0]?.id ?? null,
   });
+
+  if (turn.attachment_ids.length) {
+    await sendSelectedFiles({
+      organizationId: args.organizationId,
+      lead,
+      connectionId: args.connectionId,
+      phoneNumberId: args.phoneNumberId,
+      accessToken,
+      destination,
+      files: context.files ?? [],
+      attachmentIds: turn.attachment_ids,
+    });
+  }
 
   const nextStage = allowedStage(lead.kind, turn.stage) ? turn.stage : lead.stage;
   const pauseForStage = lead.kind === 'cliente'
@@ -160,6 +296,7 @@ async function processAiTurn(args: { organizationId: string; leadId: string; con
       score,
       stage: nextStage,
       handoff: turn.handoff,
+      attachment_ids: turn.attachment_ids,
       extracted: turn.extracted,
     },
   });
