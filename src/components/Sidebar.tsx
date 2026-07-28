@@ -18,6 +18,8 @@ const links: NavItem[] = [
   { href: '/corretores', icon: '🤝', label: 'Pipeline Corretores' },
   { href: '/importar?tipo=corretor', icon: '📥', label: 'Importar corretores', roles: ['admin', 'comercial'] },
   { section: 'Sistema', roles: ['admin'] },
+  { href: '/treinamento/nara', icon: '🎓', label: 'Treinar a Nara', roles: ['admin'] },
+  { href: '/treinamento/plantao', icon: '🌙', label: 'Treinar o Plantão', roles: ['admin'] },
   { href: '/configuracoes/whatsapp', icon: '📱', label: 'Canais WhatsApp', roles: ['admin'] },
   { href: '/usuarios', icon: '👥', label: 'Usuários', roles: ['admin'] },
 ];
