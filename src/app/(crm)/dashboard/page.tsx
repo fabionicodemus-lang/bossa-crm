@@ -13,10 +13,10 @@ export default async function DashboardPage() {
   const orgId = context!.organization.id;
   const now = new Date().toISOString();
   const [{ count: totalClients }, { count: aiCount }, { count: hotCount }, { count: brokerCount }, { count: overdueTasks }, { count: pendingHandoffs }, activitiesResult] = await Promise.all([
-    supabase.from('leads').select('id', { count: 'exact', head: true }).eq('organization_id', orgId).eq('kind', 'cliente'),
-    supabase.from('leads').select('id', { count: 'exact', head: true }).eq('organization_id', orgId).eq('owner_mode', 'ai').eq('ai_enabled', true),
-    supabase.from('leads').select('id', { count: 'exact', head: true }).eq('organization_id', orgId).in('priority_class', ['A1', 'A2']).not('stage', 'in', '(fechado_ganho,encerrado)'),
-    supabase.from('leads').select('id', { count: 'exact', head: true }).eq('organization_id', orgId).eq('kind', 'corretor'),
+    supabase.from('leads').select('id', { count: 'exact', head: true }).eq('organization_id', orgId).eq('kind', 'cliente').is('archived_at', null),
+    supabase.from('leads').select('id', { count: 'exact', head: true }).eq('organization_id', orgId).eq('owner_mode', 'ai').eq('ai_enabled', true).is('archived_at', null),
+    supabase.from('leads').select('id', { count: 'exact', head: true }).eq('organization_id', orgId).in('priority_class', ['A1', 'A2']).not('stage', 'in', '(fechado_ganho,encerrado)').is('archived_at', null),
+    supabase.from('leads').select('id', { count: 'exact', head: true }).eq('organization_id', orgId).eq('kind', 'corretor').is('archived_at', null),
     supabase.from('lead_tasks').select('id', { count: 'exact', head: true }).eq('organization_id', orgId).in('status', ['pending', 'overdue']).lt('due_at', now),
     supabase.from('lead_handoffs').select('id', { count: 'exact', head: true }).eq('organization_id', orgId).eq('status', 'pending'),
     supabase.from('activities').select('id,title,description,created_at,leads(id,name,kind)').eq('organization_id', orgId).order('created_at', { ascending: false }).limit(10),
@@ -31,7 +31,7 @@ export default async function DashboardPage() {
     <PageTopbar title="Dashboard" subtitle={`Operação híbrida Nara + equipe · ${context!.organization.name}`} actions={<Link href="/importar" className="btn btn-primary btn-sm">📥 Importar XLSX</Link>} />
     <div className="page-content">
       <div className="kpis">
-        <div className="kpi"><div className="kpi-label">Leads de clientes</div><div className="kpi-value">{totalClients ?? 0}</div><div className="kpi-note">base centralizada</div></div>
+        <div className="kpi"><div className="kpi-label">Leads de clientes</div><div className="kpi-value">{totalClients ?? 0}</div><div className="kpi-note">base ativa</div></div>
         <div className="kpi"><div className="kpi-label">Sob responsabilidade da IA</div><div className="kpi-value">{aiCount ?? 0}</div><div className="kpi-note">Nara e Plantão ativos</div></div>
         <div className="kpi"><div className="kpi-label">Prioridade A1/A2</div><div className="kpi-value" style={{ color: 'var(--red)' }}>{hotCount ?? 0}</div><div className="kpi-note">pedem resposta rápida</div></div>
         <div className="kpi"><div className="kpi-label">Passagens pendentes</div><div className="kpi-value" style={{ color: (pendingHandoffs ?? 0) > 0 ? 'var(--red)' : undefined }}>{pendingHandoffs ?? 0}</div><div className="kpi-note">aguardando aceite</div></div>
@@ -40,7 +40,7 @@ export default async function DashboardPage() {
       </div>
       <div className="grid grid-2">
         <section className="card"><div className="card-head"><h3>Atividade recente</h3></div><div className="card-body">{activities.length === 0 ? <div className="empty-state">As movimentações do CRM aparecerão aqui.</div> : <div className="timeline">{activities.map((item) => <div className="timeline-item" key={item.id}><div className="timeline-icon">•</div><div><div className="timeline-title">{item.title}</div>{item.description && <div className="timeline-desc">{item.description}</div>}<div className="timeline-time">{item.leads?.name ? `${item.leads.name} · ` : ''}{formatDateTime(item.created_at)}</div></div></div>)}</div>}</div></section>
-        <section className="card"><div className="card-head"><h3>Acessos rápidos</h3></div><div className="card-body grid"><Link href="/clientes" className="btn btn-ghost" style={{ justifyContent: 'flex-start' }}>🧲 Pipeline de clientes</Link><Link href="/corretores" className="btn btn-ghost" style={{ justifyContent: 'flex-start' }}>🤝 Pipeline de corretores</Link><Link href="/ia" className="btn btn-ghost" style={{ justifyContent: 'flex-start' }}>🤖 Conversas sob responsabilidade da IA</Link><Link href="/configuracoes/whatsapp" className="btn btn-ghost" style={{ justifyContent: 'flex-start' }}>📱 Configurar WhatsApp</Link>{context!.role === 'admin' && <Link href="/usuarios" className="btn btn-ghost" style={{ justifyContent: 'flex-start' }}>👥 Consultores e permissões</Link>}</div></section>
+        <section className="card"><div className="card-head"><h3>Acessos rápidos</h3></div><div className="card-body grid"><Link href="/clientes" className="btn btn-ghost" style={{ justifyContent: 'flex-start' }}>🧲 Pipeline de clientes</Link><Link href="/corretores" className="btn btn-ghost" style={{ justifyContent: 'flex-start' }}>🤝 Pipeline de corretores</Link><Link href="/ia" className="btn btn-ghost" style={{ justifyContent: 'flex-start' }}>🤖 Conversas sob responsabilidade da IA</Link><Link href="/arquivados" className="btn btn-ghost" style={{ justifyContent: 'flex-start' }}>🗄️ Leads arquivados</Link><Link href="/configuracoes/whatsapp" className="btn btn-ghost" style={{ justifyContent: 'flex-start' }}>📱 Configurar WhatsApp</Link>{context!.role === 'admin' && <Link href="/usuarios" className="btn btn-ghost" style={{ justifyContent: 'flex-start' }}>👥 Consultores e permissões</Link>}</div></section>
       </div>
     </div>
   </>;
