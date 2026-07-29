@@ -1,9 +1,9 @@
-import { readFile } from 'node:fs/promises';
-import path from 'node:path';
+import { Buffer } from 'node:buffer';
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { createProposalPdf, jpegDimensions, type ProposalPdfImage, type ProposalPdfScheduleRow } from '@/lib/simple-pdf';
+import { BOSSA_LOGO_BASE64 } from '@/lib/brand-assets';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -80,7 +80,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     total: money.format(numberValue(item.amount) * numberValue(item.quantity)),
   }));
 
-  const bossaBytes = await readFile(path.join(process.cwd(), 'public', 'brand', 'bossa-empreendimentos.jpg'));
+  const bossaBytes = Buffer.from(BOSSA_LOGO_BASE64, 'base64');
   const bossaLogo = await jpegImage(bossaBytes);
   if (!bossaLogo) return NextResponse.json({ error: 'O logo institucional não pôde ser carregado.' }, { status: 500 });
 
