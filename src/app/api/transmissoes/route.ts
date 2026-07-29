@@ -47,7 +47,7 @@ export async function POST(request: Request) {
   if (!templateId || stages.length === 0) return NextResponse.json({ error: 'Selecione o modelo da Meta e ao menos uma etapa.' }, { status: 400 });
 
   const kind: LeadKind = channel === 'clientes' ? 'cliente' : 'corretor';
-  const validStages = new Set(stagesFor(kind).map((stage) => stage.id));
+  const validStages = new Set<string>(stagesFor(kind).map((stage) => stage.id));
   if (stages.some((stage) => !validStages.has(stage))) return NextResponse.json({ error: 'Uma das etapas selecionadas é inválida.' }, { status: 400 });
 
   const admin = createAdminClient();
