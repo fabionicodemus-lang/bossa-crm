@@ -38,15 +38,24 @@ export function PipelineBoard({ initialLeads, kind, organizationId, canEdit }: {
   const [overStage, setOverStage] = useState<string | null>(null);
   const [query, setQuery] = useState('');
   const [showNew, setShowNew] = useState(false);
+  const [showBulk, setShowBulk] = useState(false);
+  const [bulkFromStage, setBulkFromStage] = useState('novo_triagem');
+  const [bulkToStage, setBulkToStage] = useState('futuro');
   const [saving, setSaving] = useState(false);
+  const [bulkSaving, setBulkSaving] = useState(false);
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
 
+  const stages = stagesFor(kind);
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return leads;
     return leads.filter((lead) => [lead.name, lead.phone, lead.enterprise, lead.company, lead.source, lead.priority_class, lead.next_action]
       .some((value) => String(value ?? '').toLowerCase().includes(q)));
   }, [leads, query]);
+  const bulkCount = leads.filter((lead) => lead.stage === bulkFromStage).length;
+  const fromLabel = stages.find((stage) => stage.id === bulkFromStage)?.label ?? bulkFromStage;
+  const toLabel = stages.find((stage) => stage.id === bulkToStage)?.label ?? bulkToStage;
 
   async function moveLead(stage: string) {
     if (!canEdit) return;
@@ -75,6 +84,46 @@ export function PipelineBoard({ initialLeads, kind, organizationId, canEdit }: {
       const payload = await response.json().catch(() => ({}));
       setError(payload.error || 'Não foi possível mover o lead. Execute primeiro a migração SQL do sistema híbrido.');
     } else router.refresh();
+  }
+
+  async function moveAllFromStage() {
+    if (!canEdit || bulkSaving || bulkCount === 0) return;
+    setError('');
+    setNotice('');
+    if (bulkFromStage === bulkToStage) {
+      setError('Escolha etapas diferentes.');
+      return;
+    }
+    const confirmed = window.confirm(`Mover ${bulkCount} ${bulkCount === 1 ? 'registro' : 'registros'} de “${fromLabel}” para “${toLabel}”?`);
+    if (!confirmed) return;
+
+    setBulkSaving(true);
+    try {
+      const response = await fetch('/api/leads/bulk-stage', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ kind, fromStage: bulkFromStage, toStage: bulkToStage }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.error || 'Não foi possível movimentar os leads.');
+
+      const ownerMode = isAiStage(bulkToStage) ? 'ai' : isHumanStage(bulkToStage) ? 'human' : 'none';
+      setLeads((items) => items.map((lead) => lead.stage === bulkFromStage ? {
+        ...lead,
+        stage: bulkToStage,
+        owner_mode: ownerMode,
+        ai_enabled: isAiStage(bulkToStage) && !lead.opt_out && !lead.automation_paused,
+        next_action: bulkToStage === 'futuro' ? 'Aguardar inclusão em campanha de reativação comercial.' : lead.next_action,
+        next_action_due_at: bulkToStage === 'futuro' ? null : lead.next_action_due_at,
+      } : lead));
+      setNotice(payload.message || `${payload.updated || bulkCount} registros movimentados.`);
+      setShowBulk(false);
+      router.refresh();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Não foi possível movimentar os leads.');
+    } finally {
+      setBulkSaving(false);
+    }
   }
 
   async function createLead(event: FormEvent<HTMLFormElement>) {
@@ -123,12 +172,28 @@ export function PipelineBoard({ initialLeads, kind, organizationId, canEdit }: {
         <div className="page-actions">
           <input className="input" style={{ width: 230 }} placeholder="Buscar nome, ação, prioridade…" value={query} onChange={(e) => setQuery(e.target.value)} />
           {canEdit && <>
+            <button className="btn btn-ghost btn-sm" onClick={() => setShowBulk((value) => !value)}>⇄ Mover em massa</button>
             <Link className="btn btn-ghost btn-sm" href={`/importar?tipo=${kind}`}>📥 Importar XLSX</Link>
             <button className="btn btn-primary btn-sm" onClick={() => setShowNew((value) => !value)}>+ {kind === 'cliente' ? 'Novo lead' : 'Novo corretor'}</button>
           </>}
         </div>
       </div>
       {error && <div className="error-box">{error}</div>}
+      {notice && <div className="success-box">{notice}</div>}
+
+      {canEdit && showBulk && <section className="card" style={{ marginBottom: 15 }}>
+        <div className="card-head"><h3>Movimentação em massa</h3><button className="btn btn-ghost btn-sm" onClick={() => setShowBulk(false)}>Fechar</button></div>
+        <div className="card-body">
+          <div className="grid grid-3">
+            <div className="field"><label>Etapa de origem</label><select className="select" value={bulkFromStage} onChange={(event) => setBulkFromStage(event.target.value)}>{stages.map((stage) => <option value={stage.id} key={stage.id}>{stage.label}</option>)}</select></div>
+            <div className="field"><label>Etapa de destino</label><select className="select" value={bulkToStage} onChange={(event) => setBulkToStage(event.target.value)}>{stages.filter((stage) => stage.id !== 'passagem_pendente').map((stage) => <option value={stage.id} key={stage.id}>{stage.label}</option>)}</select></div>
+            <div className="field"><label>Registros que serão movidos</label><div className="input" style={{ background: 'var(--bg)', fontWeight: 800 }}>{bulkCount} {bulkCount === 1 ? 'registro' : 'registros'}</div></div>
+          </div>
+          <div className="info-box">A ação considera todos os registros ativos da etapa de origem, mesmo que a busca da pipeline esteja filtrada. Cada ficha receberá um registro no histórico.</div>
+          <button className="btn btn-primary" disabled={bulkSaving || bulkCount === 0 || bulkFromStage === bulkToStage} onClick={() => void moveAllFromStage()}>{bulkSaving ? 'Movendo…' : `Mover ${bulkCount} para ${toLabel}`}</button>
+        </div>
+      </section>}
+
       {canEdit && showNew && <section className="card" style={{ marginBottom: 15 }}>
         <div className="card-head"><h3>Cadastro manual</h3><button className="btn btn-ghost btn-sm" onClick={() => setShowNew(false)}>Fechar</button></div>
         <form className="card-body grid grid-3" onSubmit={createLead}>
@@ -143,7 +208,7 @@ export function PipelineBoard({ initialLeads, kind, organizationId, canEdit }: {
       </section>}
 
       <div className="pipeline">
-        {stagesFor(kind).map((stage) => {
+        {stages.map((stage) => {
           const stageLeads = filtered.filter((lead) => lead.stage === stage.id);
           return <section key={stage.id} className={`pipeline-column ${overStage === stage.id ? 'dragover' : ''}`}
             onDragOver={(event) => { if (!canEdit) return; event.preventDefault(); setOverStage(stage.id); }}
