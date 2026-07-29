@@ -29,7 +29,6 @@ export type ProposalPdfData = {
   proposedPrice: string;
   discount: string;
   paidUntilKeys: string;
-  paidUntilKeysPercent: string;
   schedule: ProposalPdfScheduleRow[];
   notes: string;
   bossaLogo: ProposalPdfImage;
@@ -181,9 +180,8 @@ export function createProposalPdf(data: ProposalPdfData) {
     ['Valor da proposta', data.proposedPrice],
     ['Desconto', data.discount],
     ['Pago até as chaves', data.paidUntilKeys],
-    ['Percentual até as chaves', data.paidUntilKeysPercent],
   ];
-  const cardW = 99;
+  const cardW = 125;
   summary.forEach(([labelText, value], index) => {
     const x = 40 + index * (cardW + 5);
     drawRect(x, 316, cardW, 58, index === 1 ? '0.987 0.944 0.920' : light);
