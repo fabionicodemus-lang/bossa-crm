@@ -17,6 +17,8 @@ const links: NavItem[] = [
   { section: 'Corretores' },
   { href: '/corretores', icon: '🤝', label: 'Pipeline Corretores' },
   { href: '/importar?tipo=corretor', icon: '📥', label: 'Importar corretores', roles: ['admin', 'comercial'] },
+  { section: 'Comercial' },
+  { href: '/empreendimentos', icon: '🏢', label: 'Empreendimentos' },
   { section: 'Sistema', roles: ['admin'] },
   { href: '/treinamento/nara', icon: '🎓', label: 'Treinar a Nara', roles: ['admin'] },
   { href: '/treinamento/plantao', icon: '🌙', label: 'Treinar o Plantão', roles: ['admin'] },
