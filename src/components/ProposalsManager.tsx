@@ -16,11 +16,12 @@ import {
   localDateTime,
   money,
   numberValue,
-  planBoolean,
   planText,
   statusLabels,
   storedStatusOf,
+  suggestedReinforcementDate,
   workflowOf,
+  type MonthlyMode,
   type Origin,
   type Proposal,
   type ProposalDevelopment,
@@ -28,6 +29,7 @@ import {
   type ProposalLead,
   type ProposalSnapshot,
   type ProposalUnit,
+  type ReinforcementFrequency,
   type WorkflowStatus,
 } from './proposals/model';
 
@@ -72,15 +74,15 @@ export function ProposalsManager({
   const availableLeads = leads.filter((lead) => lead.kind === form.origin);
   const developmentUnits = units.filter((unit) => unit.development_id === form.developmentId);
   const deliveryDate = selectedDevelopment?.delivery_date ?? null;
-  const firstBeforeKeysDate = addMonthsIso(form.proposalDate, 1);
+  const firstMonthlyDate = addMonthsIso(form.proposalDate, 1);
   const firstAfterKeysDate = deliveryDate ? addMonthsIso(deliveryDate, 1) : '';
   const maxBeforeKeysCount = deliveryDate
-    ? countOccurrencesUntil(firstBeforeKeysDate, 1, 600, deliveryDate)
+    ? countOccurrencesUntil(firstMonthlyDate, 1, 600, deliveryDate)
     : 0;
 
   const calculations = useMemo(
-    () => calculateProposal(form, deliveryDate, firstBeforeKeysDate, firstAfterKeysDate),
-    [deliveryDate, firstAfterKeysDate, firstBeforeKeysDate, form],
+    () => calculateProposal(form, deliveryDate, firstMonthlyDate, firstAfterKeysDate),
+    [deliveryDate, firstAfterKeysDate, firstMonthlyDate, form],
   );
 
   const filteredProposals = useMemo(() => {
@@ -134,25 +136,24 @@ export function ProposalsManager({
   }
 
   function chooseDevelopment(developmentId: string) {
-    const development = developments.find((item) => item.id === developmentId);
-    const plan = development?.default_payment_plan ?? {};
     setForm((current) => ({
       ...current,
       developmentId,
       unitId: '',
       listPrice: '',
       entryTotal: '',
-      hasBeforeKeysMonthly: planBoolean(plan, 'has_before_keys_monthly', false),
+      monthlyMode: 'unificado',
+      monthlyCount: '',
+      monthlyAmount: '',
       beforeKeysCount: '',
       beforeKeysAmount: '',
+      afterKeysCount: '',
+      afterKeysAmount: '',
       reinforcementFrequency: 'anual',
       reinforcementCount: '',
       reinforcementAmount: '',
-      firstReinforcementDate: '',
+      firstReinforcementDate: suggestedReinforcementDate(current.proposalDate, 'anual'),
       keysAmount: '',
-      hasAfterKeysMonthly: planBoolean(plan, 'has_after_keys_monthly', false),
-      afterKeysCount: '',
-      afterKeysAmount: '',
     }));
   }
 
@@ -163,23 +164,65 @@ export function ProposalsManager({
       return;
     }
     const plan = unit.payment_plan ?? {};
-    const postKeysCount = numberValue(plan.after_keys_count ?? plan.post_keys_count);
+    const storedMode = planText(plan, 'monthly_mode');
+    const storedAfterCount = numberValue(plan.after_keys_count ?? plan.post_keys_count);
+    const storedAfterAmount = numberValue(plan.after_keys_amount ?? plan.post_keys_amount);
+    const unitMonthlyAmount = numberValue(unit.installment_amount);
+    const useSplitMode = storedMode === 'dividido'
+      || (!storedMode && storedAfterCount > 0 && storedAfterAmount > 0 && storedAfterAmount !== unitMonthlyAmount);
+    const frequency: ReinforcementFrequency = planText(plan, 'reinforcement_frequency') === 'semestral' ? 'semestral' : 'anual';
+
     setForm((current) => ({
       ...current,
       unitId,
       listPrice: String(numberValue(unit.list_price) || ''),
       entryTotal: String(numberValue(unit.entry_amount) || ''),
-      hasBeforeKeysMonthly: numberValue(unit.installment_count) > 0,
-      beforeKeysCount: String(numberValue(unit.installment_count) || ''),
-      beforeKeysAmount: String(numberValue(unit.installment_amount) || ''),
+      monthlyMode: useSplitMode ? 'dividido' : 'unificado',
+      monthlyCount: useSplitMode ? '' : String(numberValue(plan.monthly_count ?? unit.installment_count) || ''),
+      monthlyAmount: useSplitMode ? '' : String(numberValue(plan.monthly_amount ?? unit.installment_amount) || ''),
+      beforeKeysCount: useSplitMode ? String(numberValue(plan.before_keys_count ?? unit.installment_count) || '') : '',
+      beforeKeysAmount: useSplitMode ? String(numberValue(plan.before_keys_amount ?? unit.installment_amount) || '') : '',
+      afterKeysCount: useSplitMode ? String(storedAfterCount || '') : '',
+      afterKeysAmount: useSplitMode ? String(storedAfterAmount || '') : '',
       reinforcementCount: String(numberValue(unit.reinforcement_count) || ''),
       reinforcementAmount: String(numberValue(unit.reinforcement_amount) || ''),
-      firstReinforcementDate: planText(plan, 'first_reinforcement_date'),
-      reinforcementFrequency: planText(plan, 'reinforcement_frequency') === 'semestral' ? 'semestral' : 'anual',
+      reinforcementFrequency: frequency,
+      firstReinforcementDate: planText(plan, 'first_reinforcement_date')
+        || suggestedReinforcementDate(current.proposalDate, frequency),
       keysAmount: String(numberValue(unit.keys_amount) || ''),
-      hasAfterKeysMonthly: postKeysCount > 0,
-      afterKeysCount: String(postKeysCount || ''),
-      afterKeysAmount: planText(plan, 'after_keys_amount') || planText(plan, 'post_keys_amount'),
+    }));
+  }
+
+  function chooseMonthlyMode(monthlyMode: MonthlyMode) {
+    setForm((current) => {
+      if (monthlyMode === current.monthlyMode) return current;
+      if (monthlyMode === 'dividido') {
+        const totalCount = integerValue(current.monthlyCount);
+        const beforeCount = Math.min(totalCount, maxBeforeKeysCount);
+        const afterCount = Math.max(0, totalCount - beforeCount);
+        return {
+          ...current,
+          monthlyMode,
+          beforeKeysCount: String(beforeCount || ''),
+          beforeKeysAmount: current.monthlyAmount,
+          afterKeysCount: String(afterCount || ''),
+          afterKeysAmount: current.monthlyAmount,
+        };
+      }
+      return {
+        ...current,
+        monthlyMode,
+        monthlyCount: String(integerValue(current.beforeKeysCount) + integerValue(current.afterKeysCount) || ''),
+        monthlyAmount: current.beforeKeysAmount || current.afterKeysAmount,
+      };
+    });
+  }
+
+  function chooseReinforcementFrequency(frequency: ReinforcementFrequency) {
+    setForm((current) => ({
+      ...current,
+      reinforcementFrequency: frequency,
+      firstReinforcementDate: suggestedReinforcementDate(current.proposalDate, frequency),
     }));
   }
 
@@ -187,6 +230,21 @@ export function ProposalsManager({
     const plan = proposal.payment_plan ?? {};
     const snapshot = proposal.snapshot ?? {};
     const linkedLead = leads.find((lead) => lead.id === proposal.lead_id);
+    const oldBeforeCount = numberValue(plan.before_keys_count ?? plan.until_keys_count);
+    const oldAfterCount = numberValue(plan.after_keys_count ?? plan.post_keys_count);
+    const oldBeforeAmount = numberValue(plan.before_keys_amount ?? plan.until_keys_amount);
+    const oldAfterAmount = numberValue(plan.after_keys_amount ?? plan.post_keys_amount);
+    const storedMode = planText(plan, 'monthly_mode');
+    const monthlyMode: MonthlyMode = storedMode === 'dividido'
+      ? 'dividido'
+      : storedMode === 'unificado'
+        ? 'unificado'
+        : oldAfterCount > 0
+          ? 'dividido'
+          : 'unificado';
+    const frequency: ReinforcementFrequency = planText(plan, 'reinforcement_frequency') === 'semestral' ? 'semestral' : 'anual';
+    const proposalDate = planText(plan, 'proposal_date') || String(snapshot.proposal_date ?? proposal.created_at).slice(0, 10);
+
     setEditingId(proposal.id);
     setForm({
       origin: snapshot.origin === 'corretor' || linkedLead?.kind === 'corretor' ? 'corretor' : 'cliente',
@@ -195,21 +253,27 @@ export function ProposalsManager({
       developmentId: proposal.development_id,
       unitId: proposal.unit_id ?? '',
       workflowStatus: workflowOf(proposal),
-      proposalDate: planText(plan, 'proposal_date') || String(snapshot.proposal_date ?? proposal.created_at).slice(0, 10),
+      proposalDate,
       validUntil: proposal.valid_until ?? '',
       listPrice: String(numberValue(proposal.list_price) || ''),
       entryTotal: planText(plan, 'entry_total'),
-      hasBeforeKeysMonthly: planBoolean(plan, 'has_before_keys_monthly', numberValue(plan.before_keys_count ?? plan.until_keys_count) > 0),
-      beforeKeysCount: planText(plan, 'before_keys_count') || planText(plan, 'until_keys_count'),
-      beforeKeysAmount: planText(plan, 'before_keys_amount') || planText(plan, 'until_keys_amount'),
-      reinforcementFrequency: planText(plan, 'reinforcement_frequency') === 'semestral' ? 'semestral' : 'anual',
+      monthlyMode,
+      monthlyCount: monthlyMode === 'unificado'
+        ? planText(plan, 'monthly_count') || String(oldBeforeCount + oldAfterCount || '')
+        : '',
+      monthlyAmount: monthlyMode === 'unificado'
+        ? planText(plan, 'monthly_amount') || String(oldBeforeAmount || oldAfterAmount || '')
+        : '',
+      beforeKeysCount: monthlyMode === 'dividido' ? String(oldBeforeCount || '') : '',
+      beforeKeysAmount: monthlyMode === 'dividido' ? String(oldBeforeAmount || '') : '',
+      afterKeysCount: monthlyMode === 'dividido' ? String(oldAfterCount || '') : '',
+      afterKeysAmount: monthlyMode === 'dividido' ? String(oldAfterAmount || '') : '',
+      reinforcementFrequency: frequency,
       reinforcementCount: planText(plan, 'reinforcement_count'),
       reinforcementAmount: planText(plan, 'reinforcement_amount'),
-      firstReinforcementDate: planText(plan, 'first_reinforcement_date'),
+      firstReinforcementDate: planText(plan, 'first_reinforcement_date')
+        || suggestedReinforcementDate(proposalDate, frequency),
       keysAmount: planText(plan, 'keys_amount'),
-      hasAfterKeysMonthly: planBoolean(plan, 'has_after_keys_monthly', numberValue(plan.after_keys_count ?? plan.post_keys_count) > 0),
-      afterKeysCount: planText(plan, 'after_keys_count') || planText(plan, 'post_keys_count'),
-      afterKeysAmount: planText(plan, 'after_keys_amount') || planText(plan, 'post_keys_amount'),
       nextAction: String(snapshot.next_action ?? ''),
       nextActionDueAt: localDateTime(typeof snapshot.next_action_due_at === 'string' ? snapshot.next_action_due_at : null),
       notes: proposal.notes ?? '',
@@ -240,7 +304,7 @@ export function ProposalsManager({
       setError('Informe o cliente final apresentado pelo corretor.');
       return;
     }
-    if (form.hasBeforeKeysMonthly && integerValue(form.beforeKeysCount) > maxBeforeKeysCount) {
+    if (form.monthlyMode === 'dividido' && integerValue(form.beforeKeysCount) > maxBeforeKeysCount) {
       setError(`Há no máximo ${maxBeforeKeysCount} parcelas mensais entre a proposta e as chaves.`);
       return;
     }
@@ -260,23 +324,28 @@ export function ProposalsManager({
       const leadName = selectedLead?.name ?? 'Lead não identificado';
       const clientName = form.origin === 'cliente' ? leadName : form.clientName.trim();
       const nextActionDueAt = form.nextActionDueAt ? new Date(form.nextActionDueAt).toISOString() : null;
+      const beforeItem = calculations.scheduleItems.find((item) => item.kind === 'parcela_ate_chaves');
+      const afterItem = calculations.scheduleItems.find((item) => item.kind === 'parcela_pos_chaves');
       const paymentPlan = {
         proposal_date: form.proposalDate,
         delivery_date: deliveryDate,
         entry_total: calculations.entryTotal,
-        has_before_keys_monthly: form.hasBeforeKeysMonthly,
-        before_keys_count: form.hasBeforeKeysMonthly ? integerValue(form.beforeKeysCount) : 0,
-        before_keys_amount: form.hasBeforeKeysMonthly ? numberValue(form.beforeKeysAmount) : 0,
-        before_keys_first_date: firstBeforeKeysDate,
+        monthly_mode: form.monthlyMode,
+        monthly_count: form.monthlyMode === 'unificado' ? integerValue(form.monthlyCount) : calculations.monthlyBeforeCount + calculations.monthlyAfterCount,
+        monthly_amount: form.monthlyMode === 'unificado' ? numberValue(form.monthlyAmount) : null,
+        has_before_keys_monthly: calculations.monthlyBeforeCount > 0,
+        before_keys_count: beforeItem?.quantity ?? 0,
+        before_keys_amount: beforeItem?.amount ?? 0,
+        before_keys_first_date: beforeItem?.startDate || null,
+        has_after_keys_monthly: calculations.monthlyAfterCount > 0,
+        after_keys_count: afterItem?.quantity ?? 0,
+        after_keys_amount: afterItem?.amount ?? 0,
+        after_keys_first_date: afterItem?.startDate || null,
         reinforcement_frequency: form.reinforcementFrequency,
         reinforcement_count: integerValue(form.reinforcementCount),
         reinforcement_amount: numberValue(form.reinforcementAmount),
         first_reinforcement_date: form.firstReinforcementDate || null,
         keys_amount: numberValue(form.keysAmount),
-        has_after_keys_monthly: form.hasAfterKeysMonthly,
-        after_keys_count: form.hasAfterKeysMonthly ? integerValue(form.afterKeysCount) : 0,
-        after_keys_amount: form.hasAfterKeysMonthly ? numberValue(form.afterKeysAmount) : 0,
-        after_keys_first_date: firstAfterKeysDate || null,
       };
       const snapshot: ProposalSnapshot = {
         workflow_status: form.workflowStatus,
@@ -469,6 +538,8 @@ export function ProposalsManager({
           chooseLead={chooseLead}
           chooseDevelopment={chooseDevelopment}
           chooseUnit={chooseUnit}
+          chooseMonthlyMode={chooseMonthlyMode}
+          chooseReinforcementFrequency={chooseReinforcementFrequency}
           developments={developments}
           availableLeads={availableLeads}
           developmentUnits={developmentUnits}
@@ -476,7 +547,7 @@ export function ProposalsManager({
           selectedDevelopment={selectedDevelopment}
           selectedUnit={selectedUnit}
           deliveryDate={deliveryDate}
-          firstBeforeKeysDate={firstBeforeKeysDate}
+          firstMonthlyDate={firstMonthlyDate}
           firstAfterKeysDate={firstAfterKeysDate}
           maxBeforeKeysCount={maxBeforeKeysCount}
           calculations={calculations}
