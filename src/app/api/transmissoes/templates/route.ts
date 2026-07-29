@@ -65,6 +65,7 @@ export async function POST(request: Request) {
         category: template.category,
         status: template.status,
         quality_score: quality || null,
+        rejected_reason: template.rejected_reason || null,
         header_format: String(header?.format ?? 'NONE').toUpperCase(),
         body_text: bodyText,
         footer_text: footer?.text ? String(footer.text) : null,
