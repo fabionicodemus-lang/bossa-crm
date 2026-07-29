@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { stagesFor } from '@/lib/stages';
 import type { LeadKind } from '@/lib/types';
 
 interface ImportRecord {
@@ -16,6 +17,29 @@ interface ImportRecord {
   creci: string | null;
   temperature: number;
   metadata: Record<string, unknown>;
+}
+
+const LEGACY_STAGE_MAP: Record<LeadKind, Record<string, string>> = {
+  cliente: {
+    novo: 'novo_triagem',
+    ia: 'qualificacao_ia',
+    qualificado: 'passagem_pendente',
+    agendado: 'agendado',
+    negociacao: 'proposta_negociacao',
+    fechado: 'fechado_ganho',
+  },
+  corretor: {
+    n1: 'novo_triagem',
+    n2: 'qualificacao_ia',
+    n3: 'nutricao_ativa',
+    n4: 'proposta_negociacao',
+    n5: 'nutricao_ativa',
+  },
+};
+
+function normalizeImportedStage(kind: LeadKind, stage: string): string {
+  const mapped = LEGACY_STAGE_MAP[kind][stage] || stage;
+  return stagesFor(kind).some((item) => item.id === mapped) ? mapped : 'novo_triagem';
 }
 
 export async function POST(request: Request) {
@@ -91,13 +115,16 @@ export async function POST(request: Request) {
     if (batchKey) seenInBatch.add(batchKey);
 
     const existingId =
-      (record.kommo_id && byKommo.get(`${record.kind}:${record.kommo_id}`)) ||
-      (record.phone && byPhone.get(`${record.kind}:${record.phone}`));
+      (record.kommo_id && byKommo.get(`${record.kind}:${record.kommo_id}`))
+      || (record.phone && byPhone.get(`${record.kind}:${record.phone}`));
     if (existingId && strategy === 'ignore') {
       skipped++;
       continue;
     }
 
+    const stage = normalizeImportedStage(record.kind, String(record.stage || ''));
+    const terminal = ['fechado_ganho', 'encerrado'].includes(stage);
+    const human = ['humano_ativo', 'agendado', 'pos_reuniao', 'proposta_negociacao'].includes(stage);
     const basePayload = {
       organization_id: membership.organization_id,
       kind: record.kind,
@@ -105,14 +132,16 @@ export async function POST(request: Request) {
       name: String(record.name).slice(0, 200),
       phone: record.phone || null,
       email: record.email || null,
-      stage: record.stage,
+      stage,
       source: record.source || null,
       enterprise: record.enterprise || null,
       company: record.company || null,
       group_name: record.group_name || null,
       creci: record.creci || null,
       temperature: Math.max(0, Math.min(100, Number(record.temperature) || 0)),
-      ai_enabled: record.kind === 'cliente' && record.stage === 'ia',
+      owner_mode: terminal ? 'none' : human ? 'human' : 'ai',
+      ai_enabled: !terminal && !human,
+      automation_paused: false,
       metadata: record.metadata || {},
       updated_at: new Date().toISOString(),
     };
