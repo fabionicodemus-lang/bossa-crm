@@ -1,73 +1,84 @@
-# Bossa CRM — versão real com usuários, banco e WhatsApp
+# Bossa CRM — usuários, WhatsApp, IA e operação híbrida
 
-Este projeto substitui o protótipo HTML por uma aplicação **Next.js 16 + Supabase** com:
+Aplicação **Next.js 16 + Supabase** para a operação comercial da Bossa Empreendimentos, com:
 
-- cadastro, login, logout e recuperação de senha;
-- primeiro usuário como administrador da empresa;
-- convites por e-mail para novos usuários;
-- funções `admin`, `comercial` e `viewer`;
-- dados persistidos no PostgreSQL, não no `localStorage`;
-- RLS por empresa para impedir que usuários de outra conta vejam os dados;
-- pipelines de clientes e corretores com drag-and-drop;
-- ficha única para cliente e corretor;
-- histórico, anotações e mensagens persistentes;
-- importador XLSX compatível com a exportação do Kommo;
-- tela Atendimento IA contendo somente clientes na etapa `IA Atendendo`;
-- bloqueio automático da IA fora dessa etapa e para clientes fechados;
-- Meta Embedded Signup para conectar os dois números do WhatsApp;
-- webhook, envio de mensagens e armazenamento do histórico;
-- Nara e Plantão usando a OpenAI Responses API com modelo e fallback configuráveis;
-- cache de prompt, compactação de conversas longas e consumo registrado por lead.
+- autenticação, convites e perfis `admin`, `comercial` e `viewer`;
+- banco PostgreSQL com RLS por organização;
+- pipelines de clientes e corretores;
+- ficha unificada com WhatsApp, histórico, tarefas e próxima ação;
+- importação XLSX do Kommo;
+- dois canais da WhatsApp Cloud API;
+- Nara para clientes e Plantão para corretores;
+- OpenAI Responses API com modelo e fallback configuráveis;
+- cache de prompt, compactação de conversas longas e custo registrado por lead;
+- sistema híbrido: IA e equipe humana compartilham o histórico sem responder ao mesmo tempo;
+- mudança automática de classificação, prioridade, etapa, notas, tarefas e passagem ao humano;
+- SLA de passagem, resgate de leads esquecidos e reativação de leads futuros.
 
 ## 1. Requisitos
 
-- Node.js 22+
-- uma conta Supabase;
-- uma conta Vercel ou outro servidor compatível com Next.js;
-- para WhatsApp: aplicativo da Meta configurado para WhatsApp Business Platform;
-- para a Nara e o Plantão responderem: chave da API da OpenAI.
+- Node.js 22+;
+- Supabase;
+- Vercel ou servidor compatível com Next.js;
+- aplicativo Meta para a WhatsApp Business Platform;
+- chave da API da OpenAI.
 
 ## 2. Banco e autenticação
 
-1. Crie um projeto novo no Supabase.
-2. Abra **SQL Editor**.
-3. Execute as migrações em ordem:
+Execute as migrações no SQL Editor do Supabase, em ordem:
 
 ```text
 supabase/migrations/001_bossa_crm.sql
 supabase/migrations/002_treinamento_nara_plantao.sql
 supabase/migrations/003_arquivos_ia.sql
 supabase/migrations/004_consumo_ia_gpt56.sql
+supabase/migrations/005_sistema_hibrido_followup.sql
 ```
 
-4. Em **Authentication > URL Configuration**, defina:
-   - Site URL local: `http://localhost:3000`
-   - URL de produção: o domínio do CRM
-   - Redirect URLs: `http://localhost:3000/**` e `https://SEU-DOMINIO/**`
-5. Para testes rápidos, você pode desabilitar confirmação de e-mail. Em produção, é melhor mantê-la habilitada.
+A migração `005`:
+
+- converte as etapas antigas para os estados híbridos;
+- cria tarefas e aceite formal de passagem;
+- adiciona dono, backup, prioridade, próxima ação, prazo e reativação ao lead;
+- adiciona a oferta da unidade pronta do Soul à base da Nara e do Plantão sem apagar os textos já personalizados.
+
+Depois do deployment do código e da configuração do worker, execute:
+
+```text
+supabase/migrations/006_agendar_worker_followup.sql
+```
+
+Em **Authentication → URL Configuration**, configure o endereço de produção e as URLs de redirecionamento.
 
 ## 3. Variáveis de ambiente
 
-Copie `.env.example` para `.env.local` e preencha:
+Copie `.env.example` para `.env.local`:
 
 ```bash
 cp .env.example .env.local
 ```
 
-No Supabase, obtenha os valores no painel **Connect / API Keys**.
+Variáveis principais:
 
-- `NEXT_PUBLIC_SUPABASE_URL`: URL do projeto.
-- `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`: chave publicável.
-- `SUPABASE_SECRET_KEY`: chave secreta, usada somente no servidor.
-- `NEXT_PUBLIC_ALLOW_PUBLIC_SIGNUP`: deixe `true` para criar o primeiro administrador; depois altere para `false` para aceitar novos usuários somente por convite.
+```env
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=
+SUPABASE_SECRET_KEY=
+NEXT_PUBLIC_APP_URL=
+NEXT_PUBLIC_ALLOW_PUBLIC_SIGNUP=false
 
-A chave secreta **nunca** pode ser exposta com prefixo `NEXT_PUBLIC_`.
+OPENAI_API_KEY=
+OPENAI_MODEL=gpt-5.6-terra
+OPENAI_MODEL_FALLBACK=gpt-5.6-luna
+OPENAI_REASONING_EFFORT=low
+OPENAI_MAX_OUTPUT_TOKENS=2400
+OPENAI_VERBOSITY=low
+OPENAI_TIMEOUT_MS=25000
 
-Gere a chave de criptografia do token do WhatsApp:
-
-```bash
-openssl rand -base64 32
+CRON_SECRET=
 ```
+
+`SUPABASE_SECRET_KEY`, `OPENAI_API_KEY` e `CRON_SECRET` são variáveis somente do servidor e nunca podem usar o prefixo `NEXT_PUBLIC_`.
 
 ## 4. Rodar localmente
 
@@ -78,83 +89,102 @@ npm run dev
 
 Acesse `http://localhost:3000`.
 
-1. Clique em **Criar usuário**.
-2. Confirme o e-mail, caso necessário.
-3. No onboarding, crie **Bossa Empreendimentos**.
-4. Importe a planilha do Kommo em **Importar XLSX**.
-5. Em **Usuários**, convide o restante do time.
-6. Depois do primeiro administrador, defina `NEXT_PUBLIC_ALLOW_PUBLIC_SIGNUP=false` no ambiente de produção.
+## 5. Publicação na Vercel
 
-## 5. Publicar na Vercel
-
-1. Suba esta pasta para um repositório no GitHub (público ou privado).
-2. Importe o repositório na Vercel.
-3. Cadastre todas as variáveis de `.env.example` em **Project Settings > Environment Variables**.
-4. Faça o deploy.
-5. Atualize `NEXT_PUBLIC_APP_URL` e as URLs permitidas no Supabase.
+1. Importe este repositório na Vercel.
+2. Cadastre as variáveis de `.env.example`.
+3. Faça o deployment.
+4. Atualize `NEXT_PUBLIC_APP_URL` e as URLs permitidas no Supabase.
 
 ## 6. WhatsApp pela Meta
 
-O frontend usa o Embedded Signup. Configure no aplicativo da Meta:
+Configure no aplicativo Meta:
 
-- `NEXT_PUBLIC_META_APP_ID`
-- `NEXT_PUBLIC_META_CONFIG_ID`
-- `META_APP_ID`
-- `META_APP_SECRET`
-- `META_GRAPH_VERSION`
-- `META_WEBHOOK_VERIFY_TOKEN`
+```env
+NEXT_PUBLIC_META_APP_ID=
+NEXT_PUBLIC_META_CONFIG_ID=
+NEXT_PUBLIC_META_GRAPH_VERSION=v25.0
+META_APP_ID=
+META_APP_SECRET=
+META_GRAPH_VERSION=v25.0
+META_WEBHOOK_VERIFY_TOKEN=
+WHATSAPP_TOKEN_ENCRYPTION_KEY_BASE64=
+```
 
-Webhook de produção:
+Webhook:
 
 ```text
 https://SEU-DOMINIO/api/meta/whatsapp/webhook
 ```
 
-Assine o campo `messages` no WhatsApp Business Account.
+Assine o campo `messages` no WhatsApp Business Account. Os tokens ficam criptografados com AES-256-GCM.
 
-Os tokens são criptografados com AES-256-GCM antes de serem gravados. A tabela de conexões não possui acesso direto para usuários autenticados; somente o backend com a Secret Key consegue ler o token.
+## 7. Funcionamento da IA
 
-## 7. Atendimento por IA
-
-Preencha:
-
-```env
-OPENAI_API_KEY=
-OPENAI_MODEL=gpt-5.6-terra
-OPENAI_MODEL_FALLBACK=gpt-5.6-luna
-OPENAI_REASONING_EFFORT=low
-OPENAI_MAX_OUTPUT_TOKENS=2400
-OPENAI_VERBOSITY=low
-OPENAI_TIMEOUT_MS=25000
-```
-
-Regras implementadas:
-
-- cliente novo recebido pelo canal de clientes entra em `IA Atendendo`;
-- a Nara só responde quando `ai_enabled=true`;
-- ao sair da etapa `IA Atendendo`, a IA é pausada;
-- cliente fechado nunca é atendido automaticamente;
-- ao clicar em **Assumir conversa**, o envio humano é liberado;
-- mensagens da IA e do comercial ficam no mesmo histórico;
-- cada chamada tenta o modelo principal duas vezes e depois usa o fallback;
-- em falha total, o contato recebe uma mensagem neutra e o atendimento é transferido para o time;
+- toda mensagem recebida é analisada pela IA, inclusive quando um consultor é o dono do lead;
+- quando a IA é dona, ela também responde pelo WhatsApp;
+- quando o humano aceita a passagem, a IA fica em silêncio, mas continua atualizando classificação, resumo, prioridade, etapa, notas e tarefas;
+- pedido de humano, ligação, visita, proposta, negociação, unidade específica ou corretor com cliente ativo gera passagem;
+- classe A1 cria tarefa urgente e prazo curto;
+- a ficha do lead mostra dono, backup, próxima ação, prazo e tarefas;
+- falha total da IA cria alerta humano e envia mensagem neutra somente quando a IA era responsável pela resposta;
 - conversas com mais de 25 mensagens são compactadas, preservando as 10 mais recentes;
 - tokens, cache, modelo e custo estimado ficam registrados por lead.
 
-Para validar o modelo sem enviar mensagens reais, abra:
+Teste do modelo sem enviar mensagens reais:
 
 ```text
 /treinamento/teste-gpt56
 ```
 
-## 8. O que ainda depende das suas contas
+## 8. Estados híbridos
 
-O código está pronto, mas a publicação real exige credenciais e configurações que só o administrador da Bossa pode fornecer:
+Clientes:
 
-- projeto e chaves Supabase;
+```text
+Novo/Triagem → Qualificação Nara → Nutrição ativa → Passagem pendente
+→ Humano ativo → Agendado → Pós-reunião → Proposta/Negociação
+→ Futuro → Venda fechada ou Encerrado
+```
+
+Corretores usam a mesma estrutura, sem a etapa de venda fechada. O Plantão muda automaticamente o relacionamento conforme lê a conversa e identifica cliente ativo, visita, proposta ou negociação.
+
+## 9. Worker de SLA e resgate
+
+O endpoint protegido é:
+
+```text
+/api/automation/followup
+```
+
+Antes de executar `006_agendar_worker_followup.sql`:
+
+1. Gere um valor forte para `CRON_SECRET` e cadastre-o na Vercel.
+2. No Vault do Supabase, crie:
+   - `bossa_crm_worker_url`: URL completa do endpoint;
+   - `bossa_crm_cron_secret`: o mesmo valor de `CRON_SECRET`.
+3. Execute a migração `006`.
+
+O worker roda a cada cinco minutos e:
+
+- marca tarefas vencidas;
+- alerta passagens sem aceite;
+- devolve à IA uma passagem abandonada;
+- resgata leads humanos sem atividade por sete dias;
+- reabre leads quando chega a data individual de reativação.
+
+Nunca coloque o valor real de `CRON_SECRET` em SQL versionado ou no GitHub.
+
+## 10. Limite do follow-up proativo
+
+A automação de estados, tarefas e resgate funciona pelo CRM. Mensagens proativas de WhatsApp fora da janela de atendimento exigem templates aprovados na Meta. As réguas de 30, 60 e 90 dias devem ser ativadas somente depois de cadastrar esses templates, para evitar bloqueios ou mensagens recusadas.
+
+## 11. O que ainda depende das contas da Bossa
+
 - execução das migrações SQL;
-- domínio/Vercel;
-- aplicativo, Configuration ID e revisão da Meta;
-- chave da API da OpenAI e variáveis do modelo.
+- variáveis na Vercel;
+- aplicativo, revisão e números na Meta;
+- configuração do Vault e do worker;
+- templates de WhatsApp para follow-ups fora da janela de atendimento.
 
 Não coloque senhas ou chaves reais dentro do código ou do GitHub.
