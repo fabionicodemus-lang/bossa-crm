@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 
-const MIN_PASSWORD_LENGTH = 8;
+const MIN_PASSWORD_LENGTH = 6;
 const MAX_PASSWORD_LENGTH = 72;
 
 export async function POST(request: Request) {
@@ -47,12 +47,7 @@ export async function POST(request: Request) {
   }
 
   const admin = createAdminClient();
-  const { error } = await admin.auth.admin.updateUserById(targetUserId, {
-    password,
-    user_metadata: {
-      password_reset_by_admin_at: new Date().toISOString(),
-    },
-  });
+  const { error } = await admin.auth.admin.updateUserById(targetUserId, { password });
 
   if (error) {
     return NextResponse.json({ error: error.message || 'Não foi possível redefinir a senha.' }, { status: 400 });
