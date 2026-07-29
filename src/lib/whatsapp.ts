@@ -14,8 +14,11 @@ async function graphRequest<T>(path: string, options: RequestInit & { accessToke
   if (options.accessToken) headers.set('Authorization', `Bearer ${options.accessToken}`);
   if (options.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
   const response = await fetch(`${graphBase}/${path.replace(/^\//, '')}`, { ...options, headers, cache: 'no-store' });
-  const data = await response.json() as T & { error?: { message?: string } };
-  if (!response.ok) throw new Error(data.error?.message || `Meta Graph API: HTTP ${response.status}`);
+  const data = await response.json() as T & { error?: { message?: string; code?: number; error_subcode?: number } };
+  if (!response.ok) {
+    const suffix = data.error?.code ? ` (Meta ${data.error.code}${data.error.error_subcode ? `/${data.error.error_subcode}` : ''})` : '';
+    throw new Error(`${data.error?.message || `Meta Graph API: HTTP ${response.status}`}${suffix}`);
+  }
   return data;
 }
 
@@ -38,11 +41,85 @@ export async function getPhoneNumber(phoneNumberId: string, accessToken: string)
   );
 }
 
+export type MetaTemplateComponent = {
+  type: string;
+  format?: string;
+  text?: string;
+  buttons?: Array<Record<string, unknown>>;
+  example?: Record<string, unknown>;
+  [key: string]: unknown;
+};
+
+export type MetaMessageTemplate = {
+  id?: string;
+  name: string;
+  status: string;
+  category: string;
+  language: string;
+  quality_score?: { score?: string } | string | null;
+  components?: MetaTemplateComponent[];
+};
+
+export async function getWhatsAppTemplates(args: { wabaId: string; accessToken: string }) {
+  const fields = encodeURIComponent('id,name,status,category,language,quality_score,components');
+  return graphRequest<{ data?: MetaMessageTemplate[] }>(`${args.wabaId}/message_templates?limit=250&fields=${fields}`, {
+    accessToken: args.accessToken,
+  });
+}
+
 export async function sendWhatsAppText(args: { phoneNumberId: string; accessToken: string; to: string; body: string }) {
   return graphRequest<{ messages?: Array<{ id: string }> }>(`${args.phoneNumberId}/messages`, {
     method: 'POST',
     accessToken: args.accessToken,
     body: JSON.stringify({ messaging_product: 'whatsapp', recipient_type: 'individual', to: args.to, type: 'text', text: { preview_url: false, body: args.body } }),
+  });
+}
+
+export async function sendWhatsAppTemplate(args: {
+  phoneNumberId: string;
+  accessToken: string;
+  to: string;
+  name: string;
+  language: string;
+  bodyParameters?: string[];
+  headerType?: 'IMAGE' | 'VIDEO' | 'DOCUMENT' | 'TEXT' | 'NONE';
+  headerMediaLink?: string;
+  headerText?: string;
+}) {
+  const components: Array<Record<string, unknown>> = [];
+  const headerType = args.headerType ?? 'NONE';
+
+  if (['IMAGE', 'VIDEO', 'DOCUMENT'].includes(headerType) && args.headerMediaLink) {
+    const type = headerType.toLowerCase();
+    components.push({
+      type: 'header',
+      parameters: [{ type, [type]: { link: args.headerMediaLink } }],
+    });
+  } else if (headerType === 'TEXT' && args.headerText) {
+    components.push({ type: 'header', parameters: [{ type: 'text', text: args.headerText }] });
+  }
+
+  if (args.bodyParameters?.length) {
+    components.push({
+      type: 'body',
+      parameters: args.bodyParameters.map((text) => ({ type: 'text', text: String(text).slice(0, 1024) })),
+    });
+  }
+
+  return graphRequest<{ messages?: Array<{ id: string }> }>(`${args.phoneNumberId}/messages`, {
+    method: 'POST',
+    accessToken: args.accessToken,
+    body: JSON.stringify({
+      messaging_product: 'whatsapp',
+      recipient_type: 'individual',
+      to: args.to,
+      type: 'template',
+      template: {
+        name: args.name,
+        language: { code: args.language },
+        ...(components.length ? { components } : {}),
+      },
+    }),
   });
 }
 

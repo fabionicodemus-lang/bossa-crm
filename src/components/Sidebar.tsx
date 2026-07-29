@@ -20,6 +20,7 @@ const links: NavItem[] = [
   { section: 'Comercial' },
   { href: '/empreendimentos', icon: '🏢', label: 'Empreendimentos' },
   { href: '/propostas', icon: '🧾', label: 'Propostas' },
+  { href: '/transmissoes', icon: '📣', label: 'Transmissões' },
   { href: '/arquivados', icon: '🗄️', label: 'Leads arquivados' },
   { section: 'Sistema', roles: ['admin'] },
   { href: '/treinamento/nara', icon: '🎓', label: 'Treinar a Nara', roles: ['admin'] },
