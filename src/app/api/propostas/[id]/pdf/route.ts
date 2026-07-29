@@ -108,7 +108,6 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     proposedPrice: money.format(proposedPrice),
     discount: `${money.format(discountAmount)} · ${percent.format(discountPercent)}%`,
     paidUntilKeys: money.format(numberValue(snapshot.paid_until_keys_amount)),
-    paidUntilKeysPercent: `${percent.format(numberValue(snapshot.paid_until_keys_percent))}%`,
     schedule,
     notes: proposal.notes ?? '',
     bossaLogo,
