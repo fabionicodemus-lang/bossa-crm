@@ -125,8 +125,8 @@ export function UsersTable({ initialItems, currentUserId }: { initialItems: Memb
 
   async function resetPassword() {
     if (!resetUser) return;
-    if (temporaryPassword.length < 8) {
-      setError('A senha temporária precisa ter pelo menos 8 caracteres.');
+    if (temporaryPassword.length < 6) {
+      setError('A senha temporária precisa ter pelo menos 6 caracteres.');
       return;
     }
     if (temporaryPassword !== confirmPassword) {
@@ -193,7 +193,7 @@ export function UsersTable({ initialItems, currentUserId }: { initialItems: Memb
           <div className="info-box" style={{ marginTop: 0 }}>Você está definindo uma senha temporária para <strong>{resetUser.profiles?.full_name || 'Usuário'}</strong> ({resetUser.profiles?.email || 'sem e-mail'}). Não haverá confirmação por e-mail.</div>
           <div className="field">
             <label>Nova senha temporária</label>
-            <input className="input" type={showPassword ? 'text' : 'password'} autoComplete="new-password" value={temporaryPassword} onChange={(event) => setTemporaryPassword(event.target.value)} placeholder="Mínimo de 8 caracteres" />
+            <input className="input" type={showPassword ? 'text' : 'password'} autoComplete="new-password" value={temporaryPassword} onChange={(event) => setTemporaryPassword(event.target.value)} placeholder="Mínimo de 6 caracteres" />
           </div>
           <div className="field">
             <label>Confirmar senha</label>
