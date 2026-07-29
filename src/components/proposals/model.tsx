@@ -164,6 +164,9 @@ export function calculateProposal(form:ProposalForm,deliveryDate:string|null,fir
   if(reinforcementCount>0)scheduleItems.push({kind:form.reinforcementFrequency==='semestral'?'reforco_semestral':'reforco_anual',label:form.reinforcementFrequency==='semestral'?'Reforços semestrais':'Reforços anuais',quantity:reinforcementCount,amount:reinforcementAmount,startDate:form.firstReinforcementDate,intervalMonths:reinforcementInterval,total:reinforcementTotal,paidUntilKeysQuantity:paidReinforcementCount,paidUntilKeysAmount:paidReinforcementCount*reinforcementAmount});
   if(keysAmount>0&&deliveryDate)scheduleItems.push({kind:'chaves',label:'Parcela nas chaves',quantity:1,amount:keysAmount,startDate:deliveryDate,intervalMonths:null,total:keysAmount,paidUntilKeysQuantity:1,paidUntilKeysAmount:keysAmount});
 
+  const scheduleOrder:Record<string,number>={entrada:0,parcela_ate_chaves:1,reforco_semestral:2,reforco_anual:2,chaves:3,parcela_pos_chaves:4};
+  scheduleItems.sort((first,second)=>(scheduleOrder[first.kind]??9)-(scheduleOrder[second.kind]??9));
+
   return {
     listPrice,
     proposedPrice:nominalTotal,
