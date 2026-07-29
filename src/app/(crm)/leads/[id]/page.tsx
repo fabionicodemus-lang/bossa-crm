@@ -5,7 +5,13 @@ import { LeadDetail } from '@/components/LeadDetail';
 import { getCurrentContext } from '@/lib/auth';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
-import type { Activity, Lead, Message } from '@/lib/types';
+import type { Activity, AppRole, Lead, LeadTask, Message, TeamMember } from '@/lib/types';
+
+type MembershipRow = {
+  user_id: string;
+  role: AppRole;
+  profiles: { full_name: string; email: string } | Array<{ full_name: string; email: string }> | null;
+};
 
 export default async function LeadPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -17,11 +23,21 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
   const lead = leadData as Lead;
   const channel = lead.kind === 'cliente' ? 'clientes' : 'corretores';
   const admin = createAdminClient();
-  const [{ data: messages }, { data: activities }, { count: connections }] = await Promise.all([
+  const [{ data: messages }, { data: activities }, { data: tasks }, { data: memberships }, { count: connections }] = await Promise.all([
     supabase.from('messages').select('*').eq('lead_id', id).order('created_at', { ascending: true }).limit(1000),
     supabase.from('activities').select('*').eq('lead_id', id).order('created_at', { ascending: false }).limit(500),
+    supabase.from('lead_tasks').select('*').eq('lead_id', id).order('status').order('due_at', { ascending: true, nullsFirst: false }).limit(500),
+    supabase.from('memberships').select('user_id,role,profiles(full_name,email)').eq('organization_id', orgId).order('created_at'),
     admin.from('whatsapp_connections').select('id', { count: 'exact', head: true }).eq('organization_id', orgId).eq('channel', channel).eq('status', 'connected'),
   ]);
 
-  return <><PageTopbar title={lead.name} subtitle={lead.kind === 'cliente' ? 'Ficha do cliente, WhatsApp e histórico completo' : 'Ficha do corretor, WhatsApp e relacionamento'} actions={<Link className="btn btn-ghost btn-sm" href={lead.kind === 'cliente' ? '/clientes' : '/corretores'}>← Voltar à pipeline</Link>} /><div className="page-content"><LeadDetail initialLead={lead} initialMessages={(messages ?? []) as Message[]} initialActivities={(activities ?? []) as Activity[]} whatsappConnected={(connections ?? 0) > 0} canEdit={context!.role !== 'viewer'} /></div></>;
+  const teamMembers: TeamMember[] = ((memberships ?? []) as MembershipRow[]).map((item) => {
+    const profile = Array.isArray(item.profiles) ? item.profiles[0] : item.profiles;
+    return { user_id: item.user_id, role: item.role, full_name: profile?.full_name || 'Usuário', email: profile?.email || '' };
+  });
+
+  return <>
+    <PageTopbar title={lead.name} subtitle={lead.kind === 'cliente' ? 'Atendimento híbrido, WhatsApp, tarefas e histórico' : 'Relacionamento híbrido com corretor, tarefas e histórico'} actions={<Link className="btn btn-ghost btn-sm" href={lead.kind === 'cliente' ? '/clientes' : '/corretores'}>← Voltar à pipeline</Link>} />
+    <div className="page-content"><LeadDetail initialLead={lead} initialMessages={(messages ?? []) as Message[]} initialActivities={(activities ?? []) as Activity[]} initialTasks={(tasks ?? []) as LeadTask[]} teamMembers={teamMembers} whatsappConnected={(connections ?? 0) > 0} canEdit={context!.role !== 'viewer'} /></div>
+  </>;
 }
