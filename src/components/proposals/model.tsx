@@ -36,3 +36,27 @@ export function errorText(error:unknown){ if(error instanceof Error)return error
 
 export function MoneyInput({value,onChange,disabled=false,readOnly=false}:{value:string;onChange:(value:string)=>void;disabled?:boolean;readOnly?:boolean}){ return <input className="input mono" type="text" inputMode="numeric" value={formatMoneyInput(value)} onChange={event=>onChange(parseMoneyInput(event.target.value))} onFocus={event=>event.currentTarget.select()} disabled={disabled} readOnly={readOnly} style={readOnly?{background:'var(--bg)',fontWeight:800}:undefined}/> }
 export function ToggleButton({active,children,onClick,disabled=false}:{active:boolean;children:ReactNode;onClick:()=>void;disabled?:boolean}){ return <button type="button" className={active?'btn btn-primary btn-sm':'btn btn-ghost btn-sm'} onClick={onClick} disabled={disabled} aria-pressed={active}>{children}</button> }
+
+export function calculateProposal(form:ProposalForm,deliveryDate:string|null,firstBeforeKeysDate:string,firstAfterKeysDate:string):ProposalCalculations{
+  const listPrice=numberValue(form.listPrice), entryTotal=numberValue(form.entryTotal);
+  const beforeKeysCount=form.hasBeforeKeysMonthly?integerValue(form.beforeKeysCount):0;
+  const beforeKeysAmount=form.hasBeforeKeysMonthly?numberValue(form.beforeKeysAmount):0;
+  const reinforcementCount=integerValue(form.reinforcementCount), reinforcementAmount=numberValue(form.reinforcementAmount);
+  const reinforcementInterval=form.reinforcementFrequency==='semestral'?6:12;
+  const keysAmount=numberValue(form.keysAmount);
+  const afterKeysCount=form.hasAfterKeysMonthly?integerValue(form.afterKeysCount):0;
+  const afterKeysAmount=form.hasAfterKeysMonthly?numberValue(form.afterKeysAmount):0;
+  const paidBeforeMonthlyCount=countOccurrencesUntil(firstBeforeKeysDate,1,beforeKeysCount,deliveryDate);
+  const paidReinforcementCount=countOccurrencesUntil(form.firstReinforcementDate,reinforcementInterval,reinforcementCount,deliveryDate);
+  const beforeMonthlyTotal=beforeKeysCount*beforeKeysAmount, reinforcementTotal=reinforcementCount*reinforcementAmount, afterMonthlyTotal=afterKeysCount*afterKeysAmount;
+  const paidUntilKeys=entryTotal+paidBeforeMonthlyCount*beforeKeysAmount+paidReinforcementCount*reinforcementAmount+(deliveryDate?keysAmount:0);
+  const nominalTotal=entryTotal+beforeMonthlyTotal+reinforcementTotal+keysAmount+afterMonthlyTotal;
+  const discountAmount=Math.max(0,listPrice-nominalTotal);
+  const scheduleItems:ScheduleItem[]=[];
+  if(entryTotal>0)scheduleItems.push({kind:'entrada',label:'Entrada direta',quantity:1,amount:entryTotal,startDate:form.proposalDate,intervalMonths:null,total:entryTotal,paidUntilKeysQuantity:deliveryDate&&isOnOrBefore(form.proposalDate,deliveryDate)?1:0,paidUntilKeysAmount:deliveryDate&&isOnOrBefore(form.proposalDate,deliveryDate)?entryTotal:0});
+  if(beforeKeysCount>0)scheduleItems.push({kind:'parcela_ate_chaves',label:'Mensais antes das chaves',quantity:beforeKeysCount,amount:beforeKeysAmount,startDate:firstBeforeKeysDate,intervalMonths:1,total:beforeMonthlyTotal,paidUntilKeysQuantity:paidBeforeMonthlyCount,paidUntilKeysAmount:paidBeforeMonthlyCount*beforeKeysAmount});
+  if(reinforcementCount>0)scheduleItems.push({kind:form.reinforcementFrequency==='semestral'?'reforco_semestral':'reforco_anual',label:form.reinforcementFrequency==='semestral'?'Reforços semestrais':'Reforços anuais',quantity:reinforcementCount,amount:reinforcementAmount,startDate:form.firstReinforcementDate,intervalMonths:reinforcementInterval,total:reinforcementTotal,paidUntilKeysQuantity:paidReinforcementCount,paidUntilKeysAmount:paidReinforcementCount*reinforcementAmount});
+  if(keysAmount>0&&deliveryDate)scheduleItems.push({kind:'chaves',label:'Parcela nas chaves',quantity:1,amount:keysAmount,startDate:deliveryDate,intervalMonths:null,total:keysAmount,paidUntilKeysQuantity:1,paidUntilKeysAmount:keysAmount});
+  if(afterKeysCount>0&&firstAfterKeysDate)scheduleItems.push({kind:'parcela_pos_chaves',label:'Mensais após as chaves',quantity:afterKeysCount,amount:afterKeysAmount,startDate:firstAfterKeysDate,intervalMonths:1,total:afterMonthlyTotal,paidUntilKeysQuantity:0,paidUntilKeysAmount:0});
+  return {listPrice,proposedPrice:nominalTotal,entryTotal,paidUntilKeys,paidUntilKeysPercent:nominalTotal>0?paidUntilKeys/nominalTotal*100:0,nominalTotal,discountAmount,discountPercent:listPrice>0?discountAmount/listPrice*100:0,differenceFromTable:nominalTotal-listPrice,scheduleItems,paidBeforeMonthlyCount,paidReinforcementCount};
+}
