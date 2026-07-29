@@ -57,13 +57,64 @@ export type MetaMessageTemplate = {
   category: string;
   language: string;
   quality_score?: { score?: string } | string | null;
+  rejected_reason?: string | null;
   components?: MetaTemplateComponent[];
 };
 
 export async function getWhatsAppTemplates(args: { wabaId: string; accessToken: string }) {
-  const fields = encodeURIComponent('id,name,status,category,language,quality_score,components');
+  const fields = encodeURIComponent('id,name,status,category,language,quality_score,rejected_reason,components');
   return graphRequest<{ data?: MetaMessageTemplate[] }>(`${args.wabaId}/message_templates?limit=250&fields=${fields}`, {
     accessToken: args.accessToken,
+  });
+}
+
+export async function uploadMetaTemplateMedia(args: {
+  accessToken: string;
+  fileName: string;
+  fileType: string;
+  bytes: ArrayBuffer;
+}) {
+  const params = new URLSearchParams({
+    file_length: String(args.bytes.byteLength),
+    file_type: args.fileType,
+    file_name: args.fileName,
+  });
+  const session = await graphRequest<{ id?: string }>(`${required('META_APP_ID')}/uploads?${params.toString()}`, {
+    method: 'POST',
+    accessToken: args.accessToken,
+  });
+  if (!session.id) throw new Error('A Meta não criou a sessão de upload do anexo.');
+
+  const uploaded = await graphRequest<{ h?: string }>(session.id, {
+    method: 'POST',
+    accessToken: args.accessToken,
+    headers: {
+      'Content-Type': args.fileType,
+      file_offset: '0',
+    },
+    body: args.bytes,
+  });
+  if (!uploaded.h) throw new Error('A Meta não devolveu o identificador do anexo.');
+  return uploaded.h;
+}
+
+export async function createWhatsAppTemplate(args: {
+  wabaId: string;
+  accessToken: string;
+  name: string;
+  language: string;
+  category: 'MARKETING' | 'UTILITY';
+  components: MetaTemplateComponent[];
+}) {
+  return graphRequest<{ id?: string; status?: string; category?: string }>(`${args.wabaId}/message_templates`, {
+    method: 'POST',
+    accessToken: args.accessToken,
+    body: JSON.stringify({
+      name: args.name,
+      language: args.language,
+      category: args.category,
+      components: args.components,
+    }),
   });
 }
 
