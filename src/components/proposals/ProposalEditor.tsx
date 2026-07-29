@@ -9,12 +9,14 @@ import {
   money,
   MoneyInput,
   ToggleButton,
+  type MonthlyMode,
   type Origin,
   type ProposalCalculations,
   type ProposalDevelopment,
   type ProposalForm,
   type ProposalLead,
   type ProposalUnit,
+  type ReinforcementFrequency,
   statusLabels,
   type WorkflowStatus,
 } from './model';
@@ -26,6 +28,8 @@ export function ProposalEditor({
   chooseLead,
   chooseDevelopment,
   chooseUnit,
+  chooseMonthlyMode,
+  chooseReinforcementFrequency,
   developments,
   availableLeads,
   developmentUnits,
@@ -33,7 +37,7 @@ export function ProposalEditor({
   selectedDevelopment,
   selectedUnit,
   deliveryDate,
-  firstBeforeKeysDate,
+  firstMonthlyDate,
   firstAfterKeysDate,
   maxBeforeKeysCount,
   calculations,
@@ -49,6 +53,8 @@ export function ProposalEditor({
   chooseLead: (leadId: string) => void;
   chooseDevelopment: (developmentId: string) => void;
   chooseUnit: (unitId: string) => void;
+  chooseMonthlyMode: (mode: MonthlyMode) => void;
+  chooseReinforcementFrequency: (frequency: ReinforcementFrequency) => void;
   developments: ProposalDevelopment[];
   availableLeads: ProposalLead[];
   developmentUnits: ProposalUnit[];
@@ -56,7 +62,7 @@ export function ProposalEditor({
   selectedDevelopment: ProposalDevelopment | null;
   selectedUnit: ProposalUnit | null;
   deliveryDate: string | null;
-  firstBeforeKeysDate: string;
+  firstMonthlyDate: string;
   firstAfterKeysDate: string;
   maxBeforeKeysCount: number;
   calculations: ProposalCalculations;
@@ -68,7 +74,7 @@ export function ProposalEditor({
 }) {
   return <form onSubmit={onSubmit}>
     <div className="page-head">
-      <div><h2>{editingId ? 'Editar proposta' : 'Nova proposta'}</h2><p>O valor da proposta e o percentual até as chaves são calculados automaticamente pelas datas.</p></div>
+      <div><h2>{editingId ? 'Editar proposta' : 'Nova proposta'}</h2><p>O valor da proposta e o percentual interno até as chaves são calculados automaticamente pelas datas.</p></div>
       <button type="button" className="btn btn-ghost" onClick={onCancel}>← Voltar para propostas</button>
     </div>
 
@@ -107,39 +113,56 @@ export function ProposalEditor({
             </div>
 
             <div className="card" style={{ boxShadow: 'none', marginTop: 14 }}>
-              <div className="card-head"><h3>Parcelas mensais</h3><div className="page-actions"><ToggleButton active={form.hasBeforeKeysMonthly} onClick={() => setField('hasBeforeKeysMonthly', !form.hasBeforeKeysMonthly)} disabled={!canEdit}>Antes das chaves</ToggleButton><ToggleButton active={form.hasAfterKeysMonthly} onClick={() => setField('hasAfterKeysMonthly', !form.hasAfterKeysMonthly)} disabled={!canEdit}>Depois das chaves</ToggleButton></div></div>
+              <div className="card-head">
+                <div><h3>Parcelas mensais</h3><small className="faint">No padrão, informe uma única quantidade e um único valor.</small></div>
+                <ToggleButton
+                  active={form.monthlyMode === 'dividido'}
+                  onClick={() => chooseMonthlyMode(form.monthlyMode === 'unificado' ? 'dividido' : 'unificado')}
+                  disabled={!canEdit}
+                >
+                  {form.monthlyMode === 'unificado' ? 'Usar valores diferentes' : 'Voltar para valor único'}
+                </ToggleButton>
+              </div>
               <div className="card-body">
-                {!form.hasBeforeKeysMonthly && !form.hasAfterKeysMonthly && <div className="info-box">As mensais estão desativadas. Use os botões acima para incluí-las.</div>}
-                {form.hasBeforeKeysMonthly && <div className="grid grid-3">
-                  <div className="field"><label>Mensais antes · quantidade</label><input className="input" type="number" min="0" max={maxBeforeKeysCount || undefined} value={form.beforeKeysCount} onChange={(event) => setField('beforeKeysCount', event.target.value)} disabled={!canEdit} /></div>
-                  <div className="field"><label>Mensais antes · valor</label><MoneyInput value={form.beforeKeysAmount} onChange={(value) => setField('beforeKeysAmount', value)} disabled={!canEdit} /></div>
-                  <div className="field"><label>Primeiro vencimento</label><input className="input" type="date" value={firstBeforeKeysDate} readOnly style={{ background: 'var(--bg)' }} /></div>
-                  <div className="info-box" style={{ gridColumn: '1 / -1' }}>Entre a proposta e a entrega cabem até <strong>{maxBeforeKeysCount}</strong> parcelas mensais. O primeiro vencimento ocorre um mês após a proposta.</div>
-                </div>}
-                {form.hasAfterKeysMonthly && <div className="grid grid-3" style={{ marginTop: form.hasBeforeKeysMonthly ? 14 : 0 }}>
-                  <div className="field"><label>Mensais depois · quantidade</label><input className="input" type="number" min="0" value={form.afterKeysCount} onChange={(event) => setField('afterKeysCount', event.target.value)} disabled={!canEdit} /></div>
-                  <div className="field"><label>Mensais depois · valor</label><MoneyInput value={form.afterKeysAmount} onChange={(value) => setField('afterKeysAmount', value)} disabled={!canEdit} /></div>
-                  <div className="field"><label>Primeiro vencimento</label><input className="input" type="date" value={firstAfterKeysDate} readOnly style={{ background: 'var(--bg)' }} /></div>
-                </div>}
+                {form.monthlyMode === 'unificado' ? <>
+                  <div className="grid grid-3">
+                    <div className="field"><label>Quantidade total de mensais</label><input className="input" type="number" min="0" value={form.monthlyCount} onChange={(event) => setField('monthlyCount', event.target.value)} disabled={!canEdit} /></div>
+                    <div className="field"><label>Valor de cada mensal</label><MoneyInput value={form.monthlyAmount} onChange={(value) => setField('monthlyAmount', value)} disabled={!canEdit} /></div>
+                    <div className="field"><label>Primeiro vencimento</label><input className="input" type="date" value={firstMonthlyDate} readOnly style={{ background: 'var(--bg)' }} /></div>
+                  </div>
+                  <div className="info-box" style={{ marginTop: 12 }}>
+                    Pelo calendário atual, o sistema classificará automaticamente <strong>{calculations.monthlyBeforeCount}</strong> mensal(is) até as chaves e <strong>{calculations.monthlyAfterCount}</strong> depois das chaves.
+                  </div>
+                </> : <>
+                  <div className="grid grid-3">
+                    <div className="field"><label>Até as chaves · quantidade</label><input className="input" type="number" min="0" max={maxBeforeKeysCount || undefined} value={form.beforeKeysCount} onChange={(event) => setField('beforeKeysCount', event.target.value)} disabled={!canEdit} /></div>
+                    <div className="field"><label>Até as chaves · valor</label><MoneyInput value={form.beforeKeysAmount} onChange={(value) => setField('beforeKeysAmount', value)} disabled={!canEdit} /></div>
+                    <div className="field"><label>Primeiro vencimento</label><input className="input" type="date" value={firstMonthlyDate} readOnly style={{ background: 'var(--bg)' }} /></div>
+                    <div className="field"><label>Depois das chaves · quantidade</label><input className="input" type="number" min="0" value={form.afterKeysCount} onChange={(event) => setField('afterKeysCount', event.target.value)} disabled={!canEdit} /></div>
+                    <div className="field"><label>Depois das chaves · valor</label><MoneyInput value={form.afterKeysAmount} onChange={(value) => setField('afterKeysAmount', value)} disabled={!canEdit} /></div>
+                    <div className="field"><label>Primeiro vencimento pós-chaves</label><input className="input" type="date" value={firstAfterKeysDate} readOnly style={{ background: 'var(--bg)' }} /></div>
+                  </div>
+                  <div className="info-box" style={{ marginTop: 12 }}>Use este modo somente quando o valor das parcelas mudar após a entrega. Até as chaves cabem no máximo <strong>{maxBeforeKeysCount}</strong> mensais.</div>
+                </>}
               </div>
             </div>
 
             <div className="card" style={{ boxShadow: 'none', marginTop: 14 }}>
-              <div className="card-head"><h3>Reforços</h3><div className="page-actions"><ToggleButton active={form.reinforcementFrequency === 'anual'} onClick={() => setField('reinforcementFrequency', 'anual')} disabled={!canEdit}>Anuais</ToggleButton><ToggleButton active={form.reinforcementFrequency === 'semestral'} onClick={() => setField('reinforcementFrequency', 'semestral')} disabled={!canEdit}>Semestrais</ToggleButton></div></div>
+              <div className="card-head"><h3>Reforços</h3><div className="page-actions"><ToggleButton active={form.reinforcementFrequency === 'anual'} onClick={() => chooseReinforcementFrequency('anual')} disabled={!canEdit}>Anuais</ToggleButton><ToggleButton active={form.reinforcementFrequency === 'semestral'} onClick={() => chooseReinforcementFrequency('semestral')} disabled={!canEdit}>Semestrais</ToggleButton></div></div>
               <div className="card-body grid grid-3">
                 <div className="field"><label>Quantidade</label><input className="input" type="number" min="0" value={form.reinforcementCount} onChange={(event) => setField('reinforcementCount', event.target.value)} disabled={!canEdit} /></div>
                 <div className="field"><label>Valor de cada reforço</label><MoneyInput value={form.reinforcementAmount} onChange={(value) => setField('reinforcementAmount', value)} disabled={!canEdit} /></div>
-                <div className="field"><label>Data do primeiro reforço {form.reinforcementFrequency}</label><input className="input" type="date" value={form.firstReinforcementDate} onChange={(event) => setField('firstReinforcementDate', event.target.value)} disabled={!canEdit || integerValue(form.reinforcementCount) === 0} /></div>
+                <div className="field"><label>Data do primeiro reforço {form.reinforcementFrequency}</label><input className="input" type="date" value={form.firstReinforcementDate} onChange={(event) => setField('firstReinforcementDate', event.target.value)} disabled={!canEdit || integerValue(form.reinforcementCount) === 0} /><small className="faint">Sugerida automaticamente em {form.reinforcementFrequency === 'anual' ? '12' : '6'} meses.</small></div>
               </div>
             </div>
           </div>
         </section>
 
         <section className="card">
-          <div className="card-head"><h3>3. Cronograma calculado</h3><span className="chip">Até a entrega entra no percentual</span></div>
+          <div className="card-head"><h3>3. Cronograma calculado</h3><span className="chip">Até a entrega entra no percentual interno</span></div>
           <div className="table-wrap"><table><thead><tr><th>Pagamento</th><th>Qtd.</th><th>Valor</th><th>Primeiro vencimento</th><th>Total</th><th>Até chaves</th></tr></thead><tbody>
             {calculations.scheduleItems.length === 0 && <tr><td colSpan={6}><div className="empty-state">Preencha o fluxo para visualizar o cronograma.</div></td></tr>}
-            {calculations.scheduleItems.map((item) => <tr key={item.kind}><td><strong>{item.label}</strong></td><td>{item.quantity}</td><td>{money.format(item.amount)}</td><td>{item.startDate ? date.format(dateFromIso(item.startDate)) : '—'}</td><td><strong>{money.format(item.total)}</strong></td><td>{item.paidUntilKeysQuantity} · {money.format(item.paidUntilKeysAmount)}</td></tr>)}
+            {calculations.scheduleItems.map((item) => <tr key={`${item.kind}-${item.startDate}`}><td><strong>{item.label}</strong></td><td>{item.quantity}</td><td>{money.format(item.amount)}</td><td>{item.startDate ? date.format(dateFromIso(item.startDate)) : '—'}</td><td><strong>{money.format(item.total)}</strong></td><td>{item.paidUntilKeysQuantity} · {money.format(item.paidUntilKeysAmount)}</td></tr>)}
           </tbody></table></div>
         </section>
 
