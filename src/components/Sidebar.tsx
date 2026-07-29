@@ -27,6 +27,7 @@ const links: NavItem[] = [
   { href: '/treinamento/plantao', icon: '🌙', label: 'Treinar o Plantão', roles: ['admin'] },
   { href: '/configuracoes/arquivos-ia', icon: '🗂️', label: 'Arquivos da IA', roles: ['admin'] },
   { href: '/configuracoes/whatsapp', icon: '📱', label: 'Canais WhatsApp', roles: ['admin'] },
+  { href: '/modelos-meta', icon: '🧩', label: 'Modelos da Meta', roles: ['admin'] },
   { href: '/usuarios', icon: '👥', label: 'Usuários', roles: ['admin'] },
 ];
 
