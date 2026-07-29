@@ -57,6 +57,9 @@ export async function POST(request: Request) {
   if (String(template.status).toUpperCase() !== 'APPROVED') {
     return NextResponse.json({ error: 'Somente modelos com status Aprovado podem ser usados.' }, { status: 409 });
   }
+  if (String(template.category).toUpperCase() !== 'MARKETING') {
+    return NextResponse.json({ error: 'Transmissões comerciais e de reativação devem usar um modelo da categoria Marketing.' }, { status: 409 });
+  }
   if (Number(template.variable_count) !== variableMappings.length) {
     return NextResponse.json({ error: `Preencha as ${template.variable_count} variáveis do modelo.` }, { status: 400 });
   }
