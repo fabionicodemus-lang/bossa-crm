@@ -73,6 +73,7 @@ create table if not exists public.broadcast_recipients (
   lead_name text not null,
   phone text,
   stage text,
+  lead_snapshot jsonb not null default '{}'::jsonb,
   status text not null default 'queued' check (status in ('queued','sending','sent','delivered','read','failed','skipped')),
   whatsapp_message_id text,
   error_code text,
@@ -115,6 +116,17 @@ on conflict (id) do update set
 alter table public.whatsapp_templates enable row level security;
 alter table public.broadcasts enable row level security;
 alter table public.broadcast_recipients enable row level security;
+
+drop policy if exists whatsapp_templates_select_member on public.whatsapp_templates;
+drop policy if exists whatsapp_templates_manage_editor on public.whatsapp_templates;
+drop policy if exists broadcasts_select_member on public.broadcasts;
+drop policy if exists broadcasts_manage_editor on public.broadcasts;
+drop policy if exists broadcast_recipients_select_member on public.broadcast_recipients;
+drop policy if exists broadcast_recipients_manage_editor on public.broadcast_recipients;
+drop policy if exists broadcast_media_select_member on storage.objects;
+drop policy if exists broadcast_media_insert_editor on storage.objects;
+drop policy if exists broadcast_media_update_editor on storage.objects;
+drop policy if exists broadcast_media_delete_editor on storage.objects;
 
 create policy whatsapp_templates_select_member on public.whatsapp_templates
   for select to authenticated using (private.is_org_member(organization_id));
