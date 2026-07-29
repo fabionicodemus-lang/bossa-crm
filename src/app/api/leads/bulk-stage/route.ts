@@ -5,8 +5,6 @@ import type { LeadKind } from '@/lib/types';
 
 type BulkLead = {
   id: string;
-  name: string;
-  owner_id: string | null;
   opt_out: boolean | null;
   automation_paused: boolean | null;
 };
@@ -60,7 +58,7 @@ export async function POST(request: Request) {
 
   const { data, error: findError } = await supabase
     .from('leads')
-    .select('id,name,owner_id,opt_out,automation_paused')
+    .select('id,opt_out,automation_paused')
     .eq('organization_id', membership.organization_id)
     .eq('kind', kind)
     .eq('stage', fromStage)
@@ -77,34 +75,47 @@ export async function POST(request: Request) {
   const terminalStage = ['fechado_ganho', 'encerrado'].includes(toStage);
 
   for (const batch of chunks(leads, CHUNK_SIZE)) {
-    const updates = batch.map((lead) => {
-      const update: Record<string, unknown> = {
-        id: lead.id,
-        stage: toStage,
-        owner_mode: aiStage ? 'ai' : humanStage ? 'human' : 'none',
-        ai_enabled: aiStage && !lead.opt_out && !lead.automation_paused,
-        updated_at: now,
-      };
+    const ids = batch.map((lead) => lead.id);
+    const commonUpdate: Record<string, unknown> = {
+      stage: toStage,
+      owner_mode: aiStage ? 'ai' : humanStage ? 'human' : 'none',
+      ai_enabled: false,
+      updated_at: now,
+    };
 
-      if (aiStage) update.owner_id = null;
-      if (humanStage) {
-        update.owner_id = lead.owner_id || user.id;
-        update.last_human_activity_at = now;
-      }
-      if (terminalStage) {
-        update.next_action = null;
-        update.next_action_type = null;
-        update.next_action_due_at = null;
-      } else if (toStage === 'futuro') {
-        update.next_action = 'Aguardar inclusão em campanha de reativação comercial.';
-        update.next_action_type = 'campanha_reativacao';
-        update.next_action_due_at = null;
-      }
-      return update;
-    });
+    if (aiStage) commonUpdate.owner_id = null;
+    if (humanStage) {
+      commonUpdate.owner_id = user.id;
+      commonUpdate.last_human_activity_at = now;
+    }
+    if (terminalStage) {
+      commonUpdate.next_action = null;
+      commonUpdate.next_action_type = null;
+      commonUpdate.next_action_due_at = null;
+    } else if (toStage === 'futuro') {
+      commonUpdate.next_action = 'Aguardar inclusão em campanha de reativação comercial.';
+      commonUpdate.next_action_type = 'campanha_reativacao';
+      commonUpdate.next_action_due_at = null;
+    }
 
-    const { error: updateError } = await supabase.from('leads').upsert(updates, { onConflict: 'id' });
+    const { error: updateError } = await supabase
+      .from('leads')
+      .update(commonUpdate)
+      .eq('organization_id', membership.organization_id)
+      .in('id', ids);
     if (updateError) return NextResponse.json({ error: updateError.message }, { status: 400 });
+
+    if (aiStage) {
+      const enabledIds = batch.filter((lead) => !lead.opt_out && !lead.automation_paused).map((lead) => lead.id);
+      if (enabledIds.length) {
+        const { error: enableError } = await supabase
+          .from('leads')
+          .update({ ai_enabled: true })
+          .eq('organization_id', membership.organization_id)
+          .in('id', enabledIds);
+        if (enableError) return NextResponse.json({ error: enableError.message }, { status: 400 });
+      }
+    }
 
     const activities = batch.map((lead) => ({
       organization_id: membership.organization_id,
