@@ -7,6 +7,7 @@ Aplicação **Next.js 16 + Supabase** para a operação comercial da Bossa Empre
 - pipelines de clientes e corretores;
 - ficha unificada com WhatsApp, histórico, tarefas e próxima ação;
 - importação XLSX do Kommo;
+- movimentação em massa entre etapas da pipeline;
 - dois canais da WhatsApp Cloud API;
 - Nara para clientes e Plantão para corretores;
 - OpenAI Responses API com modelo e fallback configuráveis;
