@@ -4,6 +4,14 @@ import Link from 'next/link';
 import { FormEvent, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 
+function friendlyError(message: string) {
+  const normalized = message.toLowerCase();
+  if (normalized.includes('rate limit') || normalized.includes('too many requests')) {
+    return 'O limite temporário de e-mails de autenticação foi atingido. Aguarde cerca de uma hora ou peça ao administrador do CRM para gerar um “Link de senha” na tela Usuários.';
+  }
+  return message;
+}
+
 export function PasswordResetForm() {
   const [email, setEmail] = useState('');
   const [error, setError] = useState('');
@@ -14,11 +22,12 @@ export function PasswordResetForm() {
     event.preventDefault();
     setLoading(true);
     setError('');
+    setSuccess('');
     const supabase = createClient();
     const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
       redirectTo: `${window.location.origin}/auth/callback?next=/atualizar-senha`,
     });
-    if (resetError) setError(resetError.message);
+    if (resetError) setError(friendlyError(resetError.message));
     else setSuccess('Enviamos um link para redefinir sua senha.');
     setLoading(false);
   }
