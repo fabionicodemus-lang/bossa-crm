@@ -45,6 +45,7 @@ export function Sidebar({ context, aiCount }: { context: UserContext; aiCount: n
       </nav>
       <div className="sidebar-user">
         <div className="user-chip"><div className="avatar">{initials(context.fullName)}</div><div className="user-info"><div className="user-name">{context.fullName}</div><div className="user-role">{context.role}</div></div></div>
+        <Link className={`btn btn-ghost btn-block btn-sm ${pathname === '/minha-conta' ? 'active' : ''}`} href="/minha-conta">⚙️ Minha conta e senha</Link>
         <SignOutButton />
       </div>
     </aside>
