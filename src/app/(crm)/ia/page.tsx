@@ -18,6 +18,7 @@ export default async function AiPage() {
     .eq('organization_id', context!.organization.id)
     .eq('owner_mode', 'ai')
     .eq('ai_enabled', true)
+    .is('archived_at', null)
     .order('updated_at', { ascending: false });
   const contacts = (data ?? []) as unknown as AiLead[];
   const clients = contacts.filter((lead) => lead.kind === 'cliente');

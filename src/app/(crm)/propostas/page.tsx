@@ -18,7 +18,7 @@ export default async function ProposalsPage() {
     supabase.from('proposals').select('*').eq('organization_id', organizationId).order('updated_at', { ascending: false }),
     supabase.from('developments').select('id,name,delivery_date,default_payment_plan').eq('organization_id', organizationId).eq('active', true).order('name'),
     supabase.from('development_units').select('id,development_id,unit_code,status,list_price,entry_amount,installment_count,installment_amount,reinforcement_count,reinforcement_amount,keys_amount,payment_plan').eq('organization_id', organizationId).order('floor', { ascending: false, nullsFirst: false }).order('unit_code'),
-    supabase.from('leads').select('id,kind,name,phone,enterprise,company,group_name').eq('organization_id', organizationId).order('name'),
+    supabase.from('leads').select('id,kind,name,phone,enterprise,company,group_name').eq('organization_id', organizationId).is('archived_at', null).order('name'),
   ]);
 
   const schemaError = [proposalsResult.error, developmentsResult.error, unitsResult.error, leadsResult.error].find(Boolean);
@@ -26,7 +26,7 @@ export default async function ProposalsPage() {
   return <>
     <PageTopbar title="Propostas" subtitle="Simulação, histórico por lead e planilha geral da operação comercial" />
     {schemaError
-      ? <div className="page-content"><div className="error-box">A estrutura de propostas ainda não está disponível no Supabase. Execute a migração 007_empreendimentos_estoque_propostas.sql e atualize esta página.</div></div>
+      ? <div className="page-content"><div className="error-box">A estrutura de propostas ou arquivamento ainda não está disponível no Supabase. Execute as migrações 007 e 008 e atualize esta página.</div></div>
       : <ProposalsManager
           organizationId={organizationId}
           currentUserId={context!.userId}

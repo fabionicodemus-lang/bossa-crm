@@ -56,6 +56,9 @@ export interface Lead {
   loss_reason?: string | null;
   opt_out?: boolean | null;
   automation_paused?: boolean | null;
+  archived_at?: string | null;
+  archived_by?: string | null;
+  archived_reason?: string | null;
   metadata: Record<string, unknown>;
   created_at: string;
   updated_at: string;
