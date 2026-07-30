@@ -1,0 +1,116 @@
+name: Fix Nara triage loop
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/fix-nara-triage-loop.yml
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Stop repeated triage questions
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('src/lib/ai.ts')
+          content = path.read_text()
+
+          old_route = """function routeOutsideBuyerProfile(text: string): boolean {
+  const value = normalizeText(text);
+  if (/\\b(nao sou corretor|nao sou cliente)\\b/.test(value)) return false;
+  return /\\b(corretor|corretora|imobiliaria|creci|ja comprei|sou cliente|segunda via|boleto|contrato|pos-venda|assistencia|entrega|chaves|fornecedor|prestador|curriculo|vaga|trabalhar com voces|cobranca|imprensa)\\b/.test(value);
+}"""
+          new_route = """function routeOutsideBuyerProfile(text: string): boolean {
+  const value = normalizeText(text);
+  if (/\\b(nao sou corretor|nao sou cliente)\\b/.test(value)) return false;
+  return /\\b(outro atendimento|outro assunto|preciso de atendimento|preciso falar com a bossa|nao quero comprar|nao estou procurando|corretor|corretora|imobiliaria|creci|ja comprei|sou cliente|segunda via|boleto|contrato|pos-venda|assistencia|entrega|chaves|fornecedor|prestador|curriculo|vaga|trabalhar com voces|cobranca|imprensa)\\b/.test(value);
+}
+
+function outsideBuyerReply(history: ChatMessage[]): string {
+  const value = normalizeText(lastUserText(history));
+  if (/\\b(corretor|corretora|imobiliaria|creci)\\b/.test(value)) {
+    return 'Claro. Vou direcionar você para o Plantão da Bossa, que atende corretores parceiros.';
+  }
+  if (/\\b(ja comprei|sou cliente|segunda via|boleto|contrato|pos-venda|assistencia|entrega|chaves)\\b/.test(value)) {
+    return 'Claro. Vou direcionar você para a equipe responsável pelo atendimento aos clientes. Pode me dizer em uma frase qual é o assunto?';
+  }
+  return 'Claro. Vou direcionar você para a equipe responsável. Pode me dizer em uma frase qual atendimento precisa?';
+}"""
+
+          old_state = """  const buyerConfirmed = hasExplicitBuyerIntent(lead, history, context);
+  const askedBefore = hasTriageQuestionBeenAsked(history, context);
+
+  if (!buyerConfirmed && !routed) {
+    const learnedCorrection = exactManagerCorrection(history, context);"""
+          new_state = """  const buyerConfirmed = hasExplicitBuyerIntent(lead, history, context);
+  const askedBefore = hasTriageQuestionBeenAsked(history, context);
+  const triageAttempts = assistantMessages(history).filter((message) => looksLikeTriageQuestion(message, context)).length;
+
+  if (!buyerConfirmed && !routed) {
+    if (triageAttempts >= 2) {
+      turn.reply = ensureFirstTurnIntroduction(
+        'Entendi. Vou direcionar você para a equipe da Bossa para continuar por outro atendimento. Pode me dizer em uma frase qual é o assunto?',
+        history,
+        context,
+      );
+      turn.classification = 'frio';
+      turn.score = Math.min(turn.score, 20);
+      turn.stage = 'ia';
+      turn.summary = 'A intenção de compra não foi confirmada após duas tentativas de triagem.';
+      turn.next_action = 'Transferir para atendimento humano e identificar o assunto solicitado.';
+      turn.handoff = true;
+      turn.attachment_ids = [];
+      return turn;
+    }
+
+    const learnedCorrection = exactManagerCorrection(history, context);"""
+
+          old_routed = """  if (routed) {
+    turn.stage = 'ia';
+    turn.handoff = true;
+    turn.attachment_ids = [];
+    turn.reply = ensureFirstTurnIntroduction(turn.reply, history, context);
+    return turn;
+  }"""
+          new_routed = """  if (routed) {
+    turn.stage = 'ia';
+    turn.handoff = true;
+    turn.attachment_ids = [];
+    turn.classification = 'frio';
+    turn.score = Math.min(turn.score, 20);
+    turn.summary = 'Contato informou que precisa de outro atendimento da Bossa.';
+    turn.next_action = 'Direcionar para o canal humano responsável e identificar o assunto.';
+    turn.reply = ensureFirstTurnIntroduction(outsideBuyerReply(history), history, context);
+    return turn;
+  }"""
+
+          for old, new, label in [
+              (old_route, new_route, 'routeOutsideBuyerProfile'),
+              (old_state, new_state, 'triage state'),
+              (old_routed, new_routed, 'routed block'),
+          ]:
+              if old not in content:
+                  raise SystemExit(f'Expected {label} block was not found')
+              content = content.replace(old, new, 1)
+
+          path.write_text(content)
+          PY
+          rm .github/workflows/fix-nara-triage-loop.yml
+
+      - name: Commit correction
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/lib/ai.ts .github/workflows/fix-nara-triage-loop.yml
+          git commit -m "Impede repetição da triagem da Nara"
+          git push
