@@ -48,9 +48,11 @@ export async function POST(request: Request) {
   );
 
   if (!signatureValid) {
+    const now = new Date().toISOString();
     const { error } = await admin.from('whatsapp_webhook_events').insert({
       raw: rawJson(rawBody),
       signature_valid: false,
+      processed_at: now,
       error: 'Assinatura X-Hub-Signature-256 inválida.',
     });
     if (error) console.error('[whatsapp invalid signature log]', error.message);
@@ -61,9 +63,11 @@ export async function POST(request: Request) {
   try {
     payload = JSON.parse(rawBody) as MetaWebhookPayload;
   } catch {
+    const now = new Date().toISOString();
     await admin.from('whatsapp_webhook_events').insert({
       raw: { raw_text: rawBody },
       signature_valid: true,
+      processed_at: now,
       error: 'Corpo JSON inválido.',
     });
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
