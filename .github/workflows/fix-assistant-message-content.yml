@@ -1,0 +1,84 @@
+name: Fix assistant message content
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/fix-assistant-message-content.yml
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Fix Responses API assistant content
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('src/lib/ai.ts')
+          content = path.read_text()
+
+          old_types = """type InputTextBlock = {
+  type: 'input_text';
+  text: string;
+  prompt_cache_breakpoint?: { mode: 'explicit' };
+};
+type InputMessage = {
+  type: 'message';
+  role: 'system' | 'developer' | 'user' | 'assistant';
+  content: InputTextBlock[];
+};"""
+          new_types = """type InputTextBlock = {
+  type: 'input_text';
+  text: string;
+  prompt_cache_breakpoint?: { mode: 'explicit' };
+};
+type OutputTextBlock = {
+  type: 'output_text';
+  text: string;
+};
+type InputMessage = {
+  type: 'message';
+  role: 'system' | 'developer' | 'user' | 'assistant';
+  content: InputTextBlock[] | OutputTextBlock[];
+};"""
+
+          old_helper = """function inputMessage(role: InputMessage['role'], text: string, cacheBreakpoint = false): InputMessage {
+  const block: InputTextBlock = { type: 'input_text', text };
+  if (cacheBreakpoint) block.prompt_cache_breakpoint = { mode: 'explicit' };
+  return { type: 'message', role, content: [block] };
+}"""
+          new_helper = """function inputMessage(role: InputMessage['role'], text: string, cacheBreakpoint = false): InputMessage {
+  if (role === 'assistant') {
+    return { type: 'message', role, content: [{ type: 'output_text', text }] };
+  }
+  const block: InputTextBlock = { type: 'input_text', text };
+  if (cacheBreakpoint) block.prompt_cache_breakpoint = { mode: 'explicit' };
+  return { type: 'message', role, content: [block] };
+}"""
+
+          if old_types not in content:
+              raise SystemExit('Expected input message types were not found')
+          if old_helper not in content:
+              raise SystemExit('Expected inputMessage helper was not found')
+
+          content = content.replace(old_types, new_types, 1)
+          content = content.replace(old_helper, new_helper, 1)
+          path.write_text(content)
+          PY
+          rm .github/workflows/fix-assistant-message-content.yml
+
+      - name: Commit correction
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/lib/ai.ts .github/workflows/fix-assistant-message-content.yml
+          git commit -m "Corrige formato das mensagens anteriores da IA"
+          git push
