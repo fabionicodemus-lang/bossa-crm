@@ -3,6 +3,7 @@ import { processPendingWebhookEvents } from '@/lib/whatsapp/webhookProcessor';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
+const RECOVERY_BATCH_SIZE = 5;
 
 function authorized(request: Request) {
   const secret = process.env.CRON_SECRET;
@@ -15,7 +16,10 @@ async function run(request: Request) {
   if (!authorized(request)) {
     return NextResponse.json({ error: 'Não autorizado.' }, { status: 401 });
   }
-  return NextResponse.json({ ok: true, ...(await processPendingWebhookEvents()) });
+  return NextResponse.json({
+    ok: true,
+    ...(await processPendingWebhookEvents(RECOVERY_BATCH_SIZE)),
+  });
 }
 
 export async function GET(request: Request) {
