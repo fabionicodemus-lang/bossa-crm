@@ -42,10 +42,10 @@ export function WhatsAppSettings({ initialConnections }: { initialConnections: C
   const connectingRef = useRef(false);
   const appId = process.env.NEXT_PUBLIC_META_APP_ID;
   const configId = process.env.NEXT_PUBLIC_META_CONFIG_ID;
-  const graphVersion = process.env.NEXT_PUBLIC_META_GRAPH_VERSION || 'v25.0';
+  const graphVersion = process.env.NEXT_PUBLIC_META_GRAPH_VERSION;
 
   const initializeFacebook = useCallback(() => {
-    if (!appId || !window.FB) return;
+    if (!appId || !graphVersion || !window.FB) return;
     if (!initializedRef.current) {
       window.FB.init({ appId, autoLogAppEvents: true, xfbml: false, version: graphVersion });
       initializedRef.current = true;
@@ -100,7 +100,7 @@ export function WhatsAppSettings({ initialConnections }: { initialConnections: C
   }, [finishConnection]);
 
   useEffect(() => {
-    if (!appId) return;
+    if (!appId || !graphVersion) return;
 
     let active = true;
     const scriptId = 'facebook-jssdk';
@@ -147,15 +147,15 @@ export function WhatsAppSettings({ initialConnections }: { initialConnections: C
       script?.removeEventListener('error', markError);
       if (window.fbAsyncInit === markReady) window.fbAsyncInit = undefined;
     };
-  }, [appId, initializeFacebook]);
+  }, [appId, graphVersion, initializeFacebook]);
 
   function connect(channel: Channel) {
     channelRef.current = channel;
     setSelected(channel);
     setError('');
     setSuccess('');
-    if (!appId || !configId) {
-      setError('Configure NEXT_PUBLIC_META_APP_ID e NEXT_PUBLIC_META_CONFIG_ID no servidor antes de conectar.');
+    if (!appId || !configId || !graphVersion) {
+      setError('Configure NEXT_PUBLIC_META_APP_ID, NEXT_PUBLIC_META_CONFIG_ID e NEXT_PUBLIC_META_GRAPH_VERSION antes de usar o fluxo legado.');
       return;
     }
     if (!window.FB || !sdkReady) {
