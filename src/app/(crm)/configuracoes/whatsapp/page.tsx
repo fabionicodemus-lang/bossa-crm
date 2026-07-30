@@ -2,9 +2,12 @@ import { PageTopbar } from '@/components/PageTopbar';
 import {
   WhatsAppChannelsManager,
   type WhatsAppChannelSummary,
-  type WhatsAppMonthlyCount,
 } from '@/components/WhatsAppChannelsManager';
 import { WhatsAppSettings, type Connection } from '@/components/WhatsAppSettings';
+import {
+  WhatsAppUsageSummary,
+  type WhatsAppMonthlyCount,
+} from '@/components/WhatsAppUsageSummary';
 import { requireAdmin } from '@/lib/auth';
 import { createAdminClient } from '@/lib/supabase/admin';
 
@@ -17,6 +20,18 @@ function isMigrationMissing(error: { code?: string; message?: string } | null) {
       || error.message?.includes('whatsapp_channels')
     )
   );
+}
+
+function channelToConnection(channel: WhatsAppChannelSummary): Connection {
+  return {
+    id: channel.id,
+    channel: channel.role === 'cliente' ? 'clientes' : 'corretores',
+    display_phone_number: channel.display_phone_number,
+    verified_name: channel.verified_name,
+    quality_rating: channel.quality_rating,
+    status: channel.status,
+    connected_at: channel.registered_at ?? channel.created_at,
+  };
 }
 
 export default async function WhatsAppPage() {
@@ -32,36 +47,37 @@ export default async function WhatsAppPage() {
 
   const migrationPending = isMigrationMissing(channelError);
   let channels = (channelRows ?? []) as WhatsAppChannelSummary[];
-  let legacyConnections: Connection[] = [];
+  let connections = channels.map(channelToConnection);
 
-  if (migrationPending || process.env.FEATURE_EMBEDDED_SIGNUP === 'true') {
+  if (migrationPending || connections.length === 0) {
     const { data } = await admin
       .from('whatsapp_connections')
-      .select('id,channel,business_id,waba_id,phone_number_id,display_phone_number,verified_name,quality_rating,status,connected_at,updated_at')
+      .select('id,channel,display_phone_number,verified_name,quality_rating,status,connected_at')
       .eq('organization_id', organizationId)
       .order('connected_at', { ascending: false });
-    legacyConnections = (data ?? []) as Connection[];
+    const legacyConnections = (data ?? []) as Connection[];
 
+    if (connections.length === 0) connections = legacyConnections;
     if (migrationPending) {
-      channels = (data ?? []).map((item) => ({
+      channels = legacyConnections.map((item) => ({
         id: item.id,
         label: item.channel === 'clientes' ? 'Clientes finais · Nara' : 'Corretores · Plantão',
         role: item.channel === 'clientes' ? 'cliente' : 'corretor',
         provider: 'meta_cloud',
-        business_id: item.business_id ?? null,
-        waba_id: item.waba_id,
-        phone_number_id: item.phone_number_id,
-        display_phone_number: item.display_phone_number ?? null,
-        verified_name: item.verified_name ?? null,
-        quality_rating: item.quality_rating ?? null,
+        business_id: null,
+        waba_id: '',
+        phone_number_id: '',
+        display_phone_number: item.display_phone_number,
+        verified_name: item.verified_name,
+        quality_rating: item.quality_rating,
         status: item.status,
         messaging_limit: null,
-        registered_at: item.status === 'connected' ? item.connected_at : null,
-        app_subscribed_at: item.status === 'connected' ? item.connected_at : null,
-        last_tested_at: item.updated_at ?? item.connected_at,
+        registered_at: item.connected_at,
+        app_subscribed_at: item.connected_at,
+        last_tested_at: item.connected_at,
         created_at: item.connected_at,
-        updated_at: item.updated_at ?? item.connected_at,
-      })) as WhatsAppChannelSummary[];
+        updated_at: item.connected_at,
+      }));
     }
   }
 
@@ -83,36 +99,49 @@ export default async function WhatsAppPage() {
     })) as WhatsAppMonthlyCount[];
   }
 
-  const embeddedSignupEnabled = process.env.FEATURE_EMBEDDED_SIGNUP === 'true';
+  const coexistenceEnabled = process.env.FEATURE_EMBEDDED_SIGNUP !== 'false';
+  const directConnectionEnabled = process.env.FEATURE_DIRECT_WHATSAPP_CONNECTION === 'true';
   const connectionVersion = channels
     .map((item) => `${item.role}:${item.id}:${item.updated_at}`)
     .sort()
     .join('|');
 
   return <>
-    <PageTopbar title="Canais WhatsApp" subtitle="Dois números próprios da Bossa conectados diretamente à Cloud API" />
+    <PageTopbar
+      title="Canais WhatsApp"
+      subtitle="Use os mesmos números no WhatsApp Business e no Bossa CRM"
+    />
     <div className="page-content">
       <div className="page-head">
         <div>
-          <h2>Integração oficial do WhatsApp</h2>
-          <p>Tokens, PIN e chamadas à Graph API permanecem exclusivamente no servidor.</p>
+          <h2>Coexistência oficial da Meta</h2>
+          <p>O WhatsApp continua no celular e as novas conversas também ficam disponíveis para Nara, Plantão e equipe comercial no CRM.</p>
         </div>
       </div>
 
-      <WhatsAppChannelsManager
-        key={connectionVersion}
-        initialChannels={channels}
-        monthlyCounts={monthlyCounts}
-        migrationPending={migrationPending}
-      />
+      {migrationPending && <div className="error-box" style={{ marginBottom: 14 }}>
+        A migração 012 ainda não foi localizada. Execute as migrations do WhatsApp antes de conectar os números.
+      </div>}
 
-      {embeddedSignupEnabled && <section className="card" style={{ marginTop: 14 }}>
-        <div className="card-head"><div><h3>Legacy · Cadastro Incorporado</h3><small className="faint">Disponível apenas para preparação da Fase 2.</small></div></div>
-        <div className="card-body">
-          <div className="error-box" style={{ marginBottom: 14 }}>Feature flag FEATURE_EMBEDDED_SIGNUP ligada. Este fluxo não deve ser usado na operação atual da Bossa.</div>
-          <WhatsAppSettings initialConnections={legacyConnections} />
+      {coexistenceEnabled
+        ? <WhatsAppSettings key={connectionVersion} initialConnections={connections} />
+        : <div className="error-box">A Coexistência está desativada pela variável FEATURE_EMBEDDED_SIGNUP.</div>}
+
+      <WhatsAppUsageSummary counts={monthlyCounts} />
+
+      {directConnectionEnabled && <details style={{ marginTop: 14 }}>
+        <summary className="btn btn-ghost">Diagnóstico avançado · conexão API-only</summary>
+        <div style={{ marginTop: 14 }}>
+          <div className="error-box" style={{ marginBottom: 14 }}>
+            Use esta área somente para diagnóstico técnico. O fluxo normal da Bossa é a Coexistência acima.
+          </div>
+          <WhatsAppChannelsManager
+            initialChannels={channels}
+            monthlyCounts={[]}
+            migrationPending={migrationPending}
+          />
         </div>
-      </section>}
+      </details>}
     </div>
   </>;
 }
