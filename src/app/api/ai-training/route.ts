@@ -360,8 +360,21 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Erro no treinamento.';
+    const details = error
+      && typeof error === 'object'
+      && 'causes' in error
+      && Array.isArray(error.causes)
+      ? error.causes.map(String)
+      : [];
+
+    console.error('[ai-training simulate]', {
+      message,
+      details,
+      error,
+    });
+
     const status = message.toLowerCase().includes('openai') ? 502 : 400;
-    return NextResponse.json({ error: message }, { status });
+    return NextResponse.json({ error: message, details }, { status });
   }
 }
 
