@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { processPendingWebhookEvents } from '@/lib/whatsapp/webhookProcessor';
+import { processPendingWebhookEvents } from '@/lib/whatsapp/webhookDispatcher';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
