@@ -4,6 +4,12 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { encryptToken, exchangeEmbeddedSignupCode, getPhoneNumber, subscribeAppToWaba } from '@/lib/whatsapp';
 
 export async function POST(request: Request) {
+  if (process.env.FEATURE_EMBEDDED_SIGNUP !== 'true') {
+    return NextResponse.json({
+      error: 'Cadastro Incorporado desativado nesta fase. Use a conexão direta da Cloud API.',
+    }, { status: 404 });
+  }
+
   try {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
