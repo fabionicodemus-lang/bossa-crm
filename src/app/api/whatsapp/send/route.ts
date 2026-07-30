@@ -6,8 +6,20 @@ import { loadAiContext } from '@/lib/ai-context';
 import { recordAiUsage } from '@/lib/ai-usage';
 import { applyHybridDecision } from '@/lib/hybrid-server';
 import type { Lead } from '@/lib/types';
-import { decryptToken, normalizeWaId, sendWhatsAppText } from '@/lib/whatsapp';
+import {
+  channelAccess,
+  ensureConversation,
+  findChannelByRole,
+  roleForLeadKind,
+} from '@/lib/whatsapp/channelService';
+import {
+  isCustomerServiceWindowOpen,
+  leadWindowExpiresAt,
+  OUTSIDE_WINDOW_MESSAGE,
+} from '@/lib/whatsapp/window';
+import { normalizeWaId } from '@/lib/whatsapp/utils';
 
+export const runtime = 'nodejs';
 export const maxDuration = 60;
 
 async function analyzeAfterHumanMessage(organizationId: string, leadId: string) {
@@ -58,31 +70,76 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Aceite a passagem ou assuma a conversa antes de enviar uma mensagem humana.' }, { status: 409 });
     }
 
-    const channel = lead.kind === 'cliente' ? 'clientes' : 'corretores';
-    const { data: connection } = await admin.from('whatsapp_connections')
-      .select('id,phone_number_id,encrypted_access_token,status')
-      .eq('organization_id', membership.organization_id).eq('channel', channel).eq('status', 'connected').maybeSingle();
-    if (!connection) return NextResponse.json({ error: 'O canal do WhatsApp ainda não está conectado.' }, { status: 409 });
+    const channel = await findChannelByRole(
+      admin,
+      membership.organization_id,
+      roleForLeadKind(lead.kind),
+    );
+    if (!channel) return NextResponse.json({ error: 'O canal do WhatsApp ainda não está conectado.' }, { status: 409 });
 
     const destination = normalizeWaId(lead.phone);
     if (!destination) return NextResponse.json({ error: 'O telefone do contato não possui dígitos válidos.' }, { status: 400 });
-    const result = await sendWhatsAppText({
-      phoneNumberId: connection.phone_number_id,
-      accessToken: decryptToken(connection.encrypted_access_token),
+
+    const conversation = await ensureConversation({
+      admin,
+      channel,
+      contactWaId: destination,
+      leadId: lead.id,
+    });
+    const windowExpiresAt = conversation.window_expires_at ?? leadWindowExpiresAt(lead);
+    if (!isCustomerServiceWindowOpen(windowExpiresAt)) {
+      return NextResponse.json({
+        error: OUTSIDE_WINDOW_MESSAGE,
+        code: 'WHATSAPP_WINDOW_CLOSED',
+      }, { status: 409 });
+    }
+
+    const { provider, accessToken, phoneNumberId } = channelAccess(channel);
+    const result = await provider.sendText({
+      phoneNumberId,
+      accessToken,
       to: destination,
       body: text,
     });
     const now = new Date().toISOString();
+
+    const transport = {
+      organization_id: membership.organization_id,
+      channel_id: channel.id,
+      conversation_id: conversation.id,
+      lead_id: lead.id,
+      wamid: result.messageId,
+      direction: 'out',
+      sender_kind: 'humano',
+      type: 'text',
+      body: text,
+      payload: { provider: result.raw, sender_user_id: user.id },
+      status: 'sent',
+      category: 'service',
+      sent_at: now,
+    };
+    if (result.messageId) {
+      const { error: transportError } = await admin.from('whatsapp_messages')
+        .upsert(transport, { onConflict: 'wamid', ignoreDuplicates: true });
+      if (transportError) throw transportError;
+    } else {
+      const { error: transportError } = await admin.from('whatsapp_messages').insert(transport);
+      if (transportError) throw transportError;
+    }
+
     const { data: message, error } = await admin.from('messages').insert({
       organization_id: membership.organization_id,
       lead_id: lead.id,
-      whatsapp_connection_id: connection.id,
+      whatsapp_connection_id: channel.legacy_connection_id ?? channel.id,
+      whatsapp_channel_id: channel.id,
+      whatsapp_conversation_id: conversation.id,
       direction: 'out',
       sender_kind: 'humano',
       sender_user_id: user.id,
       body: text,
       status: 'sent',
-      whatsapp_message_id: result.messages?.[0]?.id ?? null,
+      whatsapp_message_id: result.messageId,
+      raw_payload: { category: 'service' },
     }).select('*').single();
     if (error) throw error;
 
@@ -105,12 +162,13 @@ export async function POST(request: Request) {
       type: 'mensagem_humana',
       title: 'Consultor respondeu pelo WhatsApp',
       description: text,
-      metadata: { message_id: message.id },
+      metadata: { message_id: message.id, whatsapp_channel_id: channel.id, category: 'service' },
     });
 
     after(async () => {
-      try { await analyzeAfterHumanMessage(membership.organization_id, lead.id); }
-      catch (analysisError) {
+      try {
+        await analyzeAfterHumanMessage(membership.organization_id, lead.id);
+      } catch (analysisError) {
         console.error('[silent hybrid analysis]', analysisError);
         await createAdminClient().from('activities').insert({
           organization_id: membership.organization_id,
@@ -123,7 +181,7 @@ export async function POST(request: Request) {
       }
     });
 
-    return NextResponse.json({ message });
+    return NextResponse.json({ message, windowExpiresAt });
   } catch (error) {
     console.error('[whatsapp send]', error);
     return NextResponse.json({ error: error instanceof Error ? error.message : 'Não foi possível enviar a mensagem.' }, { status: 500 });
