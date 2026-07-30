@@ -161,17 +161,28 @@ export async function openConversationWindow(args: {
   leadId: string;
   receivedAt: string;
 }) {
-  const windowExpiresAt = windowExpiresFromInbound(args.receivedAt);
+  const current = await ensureConversation({
+    admin: args.admin,
+    channel: args.channel,
+    contactWaId: args.contactWaId,
+    leadId: args.leadId,
+  });
+  const incomingTime = new Date(args.receivedAt).getTime();
+  const currentTime = current.last_inbound_at
+    ? new Date(current.last_inbound_at).getTime()
+    : Number.NEGATIVE_INFINITY;
+
+  if (!Number.isFinite(incomingTime)) throw new Error('Data de mensagem recebida inválida.');
+  if (Number.isFinite(currentTime) && incomingTime <= currentTime) return current;
+
   const { data, error } = await args.admin
     .from('whatsapp_conversations')
-    .upsert({
-      organization_id: args.channel.organization_id,
-      channel_id: args.channel.id,
-      contact_wa_id: args.contactWaId,
+    .update({
       lead_id: args.leadId,
       last_inbound_at: args.receivedAt,
-      window_expires_at: windowExpiresAt,
-    }, { onConflict: 'channel_id,contact_wa_id' })
+      window_expires_at: windowExpiresFromInbound(args.receivedAt),
+    })
+    .eq('id', current.id)
     .select('*')
     .single();
   if (error) throw error;
