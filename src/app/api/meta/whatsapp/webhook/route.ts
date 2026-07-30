@@ -1,7 +1,7 @@
 import { after, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { verifyMetaSignature } from '@/lib/whatsapp/crypto';
-import { processWebhookEvent } from '@/lib/whatsapp/webhookProcessor';
+import { dispatchWebhookEvent } from '@/lib/whatsapp/webhookDispatcher';
 import type { MetaWebhookPayload } from '@/lib/whatsapp/webhookTypes';
 
 export const runtime = 'nodejs';
@@ -114,7 +114,7 @@ export async function POST(request: Request) {
   after(async () => {
     for (const event of events) {
       try {
-        await processWebhookEvent(event.id);
+        await dispatchWebhookEvent(event.id);
       } catch (processError) {
         console.error('[whatsapp webhook async]', event.id, processError);
       }
