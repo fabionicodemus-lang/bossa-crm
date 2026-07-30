@@ -836,7 +836,7 @@ export async function generateAiTurn(
       requestKind: 'response',
       compacted,
       fallbackUsed,
-      promptCacheKey: explicitCache ? `bossa:${lead.organization_id}:${lead.kind}:atendimento-v1` : undefined,
+      promptCacheKey: explicitCache ? `bossa:${lead.organization_id}:${lead.kind}:v1` : undefined,
     };
   });
   usageRecords.push(result.usage);
