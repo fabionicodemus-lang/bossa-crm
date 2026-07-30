@@ -114,3 +114,5 @@ function outsideBuyerReply(history: ChatMessage[]): string {
           git add src/lib/ai.ts .github/workflows/fix-nara-triage-loop.yml
           git commit -m "Impede repetição da triagem da Nara"
           git push
+
+# trigger execution
