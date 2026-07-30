@@ -1,10 +1,9 @@
 {
   "name": "bossa-crm",
-  "version": "1.0.0",
+  "version": "1.2.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "prebuild": "node scripts/patch-nara-loop.mjs",
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
