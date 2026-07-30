@@ -1,470 +1,121 @@
 import { after, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { generateAiTurn, type AiFileOption, type AiUsageRecord } from '@/lib/ai';
-import { loadAiContext } from '@/lib/ai-context';
-import { aiCanReply } from '@/lib/hybrid';
-import { applyHybridDecision } from '@/lib/hybrid-server';
-import type { Lead, LeadKind } from '@/lib/types';
-import { decryptToken, normalizeWaId, sendWhatsAppMedia, sendWhatsAppText, type WhatsAppMediaType, verifyMetaSignature } from '@/lib/whatsapp';
+import { verifyMetaSignature } from '@/lib/whatsapp/crypto';
+import { processWebhookEvent } from '@/lib/whatsapp/webhookProcessor';
+import type { MetaWebhookPayload } from '@/lib/whatsapp/webhookTypes';
 
+export const runtime = 'nodejs';
 export const maxDuration = 60;
-const AI_NEUTRAL_REPLY = 'Já te respondo, só um instante.';
+
+function webhookVerifyToken() {
+  const value = process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN?.trim();
+  if (!value) throw new Error('Variável de ambiente ausente: WHATSAPP_WEBHOOK_VERIFY_TOKEN');
+  return value;
+}
+
+function rawJson(rawBody: string) {
+  try {
+    return JSON.parse(rawBody) as Record<string, unknown>;
+  } catch {
+    return { raw_text: rawBody };
+  }
+}
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const mode = url.searchParams.get('hub.mode');
   const token = url.searchParams.get('hub.verify_token');
   const challenge = url.searchParams.get('hub.challenge');
-  if (mode === 'subscribe' && token && token === process.env.META_WEBHOOK_VERIFY_TOKEN) {
-    return new Response(challenge ?? '', { status: 200 });
-  }
-  return new Response('Forbidden', { status: 403 });
-}
 
-interface MetaMessage {
-  id?: string;
-  from?: string;
-  type?: string;
-  timestamp?: string | number;
-  text?: { body?: string };
-  button?: { text?: string };
-  interactive?: { button_reply?: { title?: string }; list_reply?: { title?: string } };
-  image?: { caption?: string };
-  document?: { caption?: string; filename?: string };
-  video?: { caption?: string };
-  [key: string]: unknown;
-}
-
-interface MetaWebhookPayload {
-  entry?: Array<{
-    changes?: Array<{
-      value?: {
-        metadata?: { phone_number_id?: string };
-        contacts?: Array<{ wa_id?: string; profile?: { name?: string } }>;
-        statuses?: Array<{ id?: string; status?: string }>;
-        messages?: MetaMessage[];
-      };
-    }>;
-  }>;
-}
-
-function messageBody(message: MetaMessage): string {
-  if (message.type === 'text') return String(message.text?.body ?? '');
-  if (message.type === 'button') return String(message.button?.text ?? '');
-  if (message.type === 'interactive') return String(message.interactive?.button_reply?.title ?? message.interactive?.list_reply?.title ?? 'Resposta interativa');
-  if (message.type === 'image') return String(message.image?.caption ?? '[Imagem]');
-  if (message.type === 'document') return String(message.document?.caption ?? `[Documento${message.document?.filename ? `: ${message.document.filename}` : ''}]`);
-  if (message.type === 'audio') return '[Áudio]';
-  if (message.type === 'video') return String(message.video?.caption ?? '[Vídeo]');
-  if (message.type === 'location') return '[Localização]';
-  if (message.type === 'contacts') return '[Contato compartilhado]';
-  return `[Mensagem ${message.type || 'desconhecida'}]`;
-}
-
-function whatsappMediaType(file: AiFileOption): WhatsAppMediaType {
-  const mime = (file.mime_type || '').toLowerCase();
-  if (mime.startsWith('image/')) return 'image';
-  if (mime.startsWith('video/')) return 'video';
-  if (mime.startsWith('audio/')) return 'audio';
-  return 'document';
-}
-
-function numeric(value: unknown): number {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : 0;
-}
-
-function mergeUsageMetadata(current: Record<string, unknown>, records: AiUsageRecord[]) {
-  const previous = current.ai_usage && typeof current.ai_usage === 'object'
-    ? current.ai_usage as Record<string, unknown>
-    : {};
-  const totals = records.reduce((acc, item) => ({
-    calls: acc.calls + 1,
-    input_tokens: acc.input_tokens + item.input_tokens,
-    cached_tokens: acc.cached_tokens + item.cached_tokens,
-    cache_write_tokens: acc.cache_write_tokens + item.cache_write_tokens,
-    output_tokens: acc.output_tokens + item.output_tokens,
-    reasoning_tokens: acc.reasoning_tokens + item.reasoning_tokens,
-    estimated_cost_usd: acc.estimated_cost_usd + item.estimated_cost_usd,
-    fallback_calls: acc.fallback_calls + (item.fallback_used ? 1 : 0),
-    compacted_calls: acc.compacted_calls + (item.compacted ? 1 : 0),
-  }), {
-    calls: 0,
-    input_tokens: 0,
-    cached_tokens: 0,
-    cache_write_tokens: 0,
-    output_tokens: 0,
-    reasoning_tokens: 0,
-    estimated_cost_usd: 0,
-    fallback_calls: 0,
-    compacted_calls: 0,
-  });
-  const latest = records.at(-1);
-  return {
-    ...current,
-    ai_usage: {
-      calls: numeric(previous.calls) + totals.calls,
-      input_tokens: numeric(previous.input_tokens) + totals.input_tokens,
-      cached_tokens: numeric(previous.cached_tokens) + totals.cached_tokens,
-      cache_write_tokens: numeric(previous.cache_write_tokens) + totals.cache_write_tokens,
-      output_tokens: numeric(previous.output_tokens) + totals.output_tokens,
-      reasoning_tokens: numeric(previous.reasoning_tokens) + totals.reasoning_tokens,
-      estimated_cost_usd: Number((numeric(previous.estimated_cost_usd) + totals.estimated_cost_usd).toFixed(8)),
-      fallback_calls: numeric(previous.fallback_calls) + totals.fallback_calls,
-      compacted_calls: numeric(previous.compacted_calls) + totals.compacted_calls,
-      last_model: latest?.model ?? previous.last_model ?? null,
-      last_at: new Date().toISOString(),
-    },
-  };
-}
-
-async function persistAiUsage(args: { organizationId: string; leadId: string; records: AiUsageRecord[] }) {
-  if (!args.records.length) return;
-  const admin = createAdminClient();
-  const { error } = await admin.from('ai_usage_logs').insert(args.records.map((item) => ({
-    organization_id: args.organizationId,
-    lead_id: args.leadId,
-    request_kind: item.request_kind,
-    model: item.model,
-    request_id: item.request_id,
-    input_tokens: item.input_tokens,
-    cached_tokens: item.cached_tokens,
-    cache_write_tokens: item.cache_write_tokens,
-    output_tokens: item.output_tokens,
-    reasoning_tokens: item.reasoning_tokens,
-    preflight_input_tokens: item.preflight_input_tokens,
-    preflight_estimated: item.preflight_estimated,
-    estimated_cost_usd: item.estimated_cost_usd,
-    fallback_used: item.fallback_used,
-    compacted: item.compacted,
-    long_context: item.long_context,
-  })));
-  if (error) console.error('[ai usage log]', error.message);
-}
-
-async function sendSelectedFiles(args: {
-  organizationId: string;
-  lead: Lead;
-  connectionId: string;
-  phoneNumberId: string;
-  accessToken: string;
-  destination: string;
-  files: AiFileOption[];
-  attachmentIds: string[];
-}) {
-  const admin = createAdminClient();
-  const selected = args.attachmentIds
-    .map((id) => args.files.find((file) => file.id === id))
-    .filter((file): file is AiFileOption => Boolean(file))
-    .slice(0, 3);
-
-  for (const file of selected) {
-    try {
-      const { data: signed, error: signedError } = await admin.storage
-        .from(file.storage_bucket)
-        .createSignedUrl(file.storage_path, 3600);
-      if (signedError || !signed?.signedUrl) throw signedError ?? new Error('Não foi possível gerar o link temporário do arquivo.');
-      const type = whatsappMediaType(file);
-      const result = await sendWhatsAppMedia({
-        phoneNumberId: args.phoneNumberId,
-        accessToken: args.accessToken,
-        to: args.destination,
-        type,
-        link: signed.signedUrl,
-        caption: type === 'audio' ? undefined : file.title,
-        filename: type === 'document' ? file.original_name : undefined,
-      });
-      await admin.from('messages').insert({
-        organization_id: args.organizationId,
-        lead_id: args.lead.id,
-        whatsapp_connection_id: args.connectionId,
-        direction: 'out',
-        sender_kind: 'ia',
-        body: `📎 ${file.title}`,
-        status: 'sent',
-        whatsapp_message_id: result.messages?.[0]?.id ?? null,
-        raw_payload: { ai_file_id: file.id, category: file.category, original_name: file.original_name, mime_type: file.mime_type },
-      });
-      await admin.from('activities').insert({
-        organization_id: args.organizationId,
-        lead_id: args.lead.id,
-        type: 'arquivo_ia_enviado',
-        title: `IA enviou o arquivo “${file.title}”`,
-        description: `${file.original_name} enviado automaticamente pelo WhatsApp.`,
-        metadata: { ai_file_id: file.id, category: file.category, mime_type: file.mime_type },
-      });
-    } catch (error) {
-      console.error('[whatsapp ai file]', file.id, error);
-      await admin.from('activities').insert({
-        organization_id: args.organizationId,
-        lead_id: args.lead.id,
-        type: 'falha_arquivo_ia',
-        title: `Falha ao enviar o arquivo “${file.title}”`,
-        description: error instanceof Error ? error.message : 'Erro desconhecido no envio do arquivo.',
-        metadata: { ai_file_id: file.id },
-      });
-    }
-  }
-}
-
-async function handleAiFailure(args: {
-  organizationId: string;
-  lead: Lead;
-  connectionId: string;
-  phoneNumberId: string;
-  encryptedToken: string;
-  error: unknown;
-  shouldReply: boolean;
-}) {
-  const admin = createAdminClient();
-  const destination = normalizeWaId(args.lead.phone ?? '');
-  const technicalMessage = args.error instanceof Error ? args.error.message : 'Falha desconhecida na IA.';
-  let neutralSent = false;
-
-  if (args.shouldReply && destination) {
-    try {
-      const accessToken = decryptToken(args.encryptedToken);
-      const result = await sendWhatsAppText({ phoneNumberId: args.phoneNumberId, accessToken, to: destination, body: AI_NEUTRAL_REPLY });
-      neutralSent = true;
-      await admin.from('messages').insert({
-        organization_id: args.organizationId,
-        lead_id: args.lead.id,
-        whatsapp_connection_id: args.connectionId,
-        direction: 'out',
-        sender_kind: 'ia',
-        body: AI_NEUTRAL_REPLY,
-        status: 'sent',
-        whatsapp_message_id: result.messages?.[0]?.id ?? null,
-        raw_payload: { ai_fallback_message: true },
-      });
-    } catch (sendError) {
-      console.error('[whatsapp ai neutral]', sendError);
-    }
-  }
-
-  const now = new Date().toISOString();
-  await admin.from('leads').update({
-    ai_enabled: false,
-    automation_paused: true,
-    owner_mode: 'ai',
-    stage: 'passagem_pendente',
-    next_action: 'O time comercial deve assumir; a IA esgotou as tentativas.',
-    next_action_type: 'falha_ia',
-    next_action_due_at: now,
-    metadata: { ...(args.lead.metadata || {}), ai_attention_required: true, ai_last_error_at: now },
-  }).eq('id', args.lead.id);
-  await admin.from('lead_tasks').insert({
-    organization_id: args.organizationId,
-    lead_id: args.lead.id,
-    assigned_mode: 'manager',
-    type: 'falha_ia',
-    title: 'Assumir atendimento após falha da IA',
-    description: technicalMessage,
-    priority: 'urgent',
-    status: 'pending',
-    due_at: now,
-    created_by_kind: 'system',
-    dedupe_key: 'system:ai-failure',
-    metadata: { neutral_sent: neutralSent },
-  });
-  await admin.from('activities').insert({
-    organization_id: args.organizationId,
-    lead_id: args.lead.id,
-    type: 'falha_ia',
-    title: 'IA precisa de atendimento humano',
-    description: `${neutralSent ? 'O contato recebeu uma mensagem neutra. ' : ''}Erro técnico interno: ${technicalMessage}`,
-    metadata: { neutral_sent: neutralSent, requires_human: true },
-  });
-}
-
-async function processConversation(args: {
-  organizationId: string;
-  leadId: string;
-  connectionId: string;
-  phoneNumberId: string;
-  encryptedToken: string;
-  sourceMessageId: string;
-}) {
-  const admin = createAdminClient();
-  const { data: leadData } = await admin.from('leads').select('*').eq('id', args.leadId).maybeSingle();
-  const lead = leadData as Lead | null;
-  if (!lead || lead.opt_out) return;
-
-  const context = await loadAiContext(admin, args.organizationId, lead.kind);
-  if (context.config?.active === false) return;
-  const { data: historyRows } = await admin.from('messages')
-    .select('direction,sender_kind,body')
-    .eq('lead_id', lead.id)
-    .neq('direction', 'system')
-    .order('created_at', { ascending: true })
-    .limit(100);
-  const history = (historyRows ?? []).map((row) => ({
-    role: row.direction === 'in' ? 'user' as const : 'assistant' as const,
-    content: row.body,
-  }));
-  if (!history.length) return;
-
-  const shouldReply = aiCanReply(lead);
-  let turn;
   try {
-    turn = await generateAiTurn(lead, history, context);
+    if (mode === 'subscribe' && token === webhookVerifyToken()) {
+      return new Response(challenge ?? '', { status: 200 });
+    }
   } catch (error) {
-    console.error('[whatsapp ai exhausted]', error);
-    await handleAiFailure({ ...args, lead, error, shouldReply });
-    return;
-  }
-  if (!turn) return;
-
-  const lastUserMessage = [...history].reverse().find((item) => item.role === 'user')?.content ?? '';
-  const decision = await applyHybridDecision({
-    admin,
-    organizationId: args.organizationId,
-    lead,
-    turn,
-    lastUserMessage,
-    sourceMessageId: args.sourceMessageId,
-  });
-
-  const usageRecords = turn.usage_records ?? [];
-  await persistAiUsage({ organizationId: args.organizationId, leadId: lead.id, records: usageRecords });
-  const { data: refreshed } = await admin.from('leads').select('metadata').eq('id', lead.id).maybeSingle();
-  if (usageRecords.length) {
-    await admin.from('leads').update({ metadata: mergeUsageMetadata((refreshed?.metadata ?? lead.metadata ?? {}) as Record<string, unknown>, usageRecords) }).eq('id', lead.id);
+    console.error('[whatsapp webhook handshake]', error);
+    return new Response('Webhook not configured', { status: 500 });
   }
 
-  if (!shouldReply || decision.ownerMode !== 'ai' || !decision.aiEnabled) return;
-  const destination = normalizeWaId(lead.phone ?? '');
-  const reply = turn.reply.trim();
-  if (!destination || !reply) return;
-  const accessToken = decryptToken(args.encryptedToken);
-  const result = await sendWhatsAppText({ phoneNumberId: args.phoneNumberId, accessToken, to: destination, body: reply });
-  const now = new Date().toISOString();
-  await admin.from('messages').insert({
-    organization_id: args.organizationId,
-    lead_id: lead.id,
-    whatsapp_connection_id: args.connectionId,
-    direction: 'out',
-    sender_kind: 'ia',
-    body: reply,
-    status: 'sent',
-    whatsapp_message_id: result.messages?.[0]?.id ?? null,
-    raw_payload: { ai_model: turn.model_used ?? null, ai_compacted: turn.compacted ?? false, ai_usage: usageRecords },
-  });
-  await admin.from('leads').update({ last_outbound_at: now, last_ai_activity_at: now }).eq('id', lead.id);
-  if (turn.attachment_ids.length) {
-    await sendSelectedFiles({
-      organizationId: args.organizationId,
-      lead,
-      connectionId: args.connectionId,
-      phoneNumberId: args.phoneNumberId,
-      accessToken,
-      destination,
-      files: context.files ?? [],
-      attachmentIds: turn.attachment_ids,
-    });
-  }
+  return new Response('Forbidden', { status: 403 });
 }
 
 export async function POST(request: Request) {
   const rawBody = await request.text();
+  const admin = createAdminClient();
+  const signatureValid = verifyMetaSignature(
+    rawBody,
+    request.headers.get('x-hub-signature-256'),
+  );
+
+  if (!signatureValid) {
+    const { error } = await admin.from('whatsapp_webhook_events').insert({
+      raw: rawJson(rawBody),
+      signature_valid: false,
+      error: 'Assinatura X-Hub-Signature-256 inválida.',
+    });
+    if (error) console.error('[whatsapp invalid signature log]', error.message);
+    return new Response('Invalid signature', { status: 401 });
+  }
+
+  let payload: MetaWebhookPayload;
   try {
-    if (!verifyMetaSignature(rawBody, request.headers.get('x-hub-signature-256'))) {
-      return new Response('Invalid signature', { status: 401 });
-    }
-    const payload = JSON.parse(rawBody) as MetaWebhookPayload;
-    const admin = createAdminClient();
-    const jobs: Array<Parameters<typeof processConversation>[0]> = [];
+    payload = JSON.parse(rawBody) as MetaWebhookPayload;
+  } catch {
+    await admin.from('whatsapp_webhook_events').insert({
+      raw: { raw_text: rawBody },
+      signature_valid: true,
+      error: 'Corpo JSON inválido.',
+    });
+    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
+  }
 
-    for (const entry of payload.entry ?? []) {
-      for (const change of entry.changes ?? []) {
-        const value = change.value ?? {};
-        const phoneNumberId = String(value.metadata?.phone_number_id ?? '');
-        if (!phoneNumberId) continue;
-        const { data: connection } = await admin.from('whatsapp_connections')
-          .select('*').eq('phone_number_id', phoneNumberId).eq('status', 'connected').maybeSingle();
-        if (!connection) continue;
+  const rows: Array<{
+    phone_number_id: string | null;
+    raw: Record<string, unknown>;
+    signature_valid: true;
+  }> = [];
 
-        for (const status of value.statuses ?? []) {
-          const wamid = String(status.id ?? '');
-          if (wamid) await admin.from('messages').update({ status: String(status.status ?? 'unknown') }).eq('whatsapp_message_id', wamid);
-        }
-
-        const contactName = String(value.contacts?.[0]?.profile?.name ?? '').trim();
-        for (const message of value.messages ?? []) {
-          const waId = normalizeWaId(String(message.from ?? value.contacts?.[0]?.wa_id ?? ''));
-          if (!waId) continue;
-          const kind: LeadKind = connection.channel === 'clientes' ? 'cliente' : 'corretor';
-          let { data: lead } = await admin.from('leads').select('*')
-            .eq('organization_id', connection.organization_id).eq('kind', kind).eq('phone', waId).maybeSingle();
-
-          if (!lead) {
-            const now = new Date().toISOString();
-            const { data: inserted, error } = await admin.from('leads').insert({
-              organization_id: connection.organization_id,
-              kind,
-              name: contactName || waId,
-              phone: waId,
-              stage: 'novo_triagem',
-              source: 'WhatsApp',
-              company: kind === 'corretor' ? 'Não informada' : null,
-              temperature: 0,
-              ai_enabled: true,
-              owner_mode: 'ai',
-              priority_class: null,
-              last_inbound_at: now,
-              metadata: {},
-            }).select('*').single();
-            if (error) throw error;
-            lead = inserted;
-          }
-
-          const inboundWamid = String(message.id ?? '').trim();
-          if (!inboundWamid) continue;
-          const body = messageBody(message);
-          const createdAt = message.timestamp ? new Date(Number(message.timestamp) * 1000).toISOString() : new Date().toISOString();
-          const { data: storedMessage, error: messageError } = await admin.from('messages').upsert({
-            organization_id: connection.organization_id,
-            lead_id: lead.id,
-            whatsapp_connection_id: connection.id,
-            direction: 'in',
-            sender_kind: 'lead',
-            body,
-            status: 'received',
-            whatsapp_message_id: inboundWamid,
-            raw_payload: message,
-            created_at: createdAt,
-          }, { onConflict: 'whatsapp_message_id', ignoreDuplicates: true }).select('id').maybeSingle();
-          if (messageError) throw messageError;
-          if (!storedMessage) continue;
-
-          await admin.from('leads').update({
-            name: lead.name === lead.phone && contactName ? contactName : lead.name,
-            last_inbound_at: createdAt,
-            updated_at: new Date().toISOString(),
-          }).eq('id', lead.id);
-
-          jobs.push({
-            organizationId: connection.organization_id,
-            leadId: lead.id,
-            connectionId: connection.id,
-            phoneNumberId: connection.phone_number_id,
-            encryptedToken: connection.encrypted_access_token,
-            sourceMessageId: storedMessage.id,
-          });
-        }
-      }
-    }
-
-    if (jobs.length) {
-      after(async () => {
-        for (const job of jobs) {
-          try { await processConversation(job); } catch (error) { console.error('[whatsapp hybrid]', error); }
-        }
+  for (const entry of payload.entry ?? []) {
+    for (const change of entry.changes ?? []) {
+      rows.push({
+        phone_number_id: String(change.value?.metadata?.phone_number_id ?? '').trim() || null,
+        raw: {
+          object: payload.object,
+          entry_id: entry.id,
+          change,
+        },
+        signature_valid: true,
       });
     }
-    return NextResponse.json({ received: true });
-  } catch (error) {
-    console.error('[whatsapp webhook]', error);
-    return NextResponse.json({ error: 'Webhook processing failed' }, { status: 500 });
   }
+
+  if (!rows.length) {
+    rows.push({
+      phone_number_id: null,
+      raw: payload as Record<string, unknown>,
+      signature_valid: true,
+    });
+  }
+
+  const { data: events, error } = await admin
+    .from('whatsapp_webhook_events')
+    .insert(rows)
+    .select('id');
+
+  if (error || !events?.length) {
+    console.error('[whatsapp webhook queue]', error?.message ?? 'Evento não gravado.');
+    return NextResponse.json({ error: 'Webhook queue unavailable' }, { status: 500 });
+  }
+
+  after(async () => {
+    for (const event of events) {
+      try {
+        await processWebhookEvent(event.id);
+      } catch (processError) {
+        console.error('[whatsapp webhook async]', event.id, processError);
+      }
+    }
+  });
+
+  return NextResponse.json({ received: true }, { status: 200 });
 }
