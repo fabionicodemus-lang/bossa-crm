@@ -1,4 +1,4 @@
--- BOSSA CRM — agenda o worker de recuperação dos eventos do WhatsApp
+-- BOSSA CRM — totais de entrega e worker de recuperação dos eventos do WhatsApp
 -- Execute DEPOIS de 012_whatsapp_desenvolvedor_direto.sql e do deployment do código.
 --
 -- ANTES DE EXECUTAR:
@@ -7,6 +7,59 @@
 --    bossa_crm_whatsapp_worker_url = https://SEU-DOMINIO/api/automation/whatsapp-events
 --    bossa_crm_cron_secret         = o mesmo valor de CRON_SECRET da Vercel
 -- 3) Não cole o segredo neste arquivo nem o salve no GitHub.
+
+-- Sempre que a Meta alterar sent/delivered/read/failed de um destinatário,
+-- atualiza automaticamente os totais exibidos na transmissão.
+create or replace function public.refresh_broadcast_delivery_counts()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  target_broadcast_id uuid;
+begin
+  if tg_op = 'DELETE' then
+    target_broadcast_id := old.broadcast_id;
+  else
+    target_broadcast_id := new.broadcast_id;
+  end if;
+
+  update public.broadcasts broadcast
+  set
+    queued_count = totals.queued_count,
+    sent_count = totals.sent_count,
+    delivered_count = totals.delivered_count,
+    read_count = totals.read_count,
+    failed_count = totals.failed_count,
+    skipped_count = totals.skipped_count,
+    updated_at = now()
+  from (
+    select
+      count(*) filter (where status in ('queued', 'sending'))::integer as queued_count,
+      count(*) filter (where status = 'sent')::integer as sent_count,
+      count(*) filter (where status = 'delivered')::integer as delivered_count,
+      count(*) filter (where status = 'read')::integer as read_count,
+      count(*) filter (where status = 'failed')::integer as failed_count,
+      count(*) filter (where status = 'skipped')::integer as skipped_count
+    from public.broadcast_recipients
+    where broadcast_id = target_broadcast_id
+  ) totals
+  where broadcast.id = target_broadcast_id;
+
+  if tg_op = 'DELETE' then
+    return old;
+  end if;
+  return new;
+end;
+$$;
+
+revoke all on function public.refresh_broadcast_delivery_counts() from public, anon, authenticated;
+
+drop trigger if exists broadcast_recipients_refresh_delivery_counts on public.broadcast_recipients;
+create trigger broadcast_recipients_refresh_delivery_counts
+after insert or update of status or delete on public.broadcast_recipients
+for each row execute procedure public.refresh_broadcast_delivery_counts();
 
 create extension if not exists pg_cron;
 create extension if not exists pg_net;
