@@ -155,7 +155,7 @@ export function WhatsAppSettings({ initialConnections }: { initialConnections: C
     setError('');
     setSuccess('');
     if (!appId || !configId || !graphVersion) {
-      setError('Configure NEXT_PUBLIC_META_APP_ID, NEXT_PUBLIC_META_CONFIG_ID e NEXT_PUBLIC_META_GRAPH_VERSION antes de usar o fluxo legado.');
+      setError('Configure NEXT_PUBLIC_META_APP_ID, NEXT_PUBLIC_META_CONFIG_ID e NEXT_PUBLIC_META_GRAPH_VERSION na Vercel antes de conectar.');
       return;
     }
     if (!window.FB || !sdkReady) {
@@ -182,18 +182,55 @@ export function WhatsAppSettings({ initialConnections }: { initialConnections: C
     });
   }
 
-  function connection(channel: Channel) { return connections.find((item) => item.channel === channel); }
+  function connection(channel: Channel) {
+    return connections.find((item) => item.channel === channel && item.status === 'connected');
+  }
 
   return <>
-    <div className="info-box" style={{ marginBottom: 14 }}><strong>Modo de coexistência.</strong> Os números continuarão funcionando normalmente no aplicativo WhatsApp Business do celular enquanto o CRM recebe mensagens e executa as automações pela API oficial.</div>
+    <div className="info-box" style={{ marginBottom: 14 }}>
+      <strong>Modo de coexistência.</strong> Os números continuarão funcionando normalmente no aplicativo WhatsApp Business do celular enquanto o CRM recebe mensagens e executa as automações pela API oficial.
+    </div>
     <div className="grid grid-2">
       {(['clientes', 'corretores'] as Channel[]).map((channel) => {
         const item = connection(channel);
-        return <section className="card" key={channel}><div className="card-head"><h3>{channel === 'clientes' ? 'Canal 1 · Clientes finais' : 'Canal 2 · Corretores'}</h3><span className={`connection-pill ${item ? '' : 'off'}`}>{item ? 'Conectado' : 'Não conectado'}</span></div><div className="card-body"><p className="muted">{channel === 'clientes' ? 'Número usado nos anúncios e no atendimento da Nara.' : 'Número dedicado ao relacionamento e plantão dos corretores.'}</p>{item ? <div className="info-list"><div className="info-row"><span>Número</span><strong>{item.display_phone_number || '—'}</strong></div><div className="info-row"><span>Nome verificado</span><strong>{item.verified_name || '—'}</strong></div><div className="info-row"><span>Qualidade</span><strong>{item.quality_rating || '—'}</strong></div><div className="info-row"><span>Status</span><strong>{item.status}</strong></div><button className="btn btn-ghost btn-sm" onClick={() => connect(channel)}>Trocar ou reconectar número</button></div> : <button className="btn btn-primary" onClick={() => connect(channel)} disabled={loading || !sdkReady}><span style={{ fontWeight: 900 }}>f</span> {loading && selected === channel ? 'Conectando…' : sdkReady ? 'Conectar sem sair do WhatsApp Business' : 'Carregando Facebook…'}</button>}</div></section>;
+        return <section className="card" key={channel}>
+          <div className="card-head">
+            <h3>{channel === 'clientes' ? 'Canal 1 · Clientes finais' : 'Canal 2 · Corretores'}</h3>
+            <span className={`connection-pill ${item ? '' : 'off'}`}>{item ? 'Coexistência ativa' : 'Não conectado'}</span>
+          </div>
+          <div className="card-body">
+            <p className="muted">{channel === 'clientes' ? 'Número usado nos anúncios e no atendimento da Nara.' : 'Número dedicado ao relacionamento e plantão dos corretores.'}</p>
+            {item
+              ? <div className="info-list">
+                <div className="info-row"><span>Número</span><strong>{item.display_phone_number || '—'}</strong></div>
+                <div className="info-row"><span>Nome verificado</span><strong>{item.verified_name || '—'}</strong></div>
+                <div className="info-row"><span>Qualidade</span><strong>{item.quality_rating || '—'}</strong></div>
+                <div className="info-row"><span>Status</span><strong>WhatsApp Business + CRM</strong></div>
+                <button className="btn btn-ghost btn-sm" onClick={() => connect(channel)}>Trocar ou reconectar número</button>
+              </div>
+              : <button className="btn btn-primary" onClick={() => connect(channel)} disabled={loading || !sdkReady}>
+                <span style={{ fontWeight: 900 }}>f</span> {loading && selected === channel ? 'Conectando…' : sdkReady ? 'Conectar sem sair do WhatsApp Business' : 'Carregando Facebook…'}
+              </button>}
+          </div>
+        </section>;
       })}
     </div>
     {error && <div className="error-box" style={{ marginTop: 14 }}>{error}</div>}
     {success && <div className="success-box" style={{ marginTop: 14 }}>{success}</div>}
-    <section className="card" style={{ marginTop: 14 }}><div className="card-head"><h3>Como funciona no sistema real</h3></div><div className="card-body"><ol className="muted" style={{ lineHeight: 1.8, paddingLeft: 20 }}><li>O administrador escolhe o canal e entra com o Facebook.</li><li>Na janela da Meta, escolhe conectar o número já usado no WhatsApp Business.</li><li>Confirma a coexistência pelo próprio aplicativo, sem excluir a conta nem perder o uso no celular.</li><li>O backend salva o token criptografado, assina os webhooks e passa a registrar as novas mensagens no CRM.</li></ol><div className="info-box">Não exclua a conta do WhatsApp Business, não desinstale o aplicativo e não escolha uma migração definitiva do número para API. O fluxo correto é conectar o aplicativo existente em modo de coexistência.</div></div></section>
+    <section className="card" style={{ marginTop: 14 }}>
+      <div className="card-head"><h3>Como funciona no sistema real</h3></div>
+      <div className="card-body">
+        <ol className="muted" style={{ lineHeight: 1.8, paddingLeft: 20 }}>
+          <li>O administrador escolhe o canal e entra com o Facebook.</li>
+          <li>Na janela da Meta, escolhe conectar o número já usado no WhatsApp Business.</li>
+          <li>Confirma a coexistência pelo próprio aplicativo, sem excluir a conta nem perder o uso no celular.</li>
+          <li>O backend salva o token criptografado, assina os webhooks e registra as novas mensagens no CRM.</li>
+          <li>Quando alguém responde pelo celular, a resposta aparece no histórico e a IA daquele lead é pausada automaticamente.</li>
+        </ol>
+        <div className="info-box">
+          Não exclua a conta do WhatsApp Business, não desinstale o aplicativo e não escolha uma migração definitiva do número para API. O fluxo correto é conectar o aplicativo existente em modo de coexistência.
+        </div>
+      </div>
+    </section>
   </>;
 }
