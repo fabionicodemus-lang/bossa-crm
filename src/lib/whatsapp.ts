@@ -1,71 +1,37 @@
-import crypto from 'node:crypto';
+// Fachada temporária de compatibilidade.
+// O acesso à Graph API fica exclusivamente em providers/metaCloud.ts.
 
-const graphVersion = process.env.META_GRAPH_VERSION || 'v25.0';
-const graphBase = `https://graph.facebook.com/${graphVersion}`;
+import type {
+  WhatsAppMediaType,
+  WhatsAppTemplate,
+  WhatsAppTemplateComponent,
+} from '@/lib/whatsapp/channelProvider';
+import { encryptToken, decryptToken, verifyMetaSignature } from '@/lib/whatsapp/crypto';
+import { exchangeEmbeddedSignupCode, metaCloudProvider } from '@/lib/whatsapp/providers/metaCloud';
+import { normalizeWaId } from '@/lib/whatsapp/utils';
 
-function required(name: string) {
-  const value = process.env[name];
-  if (!value) throw new Error(`Variável de ambiente ausente: ${name}`);
-  return value;
-}
-
-async function graphRequest<T>(path: string, options: RequestInit & { accessToken?: string } = {}): Promise<T> {
-  const headers = new Headers(options.headers);
-  if (options.accessToken) headers.set('Authorization', `Bearer ${options.accessToken}`);
-  if (options.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
-  const response = await fetch(`${graphBase}/${path.replace(/^\//, '')}`, { ...options, headers, cache: 'no-store' });
-  const data = await response.json() as T & { error?: { message?: string; code?: number; error_subcode?: number } };
-  if (!response.ok) {
-    const suffix = data.error?.code ? ` (Meta ${data.error.code}${data.error.error_subcode ? `/${data.error.error_subcode}` : ''})` : '';
-    throw new Error(`${data.error?.message || `Meta Graph API: HTTP ${response.status}`}${suffix}`);
-  }
-  return data;
-}
-
-export async function exchangeEmbeddedSignupCode(code: string) {
-  const params = new URLSearchParams({ client_id: required('META_APP_ID'), client_secret: required('META_APP_SECRET'), code });
-  const response = await fetch(`${graphBase}/oauth/access_token?${params}`, { cache: 'no-store' });
-  const data = await response.json() as { access_token?: string; error?: { message?: string } };
-  if (!response.ok || !data.access_token) throw new Error(data.error?.message || 'A Meta não devolveu o token de acesso.');
-  return data.access_token;
-}
+export type MetaTemplateComponent = WhatsAppTemplateComponent;
+export type MetaMessageTemplate = WhatsAppTemplate;
+export type { WhatsAppMediaType };
+export { encryptToken, decryptToken, verifyMetaSignature, normalizeWaId, exchangeEmbeddedSignupCode };
 
 export async function subscribeAppToWaba(wabaId: string, accessToken: string) {
-  return graphRequest<{ success: boolean }>(`${wabaId}/subscribed_apps`, { method: 'POST', accessToken });
+  return metaCloudProvider.subscribeWebhook({ wabaId, accessToken });
 }
 
 export async function getPhoneNumber(phoneNumberId: string, accessToken: string) {
-  return graphRequest<{ id: string; verified_name?: string; display_phone_number?: string; quality_rating?: string }>(
-    `${phoneNumberId}?fields=id,verified_name,display_phone_number,quality_rating`,
-    { accessToken },
-  );
+  const phone = await metaCloudProvider.getPhoneInfo({ phoneNumberId, accessToken });
+  return {
+    id: phone.id,
+    verified_name: phone.verifiedName ?? undefined,
+    display_phone_number: phone.displayPhoneNumber ?? undefined,
+    quality_rating: phone.qualityRating ?? undefined,
+    whatsapp_business_manager_messaging_limit: phone.messagingLimit ?? undefined,
+  };
 }
 
-export type MetaTemplateComponent = {
-  type: string;
-  format?: string;
-  text?: string;
-  buttons?: Array<Record<string, unknown>>;
-  example?: Record<string, unknown>;
-  [key: string]: unknown;
-};
-
-export type MetaMessageTemplate = {
-  id?: string;
-  name: string;
-  status: string;
-  category: string;
-  language: string;
-  quality_score?: { score?: string } | string | null;
-  rejected_reason?: string | null;
-  components?: MetaTemplateComponent[];
-};
-
 export async function getWhatsAppTemplates(args: { wabaId: string; accessToken: string }) {
-  const fields = encodeURIComponent('id,name,status,category,language,quality_score,rejected_reason,components');
-  return graphRequest<{ data?: MetaMessageTemplate[] }>(`${args.wabaId}/message_templates?limit=250&fields=${fields}`, {
-    accessToken: args.accessToken,
-  });
+  return metaCloudProvider.listTemplates(args);
 }
 
 export async function uploadMetaTemplateMedia(args: {
@@ -74,28 +40,7 @@ export async function uploadMetaTemplateMedia(args: {
   fileType: string;
   bytes: ArrayBuffer;
 }) {
-  const params = new URLSearchParams({
-    file_length: String(args.bytes.byteLength),
-    file_type: args.fileType,
-    file_name: args.fileName,
-  });
-  const session = await graphRequest<{ id?: string }>(`${required('META_APP_ID')}/uploads?${params.toString()}`, {
-    method: 'POST',
-    accessToken: args.accessToken,
-  });
-  if (!session.id) throw new Error('A Meta não criou a sessão de upload do anexo.');
-
-  const uploaded = await graphRequest<{ h?: string }>(session.id, {
-    method: 'POST',
-    accessToken: args.accessToken,
-    headers: {
-      'Content-Type': args.fileType,
-      file_offset: '0',
-    },
-    body: args.bytes,
-  });
-  if (!uploaded.h) throw new Error('A Meta não devolveu o identificador do anexo.');
-  return uploaded.h;
+  return metaCloudProvider.uploadTemplateMedia(args);
 }
 
 export async function createWhatsAppTemplate(args: {
@@ -106,24 +51,17 @@ export async function createWhatsAppTemplate(args: {
   category: 'MARKETING' | 'UTILITY';
   components: MetaTemplateComponent[];
 }) {
-  return graphRequest<{ id?: string; status?: string; category?: string }>(`${args.wabaId}/message_templates`, {
-    method: 'POST',
-    accessToken: args.accessToken,
-    body: JSON.stringify({
-      name: args.name,
-      language: args.language,
-      category: args.category,
-      components: args.components,
-    }),
-  });
+  return metaCloudProvider.createTemplate(args);
 }
 
-export async function sendWhatsAppText(args: { phoneNumberId: string; accessToken: string; to: string; body: string }) {
-  return graphRequest<{ messages?: Array<{ id: string }> }>(`${args.phoneNumberId}/messages`, {
-    method: 'POST',
-    accessToken: args.accessToken,
-    body: JSON.stringify({ messaging_product: 'whatsapp', recipient_type: 'individual', to: args.to, type: 'text', text: { preview_url: false, body: args.body } }),
-  });
+export async function sendWhatsAppText(args: {
+  phoneNumberId: string;
+  accessToken: string;
+  to: string;
+  body: string;
+}) {
+  const result = await metaCloudProvider.sendText(args);
+  return result.raw as { messages?: Array<{ id: string }> };
 }
 
 export async function sendWhatsAppTemplate(args: {
@@ -137,44 +75,9 @@ export async function sendWhatsAppTemplate(args: {
   headerMediaLink?: string;
   headerText?: string;
 }) {
-  const components: Array<Record<string, unknown>> = [];
-  const headerType = args.headerType ?? 'NONE';
-
-  if (['IMAGE', 'VIDEO', 'DOCUMENT'].includes(headerType) && args.headerMediaLink) {
-    const type = headerType.toLowerCase();
-    components.push({
-      type: 'header',
-      parameters: [{ type, [type]: { link: args.headerMediaLink } }],
-    });
-  } else if (headerType === 'TEXT' && args.headerText) {
-    components.push({ type: 'header', parameters: [{ type: 'text', text: args.headerText }] });
-  }
-
-  if (args.bodyParameters?.length) {
-    components.push({
-      type: 'body',
-      parameters: args.bodyParameters.map((text) => ({ type: 'text', text: String(text).slice(0, 1024) })),
-    });
-  }
-
-  return graphRequest<{ messages?: Array<{ id: string }> }>(`${args.phoneNumberId}/messages`, {
-    method: 'POST',
-    accessToken: args.accessToken,
-    body: JSON.stringify({
-      messaging_product: 'whatsapp',
-      recipient_type: 'individual',
-      to: args.to,
-      type: 'template',
-      template: {
-        name: args.name,
-        language: { code: args.language },
-        ...(components.length ? { components } : {}),
-      },
-    }),
-  });
+  const result = await metaCloudProvider.sendTemplate(args);
+  return result.raw as { messages?: Array<{ id: string }> };
 }
-
-export type WhatsAppMediaType = 'image' | 'video' | 'audio' | 'document';
 
 export async function sendWhatsAppMedia(args: {
   phoneNumberId: string;
@@ -185,55 +88,6 @@ export async function sendWhatsAppMedia(args: {
   caption?: string;
   filename?: string;
 }) {
-  const media: Record<string, string> = { link: args.link };
-  if (args.caption && args.type !== 'audio') media.caption = args.caption.slice(0, 1024);
-  if (args.filename && args.type === 'document') media.filename = args.filename.slice(0, 240);
-
-  return graphRequest<{ messages?: Array<{ id: string }> }>(`${args.phoneNumberId}/messages`, {
-    method: 'POST',
-    accessToken: args.accessToken,
-    body: JSON.stringify({
-      messaging_product: 'whatsapp',
-      recipient_type: 'individual',
-      to: args.to,
-      type: args.type,
-      [args.type]: media,
-    }),
-  });
-}
-
-function encryptionKey() {
-  const key = Buffer.from(required('WHATSAPP_TOKEN_ENCRYPTION_KEY_BASE64'), 'base64');
-  if (key.length !== 32) throw new Error('WHATSAPP_TOKEN_ENCRYPTION_KEY_BASE64 deve representar 32 bytes.');
-  return key;
-}
-
-export function encryptToken(token: string) {
-  const iv = crypto.randomBytes(12);
-  const cipher = crypto.createCipheriv('aes-256-gcm', encryptionKey(), iv);
-  const encrypted = Buffer.concat([cipher.update(token, 'utf8'), cipher.final()]);
-  const tag = cipher.getAuthTag();
-  return [iv, tag, encrypted].map((part) => part.toString('base64url')).join('.');
-}
-
-export function decryptToken(payload: string) {
-  const [ivRaw, tagRaw, dataRaw] = payload.split('.');
-  if (!ivRaw || !tagRaw || !dataRaw) throw new Error('Token criptografado inválido.');
-  const decipher = crypto.createDecipheriv('aes-256-gcm', encryptionKey(), Buffer.from(ivRaw, 'base64url'));
-  decipher.setAuthTag(Buffer.from(tagRaw, 'base64url'));
-  return Buffer.concat([decipher.update(Buffer.from(dataRaw, 'base64url')), decipher.final()]).toString('utf8');
-}
-
-export function verifyMetaSignature(rawBody: string, header: string | null) {
-  if (!header?.startsWith('sha256=')) return false;
-  const expected = crypto.createHmac('sha256', required('META_APP_SECRET')).update(rawBody, 'utf8').digest('hex');
-  const received = header.slice(7);
-  if (expected.length !== received.length) return false;
-  return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(received));
-}
-
-export function normalizeWaId(value: string) {
-  const digits = value.replace(/\D/g, '');
-  if (!digits) return '';
-  return digits.startsWith('55') ? digits : `55${digits}`;
+  const result = await metaCloudProvider.sendMedia(args);
+  return result.raw as { messages?: Array<{ id: string }> };
 }

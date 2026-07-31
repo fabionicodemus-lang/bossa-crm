@@ -1,7 +1,13 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { decryptToken, normalizeWaId, sendWhatsAppTemplate } from '@/lib/whatsapp';
+import {
+  channelAccess,
+  ensureConversation,
+  findChannelById,
+} from '@/lib/whatsapp/channelService';
+import type { WhatsAppMessageCategory } from '@/lib/whatsapp/channelProvider';
+import { normalizeWaId } from '@/lib/whatsapp/utils';
 import { stageLabel } from '@/lib/stages';
 import type { LeadKind } from '@/lib/types';
 
@@ -39,6 +45,12 @@ function statusCounts(rows: Array<{ status: string }>) {
   return counts;
 }
 
+function messageCategory(value: unknown): WhatsAppMessageCategory {
+  const category = String(value ?? '').toLowerCase();
+  if (category === 'utility' || category === 'authentication' || category === 'service') return category;
+  return 'marketing';
+}
+
 export async function POST(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const supabase = await createClient();
@@ -59,12 +71,11 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
     return NextResponse.json({ error: `A transmissão já está ${broadcast.status === 'completed' ? 'concluída' : 'cancelada'}.` }, { status: 409 });
   }
 
-  const [{ data: connection }, { data: template }] = await Promise.all([
-    admin.from('whatsapp_connections').select('id,phone_number_id,encrypted_access_token,status,channel')
-      .eq('id', broadcast.whatsapp_connection_id).eq('organization_id', membership.organization_id).maybeSingle(),
-    admin.from('whatsapp_templates').select('*').eq('id', broadcast.template_id).eq('organization_id', membership.organization_id).maybeSingle(),
-  ]);
-  if (!connection || connection.status !== 'connected') return NextResponse.json({ error: 'O canal do WhatsApp não está conectado.' }, { status: 409 });
+  const channelId = String(broadcast.whatsapp_channel_id ?? broadcast.whatsapp_connection_id ?? '');
+  const channel = await findChannelById(admin, membership.organization_id, channelId);
+  const { data: template } = await admin.from('whatsapp_templates')
+    .select('*').eq('id', broadcast.template_id).eq('organization_id', membership.organization_id).maybeSingle();
+  if (!channel || channel.status !== 'connected') return NextResponse.json({ error: 'O canal do WhatsApp não está conectado.' }, { status: 409 });
   if (!template || String(template.status).toUpperCase() !== 'APPROVED') return NextResponse.json({ error: 'O modelo deixou de estar aprovado na Meta.' }, { status: 409 });
 
   const { data: queuedRows, error: queueError } = await admin.from('broadcast_recipients')
@@ -91,7 +102,11 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
 
   const now = new Date().toISOString();
   if (broadcast.status !== 'running') {
-    await admin.from('broadcasts').update({ status: 'running', started_at: broadcast.started_at || now }).eq('id', id);
+    await admin.from('broadcasts').update({
+      status: 'running',
+      started_at: broadcast.started_at || now,
+      whatsapp_channel_id: channel.id,
+    }).eq('id', id);
   }
 
   let mediaLink: string | undefined;
@@ -102,9 +117,10 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
     mediaLink = signed.signedUrl;
   }
 
-  const kind: LeadKind = broadcast.channel === 'clientes' ? 'cliente' : 'corretor';
+  const kind: LeadKind = channel.role;
   const mappings = Array.isArray(broadcast.variable_mappings) ? broadcast.variable_mappings as VariableMapping[] : [];
-  const accessToken = decryptToken(connection.encrypted_access_token);
+  const { provider, accessToken, phoneNumberId } = channelAccess(channel);
+  const category = messageCategory(template.category);
 
   for (const recipient of recipients) {
     await admin.from('broadcast_recipients').update({ status: 'sending' }).eq('id', recipient.id);
@@ -113,8 +129,8 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
       if (!destination) throw new Error('Telefone inválido.');
       const snapshot = recipient.lead_snapshot || {};
       const values = mappings.map((mapping) => mappingValue(mapping, snapshot, kind));
-      const result = await sendWhatsAppTemplate({
-        phoneNumberId: connection.phone_number_id,
+      const result = await provider.sendTemplate({
+        phoneNumberId,
         accessToken,
         to: destination,
         name: broadcast.template_name,
@@ -123,7 +139,7 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
         headerType: broadcast.header_type,
         headerMediaLink: mediaLink,
       });
-      const wamid = result.messages?.[0]?.id ?? null;
+      const wamid = result.messageId;
       const sentAt = new Date().toISOString();
       await admin.from('broadcast_recipients').update({
         status: 'sent', whatsapp_message_id: wamid, sent_at: sentAt, error_code: null, error_message: null,
@@ -131,18 +147,57 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
 
       if (recipient.lead_id) {
         const rendered = renderBody(String(template.body_text ?? ''), values);
+        const conversation = await ensureConversation({
+          admin,
+          channel,
+          contactWaId: destination,
+          leadId: recipient.lead_id,
+        });
+        const transport = {
+          organization_id: membership.organization_id,
+          channel_id: channel.id,
+          conversation_id: conversation.id,
+          lead_id: recipient.lead_id,
+          wamid,
+          direction: 'out',
+          sender_kind: 'humano',
+          type: 'template',
+          body: rendered || `[Modelo ${broadcast.template_name}]`,
+          payload: {
+            provider: result.raw,
+            broadcast_id: id,
+            template_name: broadcast.template_name,
+            template_language: broadcast.template_language,
+          },
+          status: 'sent',
+          category,
+          sent_at: sentAt,
+        };
+        if (wamid) {
+          await admin.from('whatsapp_messages').upsert(transport, { onConflict: 'wamid', ignoreDuplicates: true });
+        } else {
+          await admin.from('whatsapp_messages').insert(transport);
+        }
+
         await Promise.all([
           admin.from('messages').insert({
             organization_id: membership.organization_id,
             lead_id: recipient.lead_id,
-            whatsapp_connection_id: connection.id,
+            whatsapp_connection_id: channel.legacy_connection_id ?? channel.id,
+            whatsapp_channel_id: channel.id,
+            whatsapp_conversation_id: conversation.id,
             direction: 'out',
             sender_kind: 'humano',
             sender_user_id: user.id,
             body: rendered || `[Modelo ${broadcast.template_name}]`,
             status: 'sent',
             whatsapp_message_id: wamid,
-            raw_payload: { broadcast_id: id, template_name: broadcast.template_name, template_language: broadcast.template_language },
+            raw_payload: {
+              broadcast_id: id,
+              template_name: broadcast.template_name,
+              template_language: broadcast.template_language,
+              template_category: category,
+            },
           }),
           admin.from('activities').insert({
             organization_id: membership.organization_id,
@@ -151,7 +206,7 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
             type: 'transmissao_whatsapp',
             title: `Transmissão “${broadcast.name}” enviada`,
             description: rendered || `Modelo ${broadcast.template_name} enviado pelo WhatsApp.`,
-            metadata: { broadcast_id: id, template_id: broadcast.template_id, whatsapp_message_id: wamid },
+            metadata: { broadcast_id: id, template_id: broadcast.template_id, whatsapp_message_id: wamid, category },
           }),
           admin.from('leads').update({ last_outbound_at: sentAt, updated_at: sentAt }).eq('id', recipient.lead_id),
         ]);

@@ -1,16 +1,17 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { decryptToken, getWhatsAppTemplates, type MetaTemplateComponent } from '@/lib/whatsapp';
+import { channelAccess, findChannelByRole } from '@/lib/whatsapp/channelService';
+import type { WhatsAppTemplateComponent } from '@/lib/whatsapp/channelProvider';
 
-type Channel = 'clientes' | 'corretores';
+type LegacyChannel = 'clientes' | 'corretores';
 
 function countVariables(text: string) {
   const matches = [...text.matchAll(/\{\{(\d+)\}\}/g)].map((match) => Number(match[1]));
   return matches.length ? Math.max(...matches) : 0;
 }
 
-function componentOf(components: MetaTemplateComponent[], type: string) {
+function componentOf(components: WhatsAppTemplateComponent[], type: string) {
   return components.find((component) => String(component.type).toUpperCase() === type);
 }
 
@@ -26,24 +27,24 @@ export async function POST(request: Request) {
   }
 
   const body = await request.json().catch(() => ({})) as { channel?: unknown };
-  const channel = String(body.channel ?? '') as Channel;
-  if (!['clientes', 'corretores'].includes(channel)) {
+  const legacyChannel = String(body.channel ?? '') as LegacyChannel;
+  if (!['clientes', 'corretores'].includes(legacyChannel)) {
     return NextResponse.json({ error: 'Canal inválido.' }, { status: 400 });
   }
 
   const admin = createAdminClient();
-  const { data: connection } = await admin.from('whatsapp_connections')
-    .select('id,waba_id,encrypted_access_token,status')
-    .eq('organization_id', membership.organization_id)
-    .eq('channel', channel)
-    .eq('status', 'connected')
-    .maybeSingle();
-  if (!connection) return NextResponse.json({ error: 'O canal selecionado não está conectado.' }, { status: 409 });
+  const channel = await findChannelByRole(
+    admin,
+    membership.organization_id,
+    legacyChannel === 'clientes' ? 'cliente' : 'corretor',
+  );
+  if (!channel) return NextResponse.json({ error: 'O canal selecionado não está conectado.' }, { status: 409 });
 
   try {
-    const result = await getWhatsAppTemplates({
-      wabaId: connection.waba_id,
-      accessToken: decryptToken(connection.encrypted_access_token),
+    const { provider, accessToken } = channelAccess(channel);
+    const result = await provider.listTemplates({
+      wabaId: channel.waba_id,
+      accessToken,
     });
     const now = new Date().toISOString();
     const rows = (result.data ?? []).map((template) => {
@@ -58,7 +59,9 @@ export async function POST(request: Request) {
         : String(template.quality_score?.score ?? '');
       return {
         organization_id: membership.organization_id,
-        whatsapp_connection_id: connection.id,
+        whatsapp_connection_id: channel.legacy_connection_id ?? channel.id,
+        channel_id: channel.id,
+        waba_id: channel.waba_id,
         meta_template_id: template.id ?? null,
         name: template.name,
         language: template.language,
@@ -85,7 +88,7 @@ export async function POST(request: Request) {
     const { data: templates, error: readError } = await admin.from('whatsapp_templates')
       .select('*')
       .eq('organization_id', membership.organization_id)
-      .eq('whatsapp_connection_id', connection.id)
+      .eq('channel_id', channel.id)
       .order('status')
       .order('name');
     if (readError) throw readError;

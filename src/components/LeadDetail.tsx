@@ -6,6 +6,12 @@ import type { Activity, Lead, LeadTask, Message, TeamMember } from '@/lib/types'
 import { displayPhone, formatDateTime, initials } from '@/lib/format';
 import { stageLabel, stagesFor } from '@/lib/stages';
 import { createClient } from '@/lib/supabase/client';
+import {
+  isCustomerServiceWindowOpen,
+  leadWindowExpiresAt,
+  OUTSIDE_WINDOW_MESSAGE,
+  windowExpiresFromInbound,
+} from '@/lib/whatsapp/window';
 
 type InsertPayload<T> = { new: T };
 type UpdatePayload<T> = { new: T };
@@ -106,6 +112,13 @@ export function LeadDetail({
   const [taskPriority, setTaskPriority] = useState('normal');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [clock, setClock] = useState(0);
+
+  useEffect(() => {
+    setClock(Date.now());
+    const timer = window.setInterval(() => setClock(Date.now()), 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     const supabase = createClient();
@@ -114,6 +127,18 @@ export function LeadDetail({
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `lead_id=eq.${lead.id}` }, (payload: InsertPayload<Message>) => {
         const item = payload.new;
         setMessages((current) => current.some((message) => message.id === item.id) ? current : [...current, item]);
+        if (item.direction === 'in') {
+          const windowExpiresAt = windowExpiresFromInbound(item.created_at);
+          setLead((current) => ({
+            ...current,
+            last_inbound_at: item.created_at,
+            metadata: {
+              ...(current.metadata || {}),
+              whatsapp_window_expires_at: windowExpiresAt,
+            },
+          }));
+          setClock(Date.now());
+        }
       })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'activities', filter: `lead_id=eq.${lead.id}` }, (payload: InsertPayload<Activity>) => {
         const item = payload.new;
@@ -137,9 +162,19 @@ export function LeadDetail({
   const pendingTasks = tasks.filter((task) => task.status === 'pending' || task.status === 'overdue');
   const completedTasks = tasks.filter((task) => task.status === 'completed');
   const usage = useMemo(() => readAiUsage(lead.metadata), [lead.metadata]);
-  const metaEntries = useMemo(() => Object.entries(lead.metadata || {}).filter(([key, value]) => !['ai_usage', 'hybrid_last_decision'].includes(key) && value !== null && value !== ''), [lead.metadata]);
+  const metaEntries = useMemo(() => Object.entries(lead.metadata || {}).filter(([key, value]) => ![
+    'ai_usage',
+    'hybrid_last_decision',
+    'whatsapp_channel_id',
+    'whatsapp_conversation_id',
+    'whatsapp_window_expires_at',
+  ].includes(key) && value !== null && value !== ''), [lead.metadata]);
   const lastContact = messages.length ? formatDateTime(messages[messages.length - 1].created_at) : '—';
   const canReactivateAi = !['fechado_ganho', 'encerrado'].includes(lead.stage) && !lead.opt_out;
+  const windowExpiresAt = useMemo(() => leadWindowExpiresAt(lead), [lead]);
+  const windowOpen = clock === 0
+    ? Boolean(windowExpiresAt)
+    : isCustomerServiceWindowOpen(windowExpiresAt, clock);
 
   async function requestJson(url: string, method: string, body: unknown) {
     const response = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
@@ -196,6 +231,10 @@ export function LeadDetail({
     event.preventDefault();
     const body = text.trim();
     if (!canEdit || !body) return;
+    if (!windowOpen) {
+      setError(OUTSIDE_WINDOW_MESSAGE);
+      return;
+    }
     setLoading(true);
     setError('');
     try {
@@ -271,7 +310,7 @@ export function LeadDetail({
 
     <div className="detail-grid">
       <section className="card">
-        {tab === 'whatsapp' && <div className="whatsapp-panel"><div className="wa-head"><div className="wa-icon">☏</div><div><strong>Conversa no WhatsApp</strong><div className="faint" style={{ fontSize: 11 }}>IA e humano compartilham o histórico</div></div><span className={`connection-pill ${whatsappConnected ? '' : 'off'}`}>{whatsappConnected ? 'Canal conectado' : 'Aguardando integração'}</span></div><div className="messages">{messages.length === 0 ? <div className="empty-state">As mensagens aparecerão aqui.</div> : messages.map((message) => <div className={`message ${messageClass(message)}`} key={message.id}><small style={{ fontWeight: 700, display: 'block', marginBottom: 3 }}>{senderLabel(message)}</small>{message.body}<span className="message-meta">{formatDateTime(message.created_at)}{message.status ? ` · ${message.status}` : ''}</span></div>)}</div>{!canEdit ? <div className="blocked"><span><strong>Acesso somente para consulta.</strong></span></div> : lead.owner_mode === 'ai' && lead.ai_enabled ? <div className="blocked"><span><strong>{persona} é a dona deste contato.</strong><br />Aceite a passagem ou assuma para enviar mensagens humanas.</span><button className="btn btn-primary btn-sm" onClick={() => void toggleAi(false)}>Assumir conversa</button></div> : !whatsappConnected ? <div className="blocked"><span><strong>WhatsApp ainda não conectado.</strong></span></div> : <form className="composer" onSubmit={sendMessage}><textarea value={text} onChange={(event) => setText(event.target.value)} placeholder="Escreva uma mensagem…" onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} /><button className="btn btn-primary" disabled={loading}>{loading ? 'Enviando…' : 'Enviar'}</button></form>}</div>}
+        {tab === 'whatsapp' && <div className="whatsapp-panel"><div className="wa-head"><div className="wa-icon">☏</div><div><strong>Conversa no WhatsApp</strong><div className="faint" style={{ fontSize: 11 }}>IA e humano compartilham o histórico</div></div><span className={`connection-pill ${whatsappConnected ? '' : 'off'}`}>{whatsappConnected ? 'Canal conectado' : 'Aguardando integração'}</span><span className={`connection-pill ${windowOpen ? '' : 'off'}`}>{windowOpen ? 'Janela de 24h aberta' : 'Janela fechada'}</span></div><div className="messages">{messages.length === 0 ? <div className="empty-state">As mensagens aparecerão aqui.</div> : messages.map((message) => <div className={`message ${messageClass(message)}`} key={message.id}><small style={{ fontWeight: 700, display: 'block', marginBottom: 3 }}>{senderLabel(message)}</small>{message.body}<span className="message-meta">{formatDateTime(message.created_at)}{message.status ? ` · ${message.status}` : ''}</span></div>)}</div>{!canEdit ? <div className="blocked"><span><strong>Acesso somente para consulta.</strong></span></div> : lead.owner_mode === 'ai' && lead.ai_enabled ? <div className="blocked"><span><strong>{persona} é a dona deste contato.</strong><br />Aceite a passagem ou assuma para enviar mensagens humanas.</span><button className="btn btn-primary btn-sm" onClick={() => void toggleAi(false)}>Assumir conversa</button></div> : !whatsappConnected ? <div className="blocked"><span><strong>WhatsApp ainda não conectado.</strong></span></div> : !windowOpen ? <div className="blocked"><span><strong>{OUTSIDE_WINDOW_MESSAGE}</strong><br />Aguarde uma mensagem do contato ou envie um template pela área de Transmissões.</span></div> : <form className="composer" onSubmit={sendMessage}><textarea value={text} onChange={(event) => setText(event.target.value)} placeholder="Escreva uma mensagem…" onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} /><button className="btn btn-primary" disabled={loading}>{loading ? 'Enviando…' : 'Enviar'}</button></form>}</div>}
 
         {tab === 'historico' && <div><div className="card-head"><h3>Histórico e próxima ação</h3></div><div className="card-body">{canEdit && <form onSubmit={addNote} style={{ marginBottom: 20 }}><div className="field"><label>O que aconteceu</label><textarea className="textarea" value={note} onChange={(event) => setNote(event.target.value)} placeholder="Ex.: avaliou o fluxo, vai conversar com a esposa e pediu retorno na sexta." /></div><div className="grid grid-2"><div className="field"><label>Próxima ação {lead.owner_mode === 'human' ? '(obrigatória)' : ''}</label><input className="input" value={nextAction} onChange={(event) => setNextAction(event.target.value)} /></div><div className="field"><label>Data e hora</label><input className="input" type="datetime-local" value={nextActionDue} onChange={(event) => setNextActionDue(event.target.value)} /></div></div><button className="btn btn-secondary btn-sm" disabled={loading}>Salvar registro e tarefa</button></form>}<div className="timeline">{activities.length === 0 ? <div className="empty-state">Nenhum histórico registrado.</div> : activities.map((item) => <div className="timeline-item" key={item.id}><div className="timeline-icon">•</div><div><div className="timeline-title">{item.title}</div>{item.description && <div className="timeline-desc">{item.description}</div>}<div className="timeline-time">{formatDateTime(item.created_at)}</div></div></div>)}</div></div></div>}
 
@@ -284,7 +323,7 @@ export function LeadDetail({
         <section className="card"><div className="card-head"><h3>Dono do lead</h3></div><div className="card-body">{lead.owner_mode === 'human' ? <div className="ai-state off"><strong>👤 {owner?.full_name || 'Comercial humano'}</strong><br />A IA está em silêncio e continua analisando.</div> : lead.owner_mode === 'none' ? <div className="ai-state off"><strong>Encerrado</strong></div> : <div className="ai-state on"><strong>🤖 {persona}</strong><br />A IA responde até a passagem ser aceita.</div>}{backup && <div className="faint" style={{ marginTop: 9 }}>Backup: {backup.full_name}</div>}</div></section>
         <section className="card"><div className="card-head"><h3>Controle comercial</h3></div><div className="card-body info-list"><div className="info-row"><span>Classe</span><strong>{lead.priority_class || '—'}</strong></div><div className="info-row"><span>Classificação IA</span><strong>{lead.ai_classification || '—'}</strong></div><div className="info-row"><span>Score</span><strong>{scoreLabel(lead.temperature)} · {lead.temperature}/100</strong></div><div className="info-row"><span>Próxima ação</span><strong>{lead.next_action || lead.ai_next_action || '—'}</strong></div><div className="info-row"><span>Prazo</span><strong>{lead.next_action_due_at ? formatDateTime(lead.next_action_due_at) : '—'}</strong></div><div className="info-row"><span>Resumo</span><strong>{lead.ai_summary || '—'}</strong></div></div></section>
         <section className="card"><div className="card-head"><h3>Consumo da IA</h3></div><div className="card-body info-list">{usage ? <><div className="info-row"><span>Custo estimado</span><strong>US$ {usage.estimated_cost_usd.toFixed(4)}</strong></div><div className="info-row"><span>Chamadas</span><strong>{usage.calls}</strong></div><div className="info-row"><span>Entrada / cache</span><strong>{usage.input_tokens} / {usage.cached_tokens}</strong></div><div className="info-row"><span>Saída</span><strong>{usage.output_tokens}</strong></div><div className="info-row"><span>Último modelo</span><strong>{usage.last_model || '—'}</strong></div><div className="info-row"><span>Última análise</span><strong>{usage.last_at ? formatDateTime(usage.last_at) : '—'}</strong></div></> : <div className="empty-state">Ainda sem consumo registrado.</div>}</div></section>
-        <section className="card"><div className="card-head"><h3>Resumo</h3></div><div className="card-body info-list"><div className="info-row"><span>Etapa</span><strong>{stageLabel(lead.kind, lead.stage)}</strong></div><div className="info-row"><span>Mensagens</span><strong>{messages.filter((message) => message.direction !== 'system').length}</strong></div><div className="info-row"><span>Tarefas pendentes</span><strong>{pendingTasks.length}</strong></div><div className="info-row"><span>Último contato</span><strong>{lastContact}</strong></div><div className="info-row"><span>WhatsApp</span><strong>{whatsappConnected ? 'Conectado' : 'Não conectado'}</strong></div></div></section>
+        <section className="card"><div className="card-head"><h3>Resumo</h3></div><div className="card-body info-list"><div className="info-row"><span>Etapa</span><strong>{stageLabel(lead.kind, lead.stage)}</strong></div><div className="info-row"><span>Mensagens</span><strong>{messages.filter((message) => message.direction !== 'system').length}</strong></div><div className="info-row"><span>Tarefas pendentes</span><strong>{pendingTasks.length}</strong></div><div className="info-row"><span>Último contato</span><strong>{lastContact}</strong></div><div className="info-row"><span>WhatsApp</span><strong>{whatsappConnected ? 'Conectado' : 'Não conectado'}</strong></div><div className="info-row"><span>Janela 24h</span><strong>{windowOpen ? `Aberta até ${windowExpiresAt ? formatDateTime(windowExpiresAt) : '—'}` : 'Fechada'}</strong></div></div></section>
       </aside>
     </div>
   </>;

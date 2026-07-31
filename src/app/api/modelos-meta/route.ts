@@ -1,12 +1,8 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
-import {
-  createWhatsAppTemplate,
-  decryptToken,
-  uploadMetaTemplateMedia,
-  type MetaTemplateComponent,
-} from '@/lib/whatsapp';
+import { channelAccess, findChannelById } from '@/lib/whatsapp/channelService';
+import type { WhatsAppTemplateComponent } from '@/lib/whatsapp/channelProvider';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -61,8 +57,8 @@ function variableCount(value: string) {
   return unique[unique.length - 1];
 }
 
-function parseJsonArray<T>(value: string, label: string): T[] {
-  if (!value) return [];
+function parseJsonArray<T>(value: string, label: string) {
+  if (!value) return [] as T[];
   try {
     const parsed = JSON.parse(value);
     if (!Array.isArray(parsed)) throw new Error();
@@ -131,7 +127,7 @@ export async function POST(request: Request) {
 
   try {
     const form = await request.formData();
-    const connectionId = text(form, 'connection_id');
+    const channelId = text(form, 'connection_id');
     const name = normalizeName(text(form, 'name'));
     const language = text(form, 'language') || 'pt_BR';
     const category = text(form, 'category').toUpperCase() as TemplateCategory;
@@ -142,7 +138,7 @@ export async function POST(request: Request) {
     const examples = parseJsonArray<string>(text(form, 'body_examples'), 'Exemplos das variáveis');
     const buttons = validatedButtons(text(form, 'buttons'));
 
-    if (!connectionId) throw new Error('Selecione o canal do WhatsApp.');
+    if (!channelId) throw new Error('Selecione o canal do WhatsApp.');
     if (name.length < 2) throw new Error('Informe um nome válido para o modelo.');
     if (!/^[a-z0-9_]+$/.test(name)) throw new Error('O nome deve conter apenas letras minúsculas, números e sublinhado.');
     if (!['MARKETING', 'UTILITY'].includes(category)) throw new Error('Categoria inválida.');
@@ -157,16 +153,10 @@ export async function POST(request: Request) {
     }
 
     const admin = createAdminClient();
-    const { data: connection, error: connectionError } = await admin.from('whatsapp_connections')
-      .select('id,waba_id,encrypted_access_token,status,channel')
-      .eq('id', connectionId)
-      .eq('organization_id', membership.organization_id)
-      .maybeSingle();
-    if (connectionError) throw connectionError;
-    if (!connection || connection.status !== 'connected') throw new Error('O canal selecionado não está conectado.');
-
-    const accessToken = decryptToken(connection.encrypted_access_token);
-    const components: MetaTemplateComponent[] = [];
+    const channel = await findChannelById(admin, membership.organization_id, channelId);
+    if (!channel || channel.status !== 'connected') throw new Error('O canal selecionado não está conectado.');
+    const { provider, accessToken } = channelAccess(channel);
+    const components: WhatsAppTemplateComponent[] = [];
 
     if (headerFormat === 'TEXT') {
       if (!headerText || headerText.length > 60) throw new Error('O cabeçalho de texto deve ter entre 1 e 60 caracteres.');
@@ -179,7 +169,7 @@ export async function POST(request: Request) {
       const accepted = mediaTypes[headerFormat as keyof typeof mediaTypes];
       if (!accepted.includes(file.type)) throw new Error(`Formato de arquivo incompatível com cabeçalho ${headerFormat}.`);
       if (file.size > 100 * 1024 * 1024) throw new Error('O arquivo pode ter no máximo 100 MB.');
-      const handle = await uploadMetaTemplateMedia({
+      const handle = await provider.uploadTemplateMedia({
         accessToken,
         fileName: file.name,
         fileType: file.type,
@@ -188,14 +178,14 @@ export async function POST(request: Request) {
       components.push({ type: 'HEADER', format: headerFormat, example: { header_handle: [handle] } });
     }
 
-    const bodyComponent: MetaTemplateComponent = { type: 'BODY', text: bodyText };
+    const bodyComponent: WhatsAppTemplateComponent = { type: 'BODY', text: bodyText };
     if (count > 0) bodyComponent.example = { body_text: [examples.map((example) => String(example).trim())] };
     components.push(bodyComponent);
     if (footerText) components.push({ type: 'FOOTER', text: footerText });
     if (buttons.length) components.push({ type: 'BUTTONS', buttons });
 
-    const result = await createWhatsAppTemplate({
-      wabaId: connection.waba_id,
+    const result = await provider.createTemplate({
+      wabaId: channel.waba_id,
       accessToken,
       name,
       language,
@@ -206,7 +196,9 @@ export async function POST(request: Request) {
     const now = new Date().toISOString();
     const row = {
       organization_id: membership.organization_id,
-      whatsapp_connection_id: connection.id,
+      whatsapp_connection_id: channel.legacy_connection_id ?? channel.id,
+      channel_id: channel.id,
+      waba_id: channel.waba_id,
       meta_template_id: result.id ?? null,
       name,
       language,
