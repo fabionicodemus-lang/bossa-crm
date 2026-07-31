@@ -80,6 +80,7 @@ export default async function LegalPage({ params }: { params: Promise<{ document
         ))}
         <div style={{ height: 1, background: '#e4e8e9', margin: '30px 0 22px' }} />
         <nav style={{ display: 'flex', gap: 16, flexWrap: 'wrap', fontSize: 14 }}>
+          <a href="/sobre">Sobre o Bossa CRM</a>
           <a href="/legal/privacidade">Privacidade</a>
           <a href="/legal/termos">Termos de uso</a>
           <a href="/legal/exclusao-de-dados">Exclusão de dados</a>
