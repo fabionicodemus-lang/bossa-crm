@@ -9,6 +9,7 @@ import type { Lead } from '@/lib/types';
 import {
   channelAccess,
   ensureConversation,
+  findChannelById,
   findChannelByRole,
   roleForLeadKind,
   type WhatsAppConversationRecord,
@@ -71,24 +72,30 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Aceite a passagem ou assuma a conversa antes de enviar uma mensagem humana.' }, { status: 409 });
     }
 
-    const channel = await findChannelByRole(
-      admin,
-      membership.organization_id,
-      roleForLeadKind(lead.kind),
-    );
-    if (!channel) return NextResponse.json({ error: 'O canal do WhatsApp ainda não está conectado.' }, { status: 409 });
-
     const { data: currentConversation, error: conversationReadError } = await admin
       .from('whatsapp_conversations')
       .select('*')
-      .eq('channel_id', channel.id)
       .eq('lead_id', lead.id)
       .order('last_inbound_at', { ascending: false })
       .limit(1)
       .maybeSingle();
     if (conversationReadError) throw conversationReadError;
 
-    const storedConversation = currentConversation as WhatsAppConversationRecord | null;
+    const latestConversation = currentConversation as WhatsAppConversationRecord | null;
+    let channel = latestConversation
+      ? await findChannelById(admin, membership.organization_id, latestConversation.channel_id)
+      : null;
+    if (channel?.status !== 'connected') channel = null;
+    channel ??= await findChannelByRole(
+      admin,
+      membership.organization_id,
+      roleForLeadKind(lead.kind),
+    );
+    if (!channel) return NextResponse.json({ error: 'O canal do WhatsApp ainda não está conectado.' }, { status: 409 });
+
+    const storedConversation = latestConversation?.channel_id === channel.id
+      ? latestConversation
+      : null;
     const destination = normalizeWaId(storedConversation?.contact_wa_id ?? lead.phone);
     if (!destination) return NextResponse.json({ error: 'O telefone do contato não possui dígitos válidos.' }, { status: 400 });
 
