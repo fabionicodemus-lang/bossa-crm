@@ -464,6 +464,20 @@ async function findOrCreateLead(args: {
   if (readError) throw readError;
 
   if (!leadData) {
+    const { data: routedLead, error: routedReadError } = await args.admin
+      .from('leads')
+      .select('*')
+      .eq('organization_id', args.channel.organization_id)
+      .eq('phone', args.waId)
+      .is('archived_at', null)
+      .order('updated_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (routedReadError) throw routedReadError;
+    leadData = routedLead;
+  }
+
+  if (!leadData) {
     const { data, error } = await args.admin.from('leads').insert({
       organization_id: args.channel.organization_id,
       kind,
