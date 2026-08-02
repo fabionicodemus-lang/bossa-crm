@@ -8,7 +8,7 @@ import {
   legacyChannelForRole,
   type WhatsAppChannelRecord,
 } from '@/lib/whatsapp/channelService';
-import type { WhatsAppChannelRole } from '@/lib/whatsapp/channelProvider';
+import type { WhatsAppChannelRole, WhatsAppPhoneInfo } from '@/lib/whatsapp/channelProvider';
 import { encryptToken } from '@/lib/whatsapp/crypto';
 
 export const runtime = 'nodejs';
@@ -27,6 +27,12 @@ function roleFromBody(body: Record<string, unknown>): WhatsAppChannelRole | null
   if (body.role === 'cliente' || body.channel === 'clientes') return 'cliente';
   if (body.role === 'corretor' || body.channel === 'corretores') return 'corretor';
   return null;
+}
+
+function isMetaTestNumber(phone: WhatsAppPhoneInfo) {
+  const verifiedName = phone.verifiedName?.trim().toLocaleLowerCase('en-US') ?? '';
+  const digits = phone.displayPhoneNumber?.replace(/\D/g, '') ?? '';
+  return verifiedName === 'test number' || /^1555\d{7}$/.test(digits);
 }
 
 function publicChannel(channel: WhatsAppChannelRecord) {
@@ -91,17 +97,31 @@ export async function POST(request: Request) {
       }
 
       const now = new Date().toISOString();
+      const testNumber = isMetaTestNumber(result.phone);
       const { data: updated, error } = await admin.from('whatsapp_channels').update({
         display_phone_number: result.phone.displayPhoneNumber,
         verified_name: result.phone.verifiedName,
         quality_rating: result.phone.qualityRating,
         messaging_limit: result.phone.messagingLimit,
+        status: testNumber ? 'connected' : channel.status,
+        registered_at: testNumber ? (channel.registered_at ?? now) : channel.registered_at,
+        app_subscribed_at: testNumber ? (channel.app_subscribed_at ?? now) : channel.app_subscribed_at,
         last_tested_at: now,
       }).eq('id', channel.id).select('*').single();
       if (error) throw error;
 
+      if (testNumber && channel.legacy_connection_id) {
+        const { error: legacyError } = await admin.from('whatsapp_connections').update({
+          status: 'connected',
+          connected_at: now,
+          updated_at: now,
+        }).eq('id', channel.legacy_connection_id);
+        if (legacyError) throw legacyError;
+      }
+
       return NextResponse.json({
         ok: true,
+        testNumber,
         validation: {
           wabaId: channel.waba_id,
           phoneNumberId: channel.phone_number_id,
@@ -147,6 +167,7 @@ export async function POST(request: Request) {
       }, { status: 400 });
     }
 
+    const testNumber = isMetaTestNumber(result.phone);
     const validation = {
       wabaId,
       phoneNumberId,
@@ -155,7 +176,7 @@ export async function POST(request: Request) {
       qualityRating: result.phone.qualityRating,
       messagingLimit: result.phone.messagingLimit,
     };
-    if (action === 'test') return NextResponse.json({ ok: true, validation });
+    if (action === 'test') return NextResponse.json({ ok: true, testNumber, validation });
 
     await provider.subscribeWebhook({ wabaId, accessToken });
 
@@ -172,7 +193,7 @@ export async function POST(request: Request) {
       verified_name: result.phone.verifiedName,
       quality_rating: result.phone.qualityRating,
       encrypted_access_token: encrypted,
-      status: 'disconnected',
+      status: testNumber ? 'connected' : 'disconnected',
       connected_at: now,
       updated_at: now,
     }, { onConflict: 'organization_id,channel' }).select('id').single();
@@ -198,10 +219,10 @@ export async function POST(request: Request) {
       verified_name: result.phone.verifiedName,
       quality_rating: result.phone.qualityRating,
       token_encrypted: encrypted,
-      status: 'pending_registration',
+      status: testNumber ? 'connected' : 'pending_registration',
       messaging_limit: result.phone.messagingLimit,
       registration_pin_hash: null,
-      registered_at: null,
+      registered_at: testNumber ? now : null,
       app_subscribed_at: now,
       last_tested_at: now,
       legacy_connection_id: legacy.id,
@@ -215,6 +236,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       ok: true,
+      testNumber,
       validation,
       channel: publicChannel(channel as WhatsAppChannelRecord),
     });
