@@ -11,6 +11,7 @@ import {
   ensureConversation,
   findChannelByRole,
   roleForLeadKind,
+  type WhatsAppConversationRecord,
 } from '@/lib/whatsapp/channelService';
 import {
   isCustomerServiceWindowOpen,
@@ -77,10 +78,21 @@ export async function POST(request: Request) {
     );
     if (!channel) return NextResponse.json({ error: 'O canal do WhatsApp ainda não está conectado.' }, { status: 409 });
 
-    const destination = normalizeWaId(lead.phone);
+    const { data: currentConversation, error: conversationReadError } = await admin
+      .from('whatsapp_conversations')
+      .select('*')
+      .eq('channel_id', channel.id)
+      .eq('lead_id', lead.id)
+      .order('last_inbound_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (conversationReadError) throw conversationReadError;
+
+    const storedConversation = currentConversation as WhatsAppConversationRecord | null;
+    const destination = normalizeWaId(storedConversation?.contact_wa_id ?? lead.phone);
     if (!destination) return NextResponse.json({ error: 'O telefone do contato não possui dígitos válidos.' }, { status: 400 });
 
-    const conversation = await ensureConversation({
+    const conversation = storedConversation ?? await ensureConversation({
       admin,
       channel,
       contactWaId: destination,
@@ -92,6 +104,18 @@ export async function POST(request: Request) {
         error: OUTSIDE_WINDOW_MESSAGE,
         code: 'WHATSAPP_WINDOW_CLOSED',
       }, { status: 409 });
+    }
+
+    if (normalizeWaId(lead.phone) !== destination) {
+      const { error: phoneUpdateError } = await admin.from('leads').update({
+        phone: destination,
+        metadata: {
+          ...(lead.metadata || {}),
+          whatsapp_canonical_wa_id: destination,
+          whatsapp_phone_corrected_at: new Date().toISOString(),
+        },
+      }).eq('id', lead.id);
+      if (phoneUpdateError) throw phoneUpdateError;
     }
 
     const { provider, accessToken, phoneNumberId } = channelAccess(channel);
