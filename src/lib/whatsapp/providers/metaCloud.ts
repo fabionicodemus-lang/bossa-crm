@@ -26,6 +26,27 @@ type MetaErrorPayload = {
   };
 };
 
+function recipientNotAllowed(error: unknown) {
+  return error instanceof Error && /\(Meta 131030(?:\/\d+)?\)/.test(error.message);
+}
+
+function brazilRecipientAlternative(value: string) {
+  const digits = value.replace(/\D/g, '');
+  if (/^55\d{10}$/.test(digits)) {
+    return {
+      value: `${digits.slice(0, 4)}9${digits.slice(4)}`,
+      mode: 'br_ninth_digit_added',
+    } as const;
+  }
+  if (/^55\d{11}$/.test(digits) && digits[4] === '9') {
+    return {
+      value: `${digits.slice(0, 4)}${digits.slice(5)}`,
+      mode: 'br_ninth_digit_removed',
+    } as const;
+  }
+  return null;
+}
+
 async function graphRequest<T>(
   path: string,
   options: RequestInit & { accessToken?: string } = {},
@@ -157,7 +178,7 @@ export const metaCloudProvider: ChannelProvider = {
   },
 
   async sendText(input) {
-    const raw = await graphRequest<{ messages?: Array<{ id?: string }> } & Record<string, unknown>>(
+    const send = (to: string) => graphRequest<{ messages?: Array<{ id?: string }> } & Record<string, unknown>>(
       `${input.phoneNumberId}/messages`,
       {
         method: 'POST',
@@ -165,13 +186,25 @@ export const metaCloudProvider: ChannelProvider = {
         body: JSON.stringify({
           messaging_product: 'whatsapp',
           recipient_type: 'individual',
-          to: input.to,
+          to,
           type: 'text',
           text: { preview_url: false, body: input.body },
         }),
       },
     );
-    return sendResult(raw);
+
+    try {
+      return sendResult(await send(input.to));
+    } catch (error) {
+      const alternative = brazilRecipientAlternative(input.to);
+      if (!alternative || !recipientNotAllowed(error)) throw error;
+
+      const raw = await send(alternative.value);
+      return sendResult({
+        ...raw,
+        bossa_recipient_fallback: alternative.mode,
+      });
+    }
   },
 
   async sendTemplate(input) {
