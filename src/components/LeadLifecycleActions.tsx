@@ -1,15 +1,11 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import type { AppRole, LeadKind } from '@/lib/types';
 
 type DialogMode = 'archive' | 'delete' | null;
-
-function normalizedName(value: string) {
-  return value.trim().replace(/\s+/g, ' ').toLocaleLowerCase('pt-BR');
-}
 
 export function LeadLifecycleActions({
   leadId,
@@ -25,11 +21,10 @@ export function LeadLifecycleActions({
   archivedAt: string | null;
 }) {
   const router = useRouter();
-  const confirmInputRef = useRef<HTMLInputElement>(null);
   const [mounted, setMounted] = useState(false);
   const [dialog, setDialog] = useState<DialogMode>(null);
   const [reason, setReason] = useState('');
-  const [confirmName, setConfirmName] = useState('');
+  const [deleteConfirmed, setDeleteConfirmed] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -40,12 +35,6 @@ export function LeadLifecycleActions({
   useEffect(() => {
     setMounted(true);
   }, []);
-
-  useEffect(() => {
-    if (dialog !== 'delete') return;
-    const frame = window.requestAnimationFrame(() => confirmInputRef.current?.focus());
-    return () => window.cancelAnimationFrame(frame);
-  }, [dialog]);
 
   async function request(url: string, method: string, body: unknown) {
     const response = await fetch(url, {
@@ -85,10 +74,11 @@ export function LeadLifecycleActions({
   }
 
   async function deleteLead() {
+    if (!deleteConfirmed) return;
     setLoading(true);
     setError('');
     try {
-      await request(`/api/leads/${leadId}/lifecycle`, 'DELETE', { confirmName });
+      await request(`/api/leads/${leadId}/lifecycle`, 'DELETE', { confirmName: leadName });
       router.push(returnPath);
       router.refresh();
     } catch (cause) {
@@ -101,11 +91,9 @@ export function LeadLifecycleActions({
     if (loading) return;
     setDialog(null);
     setReason('');
-    setConfirmName('');
+    setDeleteConfirmed(false);
     setError('');
   }
-
-  const nameConfirmed = normalizedName(confirmName) === normalizedName(leadName);
 
   const dialogContent = dialog ? <div
     role="dialog"
@@ -136,24 +124,22 @@ export function LeadLifecycleActions({
           <div className="page-actions" style={{ justifyContent: 'flex-end' }}><button type="button" className="btn btn-ghost" onClick={closeDialog}>Cancelar</button><button type="button" className="btn btn-primary" disabled={loading} onClick={() => void archiveLead()}>{loading ? 'Arquivando…' : 'Confirmar arquivamento'}</button></div>
         </> : <>
           <div className="error-box" style={{ marginTop: 0 }}><strong>Ação irreversível.</strong><br />Mensagens, tarefas e histórico vinculados ao lead serão apagados. Propostas existentes serão preservadas, mas perderão o vínculo com o contato.</div>
-          <div className="field">
-            <label htmlFor="delete-lead-confirmation">Digite exatamente o nome para confirmar</label>
-            <div className="faint" style={{ marginBottom: 7 }}>{leadName}</div>
+          <label
+            htmlFor="delete-lead-confirmation"
+            style={{ display: 'flex', gap: 10, alignItems: 'flex-start', padding: '12px 13px', border: '1px solid var(--line)', borderRadius: 9, background: '#fff', cursor: 'pointer', marginBottom: 15 }}
+          >
             <input
-              ref={confirmInputRef}
               id="delete-lead-confirmation"
-              name="deleteLeadConfirmation"
-              type="text"
-              className="input"
-              value={confirmName}
-              onChange={(event) => setConfirmName(event.target.value)}
-              autoComplete="off"
-              autoFocus
+              type="checkbox"
+              checked={deleteConfirmed}
+              onChange={(event) => setDeleteConfirmed(event.target.checked)}
               disabled={loading}
+              style={{ marginTop: 2 }}
             />
-          </div>
+            <span>Confirmo a exclusão permanente do lead <strong>{leadName}</strong> e entendo que mensagens, tarefas e histórico serão apagados.</span>
+          </label>
           {error && <div className="error-box">{error}</div>}
-          <div className="page-actions" style={{ justifyContent: 'flex-end' }}><button type="button" className="btn btn-ghost" onClick={closeDialog}>Cancelar</button><button type="button" className="btn btn-danger" disabled={loading || !nameConfirmed} onClick={() => void deleteLead()}>{loading ? 'Excluindo…' : 'Excluir permanentemente'}</button></div>
+          <div className="page-actions" style={{ justifyContent: 'flex-end' }}><button type="button" className="btn btn-ghost" onClick={closeDialog}>Cancelar</button><button type="button" className="btn btn-danger" disabled={loading || !deleteConfirmed} onClick={() => void deleteLead()}>{loading ? 'Excluindo…' : 'Excluir permanentemente'}</button></div>
         </>}
       </div>
     </section>
