@@ -214,15 +214,9 @@ function outsideBuyerNextAction(history: ChatMessage[]): string {
 
           function compileForTest(file, exportsToAdd) {
             let source = fs.readFileSync(file, 'utf8');
-            for (const name of exportsToAdd) {
-              source = source.replace(`function ${name}(`, `export function ${name}(`);
-            }
+            for (const name of exportsToAdd) source = source.replace(`function ${name}(`, `export function ${name}(`);
             const output = ts.transpileModule(source, {
-              compilerOptions: {
-                module: ts.ModuleKind.CommonJS,
-                target: ts.ScriptTarget.ES2022,
-                esModuleInterop: true,
-              },
+              compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true },
               fileName: file,
             }).outputText;
             const target = path.join(os.tmpdir(), `${path.basename(file)}-${Date.now()}-${Math.random()}.cjs`);
@@ -230,27 +224,11 @@ function outsideBuyerNextAction(history: ChatMessage[]): string {
             return require(target);
           }
 
-          const ai = compileForTest('src/lib/ai.ts', [
-            'inputMessage',
-            'buildRequestInput',
-            'routeOutsideBuyerProfile',
-            'outsideBuyerReply',
-            'enforceNaraTriage',
-          ]);
+          const ai = compileForTest('src/lib/ai.ts', ['inputMessage', 'buildRequestInput', 'routeOutsideBuyerProfile', 'outsideBuyerReply', 'enforceNaraTriage']);
           const hybrid = compileForTest('src/lib/hybrid.ts', []);
-
           const context = { config: { persona: { name: 'Nara' }, knowledge: {}, active: true }, examples: [], files: [] };
-          const lead = {
-            id: 'qa-lead', kind: 'cliente', name: 'QA', stage: 'novo_triagem', metadata: {},
-            ai_enabled: true, automation_paused: false, owner_mode: 'ai', priority_class: null,
-            temperature: 0, opt_out: false, owner_id: null, backup_owner_id: null,
-            handoff_requested_at: null, reactivation_at: null, enterprise: null, source: 'QA', phone: '5547999999999',
-          };
-          const baseTurn = () => ({
-            reply: 'Qual empreendimento chamou mais sua atenção?', classification: 'morno', score: 50,
-            stage: 'ia', summary: 'Possível comprador.', next_action: 'Continuar qualificação.', handoff: false,
-            attachment_ids: [], extracted: { enterprise: '', purpose: '', typology: '', budget: '', deadline: '', decision_maker: '', company: '', creci: '', region: '', client_status: '' },
-          });
+          const lead = { id: 'qa-lead', kind: 'cliente', name: 'QA', stage: 'novo_triagem', metadata: {}, ai_enabled: true, automation_paused: false, owner_mode: 'ai', priority_class: null, temperature: 0, opt_out: false, owner_id: null, backup_owner_id: null, handoff_requested_at: null, reactivation_at: null, enterprise: null, source: 'QA', phone: '5547999999999' };
+          const baseTurn = () => ({ reply: 'Qual empreendimento chamou mais sua atenção?', classification: 'morno', score: 50, stage: 'ia', summary: 'Possível comprador.', next_action: 'Continuar qualificação.', handoff: false, attachment_ids: [], extracted: { enterprise: '', purpose: '', typology: '', budget: '', deadline: '', decision_maker: '', company: '', creci: '', region: '', client_status: '' } });
           const assert = (condition, message) => { if (!condition) throw new Error(message); };
 
           const deliveryBuyer = [{ role: 'user', content: 'Oi, vi o anúncio do Flow. Qual a previsão de entrega?' }];
@@ -269,13 +247,7 @@ function outsideBuyerNextAction(history: ChatMessage[]): string {
 
           const triageQuestion = 'Para eu te direcionar certinho, você está buscando um imóvel para comprar ou precisa falar com a Bossa sobre outro assunto?';
           const alternative = 'Só para eu seguir pelo caminho certo: seu interesse é conhecer um imóvel para comprar ou você precisa de outro atendimento da Bossa?';
-          const vagueHistory = [
-            { role: 'user', content: 'oi' },
-            { role: 'assistant', content: triageQuestion },
-            { role: 'user', content: 'hmm' },
-            { role: 'assistant', content: alternative },
-            { role: 'user', content: 'sei lá' },
-          ];
+          const vagueHistory = [{ role: 'user', content: 'oi' }, { role: 'assistant', content: triageQuestion }, { role: 'user', content: 'hmm' }, { role: 'assistant', content: alternative }, { role: 'user', content: 'sei lá' }];
           const vagueTurn = ai.enforceNaraTriage(baseTurn(), lead, vagueHistory, context);
           assert(vagueTurn.handoff, 'Terceira resposta vaga não acionou handoff');
           assert(/duas tentativas/i.test(vagueTurn.summary), 'Resumo não explica o limite de triagem');
@@ -286,37 +258,19 @@ function outsideBuyerNextAction(history: ChatMessage[]): string {
           const existingClient = [{ role: 'user', content: 'Já comprei com vocês, quando é a entrega da minha unidade?' }];
           assert(ai.routeOutsideBuyerProfile(existingClient), 'Cliente atual não foi roteado');
           assert(/p[oó]s-venda/i.test(ai.outsideBuyerReply(existingClient)), 'Cliente atual não foi direcionado ao pós-venda');
-
           const negated = [{ role: 'user', content: 'Não sou corretor, quero comprar um apartamento no Flow' }];
           assert(!ai.routeOutsideBuyerProfile(negated), 'Exceção “não sou corretor” regrediu');
 
-          const assistantBlock = ai.inputMessage('assistant', 'Resposta anterior');
-          const userBlock = ai.inputMessage('user', 'Mensagem atual');
-          assert(assistantBlock.content[0].type === 'output_text', 'Assistente não usa output_text');
-          assert(userBlock.content[0].type === 'input_text', 'Usuário não usa input_text');
+          assert(ai.inputMessage('assistant', 'Resposta anterior').content[0].type === 'output_text', 'Assistente não usa output_text');
+          assert(ai.inputMessage('user', 'Mensagem atual').content[0].type === 'input_text', 'Usuário não usa input_text');
 
-          const sixTurnHistory = [
-            { role: 'user', content: 'Oi, vi o Flow' },
-            { role: 'assistant', content: 'Olá! Aqui é a Nara, da Bossa. Você busca para morar ou investir?' },
-            { role: 'user', content: 'Para investir' },
-            { role: 'assistant', content: 'Legal! Você procura quantos quartos?' },
-            { role: 'user', content: 'Dois quartos' },
-            { role: 'assistant', content: 'Entendi. Em qual faixa de investimento?' },
-          ];
+          const sixTurnHistory = [{ role: 'user', content: 'Oi, vi o Flow' }, { role: 'assistant', content: 'Olá! Aqui é a Nara, da Bossa. Você busca para morar ou investir?' }, { role: 'user', content: 'Para investir' }, { role: 'assistant', content: 'Legal! Você procura quantos quartos?' }, { role: 'user', content: 'Dois quartos' }, { role: 'assistant', content: 'Entendi. Em qual faixa de investimento?' }];
           const requestInput = ai.buildRequestInput(lead, context, sixTurnHistory, '', false);
           const priorAssistantMessages = requestInput.filter((item) => item.role === 'assistant');
           assert(priorAssistantMessages.length === 3, 'Histórico de seis turnos perdeu mensagens da assistente');
           assert(priorAssistantMessages.every((item) => item.content[0].type === 'output_text'), 'Histórico longo contém assistant/input_text');
 
-          console.log(JSON.stringify({
-            deliveryBuyer: deliveryTurn,
-            keysBuyer: keysTurn,
-            brokerReply: ai.outsideBuyerReply(broker),
-            vagueThirdTurn: vagueTurn,
-            handoffTask: { title: decision.taskTitle, dedupe: decision.taskDedupeKey, dueAt: decision.taskDueAt },
-            existingClientReply: ai.outsideBuyerReply(existingClient),
-            sixTurnAssistantContentTypes: priorAssistantMessages.map((item) => item.content[0].type),
-          }, null, 2));
+          console.log(JSON.stringify({ deliveryBuyer: deliveryTurn, keysBuyer: keysTurn, brokerReply: ai.outsideBuyerReply(broker), vagueThirdTurn: vagueTurn, handoffTask: { title: decision.taskTitle, dedupe: decision.taskDedupeKey, dueAt: decision.taskDueAt }, existingClientReply: ai.outsideBuyerReply(existingClient), sixTurnAssistantContentTypes: priorAssistantMessages.map((item) => item.content[0].type) }, null, 2));
           NODE
 
       - name: Lint
@@ -340,3 +294,5 @@ function outsideBuyerNextAction(history: ChatMessage[]): string {
           git add src/lib/ai.ts .github/workflows/fix-nara-triage-loop.yml .github/workflows/fix-assistant-message-content.yml
           git commit -m "Corrige roteamento, handoff e histórico da Nara"
           git push origin HEAD:fix/nara-ai-engine-phase-2
+
+# execution trigger 2
