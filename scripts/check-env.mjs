@@ -8,6 +8,7 @@ const required = [
   'META_GRAPH_VERSION',
   'WHATSAPP_WEBHOOK_VERIFY_TOKEN',
   'WHATSAPP_TOKEN_ENCRYPTION_KEY_BASE64',
+  'OPENAI_API_KEY',
   'CRON_SECRET',
 ];
 
@@ -36,4 +37,4 @@ if (!/^v\d+\.\d+$/.test(process.env.META_GRAPH_VERSION)) {
   process.exit(1);
 }
 
-console.log('Variáveis essenciais, WhatsApp e worker configurados.');
+console.log('Variáveis essenciais, WhatsApp, IA e worker configurados.');

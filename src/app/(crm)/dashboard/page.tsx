@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { AiHealthBadge } from '@/components/AiHealthBadge';
 import { PageTopbar } from '@/components/PageTopbar';
 import { getCurrentContext } from '@/lib/auth';
 import { createClient } from '@/lib/supabase/server';
@@ -6,13 +7,14 @@ import { formatDateTime } from '@/lib/format';
 
 type ActivityLead = { id: string; name: string; kind: string };
 type DashboardActivity = { id: string; title: string; description: string | null; created_at: string; leads: ActivityLead | null };
+type AiMessage = { created_at: string; raw_payload: Record<string, unknown> | null };
 
 export default async function DashboardPage() {
   const context = await getCurrentContext();
   const supabase = await createClient();
   const orgId = context!.organization.id;
   const now = new Date().toISOString();
-  const [{ count: totalClients }, { count: aiCount }, { count: hotCount }, { count: brokerCount }, { count: overdueTasks }, { count: pendingHandoffs }, activitiesResult] = await Promise.all([
+  const [{ count: totalClients }, { count: aiCount }, { count: hotCount }, { count: brokerCount }, { count: overdueTasks }, { count: pendingHandoffs }, activitiesResult, aiMessagesResult] = await Promise.all([
     supabase.from('leads').select('id', { count: 'exact', head: true }).eq('organization_id', orgId).eq('kind', 'cliente').is('archived_at', null),
     supabase.from('leads').select('id', { count: 'exact', head: true }).eq('organization_id', orgId).eq('owner_mode', 'ai').eq('ai_enabled', true).is('archived_at', null),
     supabase.from('leads').select('id', { count: 'exact', head: true }).eq('organization_id', orgId).in('priority_class', ['A1', 'A2']).not('stage', 'in', '(fechado_ganho,encerrado)').is('archived_at', null),
@@ -20,15 +22,26 @@ export default async function DashboardPage() {
     supabase.from('lead_tasks').select('id', { count: 'exact', head: true }).eq('organization_id', orgId).in('status', ['pending', 'overdue']).lt('due_at', now),
     supabase.from('lead_handoffs').select('id', { count: 'exact', head: true }).eq('organization_id', orgId).eq('status', 'pending'),
     supabase.from('activities').select('id,title,description,created_at,leads(id,name,kind)').eq('organization_id', orgId).order('created_at', { ascending: false }).limit(10),
+    supabase.from('messages').select('created_at,raw_payload').eq('organization_id', orgId).eq('direction', 'out').eq('sender_kind', 'ia').eq('status', 'sent').order('created_at', { ascending: false }).limit(20),
   ]);
 
   const activities: DashboardActivity[] = (activitiesResult.data ?? []).map((item) => {
     const relatedLead = Array.isArray(item.leads) ? (item.leads[0] ?? null) : (item.leads ?? null);
     return { id: item.id, title: item.title, description: item.description, created_at: item.created_at, leads: relatedLead };
   });
+  const lastAiSuccessAt = ((aiMessagesResult.data ?? []) as AiMessage[])
+    .find((item) => item.raw_payload?.ai_fallback_message !== true)
+    ?.created_at ?? null;
 
   return <>
-    <PageTopbar title="Dashboard" subtitle={`Operação híbrida Nara + equipe · ${context!.organization.name}`} actions={<Link href="/importar" className="btn btn-primary btn-sm">📥 Importar XLSX</Link>} />
+    <PageTopbar
+      title="Dashboard"
+      subtitle={`Operação híbrida Nara + equipe · ${context!.organization.name}`}
+      actions={<div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+        {context!.role === 'admin' && <AiHealthBadge lastSuccessAt={lastAiSuccessAt} />}
+        <Link href="/importar" className="btn btn-primary btn-sm">📥 Importar XLSX</Link>
+      </div>}
+    />
     <div className="page-content">
       <div className="kpis">
         <div className="kpi"><div className="kpi-label">Leads de clientes</div><div className="kpi-value">{totalClients ?? 0}</div><div className="kpi-note">base ativa</div></div>
