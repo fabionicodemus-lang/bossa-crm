@@ -1,11 +1,7 @@
 name: Apply phase 5 attribution
 
 on:
-  push:
-    branches:
-      - feature/meta-ad-referral-attribution
-    paths:
-      - scripts/phase5-apply.py
+  pull_request:
 
 permissions:
   contents: write
@@ -37,26 +33,43 @@ jobs:
         with:
           ref: feature/meta-ad-referral-attribution
           token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Detect pending application
+        id: detect
+        run: |
+          if [ -f scripts/phase5-apply.py ]; then
+            echo "apply=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "apply=false" >> "$GITHUB_OUTPUT"
+          fi
       - name: Apply reviewed changes
+        if: steps.detect.outputs.apply == 'true'
         run: python scripts/phase5-apply.py
       - name: Setup Node
+        if: steps.detect.outputs.apply == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
       - name: Install dependencies
+        if: steps.detect.outputs.apply == 'true'
         run: npm ci --no-audit --no-fund
       - name: Simulate Meta referrals
+        if: steps.detect.outputs.apply == 'true'
         run: npm run test:meta-referral
       - name: Validate environment
+        if: steps.detect.outputs.apply == 'true'
         run: npm run check-env
       - name: Lint
+        if: steps.detect.outputs.apply == 'true'
         run: npm run lint
       - name: Typecheck
+        if: steps.detect.outputs.apply == 'true'
         run: npm run typecheck
       - name: Build
+        if: steps.detect.outputs.apply == 'true'
         run: npm run build
       - name: Commit validated changes
+        if: steps.detect.outputs.apply == 'true'
         run: |
           rm -f scripts/phase5-apply.py
           git config user.name "github-actions[bot]"
