@@ -37,15 +37,10 @@ jobs:
       - name: Apply reviewed source changes
         run: python scripts/phase4-apply.py
 
-      - name: Remove dangerous and temporary workflows
-        run: |
-          rm -f .github/workflows/bootstrap.yml
-          rm -f .github/workflows/phase4-apply.yml
-          rm -f .github/workflows/phase4-apply-v2.yml
-          rm -f docs/phase4-lint-initial.txt
-
       - name: Generate migration and architecture inventories
         run: |
+          mkdir -p docs
+          rm -f docs/phase4-lint-initial.txt
           find supabase/migrations -maxdepth 1 -type f -printf '%f\n' | sort > docs/phase4-migrations-list.txt
           {
             echo '# Mapa bruto de referências a Coexistência e Embedded Signup'
@@ -78,13 +73,12 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Remove temporary helper
-        run: rm -f scripts/phase4-apply.py
-
-      - name: Commit validated phase 4 changes
+      - name: Commit non-workflow changes
         run: |
+          rm -f scripts/phase4-apply.py tsconfig.tsbuildinfo
+          git checkout HEAD -- .github/workflows
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
-          git commit -m "Estabiliza dependências, CI e configuração do CRM"
+          git commit -m "Estabiliza dependências e configuração do CRM"
           git push origin HEAD:chore/repository-ci-phase-4
