@@ -2,6 +2,7 @@ import { generateAiTurn, type AiFileOption } from '@/lib/ai';
 import { loadAiContext } from '@/lib/ai-context';
 import { recordAiUsage } from '@/lib/ai-usage';
 import { aiCanReply } from '@/lib/hybrid';
+import { mergeMetaAdAttribution } from '@/lib/meta-ad-attribution';
 import { applyHybridDecision } from '@/lib/hybrid-server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import type { Lead, LeadKind } from '@/lib/types';
@@ -401,6 +402,7 @@ async function findOrCreateLead(args: {
   waId: string;
   contactName: string;
   receivedAt: string;
+  referral?: MetaWebhookMessage['referral'];
 }) {
   const kind: LeadKind = args.channel.role;
   const { data: existingLead, error: readError } = await args.admin
@@ -428,20 +430,21 @@ async function findOrCreateLead(args: {
   }
 
   if (!leadData) {
+    const attribution = mergeMetaAdAttribution({}, args.referral, args.receivedAt);
     const { data, error } = await args.admin.from('leads').insert({
       organization_id: args.channel.organization_id,
       kind,
       name: args.contactName || args.waId,
       phone: args.waId,
       stage: 'novo_triagem',
-      source: 'WhatsApp',
+      source: attribution.sourceLabel || 'WhatsApp',
       company: kind === 'corretor' ? 'Não informada' : null,
       temperature: 0,
       ai_enabled: true,
       owner_mode: 'ai',
       priority_class: null,
       last_inbound_at: args.receivedAt,
-      metadata: {},
+      metadata: attribution.metadata,
     }).select('*').single();
     if (error) throw error;
     leadData = data;
@@ -470,6 +473,7 @@ async function processInboundMessage(args: {
     waId,
     contactName: args.contactName,
     receivedAt: createdAt,
+    referral: args.message.referral,
   });
   const conversation = await openConversationWindow({
     admin: args.admin,
@@ -524,14 +528,16 @@ async function processInboundMessage(args: {
   if (messageError) throw messageError;
   if (!storedMessage) return;
 
+  const attribution = mergeMetaAdAttribution(lead.metadata, args.message.referral, createdAt);
   const metadata = {
-    ...(lead.metadata || {}),
+    ...attribution.metadata,
     whatsapp_channel_id: args.channel.id,
     whatsapp_conversation_id: conversation.id,
     whatsapp_window_expires_at: conversation.window_expires_at,
   };
   await args.admin.from('leads').update({
     name: lead.name === lead.phone && args.contactName ? args.contactName : lead.name,
+    source: attribution.firstAttribution && attribution.sourceLabel ? attribution.sourceLabel : lead.source,
     last_inbound_at: createdAt,
     metadata,
     updated_at: new Date().toISOString(),

@@ -23,6 +23,7 @@ Execute os arquivos na ordem abaixo, e não apenas por uma ordenação numérica
 13. `012_whatsapp_desenvolvedor_direto.sql`
 14. `013_agendar_worker_whatsapp.sql`
 15. `014_whatsapp_coexistencia.sql`
+16. `015_meta_ad_referral_attribution.sql`
 
 Os dois arquivos `002` declaram dependência apenas de `001_bossa_crm.sql` e atuam em estruturas diferentes. A ordem acima é a ordem documental adotada pelo projeto para eliminar ambiguidade em instalações novas.
 
@@ -32,7 +33,7 @@ Os dois arquivos `002` declaram dependência apenas de `001_bossa_crm.sql` e atu
 2. Não renomear os dois arquivos existentes no histórico atual.
 3. Criar, em uma mudança futura e separada, uma migration nova com número único para registrar ou validar o histórico aplicado, sem recriar objetos antigos.
 4. Para instalações futuras, considerar um baseline versionado em diretório separado, gerado a partir do estado validado do banco. O baseline não deve substituir nem reescrever o histórico usado em produção.
-5. A partir da próxima migration, usar numeração única e crescente. O próximo número disponível é `015`.
+5. A partir da próxima migration, usar numeração única e crescente. O próximo número disponível é `016`.
 
 ## Observação sobre a migration 014
 

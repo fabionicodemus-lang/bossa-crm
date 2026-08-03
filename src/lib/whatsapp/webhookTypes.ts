@@ -15,6 +15,15 @@ export interface MetaWebhookMessage {
   video?: { caption?: string; id?: string; mime_type?: string };
   location?: Record<string, unknown>;
   contacts?: Array<Record<string, unknown>>;
+  referral?: {
+    source_type?: string;
+    source_id?: string;
+    source_url?: string;
+    headline?: string;
+    body?: string;
+    ctwa_clid?: string;
+    [key: string]: unknown;
+  };
   [key: string]: unknown;
 }
 
