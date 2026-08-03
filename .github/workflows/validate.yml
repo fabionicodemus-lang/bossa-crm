@@ -4,13 +4,12 @@ on:
   push:
     branches:
       - main
-      - feature/sistema-hibrido-followup
   pull_request:
 
 jobs:
   validate:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -18,8 +17,19 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Install dependencies
+      - name: Install dependencies and generate lockfile
         run: npm install --no-audit --no-fund
+      - name: Capture lint report
+        shell: bash
+        run: npm run lint > phase4-lint-initial.txt 2>&1 || true
+      - name: Upload phase 4 diagnostic
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase4-diagnostic
+          path: |
+            package-lock.json
+            phase4-lint-initial.txt
+          if-no-files-found: error
       - name: Typecheck
         run: npm run typecheck
       - name: Build
