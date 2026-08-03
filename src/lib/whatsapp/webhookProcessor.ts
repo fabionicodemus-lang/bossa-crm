@@ -5,6 +5,7 @@ import { aiCanReply } from '@/lib/hybrid';
 import { applyHybridDecision } from '@/lib/hybrid-server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import type { Lead, LeadKind } from '@/lib/types';
+import { handleAiFailure as recordAiFailure, resolveAiChannelFailure } from '@/lib/whatsapp/aiFailure';
 import type { WhatsAppMediaType, WhatsAppMessageCategory } from '@/lib/whatsapp/channelProvider';
 import {
   channelAccess,
@@ -21,7 +22,6 @@ import type {
 } from '@/lib/whatsapp/webhookTypes';
 import { metaTimestamp, normalizeWaId } from '@/lib/whatsapp/utils';
 
-const AI_NEUTRAL_REPLY = 'Já te respondo, só um instante.';
 type AdminClient = ReturnType<typeof createAdminClient>;
 
 function messageBody(message: MetaWebhookMessage) {
@@ -206,82 +206,8 @@ async function handleAiFailure(args: {
   conversation: WhatsAppConversationRecord;
   lead: Lead;
   error: unknown;
-  shouldReply: boolean;
 }) {
-  const destination = normalizeWaId(args.lead.phone ?? '');
-  const technicalMessage = args.error instanceof Error ? args.error.message : 'Falha desconhecida na IA.';
-  const windowOpen = isCustomerServiceWindowOpen(args.conversation.window_expires_at);
-  let neutralSent = false;
-
-  if (args.shouldReply && windowOpen && destination) {
-    try {
-      const { provider, accessToken, phoneNumberId } = channelAccess(args.channel);
-      const result = await provider.sendText({
-        phoneNumberId,
-        accessToken,
-        to: destination,
-        body: AI_NEUTRAL_REPLY,
-      });
-      await recordOutbound({
-        admin: args.admin,
-        channel: args.channel,
-        conversation: args.conversation,
-        lead: args.lead,
-        senderKind: 'ia',
-        body: AI_NEUTRAL_REPLY,
-        type: 'text',
-        category: 'service',
-        wamid: result.messageId,
-        providerPayload: result.raw,
-        crmPayload: { ai_fallback_message: true },
-      });
-      neutralSent = true;
-    } catch (sendError) {
-      console.error('[whatsapp ai neutral]', sendError);
-    }
-  }
-
-  const now = new Date().toISOString();
-  await args.admin.from('leads').update({
-    ai_enabled: false,
-    automation_paused: true,
-    owner_mode: 'ai',
-    stage: 'passagem_pendente',
-    next_action: windowOpen
-      ? 'O time comercial deve assumir; a IA esgotou as tentativas.'
-      : `${OUTSIDE_WINDOW_MESSAGE} O time comercial deve assumir.`,
-    next_action_type: 'falha_ia',
-    next_action_due_at: now,
-    metadata: {
-      ...(args.lead.metadata || {}),
-      ai_attention_required: true,
-      ai_last_error_at: now,
-    },
-  }).eq('id', args.lead.id);
-
-  await args.admin.from('lead_tasks').insert({
-    organization_id: args.channel.organization_id,
-    lead_id: args.lead.id,
-    assigned_mode: 'manager',
-    type: 'falha_ia',
-    title: 'Assumir atendimento após falha da IA',
-    description: technicalMessage,
-    priority: 'urgent',
-    status: 'pending',
-    due_at: now,
-    created_by_kind: 'system',
-    dedupe_key: 'system:ai-failure',
-    metadata: { neutral_sent: neutralSent, window_open: windowOpen },
-  });
-
-  await args.admin.from('activities').insert({
-    organization_id: args.channel.organization_id,
-    lead_id: args.lead.id,
-    type: 'falha_ia',
-    title: 'IA precisa de atendimento humano',
-    description: `${neutralSent ? 'O contato recebeu uma mensagem neutra. ' : ''}Erro técnico interno: ${technicalMessage}`,
-    metadata: { neutral_sent: neutralSent, requires_human: true, window_open: windowOpen },
-  });
+  await recordAiFailure(args);
 }
 
 async function processConversation(args: {
@@ -312,9 +238,18 @@ async function processConversation(args: {
     role: row.direction === 'in' ? 'user' as const : 'assistant' as const,
     content: row.body,
   }));
-  if (!history.length) return;
-
   const shouldReply = aiCanReply(lead);
+  if (!history.length) {
+    await handleAiFailure({
+      admin: args.admin,
+      channel: args.channel,
+      conversation: args.conversation,
+      lead,
+      error: new Error('IA indisponível — chave ausente ou histórico vazio'),
+    });
+    return;
+  }
+
   let turn;
   try {
     turn = await generateAiTurn(lead, history, context);
@@ -326,11 +261,19 @@ async function processConversation(args: {
       conversation: args.conversation,
       lead,
       error,
-      shouldReply,
     });
     return;
   }
-  if (!turn) return;
+  if (!turn) {
+    await handleAiFailure({
+      admin: args.admin,
+      channel: args.channel,
+      conversation: args.conversation,
+      lead,
+      error: new Error('IA indisponível — chave ausente ou histórico vazio'),
+    });
+    return;
+  }
 
   const lastUserMessage = [...history].reverse().find((item) => item.role === 'user')?.content ?? '';
   const decision = await applyHybridDecision({
@@ -396,6 +339,12 @@ async function processConversation(args: {
     last_outbound_at: now,
     last_ai_activity_at: now,
   }).eq('id', lead.id);
+  await resolveAiChannelFailure({
+    admin: args.admin,
+    channel: args.channel,
+    lead,
+    succeededAt: now,
+  });
 
   if (turn.attachment_ids.length) {
     await sendSelectedFiles({
