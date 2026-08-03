@@ -78,10 +78,14 @@ type InputTextBlock = {
   text: string;
   prompt_cache_breakpoint?: { mode: 'explicit' };
 };
+type OutputTextBlock = {
+  type: 'output_text';
+  text: string;
+};
 type InputMessage = {
   type: 'message';
   role: 'system' | 'developer' | 'user' | 'assistant';
-  content: InputTextBlock[];
+  content: InputTextBlock[] | OutputTextBlock[];
 };
 
 type OpenAiUsage = {
@@ -325,6 +329,9 @@ function dynamicLeadContext(lead: Lead): string {
 }
 
 function inputMessage(role: InputMessage['role'], text: string, cacheBreakpoint = false): InputMessage {
+  if (role === 'assistant') {
+    return { type: 'message', role, content: [{ type: 'output_text', text }] };
+  }
   const block: InputTextBlock = { type: 'input_text', text };
   if (cacheBreakpoint) block.prompt_cache_breakpoint = { mode: 'explicit' };
   return { type: 'message', role, content: [block] };
@@ -364,10 +371,62 @@ function assistantMessages(history: ChatMessage[]): string[] {
   return history.filter((item) => item.role === 'assistant').map((item) => item.content);
 }
 
-function routeOutsideBuyerProfile(text: string): boolean {
-  const value = normalizeText(text);
-  if (/\b(nao sou corretor|nao sou cliente)\b/.test(value)) return false;
-  return /\b(corretor|corretora|imobiliaria|creci|ja comprei|sou cliente|segunda via|boleto|contrato|pos-venda|assistencia|entrega|chaves|fornecedor|prestador|curriculo|vaga|trabalhar com voces|cobranca|imprensa)\b/.test(value);
+type OutsideBuyerDestination = 'plantao' | 'pos_venda' | 'equipe';
+
+function routingText(value: string): string {
+  let normalized = normalizeText(value);
+  if (/\bnao sou (?:um |uma )?corretor(?:a)?\b/.test(normalized)) {
+    normalized = normalized.replace(/\b(corretor|corretora|imobiliaria|creci)\b/g, ' ');
+  }
+  if (/\bnao sou (?:um |uma )?cliente\b/.test(normalized)) {
+    normalized = normalized.replace(/\b(ja comprei|sou cliente|segunda via|boleto)\b/g, ' ');
+  }
+  return normalized.replace(/\s+/g, ' ').trim();
+}
+
+function outsideBuyerDestination(history: ChatMessage[]): OutsideBuyerDestination | null {
+  const fullHistory = history
+    .filter((item) => item.role === 'user')
+    .map((item) => routingText(item.content))
+    .join('\n');
+  const current = routingText(lastUserText(history));
+
+  if (/\b(corretor|corretora|imobiliaria|creci)\b/.test(fullHistory)) return 'plantao';
+  if (/\b(ja comprei|sou cliente|segunda via|boleto)\b/.test(fullHistory)) return 'pos_venda';
+  if (/\b(fornecedor|prestador|curriculo|vaga|trabalhar com voces|cobranca|imprensa)\b/.test(fullHistory)) return 'equipe';
+
+  const ambiguousSignal = /\b(entrega|chaves|contrato|pos-venda|assistencia)\b/.test(current);
+  const existingClientSignal = /\b(ja comprei|sou cliente|minha unidade|meu apartamento|comprei com voces|minha obra)\b/.test(current);
+  return ambiguousSignal && existingClientSignal ? 'pos_venda' : null;
+}
+
+function routeOutsideBuyerProfile(history: ChatMessage[]): boolean {
+  return outsideBuyerDestination(history) !== null;
+}
+
+function outsideBuyerReply(history: ChatMessage[]): string {
+  const destination = outsideBuyerDestination(history);
+  if (destination === 'plantao') {
+    return 'Vou direcionar você para o Plantão da Bossa, que atende corretores parceiros.';
+  }
+  if (destination === 'pos_venda') {
+    return 'Vou encaminhar você para o pós-venda da Bossa; por favor, diga em uma frase qual é o assunto para a equipe continuar.';
+  }
+  return 'Vou encaminhar você para a equipe responsável da Bossa; por favor, diga em uma frase qual atendimento precisa.';
+}
+
+function outsideBuyerSummary(history: ChatMessage[]): string {
+  const destination = outsideBuyerDestination(history);
+  if (destination === 'plantao') return 'Contato se identificou como corretor ou imobiliária e deve continuar pelo Plantão.';
+  if (destination === 'pos_venda') return 'Contato indicou que já é cliente e precisa de atendimento de pós-venda.';
+  return 'Contato precisa de atendimento da equipe responsável fora da esteira de compradores.';
+}
+
+function outsideBuyerNextAction(history: ChatMessage[]): string {
+  const destination = outsideBuyerDestination(history);
+  if (destination === 'plantao') return 'Continuar o atendimento pelo Plantão no pipeline de corretores.';
+  if (destination === 'pos_venda') return 'Encaminhar para o pós-venda e identificar o assunto informado pelo cliente.';
+  return 'Encaminhar para a equipe humana responsável e identificar o assunto solicitado.';
 }
 
 function asksCommercialValue(text: string): boolean {
@@ -384,12 +443,18 @@ function configuredTriageQuestion(context: AiTrainingContext): string {
   return 'Para eu te direcionar certinho, você está buscando um imóvel para comprar ou precisa falar com a Bossa sobre outro assunto?';
 }
 
+function alternativeTriageQuestion(): string {
+  return 'Só para eu seguir pelo caminho certo: seu interesse é conhecer um imóvel para comprar ou você precisa de outro atendimento da Bossa?';
+}
+
 function looksLikeTriageQuestion(text: string, context: AiTrainingContext): boolean {
   const value = normalizeText(text);
   const configured = normalizeText(configuredTriageQuestion(context));
+  const alternative = normalizeText(alternativeTriageQuestion());
   return value.includes(configured)
+    || value.includes(alternative)
     || (/buscando.*imovel.*comprar/.test(value) && /outro assunto|outro atendimento/.test(value))
-    || (/interesse.*comprar/.test(value) && /assunto/.test(value));
+    || (/interesse.*comprar/.test(value) && /assunto|outro atendimento/.test(value));
 }
 
 function hasTriageQuestionBeenAsked(history: ChatMessage[], context: AiTrainingContext): boolean {
@@ -436,10 +501,6 @@ function ensureFirstTurnIntroduction(reply: string, history: ChatMessage[], cont
   const hasIdentity = /\bnara\b/.test(value) && /\bbossa\b/.test(value);
   if (hasGreeting && hasIdentity) return reply.trim();
   return `${firstContactOpening(context)} ${reply.trim()}`.trim();
-}
-
-function alternativeTriageQuestion(): string {
-  return 'Só para eu seguir pelo caminho certo: seu interesse é conhecer um imóvel para comprar ou você precisa de outro atendimento da Bossa?';
 }
 
 function repeatedReply(reply: string, history: ChatMessage[]): boolean {
@@ -526,11 +587,33 @@ function normalizeClientDecision(turn: AiTurn): AiTurn {
 function enforceNaraTriage(turn: AiTurn, lead: Lead, history: ChatMessage[], context: AiTrainingContext): AiTurn {
   normalizeClientDecision(turn);
   const lastUser = lastUserText(history);
-  const routed = routeOutsideBuyerProfile(userText(history));
+  const routed = routeOutsideBuyerProfile(history);
   const buyerConfirmed = hasExplicitBuyerIntent(lead, history, context);
   const askedBefore = hasTriageQuestionBeenAsked(history, context);
+  const triageAttempts = assistantMessages(history)
+    .filter((message) => looksLikeTriageQuestion(message, context)).length;
 
   if (!buyerConfirmed && !routed) {
+    if (triageAttempts >= 2) {
+      turn.reply = ensureFirstTurnIntroduction(
+        'Vou encaminhar você para um atendente da Bossa; por favor, diga em uma frase qual é o assunto para o time continuar.',
+        history,
+        context,
+      );
+      turn.classification = 'frio';
+      turn.score = Math.min(turn.score, 20);
+      turn.stage = 'ia';
+      turn.summary = 'A intenção de compra não foi confirmada após duas tentativas de triagem.';
+      turn.next_action = 'Transferir para atendimento humano e identificar o assunto solicitado.';
+      turn.handoff = true;
+      turn.attachment_ids = [];
+      turn.extracted.budget = '';
+      turn.extracted.typology = '';
+      turn.extracted.deadline = '';
+      turn.extracted.decision_maker = '';
+      return turn;
+    }
+
     const learnedCorrection = exactManagerCorrection(history, context);
     const safeLearnedCorrection = learnedCorrection && !moneyTokens(learnedCorrection).length && learnedCorrection.includes('?');
     const question = askedBefore ? alternativeTriageQuestion() : configuredTriageQuestion(context);
@@ -556,7 +639,11 @@ function enforceNaraTriage(turn: AiTurn, lead: Lead, history: ChatMessage[], con
     turn.stage = 'ia';
     turn.handoff = true;
     turn.attachment_ids = [];
-    turn.reply = ensureFirstTurnIntroduction(turn.reply, history, context);
+    turn.classification = 'frio';
+    turn.score = Math.min(turn.score, 20);
+    turn.summary = outsideBuyerSummary(history);
+    turn.next_action = outsideBuyerNextAction(history);
+    turn.reply = ensureFirstTurnIntroduction(outsideBuyerReply(history), history, context);
     return turn;
   }
 
