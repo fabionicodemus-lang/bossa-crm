@@ -1,8 +1,9 @@
-name: Fix Nara triage loop
+name: Apply Nara AI engine phase 2
 
 on:
   push:
-    branches: [main]
+    branches:
+      - fix/nara-ai-engine-phase-2
     paths:
       - .github/workflows/fix-nara-triage-loop.yml
 
@@ -10,56 +11,149 @@ permissions:
   contents: write
 
 jobs:
-  fix:
+  apply-and-validate:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
+          ref: fix/nara-ai-engine-phase-2
 
-      - name: Stop repeated triage questions
+      - name: Apply reviewed AI engine corrections
         run: |
           python - <<'PY'
           from pathlib import Path
+          import re
 
           path = Path('src/lib/ai.ts')
           content = path.read_text()
 
-          old_route = """function routeOutsideBuyerProfile(text: string): boolean {
-  const value = normalizeText(text);
-  if (/\\b(nao sou corretor|nao sou cliente)\\b/.test(value)) return false;
-  return /\\b(corretor|corretora|imobiliaria|creci|ja comprei|sou cliente|segunda via|boleto|contrato|pos-venda|assistencia|entrega|chaves|fornecedor|prestador|curriculo|vaga|trabalhar com voces|cobranca|imprensa)\\b/.test(value);
+          old_types = """type InputTextBlock = {
+  type: 'input_text';
+  text: string;
+  prompt_cache_breakpoint?: { mode: 'explicit' };
+};
+type InputMessage = {
+  type: 'message';
+  role: 'system' | 'developer' | 'user' | 'assistant';
+  content: InputTextBlock[];
+};"""
+          new_types = """type InputTextBlock = {
+  type: 'input_text';
+  text: string;
+  prompt_cache_breakpoint?: { mode: 'explicit' };
+};
+type OutputTextBlock = {
+  type: 'output_text';
+  text: string;
+};
+type InputMessage = {
+  type: 'message';
+  role: 'system' | 'developer' | 'user' | 'assistant';
+  content: InputTextBlock[] | OutputTextBlock[];
+};"""
+          if old_types not in content:
+              raise SystemExit('Expected input message types were not found')
+          content = content.replace(old_types, new_types, 1)
+
+          old_helper = """function inputMessage(role: InputMessage['role'], text: string, cacheBreakpoint = false): InputMessage {
+  const block: InputTextBlock = { type: 'input_text', text };
+  if (cacheBreakpoint) block.prompt_cache_breakpoint = { mode: 'explicit' };
+  return { type: 'message', role, content: [block] };
 }"""
-          new_route = """function routeOutsideBuyerProfile(text: string): boolean {
-  const value = normalizeText(text);
-  if (/\\b(nao sou corretor|nao sou cliente)\\b/.test(value)) return false;
-  return /\\b(outro atendimento|outro assunto|preciso de atendimento|preciso falar com a bossa|nao quero comprar|nao estou procurando|corretor|corretora|imobiliaria|creci|ja comprei|sou cliente|segunda via|boleto|contrato|pos-venda|assistencia|entrega|chaves|fornecedor|prestador|curriculo|vaga|trabalhar com voces|cobranca|imprensa)\\b/.test(value);
+          new_helper = """function inputMessage(role: InputMessage['role'], text: string, cacheBreakpoint = false): InputMessage {
+  if (role === 'assistant') {
+    return { type: 'message', role, content: [{ type: 'output_text', text }] };
+  }
+  const block: InputTextBlock = { type: 'input_text', text };
+  if (cacheBreakpoint) block.prompt_cache_breakpoint = { mode: 'explicit' };
+  return { type: 'message', role, content: [block] };
+}"""
+          if old_helper not in content:
+              raise SystemExit('Expected inputMessage helper was not found')
+          content = content.replace(old_helper, new_helper, 1)
+
+          old_route_pattern = re.compile(r"function routeOutsideBuyerProfile\(text: string\): boolean \{\n.*?\n\}\n", re.S)
+          new_route = r"""type OutsideBuyerDestination = 'plantao' | 'pos_venda' | 'equipe';
+
+function routingText(value: string): string {
+  let normalized = normalizeText(value);
+  if (/\bnao sou (?:um |uma )?corretor(?:a)?\b/.test(normalized)) {
+    normalized = normalized.replace(/\b(corretor|corretora|imobiliaria|creci)\b/g, ' ');
+  }
+  if (/\bnao sou (?:um |uma )?cliente\b/.test(normalized)) {
+    normalized = normalized.replace(/\b(ja comprei|sou cliente|segunda via|boleto)\b/g, ' ');
+  }
+  return normalized.replace(/\s+/g, ' ').trim();
+}
+
+function outsideBuyerDestination(history: ChatMessage[]): OutsideBuyerDestination | null {
+  const fullHistory = history
+    .filter((item) => item.role === 'user')
+    .map((item) => routingText(item.content))
+    .join('\n');
+  const current = routingText(lastUserText(history));
+
+  if (/\b(corretor|corretora|imobiliaria|creci)\b/.test(fullHistory)) return 'plantao';
+  if (/\b(ja comprei|sou cliente|segunda via|boleto)\b/.test(fullHistory)) return 'pos_venda';
+  if (/\b(fornecedor|prestador|curriculo|vaga|trabalhar com voces|cobranca|imprensa)\b/.test(fullHistory)) return 'equipe';
+
+  const ambiguousSignal = /\b(entrega|chaves|contrato|pos-venda|assistencia)\b/.test(current);
+  const existingClientSignal = /\b(ja comprei|sou cliente|minha unidade|meu apartamento|comprei com voces|minha obra)\b/.test(current);
+  return ambiguousSignal && existingClientSignal ? 'pos_venda' : null;
+}
+
+function routeOutsideBuyerProfile(history: ChatMessage[]): boolean {
+  return outsideBuyerDestination(history) !== null;
 }
 
 function outsideBuyerReply(history: ChatMessage[]): string {
-  const value = normalizeText(lastUserText(history));
-  if (/\\b(corretor|corretora|imobiliaria|creci)\\b/.test(value)) {
-    return 'Claro. Vou direcionar você para o Plantão da Bossa, que atende corretores parceiros.';
+  const destination = outsideBuyerDestination(history);
+  if (destination === 'plantao') {
+    return 'Vou direcionar você para o Plantão da Bossa, que atende corretores parceiros.';
   }
-  if (/\\b(ja comprei|sou cliente|segunda via|boleto|contrato|pos-venda|assistencia|entrega|chaves)\\b/.test(value)) {
-    return 'Claro. Vou direcionar você para a equipe responsável pelo atendimento aos clientes. Pode me dizer em uma frase qual é o assunto?';
+  if (destination === 'pos_venda') {
+    return 'Vou encaminhar você para o pós-venda da Bossa; por favor, diga em uma frase qual é o assunto para a equipe continuar.';
   }
-  return 'Claro. Vou direcionar você para a equipe responsável. Pode me dizer em uma frase qual atendimento precisa?';
-}"""
+  return 'Vou encaminhar você para a equipe responsável da Bossa; por favor, diga em uma frase qual atendimento precisa.';
+}
 
-          old_state = """  const buyerConfirmed = hasExplicitBuyerIntent(lead, history, context);
+function outsideBuyerSummary(history: ChatMessage[]): string {
+  const destination = outsideBuyerDestination(history);
+  if (destination === 'plantao') return 'Contato se identificou como corretor ou imobiliária e deve continuar pelo Plantão.';
+  if (destination === 'pos_venda') return 'Contato indicou que já é cliente e precisa de atendimento de pós-venda.';
+  return 'Contato precisa de atendimento da equipe responsável fora da esteira de compradores.';
+}
+
+function outsideBuyerNextAction(history: ChatMessage[]): string {
+  const destination = outsideBuyerDestination(history);
+  if (destination === 'plantao') return 'Continuar o atendimento pelo Plantão no pipeline de corretores.';
+  if (destination === 'pos_venda') return 'Encaminhar para o pós-venda e identificar o assunto informado pelo cliente.';
+  return 'Encaminhar para a equipe humana responsável e identificar o assunto solicitado.';
+}
+"""
+          content, route_count = old_route_pattern.subn(new_route, content, count=1)
+          if route_count != 1:
+              raise SystemExit(f'Expected one routeOutsideBuyerProfile block, found {route_count}')
+
+          old_state = """  const lastUser = lastUserText(history);
+  const routed = routeOutsideBuyerProfile(userText(history));
+  const buyerConfirmed = hasExplicitBuyerIntent(lead, history, context);
   const askedBefore = hasTriageQuestionBeenAsked(history, context);
 
   if (!buyerConfirmed && !routed) {
     const learnedCorrection = exactManagerCorrection(history, context);"""
-          new_state = """  const buyerConfirmed = hasExplicitBuyerIntent(lead, history, context);
+          new_state = """  const lastUser = lastUserText(history);
+  const routed = routeOutsideBuyerProfile(history);
+  const buyerConfirmed = hasExplicitBuyerIntent(lead, history, context);
   const askedBefore = hasTriageQuestionBeenAsked(history, context);
-  const triageAttempts = assistantMessages(history).filter((message) => looksLikeTriageQuestion(message, context)).length;
+  const triageAttempts = assistantMessages(history)
+    .filter((message) => looksLikeTriageQuestion(message, context)).length;
 
   if (!buyerConfirmed && !routed) {
     if (triageAttempts >= 2) {
       turn.reply = ensureFirstTurnIntroduction(
-        'Entendi. Vou direcionar você para a equipe da Bossa para continuar por outro atendimento. Pode me dizer em uma frase qual é o assunto?',
+        'Vou encaminhar você para um atendente da Bossa; por favor, diga em uma frase qual é o assunto para o time continuar.',
         history,
         context,
       );
@@ -70,10 +164,17 @@ function outsideBuyerReply(history: ChatMessage[]): string {
       turn.next_action = 'Transferir para atendimento humano e identificar o assunto solicitado.';
       turn.handoff = true;
       turn.attachment_ids = [];
+      turn.extracted.budget = '';
+      turn.extracted.typology = '';
+      turn.extracted.deadline = '';
+      turn.extracted.decision_maker = '';
       return turn;
     }
 
     const learnedCorrection = exactManagerCorrection(history, context);"""
+          if old_state not in content:
+              raise SystemExit('Expected Nara triage state block was not found')
+          content = content.replace(old_state, new_state, 1)
 
           old_routed = """  if (routed) {
     turn.stage = 'ia';
@@ -88,31 +189,154 @@ function outsideBuyerReply(history: ChatMessage[]): string {
     turn.attachment_ids = [];
     turn.classification = 'frio';
     turn.score = Math.min(turn.score, 20);
-    turn.summary = 'Contato informou que precisa de outro atendimento da Bossa.';
-    turn.next_action = 'Direcionar para o canal humano responsável e identificar o assunto.';
+    turn.summary = outsideBuyerSummary(history);
+    turn.next_action = outsideBuyerNextAction(history);
     turn.reply = ensureFirstTurnIntroduction(outsideBuyerReply(history), history, context);
     return turn;
   }"""
-
-          for old, new, label in [
-              (old_route, new_route, 'routeOutsideBuyerProfile'),
-              (old_state, new_state, 'triage state'),
-              (old_routed, new_routed, 'routed block'),
-          ]:
-              if old not in content:
-                  raise SystemExit(f'Expected {label} block was not found')
-              content = content.replace(old, new, 1)
+          if old_routed not in content:
+              raise SystemExit('Expected routed block was not found')
+          content = content.replace(old_routed, new_routed, 1)
 
           path.write_text(content)
           PY
-          rm .github/workflows/fix-nara-triage-loop.yml
 
-      - name: Commit correction
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate deterministic acceptance cases
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const os = require('node:os');
+          const path = require('node:path');
+          const ts = require('typescript');
+
+          function compileForTest(file, exportsToAdd) {
+            let source = fs.readFileSync(file, 'utf8');
+            for (const name of exportsToAdd) {
+              source = source.replace(`function ${name}(`, `export function ${name}(`);
+            }
+            const output = ts.transpileModule(source, {
+              compilerOptions: {
+                module: ts.ModuleKind.CommonJS,
+                target: ts.ScriptTarget.ES2022,
+                esModuleInterop: true,
+              },
+              fileName: file,
+            }).outputText;
+            const target = path.join(os.tmpdir(), `${path.basename(file)}-${Date.now()}-${Math.random()}.cjs`);
+            fs.writeFileSync(target, output);
+            return require(target);
+          }
+
+          const ai = compileForTest('src/lib/ai.ts', [
+            'inputMessage',
+            'buildRequestInput',
+            'routeOutsideBuyerProfile',
+            'outsideBuyerReply',
+            'enforceNaraTriage',
+          ]);
+          const hybrid = compileForTest('src/lib/hybrid.ts', []);
+
+          const context = { config: { persona: { name: 'Nara' }, knowledge: {}, active: true }, examples: [], files: [] };
+          const lead = {
+            id: 'qa-lead', kind: 'cliente', name: 'QA', stage: 'novo_triagem', metadata: {},
+            ai_enabled: true, automation_paused: false, owner_mode: 'ai', priority_class: null,
+            temperature: 0, opt_out: false, owner_id: null, backup_owner_id: null,
+            handoff_requested_at: null, reactivation_at: null, enterprise: null, source: 'QA', phone: '5547999999999',
+          };
+          const baseTurn = () => ({
+            reply: 'Qual empreendimento chamou mais sua atenção?', classification: 'morno', score: 50,
+            stage: 'ia', summary: 'Possível comprador.', next_action: 'Continuar qualificação.', handoff: false,
+            attachment_ids: [], extracted: { enterprise: '', purpose: '', typology: '', budget: '', deadline: '', decision_maker: '', company: '', creci: '', region: '', client_status: '' },
+          });
+          const assert = (condition, message) => { if (!condition) throw new Error(message); };
+
+          const deliveryBuyer = [{ role: 'user', content: 'Oi, vi o anúncio do Flow. Qual a previsão de entrega?' }];
+          assert(!ai.routeOutsideBuyerProfile(deliveryBuyer), 'Entrega isolada expulsou comprador');
+          const deliveryTurn = ai.enforceNaraTriage(baseTurn(), lead, deliveryBuyer, context);
+          assert(!deliveryTurn.handoff && !/p[oó]s-venda/i.test(deliveryTurn.reply), 'Comprador do Flow foi encaminhado indevidamente');
+
+          const keysBuyer = [{ role: 'user', content: 'Quero investir em um apartamento. Quando saem as chaves?' }];
+          assert(!ai.routeOutsideBuyerProfile(keysBuyer), 'Chaves isoladas expulsaram investidor');
+          const keysTurn = ai.enforceNaraTriage(baseTurn(), lead, keysBuyer, context);
+          assert(!keysTurn.handoff, 'Investidor foi encaminhado indevidamente');
+
+          const broker = [{ role: 'user', content: 'Sou corretor da Imobiliária Litoral, meu CRECI é 12345' }];
+          assert(ai.routeOutsideBuyerProfile(broker), 'Corretor não foi roteado');
+          assert(/Plantão/.test(ai.outsideBuyerReply(broker)), 'Resposta do corretor não menciona Plantão');
+
+          const triageQuestion = 'Para eu te direcionar certinho, você está buscando um imóvel para comprar ou precisa falar com a Bossa sobre outro assunto?';
+          const alternative = 'Só para eu seguir pelo caminho certo: seu interesse é conhecer um imóvel para comprar ou você precisa de outro atendimento da Bossa?';
+          const vagueHistory = [
+            { role: 'user', content: 'oi' },
+            { role: 'assistant', content: triageQuestion },
+            { role: 'user', content: 'hmm' },
+            { role: 'assistant', content: alternative },
+            { role: 'user', content: 'sei lá' },
+          ];
+          const vagueTurn = ai.enforceNaraTriage(baseTurn(), lead, vagueHistory, context);
+          assert(vagueTurn.handoff, 'Terceira resposta vaga não acionou handoff');
+          assert(/duas tentativas/i.test(vagueTurn.summary), 'Resumo não explica o limite de triagem');
+          const decision = hybrid.deriveHybridDecision({ lead, turn: vagueTurn, lastUserMessage: 'sei lá', now: new Date('2026-08-03T18:00:00Z') });
+          assert(decision.handoffRequired, 'Decisão híbrida não reconheceu handoff');
+          assert(decision.taskDedupeKey === 'handoff:pending' && decision.taskTitle, 'Handoff não gera tarefa comercial');
+
+          const existingClient = [{ role: 'user', content: 'Já comprei com vocês, quando é a entrega da minha unidade?' }];
+          assert(ai.routeOutsideBuyerProfile(existingClient), 'Cliente atual não foi roteado');
+          assert(/p[oó]s-venda/i.test(ai.outsideBuyerReply(existingClient)), 'Cliente atual não foi direcionado ao pós-venda');
+
+          const negated = [{ role: 'user', content: 'Não sou corretor, quero comprar um apartamento no Flow' }];
+          assert(!ai.routeOutsideBuyerProfile(negated), 'Exceção “não sou corretor” regrediu');
+
+          const assistantBlock = ai.inputMessage('assistant', 'Resposta anterior');
+          const userBlock = ai.inputMessage('user', 'Mensagem atual');
+          assert(assistantBlock.content[0].type === 'output_text', 'Assistente não usa output_text');
+          assert(userBlock.content[0].type === 'input_text', 'Usuário não usa input_text');
+
+          const sixTurnHistory = [
+            { role: 'user', content: 'Oi, vi o Flow' },
+            { role: 'assistant', content: 'Olá! Aqui é a Nara, da Bossa. Você busca para morar ou investir?' },
+            { role: 'user', content: 'Para investir' },
+            { role: 'assistant', content: 'Legal! Você procura quantos quartos?' },
+            { role: 'user', content: 'Dois quartos' },
+            { role: 'assistant', content: 'Entendi. Em qual faixa de investimento?' },
+          ];
+          const requestInput = ai.buildRequestInput(lead, context, sixTurnHistory, '', false);
+          const priorAssistantMessages = requestInput.filter((item) => item.role === 'assistant');
+          assert(priorAssistantMessages.length === 3, 'Histórico de seis turnos perdeu mensagens da assistente');
+          assert(priorAssistantMessages.every((item) => item.content[0].type === 'output_text'), 'Histórico longo contém assistant/input_text');
+
+          console.log(JSON.stringify({
+            deliveryBuyer: deliveryTurn,
+            keysBuyer: keysTurn,
+            brokerReply: ai.outsideBuyerReply(broker),
+            vagueThirdTurn: vagueTurn,
+            handoffTask: { title: decision.taskTitle, dedupe: decision.taskDedupeKey, dueAt: decision.taskDueAt },
+            existingClientReply: ai.outsideBuyerReply(existingClient),
+            sixTurnAssistantContentTypes: priorAssistantMessages.map((item) => item.content[0].type),
+          }, null, 2));
+          NODE
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build
+        run: npm run build
+
+      - name: Remove obsolete self-modifying workflows
+        run: |
+          rm .github/workflows/fix-nara-triage-loop.yml
+          rm .github/workflows/fix-assistant-message-content.yml
+
+      - name: Commit validated correction
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add src/lib/ai.ts .github/workflows/fix-nara-triage-loop.yml
-          git commit -m "Impede repetição da triagem da Nara"
-          git push
-
-# trigger execution
+          git add src/lib/ai.ts .github/workflows/fix-nara-triage-loop.yml .github/workflows/fix-assistant-message-content.yml
+          git commit -m "Corrige roteamento, handoff e histórico da Nara"
+          git push origin HEAD:fix/nara-ai-engine-phase-2
