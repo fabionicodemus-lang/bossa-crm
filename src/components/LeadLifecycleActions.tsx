@@ -26,7 +26,6 @@ export function LeadLifecycleActions({
 }) {
   const router = useRouter();
   const confirmInputRef = useRef<HTMLInputElement>(null);
-  const [mounted, setMounted] = useState(false);
   const [dialog, setDialog] = useState<DialogMode>(null);
   const [reason, setReason] = useState('');
   const [confirmName, setConfirmName] = useState('');
@@ -36,10 +35,7 @@ export function LeadLifecycleActions({
   const canEdit = role === 'admin' || role === 'comercial';
   const canDelete = role === 'admin';
   const returnPath = leadKind === 'cliente' ? '/clientes' : '/corretores';
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
+  const portalTarget = typeof document === 'undefined' ? null : document.body;
 
   useEffect(() => {
     if (dialog !== 'delete') return;
@@ -163,6 +159,6 @@ export function LeadLifecycleActions({
     {canEdit && archivedAt && <button type="button" className="btn btn-secondary btn-sm" disabled={loading} onClick={() => void restoreLead()}>↩ Restaurar lead</button>}
     {canEdit && !archivedAt && <button type="button" className="btn btn-ghost btn-sm" onClick={() => setDialog('archive')}>🗄️ Arquivar</button>}
     {canDelete && <button type="button" className="btn btn-danger btn-sm" onClick={() => setDialog('delete')}>🗑️ Excluir</button>}
-    {mounted && dialogContent ? createPortal(dialogContent, document.body) : null}
+    {portalTarget && dialogContent ? createPortal(dialogContent, portalTarget) : null}
   </>;
 }

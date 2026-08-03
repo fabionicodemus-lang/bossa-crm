@@ -76,7 +76,7 @@ export function DevelopmentLogosPanel({ organizationId, canEdit, initialDevelopm
     let newPath = '';
     try {
       const normalized = await normalizeLogo(file);
-      newPath = `${organizationId}/${item.id}/brand/logo-${Date.now()}.jpg`;
+      newPath = `${organizationId}/${item.id}/brand/logo-${crypto.randomUUID()}.jpg`;
       const { error: uploadError } = await supabase.storage.from('development-files').upload(newPath, normalized, {
         cacheControl: '3600',
         contentType: 'image/jpeg',

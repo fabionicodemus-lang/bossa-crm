@@ -200,7 +200,10 @@ export function DevelopmentsManager({
   const stockValue = availableUnits.reduce((sum, item) => sum + numberValue(item.list_price), 0);
 
   useEffect(() => {
-    if (!selectedId && developments[0]) setSelectedId(developments[0].id);
+    const firstDevelopmentId = developments[0]?.id;
+    if (!selectedId && firstDevelopmentId) {
+      queueMicrotask(() => setSelectedId((current) => current || firstDevelopmentId));
+    }
   }, [developments, selectedId]);
 
   function clearMessages() {
@@ -670,7 +673,9 @@ function EditableUnitRow({
 }) {
   const [draft, setDraft] = useState(item);
 
-  useEffect(() => setDraft(item), [item]);
+  useEffect(() => {
+    queueMicrotask(() => setDraft(item));
+  }, [item]);
 
   function field<K extends keyof DevelopmentUnit>(key: K, value: DevelopmentUnit[K]) {
     setDraft((current) => ({ ...current, [key]: value }));

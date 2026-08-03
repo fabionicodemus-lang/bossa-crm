@@ -260,24 +260,27 @@ export function BroadcastsManager({
     setError('');
     setNotice('');
     try {
-      let done = false;
-      while (!done && !stopRef.current) {
-        const response = await fetch(`/api/transmissoes/${broadcast.id}/send`, { method: 'POST' });
-        const payload = await response.json().catch(() => ({}));
-        if (!response.ok) throw new Error(payload.error || 'Falha durante o envio da transmissão.');
-        done = Boolean(payload.done);
-        setBroadcasts((current) => current.map((item) => item.id === broadcast.id ? {
-          ...item,
-          status: done ? 'completed' : 'running',
-          queued_count: payload.counts?.queued ?? item.queued_count,
-          sent_count: payload.counts?.sent ?? item.sent_count,
-          delivered_count: payload.counts?.delivered ?? item.delivered_count,
-          read_count: payload.counts?.read ?? item.read_count,
-          failed_count: payload.counts?.failed ?? item.failed_count,
-        } : item));
-        if (!done) await new Promise((resolve) => window.setTimeout(resolve, 350));
-      }
-      setNotice(done ? `Transmissão “${broadcast.name}” concluída.` : `Envio pausado após o lote atual. Clique em Continuar para retomar.`);
+      const completed = await (async () => {
+        while (!stopRef.current) {
+          const response = await fetch(`/api/transmissoes/${broadcast.id}/send`, { method: 'POST' });
+          const payload = await response.json().catch(() => ({}));
+          if (!response.ok) throw new Error(payload.error || 'Falha durante o envio da transmissão.');
+          const batchDone = Boolean(payload.done);
+          setBroadcasts((current) => current.map((item) => item.id === broadcast.id ? {
+            ...item,
+            status: batchDone ? 'completed' : 'running',
+            queued_count: payload.counts?.queued ?? item.queued_count,
+            sent_count: payload.counts?.sent ?? item.sent_count,
+            delivered_count: payload.counts?.delivered ?? item.delivered_count,
+            read_count: payload.counts?.read ?? item.read_count,
+            failed_count: payload.counts?.failed ?? item.failed_count,
+          } : item));
+          if (batchDone) return true;
+          await new Promise((resolve) => window.setTimeout(resolve, 350));
+        }
+        return false;
+      })();
+      setNotice(completed ? `Transmissão “${broadcast.name}” concluída.` : `Envio pausado após o lote atual. Clique em Continuar para retomar.`);
       router.refresh();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Falha durante o envio.');

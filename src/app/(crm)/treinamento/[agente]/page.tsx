@@ -247,29 +247,35 @@ export default function AgentTrainingPage() {
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
-    setError('');
-    setNotice('');
-    setTab(agent === 'nara' ? 'triagem' : 'simulador');
-    setMessages([]);
-    setScenario('');
-    setFeedbackText('');
-    setCorrectingIndex(null);
-    setLastSimulation(null);
 
-    fetch(`/api/ai-training?agent=${agent}`, { cache: 'no-store' })
-      .then((response) => readJson<{ config: AgentConfig; examples: TrainingExample[]; ai?: AiStatus }>(response))
-      .then((data) => {
+    async function loadTraining() {
+      await Promise.resolve();
+      if (cancelled) return;
+      setLoading(true);
+      setError('');
+      setNotice('');
+      setTab(agent === 'nara' ? 'triagem' : 'simulador');
+      setMessages([]);
+      setScenario('');
+      setFeedbackText('');
+      setCorrectingIndex(null);
+      setLastSimulation(null);
+
+      try {
+        const response = await fetch(`/api/ai-training?agent=${agent}`, { cache: 'no-store' });
+        const data = await readJson<{ config: AgentConfig; examples: TrainingExample[]; ai?: AiStatus }>(response);
         if (cancelled) return;
         setConfig(agent === 'nara' ? withNaraTriage(data.config) : data.config);
         setExamples(data.examples);
         setAi(data.ai ?? null);
-      })
-      .catch((caught: unknown) => {
+      } catch (caught) {
         if (!cancelled) setError(caught instanceof Error ? caught.message : 'Não foi possível carregar o treinamento.');
-      })
-      .finally(() => { if (!cancelled) setLoading(false); });
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
 
+    void loadTraining();
     return () => { cancelled = true; };
   }, [agent]);
 

@@ -403,7 +403,7 @@ async function findOrCreateLead(args: {
   receivedAt: string;
 }) {
   const kind: LeadKind = args.channel.role;
-  let { data: leadData, error: readError } = await args.admin
+  const { data: existingLead, error: readError } = await args.admin
     .from('leads')
     .select('*')
     .eq('organization_id', args.channel.organization_id)
@@ -411,6 +411,7 @@ async function findOrCreateLead(args: {
     .eq('phone', args.waId)
     .maybeSingle();
   if (readError) throw readError;
+  let leadData = existingLead;
 
   if (!leadData) {
     const { data: routedLead, error: routedReadError } = await args.admin
