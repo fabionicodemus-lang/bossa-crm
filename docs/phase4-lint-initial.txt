@@ -1,0 +1,164 @@
+
+> bossa-crm@1.2.0 lint
+> eslint .
+
+
+/home/runner/work/bossa-crm/bossa-crm/src/app/(crm)/treinamento/[agente]/page.tsx
+  250:5  error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+/home/runner/work/bossa-crm/bossa-crm/src/app/(crm)/treinamento/[agente]/page.tsx:250:5
+  248 |   useEffect(() => {
+  249 |     let cancelled = false;
+> 250 |     setLoading(true);
+      |     ^^^^^^^^^^ Avoid calling setState() directly within an effect
+  251 |     setError('');
+  252 |     setNotice('');
+  253 |     setTab(agent === 'nara' ? 'triagem' : 'simulador');  react-hooks/set-state-in-effect
+
+/home/runner/work/bossa-crm/bossa-crm/src/app/api/meta/whatsapp/complete/route.ts
+  6:3  warning  'legacyChannelForRole' is defined but never used  @typescript-eslint/no-unused-vars
+
+/home/runner/work/bossa-crm/bossa-crm/src/app/legal/[documento]/page.tsx
+  83:11  error  Do not use an `<a>` element to navigate to `/legal/privacidade/`. Use `<Link />` from `next/link` instead. See: https://nextjs.org/docs/messages/no-html-link-for-pages        @next/next/no-html-link-for-pages
+  84:11  error  Do not use an `<a>` element to navigate to `/legal/termos/`. Use `<Link />` from `next/link` instead. See: https://nextjs.org/docs/messages/no-html-link-for-pages             @next/next/no-html-link-for-pages
+  85:11  error  Do not use an `<a>` element to navigate to `/legal/exclusao-de-dados/`. Use `<Link />` from `next/link` instead. See: https://nextjs.org/docs/messages/no-html-link-for-pages  @next/next/no-html-link-for-pages
+
+/home/runner/work/bossa-crm/bossa-crm/src/components/BroadcastsManager.tsx
+  268:9  error  Error: This value cannot be modified
+
+This modifies a variable that React considers immutable.
+
+/home/runner/work/bossa-crm/bossa-crm/src/components/BroadcastsManager.tsx:268:9
+  266 |         const payload = await response.json().catch(() => ({}));
+  267 |         if (!response.ok) throw new Error(payload.error || 'Falha durante o envio da transmissão.');
+> 268 |         done = Boolean(payload.done);
+      |         ^^^^ `done` cannot be modified
+  269 |         setBroadcasts((current) => current.map((item) => item.id === broadcast.id ? {
+  270 |           ...item,
+  271 |           status: done ? 'completed' : 'running',  react-hooks/immutability
+
+/home/runner/work/bossa-crm/bossa-crm/src/components/DevelopmentLogosPanel.tsx
+   79:60  error    Error: Cannot call impure function during render
+
+`Date.now` is an impure function. Calling an impure function can produce unstable results that update unpredictably when the component happens to re-render. (https://react.dev/reference/rules/components-and-hooks-must-be-pure#components-and-hooks-must-be-idempotent).
+
+/home/runner/work/bossa-crm/bossa-crm/src/components/DevelopmentLogosPanel.tsx:79:60
+  77 |     try {
+  78 |       const normalized = await normalizeLogo(file);
+> 79 |       newPath = `${organizationId}/${item.id}/brand/logo-${Date.now()}.jpg`;
+     |                                                            ^^^^^^^^^^ Cannot call impure function
+  80 |       const { error: uploadError } = await supabase.storage.from('development-files').upload(newPath, normalized, {
+  81 |         cacheControl: '3600',
+  82 |         contentType: 'image/jpeg',  react-hooks/purity
+  120:21  warning  Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 @next/next/no-img-element
+
+/home/runner/work/bossa-crm/bossa-crm/src/components/DevelopmentsManager.tsx
+  203:41  error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+/home/runner/work/bossa-crm/bossa-crm/src/components/DevelopmentsManager.tsx:203:41
+  201 |
+  202 |   useEffect(() => {
+> 203 |     if (!selectedId && developments[0]) setSelectedId(developments[0].id);
+      |                                         ^^^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  204 |   }, [developments, selectedId]);
+  205 |
+  206 |   function clearMessages() {                                                  react-hooks/set-state-in-effect
+  673:19  error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+/home/runner/work/bossa-crm/bossa-crm/src/components/DevelopmentsManager.tsx:673:19
+  671 |   const [draft, setDraft] = useState(item);
+  672 |
+> 673 |   useEffect(() => setDraft(item), [item]);
+      |                   ^^^^^^^^ Avoid calling setState() directly within an effect
+  674 |
+  675 |   function field<K extends keyof DevelopmentUnit>(key: K, value: DevelopmentUnit[K]) {
+  676 |     setDraft((current) => ({ ...current, [key]: value }));  react-hooks/set-state-in-effect
+
+/home/runner/work/bossa-crm/bossa-crm/src/components/LeadDetail.tsx
+  118:5  error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+/home/runner/work/bossa-crm/bossa-crm/src/components/LeadDetail.tsx:118:5
+  116 |
+  117 |   useEffect(() => {
+> 118 |     setClock(Date.now());
+      |     ^^^^^^^^ Avoid calling setState() directly within an effect
+  119 |     const timer = window.setInterval(() => setClock(Date.now()), 60_000);
+  120 |     return () => window.clearInterval(timer);
+  121 |   }, []);  react-hooks/set-state-in-effect
+
+/home/runner/work/bossa-crm/bossa-crm/src/components/LeadLifecycleActions.tsx
+  41:5  error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+/home/runner/work/bossa-crm/bossa-crm/src/components/LeadLifecycleActions.tsx:41:5
+  39 |
+  40 |   useEffect(() => {
+> 41 |     setMounted(true);
+     |     ^^^^^^^^^^ Avoid calling setState() directly within an effect
+  42 |   }, []);
+  43 |
+  44 |   useEffect(() => {  react-hooks/set-state-in-effect
+
+/home/runner/work/bossa-crm/bossa-crm/src/components/MetaTemplatesManager.tsx
+  128:5   error    Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+/home/runner/work/bossa-crm/bossa-crm/src/components/MetaTemplatesManager.tsx:128:5
+  126 |
+  127 |   useEffect(() => {
+> 128 |     setBodyExamples((current) => Array.from({ length: variableCount }, (_, index) => current[index] ?? ''));
+      |     ^^^^^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  129 |   }, [variableCount]);
+  130 |
+  131 |   function resetForm() {  react-hooks/set-state-in-effect
+  203:61  warning  '_id' is defined but never used                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         @typescript-eslint/no-unused-vars
+
+/home/runner/work/bossa-crm/bossa-crm/src/components/proposals/ProposalEditor.tsx
+  37:3  warning  'selectedDevelopment' is defined but never used  @typescript-eslint/no-unused-vars
+  38:3  warning  'selectedUnit' is defined but never used         @typescript-eslint/no-unused-vars
+
+/home/runner/work/bossa-crm/bossa-crm/src/instrumentation.ts
+  35:42  warning  '_cacheBreakpoint' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+/home/runner/work/bossa-crm/bossa-crm/src/lib/stages.ts
+  38:30  warning  '_kind' is defined but never used  @typescript-eslint/no-unused-vars
+
+/home/runner/work/bossa-crm/bossa-crm/src/lib/whatsapp/webhookProcessor.ts
+  406:32  error  'readError' is never reassigned. Use 'const' instead  prefer-const
+
+✖ 19 problems (12 errors, 7 warnings)
+
