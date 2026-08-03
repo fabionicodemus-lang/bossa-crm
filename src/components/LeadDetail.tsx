@@ -115,9 +115,13 @@ export function LeadDetail({
   const [clock, setClock] = useState(0);
 
   useEffect(() => {
-    setClock(Date.now());
-    const timer = window.setInterval(() => setClock(Date.now()), 60_000);
-    return () => window.clearInterval(timer);
+    const updateClock = () => setClock(Date.now());
+    const initialTimer = window.setTimeout(updateClock, 0);
+    const timer = window.setInterval(updateClock, 60_000);
+    return () => {
+      window.clearTimeout(initialTimer);
+      window.clearInterval(timer);
+    };
   }, []);
 
   useEffect(() => {

@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useMemo, useState } from 'react';
 
 export type MetaTemplateConnection = {
   id: string;
@@ -124,9 +124,10 @@ export function MetaTemplatesManager({
     [connectionId, templates],
   );
 
-  useEffect(() => {
-    setBodyExamples((current) => Array.from({ length: variableCount }, (_, index) => current[index] ?? ''));
-  }, [variableCount]);
+  const visibleBodyExamples = useMemo(
+    () => Array.from({ length: variableCount }, (_, index) => bodyExamples[index] ?? ''),
+    [bodyExamples, variableCount],
+  );
 
   function resetForm() {
     setName('');
@@ -198,9 +199,9 @@ export function MetaTemplatesManager({
       form.set('header_text', headerText);
       if (headerFile) form.set('header_file', headerFile);
       form.set('body_text', bodyText);
-      form.set('body_examples', JSON.stringify(bodyExamples));
+      form.set('body_examples', JSON.stringify(visibleBodyExamples));
       form.set('footer_text', footerText);
-      form.set('buttons', JSON.stringify(buttons.map(({ id: _id, ...button }) => button)));
+      form.set('buttons', JSON.stringify(buttons.map(({ type, text, value, example }) => ({ type, text, value, example }))));
 
       const response = await fetch('/api/modelos-meta', { method: 'POST', body: form });
       const data = await response.json() as { template?: MetaTemplateRow } & ApiError;
@@ -220,7 +221,7 @@ export function MetaTemplatesManager({
     }
   }
 
-  const previewBody = renderPreview(bodyText, bodyExamples);
+  const previewBody = renderPreview(bodyText, visibleBodyExamples);
   const fileAccept = headerFormat === 'IMAGE'
     ? 'image/jpeg,image/png'
     : headerFormat === 'VIDEO'
@@ -270,7 +271,7 @@ export function MetaTemplatesManager({
 
         <div className="field"><label>Corpo da mensagem</label><textarea className="textarea" value={bodyText} maxLength={1024} rows={5} onChange={(event) => setBodyText(event.target.value)} required /><small className="faint">Use variáveis sequenciais: {'{{1}}'}, {'{{2}}'}, {'{{3}}'}. {bodyText.length}/1024 caracteres.</small></div>
 
-        {variableCount > 0 && <div className="card" style={{ boxShadow: 'none' }}><div className="card-head"><h3>Exemplos das variáveis</h3><span className="chip">Obrigatórios para análise</span></div><div className="card-body grid grid-3">{bodyExamples.map((example, index) => <div className="field" key={index}><label>{`{{${index + 1}}}`}</label><input className="input" value={example} onChange={(event) => setBodyExamples((current) => current.map((item, itemIndex) => itemIndex === index ? event.target.value : item))} placeholder={`Exemplo ${index + 1}`} required /></div>)}</div></div>}
+        {variableCount > 0 && <div className="card" style={{ boxShadow: 'none' }}><div className="card-head"><h3>Exemplos das variáveis</h3><span className="chip">Obrigatórios para análise</span></div><div className="card-body grid grid-3">{visibleBodyExamples.map((example, index) => <div className="field" key={index}><label>{`{{${index + 1}}}`}</label><input className="input" value={example} onChange={(event) => setBodyExamples((current) => Array.from({ length: variableCount }, (_, itemIndex) => itemIndex === index ? event.target.value : current[itemIndex] ?? ''))} placeholder={`Exemplo ${index + 1}`} required /></div>)}</div></div>}
 
         <div className="field"><label>Rodapé opcional</label><input className="input" maxLength={60} value={footerText} onChange={(event) => setFooterText(event.target.value)} /><small className="faint">{footerText.length}/60 caracteres.</small></div>
 
