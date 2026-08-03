@@ -16,10 +16,10 @@ function numberValue(value: unknown) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
-function formatDate(value: string | null | undefined) {
-  if (!value) return '—';
+function formatDate(value: string | null | undefined, fallback = '—') {
+  if (!value) return fallback;
   const [year, month, day] = value.slice(0, 10).split('-');
-  return year && month && day ? `${day}/${month}/${year}` : '—';
+  return year && month && day ? `${day}/${month}/${year}` : fallback;
 }
 
 function safeFileName(value: string) {
@@ -62,6 +62,9 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   if (developmentResult.error || !developmentResult.data) {
     return NextResponse.json({ error: 'O empreendimento da proposta não foi encontrado.' }, { status: 404 });
   }
+  if (itemsResult.error) {
+    return NextResponse.json({ error: 'Não foi possível carregar o cronograma da proposta.' }, { status: 500 });
+  }
 
   const development = developmentResult.data;
   const snapshot = (proposal.snapshot ?? {}) as Record<string, unknown>;
@@ -72,11 +75,36 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     ? `Origem: corretor / imobiliária${leadResult.data?.company ? ` · ${leadResult.data.company}` : ''}`
     : 'Origem: cliente direto';
 
-  const schedule: ProposalPdfScheduleRow[] = (itemsResult.data ?? []).map((item) => ({
+  const items = itemsResult.data ?? [];
+  const snapshotNominalRaw = snapshot.nominal_total;
+  const hasSnapshotNominal = snapshotNominalRaw !== null
+    && snapshotNominalRaw !== undefined
+    && Number.isFinite(Number(snapshotNominalRaw));
+  const snapshotNominalTotal = numberValue(snapshotNominalRaw);
+  const proposedPrice = numberValue(proposal.proposed_price);
+  const scheduleTotal = items.reduce(
+    (sum, item) => sum + numberValue(item.amount) * numberValue(item.quantity),
+    0,
+  );
+  const scheduleMatchesSnapshot = hasSnapshotNominal
+    && Math.abs(scheduleTotal - snapshotNominalTotal) <= 0.01;
+  const storedTotalMatchesSnapshot = hasSnapshotNominal
+    && Math.abs(proposedPrice - snapshotNominalTotal) <= 0.01;
+
+  if (!scheduleMatchesSnapshot || !storedTotalMatchesSnapshot) {
+    return NextResponse.json({
+      error: 'A soma do cronograma não confere com o total da proposta. Reabra a proposta, recalcule o fluxo e salve uma nova versão antes de gerar o PDF.',
+      schedule_total: scheduleTotal,
+      proposal_total: proposedPrice,
+      snapshot_total: hasSnapshotNominal ? snapshotNominalTotal : null,
+    }, { status: 409 });
+  }
+
+  const schedule: ProposalPdfScheduleRow[] = items.map((item) => ({
     label: item.label || item.kind,
     quantity: String(item.quantity ?? 0),
     amount: money.format(numberValue(item.amount)),
-    firstDue: formatDate(item.start_date),
+    firstDue: formatDate(item.start_date, 'a definir'),
     total: money.format(numberValue(item.amount) * numberValue(item.quantity)),
   }));
 
@@ -90,7 +118,6 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     if (logoBlob) developmentLogo = await jpegImage(Buffer.from(await logoBlob.arrayBuffer()));
   }
 
-  const proposedPrice = numberValue(proposal.proposed_price);
   const discountAmount = numberValue(proposal.discount_amount);
   const discountPercent = numberValue(snapshot.discount_percent);
   const pdf = createProposalPdf({
@@ -102,7 +129,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     leadName,
     developmentName: development.name,
     unitCode: String(snapshot.unit_code ?? unitResult.data?.unit_code ?? ''),
-    deliveryDate: formatDate(String(snapshot.delivery_date ?? paymentPlan.delivery_date ?? development.delivery_date ?? '')),
+    deliveryDate: formatDate(String(snapshot.delivery_date ?? paymentPlan.delivery_date ?? development.delivery_date ?? ''), 'a definir'),
     responsibleName: String(snapshot.responsible_name ?? 'Bossa Empreendimentos'),
     listPrice: money.format(numberValue(proposal.list_price)),
     proposedPrice: money.format(proposedPrice),

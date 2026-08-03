@@ -41,6 +41,7 @@ export function ProposalEditor({
   firstAfterKeysDate,
   maxBeforeKeysCount,
   calculations,
+  scheduleWarnings,
   canEdit,
   saving,
   editingId,
@@ -66,12 +67,15 @@ export function ProposalEditor({
   firstAfterKeysDate: string;
   maxBeforeKeysCount: number;
   calculations: ProposalCalculations;
+  scheduleWarnings: string[];
   canEdit: boolean;
   saving: boolean;
   editingId: string | null;
   onCancel: () => void;
   onSubmit: (event: React.FormEvent<HTMLFormElement>) => void;
 }) {
+  const saveBlocked = scheduleWarnings.length > 0;
+
   return <form onSubmit={onSubmit}>
     <div className="page-head">
       <div><h2>{editingId ? 'Editar proposta' : 'Nova proposta'}</h2><p>O valor da proposta e o percentual interno até as chaves são calculados automaticamente pelas datas.</p></div>
@@ -91,7 +95,7 @@ export function ProposalEditor({
               <div className="field"><label>Empreendimento</label><select className="select" value={form.developmentId} onChange={(event) => chooseDevelopment(event.target.value)} disabled={!canEdit}><option value="">Selecione…</option>{developments.map((development) => <option key={development.id} value={development.id}>{development.name}{development.delivery_date ? '' : ' · sem entrega'}</option>)}</select></div>
               <div className="field"><label>Unidade</label><select className="select" value={form.unitId} onChange={(event) => chooseUnit(event.target.value)} disabled={!canEdit || !form.developmentId}><option value="">Sem unidade específica</option>{developmentUnits.map((unit) => <option key={unit.id} value={unit.id}>{unit.unit_code} · {money.format(unit.list_price)} · {unit.status}</option>)}</select></div>
             </div>
-            {selectedDevelopment && !deliveryDate && <div className="error-box" style={{ marginTop: 12 }}>O empreendimento não possui Data da Entrega. Cadastre-a antes de salvar a proposta.</div>}
+            {scheduleWarnings.map((warning) => <div className="error-box" style={{ marginTop: 12 }} key={warning}>{warning}</div>)}
           </div>
         </section>
 
@@ -108,7 +112,7 @@ export function ProposalEditor({
               <div className="card-head"><h3>Entrada e chaves</h3><span className="chip">Pagamentos diretos</span></div>
               <div className="card-body grid grid-2">
                 <div className="field"><label>Entrada direta · vencimento na data da proposta</label><MoneyInput value={form.entryTotal} onChange={(value) => setField('entryTotal', value)} disabled={!canEdit} /></div>
-                <div className="field"><label>Parcela nas chaves · {deliveryDate ? date.format(dateFromIso(deliveryDate)) : 'cadastre a entrega'}</label><MoneyInput value={form.keysAmount} onChange={(value) => setField('keysAmount', value)} disabled={!canEdit} /></div>
+                <div className="field"><label>Parcela nas chaves · {deliveryDate ? date.format(dateFromIso(deliveryDate)) : 'a definir'}</label><MoneyInput value={form.keysAmount} onChange={(value) => setField('keysAmount', value)} disabled={!canEdit} /></div>
               </div>
             </div>
 
@@ -140,7 +144,7 @@ export function ProposalEditor({
                     <div className="field"><label>Primeiro vencimento</label><input className="input" type="date" value={firstMonthlyDate} readOnly style={{ background: 'var(--bg)' }} /></div>
                     <div className="field"><label>Depois das chaves · quantidade</label><input className="input" type="number" min="0" value={form.afterKeysCount} onChange={(event) => setField('afterKeysCount', event.target.value)} disabled={!canEdit} /></div>
                     <div className="field"><label>Depois das chaves · valor</label><MoneyInput value={form.afterKeysAmount} onChange={(value) => setField('afterKeysAmount', value)} disabled={!canEdit} /></div>
-                    <div className="field"><label>Primeiro vencimento pós-chaves</label><input className="input" type="date" value={firstAfterKeysDate} readOnly style={{ background: 'var(--bg)' }} /></div>
+                    <div className="field"><label>Primeiro vencimento pós-chaves</label><input className="input" type="date" value={firstAfterKeysDate} placeholder="a definir" readOnly style={{ background: 'var(--bg)' }} /></div>
                   </div>
                   <div className="info-box" style={{ marginTop: 12 }}>Use este modo somente quando o valor das parcelas mudar após a entrega. Até as chaves cabem no máximo <strong>{maxBeforeKeysCount}</strong> mensais.</div>
                 </>}
@@ -162,7 +166,7 @@ export function ProposalEditor({
           <div className="card-head"><h3>3. Cronograma calculado</h3><span className="chip">Até a entrega entra no percentual interno</span></div>
           <div className="table-wrap"><table><thead><tr><th>Pagamento</th><th>Qtd.</th><th>Valor</th><th>Primeiro vencimento</th><th>Total</th><th>Até chaves</th></tr></thead><tbody>
             {calculations.scheduleItems.length === 0 && <tr><td colSpan={6}><div className="empty-state">Preencha o fluxo para visualizar o cronograma.</div></td></tr>}
-            {calculations.scheduleItems.map((item) => <tr key={`${item.kind}-${item.startDate}`}><td><strong>{item.label}</strong></td><td>{item.quantity}</td><td>{money.format(item.amount)}</td><td>{item.startDate ? date.format(dateFromIso(item.startDate)) : '—'}</td><td><strong>{money.format(item.total)}</strong></td><td>{item.paidUntilKeysQuantity} · {money.format(item.paidUntilKeysAmount)}</td></tr>)}
+            {calculations.scheduleItems.map((item) => <tr key={`${item.kind}-${item.startDate ?? 'a-definir'}`}><td><strong>{item.label}</strong></td><td>{item.quantity}</td><td>{money.format(item.amount)}</td><td>{item.startDate ? date.format(dateFromIso(item.startDate)) : 'a definir'}</td><td><strong>{money.format(item.total)}</strong></td><td>{item.paidUntilKeysQuantity} · {money.format(item.paidUntilKeysAmount)}</td></tr>)}
           </tbody></table></div>
         </section>
 
@@ -189,9 +193,10 @@ export function ProposalEditor({
         </div></section>
         <section className="card"><div className="card-body">
           <div className="faint" style={{ fontSize: 12, lineHeight: 1.5, marginBottom: 12 }}>Ao salvar, a proposta entra na planilha, no histórico de <strong>{selectedLead?.name ?? 'selecione um lead'}</strong> e o PDF é aberto automaticamente.</div>
+          {saveBlocked && <div className="error-box" style={{ marginBottom: 12 }}>O salvamento está bloqueado até as datas indicadas acima serem cadastradas.</div>}
           {selectedLead && <Link className="btn btn-ghost btn-block" href={`/leads/${selectedLead.id}`}>Abrir ficha do lead</Link>}
           {editingId && <a className="btn btn-ghost btn-block" style={{ marginTop: 8 }} href={`/api/propostas/${editingId}/pdf`} target="_blank" rel="noreferrer">Abrir PDF atual</a>}
-          {canEdit && <button className="btn btn-primary btn-block" style={{ marginTop: 8 }} disabled={saving}>{saving ? 'Salvando e gerando PDF…' : editingId ? 'Salvar nova versão e abrir PDF' : 'Criar proposta e abrir PDF'}</button>}
+          {canEdit && <button className="btn btn-primary btn-block" style={{ marginTop: 8 }} disabled={saving || saveBlocked}>{saving ? 'Salvando e gerando PDF…' : editingId ? 'Salvar nova versão e abrir PDF' : 'Criar proposta e abrir PDF'}</button>}
         </div></section>
       </aside>
     </div>

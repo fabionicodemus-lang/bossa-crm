@@ -8,7 +8,7 @@ export type WorkflowStatus = 'rascunho'|'enviada'|'negociacao'|'contraproposta'|
 export type Origin = 'cliente'|'corretor';
 export type ReinforcementFrequency = 'anual'|'semestral';
 export type MonthlyMode = 'unificado'|'dividido';
-export type ScheduleItem = { kind:string; label:string; quantity:number; amount:number; startDate:string; intervalMonths:number|null; total:number; paidUntilKeysQuantity:number; paidUntilKeysAmount:number };
+export type ScheduleItem = { kind:string; label:string; quantity:number; amount:number; startDate:string|null; intervalMonths:number|null; total:number; paidUntilKeysQuantity:number; paidUntilKeysAmount:number };
 export type ProposalSnapshot = Record<string,unknown> & { workflow_status?:WorkflowStatus; origin?:Origin; lead_name?:string; client_name?:string; development_name?:string; unit_code?:string; responsible_name?:string; proposal_date?:string; delivery_date?:string|null; paid_until_keys_amount?:number; paid_until_keys_percent?:number; nominal_total?:number; discount_percent?:number; schedule_items?:ScheduleItem[]; next_action?:string; next_action_due_at?:string|null };
 export type Proposal = { id:string; organization_id:string; development_id:string; unit_id:string|null; lead_id:string|null; status:StoredStatus; proposal_number:number; list_price:number; proposed_price:number; discount_amount:number; valid_until:string|null; notes:string|null; payment_plan:Record<string,unknown>; snapshot:ProposalSnapshot; version:number; created_by:string|null; updated_by:string|null; created_at:string; updated_at:string };
 export type ProposalForm = {
@@ -67,6 +67,17 @@ export function isoFromDate(value:Date){ return new Date(value.getTime()-value.g
 export function addMonthsIso(value:string,months:number){ if(!value)return ''; const source=dateFromIso(value), originalDay=source.getDate(); source.setDate(1); source.setMonth(source.getMonth()+months); source.setDate(Math.min(originalDay,new Date(source.getFullYear(),source.getMonth()+1,0).getDate())); return isoFromDate(source) }
 export function isOnOrBefore(value:string,limit:string|null|undefined){ return Boolean(value&&limit&&value<=limit) }
 export function countOccurrencesUntil(startDate:string,intervalMonths:number,quantity:number,limitDate:string|null){ if(!startDate||!limitDate||quantity<=0)return 0; let count=0; for(let index=0;index<quantity;index++) if(isOnOrBefore(addMonthsIso(startDate,index*intervalMonths),limitDate)) count++; return count }
+export function scheduleItemsTotal(items:ScheduleItem[]){ return items.reduce((sum,item)=>sum+numberValue(item.total),0) }
+export function proposalScheduleWarnings(form:ProposalForm,deliveryDate:string|null,firstAfterKeysDate:string,monthlyAfterCount:number){
+  const warnings:string[]=[];
+  const hasKeysPayment=numberValue(form.keysAmount)>0;
+  const hasUnifiedMonthly=form.monthlyMode==='unificado'&&integerValue(form.monthlyCount)>0;
+  const hasBeforeKeysMonthly=form.monthlyMode==='dividido'&&integerValue(form.beforeKeysCount)>0;
+  if(hasKeysPayment&&!deliveryDate)warnings.push('A proposta possui parcela nas chaves, mas falta a Data da Entrega. Cadastre-a em Comercial → Empreendimentos, editando o empreendimento selecionado.');
+  if((hasUnifiedMonthly||hasBeforeKeysMonthly)&&!deliveryDate)warnings.push('A proposta possui parcelas vinculadas às chaves, mas falta a Data da Entrega para separar corretamente os vencimentos. Cadastre-a em Comercial → Empreendimentos.');
+  if(monthlyAfterCount>0&&!firstAfterKeysDate)warnings.push('A proposta possui parcelas pós-chaves, mas falta a data da primeira parcela pós-chaves. Cadastre a Data da Entrega em Comercial → Empreendimentos; o CRM calcula o primeiro vencimento para um mês depois.');
+  return warnings;
+}
 export function formatMoneyInput(value:string){ return value===''?'':money.format(numberValue(value)) }
 export function parseMoneyInput(value:string){ const digits=value.replace(/\D/g,''); return digits?String(Number(digits)/100):'' }
 export function workflowOf(proposal:Proposal):WorkflowStatus{ const value=proposal.snapshot?.workflow_status; if(value&&value in statusLabels)return value; if(proposal.status==='cancelada')return 'recusada'; return proposal.status as WorkflowStatus }
@@ -129,10 +140,10 @@ export function calculateProposal(form:ProposalForm,deliveryDate:string|null,fir
     beforeMonthlyTotal=monthlyBeforeCount*monthlyAmount;
     afterMonthlyTotal=monthlyAfterCount*monthlyAmount;
     if(monthlyBeforeCount>0){
-      scheduleItems.push({kind:'parcela_ate_chaves',label:'Parcelas mensais até as chaves',quantity:monthlyBeforeCount,amount:monthlyAmount,startDate:firstMonthlyDate,intervalMonths:1,total:beforeMonthlyTotal,paidUntilKeysQuantity:monthlyBeforeCount,paidUntilKeysAmount:beforeMonthlyTotal});
+      scheduleItems.push({kind:'parcela_ate_chaves',label:'Parcelas mensais até as chaves',quantity:monthlyBeforeCount,amount:monthlyAmount,startDate:firstMonthlyDate||null,intervalMonths:1,total:beforeMonthlyTotal,paidUntilKeysQuantity:monthlyBeforeCount,paidUntilKeysAmount:beforeMonthlyTotal});
     }
     if(monthlyAfterCount>0){
-      const firstAfterDate=addMonthsIso(firstMonthlyDate,monthlyBeforeCount);
+      const firstAfterDate=deliveryDate?addMonthsIso(firstMonthlyDate,monthlyBeforeCount):null;
       scheduleItems.push({kind:'parcela_pos_chaves',label:'Parcelas mensais após as chaves',quantity:monthlyAfterCount,amount:monthlyAmount,startDate:firstAfterDate,intervalMonths:1,total:afterMonthlyTotal,paidUntilKeysQuantity:0,paidUntilKeysAmount:0});
     }
   }else{
@@ -144,10 +155,10 @@ export function calculateProposal(form:ProposalForm,deliveryDate:string|null,fir
     beforeMonthlyTotal=monthlyBeforeCount*beforeAmount;
     afterMonthlyTotal=monthlyAfterCount*afterAmount;
     if(monthlyBeforeCount>0){
-      scheduleItems.push({kind:'parcela_ate_chaves',label:'Parcelas mensais até as chaves',quantity:monthlyBeforeCount,amount:beforeAmount,startDate:firstMonthlyDate,intervalMonths:1,total:beforeMonthlyTotal,paidUntilKeysQuantity:paidBeforeCount,paidUntilKeysAmount:paidBeforeCount*beforeAmount});
+      scheduleItems.push({kind:'parcela_ate_chaves',label:'Parcelas mensais até as chaves',quantity:monthlyBeforeCount,amount:beforeAmount,startDate:firstMonthlyDate||null,intervalMonths:1,total:beforeMonthlyTotal,paidUntilKeysQuantity:paidBeforeCount,paidUntilKeysAmount:paidBeforeCount*beforeAmount});
     }
-    if(monthlyAfterCount>0&&firstAfterKeysDate){
-      scheduleItems.push({kind:'parcela_pos_chaves',label:'Parcelas mensais após as chaves',quantity:monthlyAfterCount,amount:afterAmount,startDate:firstAfterKeysDate,intervalMonths:1,total:afterMonthlyTotal,paidUntilKeysQuantity:0,paidUntilKeysAmount:0});
+    if(monthlyAfterCount>0){
+      scheduleItems.push({kind:'parcela_pos_chaves',label:'Parcelas mensais após as chaves',quantity:monthlyAfterCount,amount:afterAmount,startDate:firstAfterKeysDate||null,intervalMonths:1,total:afterMonthlyTotal,paidUntilKeysQuantity:0,paidUntilKeysAmount:0});
     }
   }
 
@@ -157,15 +168,16 @@ export function calculateProposal(form:ProposalForm,deliveryDate:string|null,fir
     .filter(item=>item.kind==='parcela_ate_chaves')
     .reduce((sum,item)=>sum+item.paidUntilKeysAmount,0);
   const paidUntilKeys=entryTotal+paidMonthlyAmount+paidReinforcementCount*reinforcementAmount+(deliveryDate?keysAmount:0);
-  const nominalTotal=entryTotal+beforeMonthlyTotal+afterMonthlyTotal+reinforcementTotal+keysAmount;
-  const discountAmount=Math.max(0,listPrice-nominalTotal);
 
-  if(entryTotal>0)scheduleItems.unshift({kind:'entrada',label:'Entrada direta',quantity:1,amount:entryTotal,startDate:form.proposalDate,intervalMonths:null,total:entryTotal,paidUntilKeysQuantity:deliveryDate&&isOnOrBefore(form.proposalDate,deliveryDate)?1:0,paidUntilKeysAmount:deliveryDate&&isOnOrBefore(form.proposalDate,deliveryDate)?entryTotal:0});
-  if(reinforcementCount>0)scheduleItems.push({kind:form.reinforcementFrequency==='semestral'?'reforco_semestral':'reforco_anual',label:form.reinforcementFrequency==='semestral'?'Reforços semestrais':'Reforços anuais',quantity:reinforcementCount,amount:reinforcementAmount,startDate:form.firstReinforcementDate,intervalMonths:reinforcementInterval,total:reinforcementTotal,paidUntilKeysQuantity:paidReinforcementCount,paidUntilKeysAmount:paidReinforcementCount*reinforcementAmount});
-  if(keysAmount>0&&deliveryDate)scheduleItems.push({kind:'chaves',label:'Parcela nas chaves',quantity:1,amount:keysAmount,startDate:deliveryDate,intervalMonths:null,total:keysAmount,paidUntilKeysQuantity:1,paidUntilKeysAmount:keysAmount});
+  if(entryTotal>0)scheduleItems.unshift({kind:'entrada',label:'Entrada direta',quantity:1,amount:entryTotal,startDate:form.proposalDate||null,intervalMonths:null,total:entryTotal,paidUntilKeysQuantity:deliveryDate&&isOnOrBefore(form.proposalDate,deliveryDate)?1:0,paidUntilKeysAmount:deliveryDate&&isOnOrBefore(form.proposalDate,deliveryDate)?entryTotal:0});
+  if(reinforcementCount>0)scheduleItems.push({kind:form.reinforcementFrequency==='semestral'?'reforco_semestral':'reforco_anual',label:form.reinforcementFrequency==='semestral'?'Reforços semestrais':'Reforços anuais',quantity:reinforcementCount,amount:reinforcementAmount,startDate:form.firstReinforcementDate||null,intervalMonths:reinforcementInterval,total:reinforcementTotal,paidUntilKeysQuantity:paidReinforcementCount,paidUntilKeysAmount:paidReinforcementCount*reinforcementAmount});
+  if(keysAmount>0)scheduleItems.push({kind:'chaves',label:'Parcela nas chaves',quantity:1,amount:keysAmount,startDate:deliveryDate,intervalMonths:null,total:keysAmount,paidUntilKeysQuantity:deliveryDate?1:0,paidUntilKeysAmount:deliveryDate?keysAmount:0});
 
   const scheduleOrder:Record<string,number>={entrada:0,parcela_ate_chaves:1,reforco_semestral:2,reforco_anual:2,chaves:3,parcela_pos_chaves:4};
   scheduleItems.sort((first,second)=>(scheduleOrder[first.kind]??9)-(scheduleOrder[second.kind]??9));
+
+  const nominalTotal=scheduleItemsTotal(scheduleItems);
+  const discountAmount=Math.max(0,listPrice-nominalTotal);
 
   return {
     listPrice,

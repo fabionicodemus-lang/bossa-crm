@@ -17,6 +17,8 @@ import {
   money,
   numberValue,
   planText,
+  proposalScheduleWarnings,
+  scheduleItemsTotal,
   statusLabels,
   storedStatusOf,
   suggestedReinforcementDate,
@@ -83,6 +85,10 @@ export function ProposalsManager({
   const calculations = useMemo(
     () => calculateProposal(form, deliveryDate, firstMonthlyDate, firstAfterKeysDate),
     [deliveryDate, firstAfterKeysDate, firstMonthlyDate, form],
+  );
+  const scheduleWarnings = useMemo(
+    () => proposalScheduleWarnings(form, deliveryDate, firstAfterKeysDate, calculations.monthlyAfterCount),
+    [calculations.monthlyAfterCount, deliveryDate, firstAfterKeysDate, form],
   );
 
   const filteredProposals = useMemo(() => {
@@ -292,12 +298,17 @@ export function ProposalsManager({
       setError('Selecione o lead e o empreendimento.');
       return;
     }
-    if (!deliveryDate) {
-      setError('Cadastre a Data da Entrega do empreendimento antes de salvar.');
+    if (scheduleWarnings.length > 0) {
+      setError(scheduleWarnings[0]);
       return;
     }
     if (calculations.proposedPrice <= 0) {
       setError('Preencha o fluxo de pagamento.');
+      return;
+    }
+    const calculatedScheduleTotal = scheduleItemsTotal(calculations.scheduleItems);
+    if (Math.abs(calculatedScheduleTotal - calculations.nominalTotal) > 0.01) {
+      setError('O cronograma não confere com o valor total da proposta. Revise o fluxo de pagamento antes de salvar.');
       return;
     }
     if (form.origin === 'corretor' && !form.clientName.trim()) {
@@ -551,6 +562,7 @@ export function ProposalsManager({
           firstAfterKeysDate={firstAfterKeysDate}
           maxBeforeKeysCount={maxBeforeKeysCount}
           calculations={calculations}
+          scheduleWarnings={scheduleWarnings}
           canEdit={canEdit}
           saving={saving}
           editingId={editingId}
