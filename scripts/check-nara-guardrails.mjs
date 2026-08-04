@@ -111,6 +111,7 @@ assert.match(aiSource, /Nunca diga que algo acabou de ser vendido/);
 assert.doesNotMatch(aiSource, /slice\(0,\s*NARA_REPLY_WORD_LIMIT\)/);
 assert.ok(wrapperSource.indexOf('postProcessNaraTurn') < wrapperSource.lastIndexOf('enforceNaraReplyGuardrails'));
 assert.ok(webhookSource.indexOf('prepareNaraOfferAudit(args.admin') < webhookSource.indexOf('provider.sendText'));
+assert.match(webhookSource, /if \(lead\.kind === 'cliente'\)[\s\S]*prepareNaraOfferAudit\(args\.admin/);
 assert.ok(webhookSource.lastIndexOf('markNaraOfferAuditSent') > webhookSource.indexOf('provider.sendText'));
 assert.match(migrationSource, /create table if not exists public\.nara_offer_logs/);
 assert.match(migrationSource, /offered_value numeric\(14,2\)/);
