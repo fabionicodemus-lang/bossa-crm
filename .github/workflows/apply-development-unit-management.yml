@@ -6,6 +6,7 @@ on:
       - feature/development-unit-management
     paths:
       - scripts/apply-development-unit-management.mjs
+      - scripts/trigger-development-unit-management.txt
 
 permissions:
   contents: write
