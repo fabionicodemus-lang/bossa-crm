@@ -37,6 +37,8 @@ jobs:
           cache: npm
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
+      - name: Test Meta referral attribution
+        run: npm run test:meta-referral
       - name: Validate environment
         run: npm run check-env
       - name: Lint

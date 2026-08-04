@@ -7,6 +7,7 @@ import type { Lead, LeadKind } from '@/lib/types';
 import { defaultStage, isAiStage, isHumanStage, stagesFor } from '@/lib/stages';
 import { displayPhone, normalizePhone } from '@/lib/format';
 import { createClient } from '@/lib/supabase/client';
+import { metaAdSourceLabel, readMetaAdAttribution } from '@/lib/meta-ad-attribution';
 
 function temperatureColor(value: number) {
   if (value >= 75) return 'var(--red)';
@@ -50,7 +51,7 @@ export function PipelineBoard({ initialLeads, kind, organizationId, canEdit }: {
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return leads;
-    return leads.filter((lead) => [lead.name, lead.phone, lead.enterprise, lead.company, lead.source, lead.priority_class, lead.next_action]
+    return leads.filter((lead) => [lead.name, lead.phone, lead.enterprise, lead.company, lead.source, metaAdSourceLabel(lead.metadata), lead.priority_class, lead.next_action]
       .some((value) => String(value ?? '').toLowerCase().includes(q)));
   }, [leads, query]);
   const bulkCount = leads.filter((lead) => lead.stage === bulkFromStage).length;
@@ -162,6 +163,36 @@ export function PipelineBoard({ initialLeads, kind, organizationId, canEdit }: {
     setSaving(false);
   }
 
+  async function exportXlsx() {
+    const XLSX = await import('xlsx');
+    const rows = filtered.map((lead) => {
+      const ad = readMetaAdAttribution(lead.metadata);
+      return {
+        Tipo: lead.kind === 'cliente' ? 'Cliente' : 'Corretor',
+        Nome: lead.name,
+        WhatsApp: displayPhone(lead.phone),
+        Email: lead.email || '',
+        Etapa: stages.find((stage) => stage.id === lead.stage)?.label || lead.stage,
+        Origem: metaAdSourceLabel(lead.metadata) || lead.source || '',
+        Empreendimento: lead.enterprise || '',
+        Imobiliária: lead.company || '',
+        CRECI: lead.creci || '',
+        Score: lead.temperature,
+        'ID do anúncio Meta': ad?.source_id || '',
+        'URL do anúncio Meta': ad?.source_url || '',
+        'Título do anúncio Meta': ad?.headline || '',
+        'Texto do anúncio Meta': ad?.body || '',
+        'Tipo da origem Meta': ad?.source_type || '',
+        'Origem capturada em': ad?.captured_at || '',
+        'Criado em': lead.created_at,
+      };
+    });
+    const worksheet = XLSX.utils.json_to_sheet(rows);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, kind === 'cliente' ? 'Clientes' : 'Corretores');
+    XLSX.writeFile(workbook, `${kind === 'cliente' ? 'clientes' : 'corretores'}-bossa-${new Date().toISOString().slice(0, 10)}.xlsx`);
+  }
+
   return (
     <>
       <div className="page-head">
@@ -171,6 +202,7 @@ export function PipelineBoard({ initialLeads, kind, organizationId, canEdit }: {
         </div>
         <div className="page-actions">
           <input className="input" style={{ width: 230 }} placeholder="Buscar nome, ação, prioridade…" value={query} onChange={(e) => setQuery(e.target.value)} />
+          <button className="btn btn-ghost btn-sm" onClick={() => void exportXlsx()}>⬇ Exportar XLSX</button>
           {canEdit && <>
             <button className="btn btn-ghost btn-sm" onClick={() => setShowBulk((value) => !value)}>⇄ Mover em massa</button>
             <Link className="btn btn-ghost btn-sm" href={`/importar?tipo=${kind}`}>📥 Importar XLSX</Link>
@@ -219,6 +251,7 @@ export function PipelineBoard({ initialLeads, kind, organizationId, canEdit }: {
               {stageLeads.map((lead) => {
                 const due = dueLabel(lead.next_action_due_at);
                 const overdue = Boolean(due?.startsWith('⚠️'));
+                const readableSource = kind === 'cliente' ? metaAdSourceLabel(lead.metadata) || lead.source : lead.group_name;
                 return <Link href={`/leads/${lead.id}`} key={lead.id} className="lead-card" draggable={canEdit}
                   onDragStart={(event) => { setDragId(lead.id); event.dataTransfer.effectAllowed = 'move'; }}
                   onDragEnd={() => { setDragId(null); setOverStage(null); }}>
@@ -228,7 +261,7 @@ export function PipelineBoard({ initialLeads, kind, organizationId, canEdit }: {
                   </div>
                   <div className="lead-sub">{kind === 'cliente' ? lead.enterprise || 'Empreendimento não informado' : lead.company || 'Autônomo'}</div>
                   <div className="lead-meta">
-                    <span className="chip">{kind === 'cliente' ? lead.source || 'Sem origem' : lead.group_name || 'Sem grupo'}</span>
+                    <span className="chip">{readableSource || (kind === 'cliente' ? 'Sem origem' : 'Sem grupo')}</span>
                     <span className={`chip ${lead.owner_mode === 'human' ? '' : 'chip-orange'}`}>{lead.owner_mode === 'human' ? '👤 Humano' : lead.owner_mode === 'none' ? 'Encerrado' : `🤖 ${kind === 'cliente' ? 'Nara' : 'Plantão'}`}</span>
                     {lead.ai_classification && <span className="chip">{lead.ai_classification}</span>}
                   </div>
