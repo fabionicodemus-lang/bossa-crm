@@ -1,4 +1,5 @@
 import { AlmaSalesTableImporter } from '@/components/AlmaSalesTableImporter';
+import { FlowSalesTableImporter } from '@/components/FlowSalesTableImporter';
 import { PageTopbar } from '@/components/PageTopbar';
 import {
   DevelopmentsManager,
@@ -43,6 +44,13 @@ export default async function DevelopmentsPage() {
             initialDevelopments={developmentRows as DevelopmentLogoItem[]}
           />
           <div className="page-content" style={{ paddingBottom: 0 }}>
+            <FlowSalesTableImporter
+              organizationId={organizationId}
+              canEdit={canEdit}
+              developments={developmentRows as Development[]}
+              typologies={typologyRows}
+              units={unitRows}
+            />
             <AlmaSalesTableImporter
               organizationId={organizationId}
               canEdit={canEdit}
