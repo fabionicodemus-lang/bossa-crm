@@ -20,6 +20,7 @@ import {
   statusLabels,
   type WorkflowStatus,
 } from './model';
+import { SearchableLeadSelect } from './SearchableLeadSelect';
 
 export function ProposalEditor({
   form,
@@ -89,7 +90,17 @@ export function ProposalEditor({
           <div className="card-body">
             <div className="grid grid-2">
               <div className="field"><label>Origem da proposta</label><select className="select" value={form.origin} onChange={(event) => chooseOrigin(event.target.value as Origin)} disabled={!canEdit}><option value="cliente">Cliente direto</option><option value="corretor">Corretor / imobiliária</option></select></div>
-              <div className="field"><label>{form.origin === 'cliente' ? 'Lead do cliente' : 'Lead do corretor'}</label><select className="select" value={form.leadId} onChange={(event) => chooseLead(event.target.value)} disabled={!canEdit}><option value="">Selecione…</option>{availableLeads.map((lead) => <option key={lead.id} value={lead.id}>{lead.name}{lead.company ? ` · ${lead.company}` : ''}</option>)}</select></div>
+              <div className="field">
+                <label>{form.origin === 'cliente' ? 'Lead do cliente' : 'Lead do corretor'}</label>
+                <SearchableLeadSelect
+                  key={`${form.origin}:${form.leadId}`}
+                  leads={availableLeads}
+                  value={form.leadId}
+                  onChange={chooseLead}
+                  disabled={!canEdit}
+                  placeholder={form.origin === 'cliente' ? 'Digite o nome, telefone ou empreendimento…' : 'Digite o nome, telefone ou imobiliária…'}
+                />
+              </div>
               {form.origin === 'corretor' && <div className="field"><label>Cliente final apresentado</label><input className="input" value={form.clientName} onChange={(event) => setField('clientName', event.target.value)} disabled={!canEdit} /></div>}
               <div className="field"><label>Data da proposta</label><input className="input" type="date" value={form.proposalDate} readOnly style={{ background: 'var(--bg)' }} /><small className="faint">Definida automaticamente no dia da criação.</small></div>
               <div className="field"><label>Empreendimento</label><select className="select" value={form.developmentId} onChange={(event) => chooseDevelopment(event.target.value)} disabled={!canEdit}><option value="">Selecione…</option>{developments.map((development) => <option key={development.id} value={development.id}>{development.name}{development.delivery_date ? '' : ' · sem entrega'}</option>)}</select></div>
