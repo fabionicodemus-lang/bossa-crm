@@ -79,10 +79,11 @@ export type NaraCommercialTurnContext = {
   calls: NaraCommercialCall[];
   source_text: string;
   error?: string;
+  blocked_reason?: 'corretor' | 'cliente_atual';
 };
 
 const UNIT_SELECT = 'id,development_id,typology_id,unit_code,floor,list_price,entry_amount,installment_count,installment_amount,payment_plan,price_updated_at';
-const MONEY_IN_TEXT = /r\$\s*\d[\d.\s]*(?:,\d{1,2})?|\b\d+(?:[.,]\d+)?\s*(?:milhao|milhoes|mil)\b/giu;
+const MONEY_IN_TEXT = /r\$\s*\d[\d.\s]*(?:,\d{1,2})?\s*(?:milhao|milhoes|mil)?|\b\d+(?:[.,]\d+)?\s*(?:milhao|milhoes|mil)\b/giu;
 
 function normalizeText(value: unknown): string {
   return String(value ?? '')
@@ -433,11 +434,68 @@ function filtersFromMessage(enterprise: string, message: string): NaraApartmentF
 }
 
 function hasCommercialSignal(message: string): boolean {
-  return /\b(precos?|valores?|quanto custa|faixa|a partir de|tabela|disponibilidade|disponive(?:l|is)|unidade|apto|apartamento|entrada|parcela|andar|suites?|quartos?|duplex)\b/.test(normalizeText(message));
+  return /\b(precos?|valor(?:es)?|quanto custa|faixa|a partir de|tabela|disponibilidade|disponive(?:l|is)|unidade|apto|apartamento|entrada|parcela|andar|suites?|quartos?|duplex)\b/.test(normalizeText(message));
 }
 
 function asksForSpecificOptions(message: string): boolean {
   return /\b(disponibilidade|disponive(?:l|is)|unidade|apto|apartamento|entrada|parcela|andar|suites?|quartos?|duplex|opcoes?)\b/.test(normalizeText(message));
+}
+
+
+function routingProfileText(value: string): string {
+  let normalized = normalizeText(value);
+  if (/\bnao sou (?:um |uma )?corretor(?:a)?\b/.test(normalized)) {
+    normalized = normalized.replace(/\b(corretor|corretora|imobiliaria|creci)\b/g, ' ');
+  }
+  if (/\bnao sou (?:um |uma )?cliente\b/.test(normalized)) {
+    normalized = normalized.replace(/\b(ja comprei|sou cliente|segunda via|boleto)\b/g, ' ');
+  }
+  return normalized.replace(/\s+/g, ' ').trim();
+}
+
+function blockedCommercialProfile(
+  lead: Lead,
+  history: ChatMessage[],
+): 'corretor' | 'cliente_atual' | null {
+  if (lead.kind === 'corretor') return 'corretor';
+  const userMessages = history
+    .filter((item) => item.role === 'user')
+    .map((item) => routingProfileText(item.content));
+  const full = userMessages.join('\n');
+  const metadata = routingProfileText(JSON.stringify(lead.metadata ?? {}));
+  const brokerSelfIdentification = /\b(?:sou|trabalho como|atuo como|falo como)\s+(?:um |uma )?(?:corretor|corretora)\b/.test(full)
+    || /\b(?:minha|da nossa) imobiliaria\b/.test(full)
+    || /\b(?:meu )?creci\s*[-:]?\s*\d+/i.test(full)
+    || /\bperfil[_ ]?(?:de[_ ])?corretor\b/.test(metadata);
+  if (brokerSelfIdentification) return 'corretor';
+
+  const currentCustomerSignal = /\b(ja comprei|sou cliente|comprei com voces|segunda via|boleto|meu contrato|minha unidade|assistencia tecnica|pos-venda)\b/.test(full)
+    || /\b(?:cliente_atual|current_customer|pos_venda)\b/.test(metadata);
+  return currentCustomerSignal ? 'cliente_atual' : null;
+}
+
+function blockedCommercialContext(
+  reason: 'corretor' | 'cliente_atual',
+  consultedAt: string,
+): NaraCommercialTurnContext {
+  if (reason === 'corretor') {
+    return {
+      consulted_at: consultedAt,
+      source_table: 'development_units',
+      calls: [],
+      blocked_reason: reason,
+      error: 'nara_price_disabled_for_broker',
+      source_text: 'CONSULTA COMERCIAL BLOQUEADA: o contato se identificou como corretor. Não consulte nem informe preço, tabela, unidade ou disponibilidade. Transfira para o Plantão da Bossa.',
+    };
+  }
+  return {
+    consulted_at: consultedAt,
+    source_table: 'development_units',
+    calls: [],
+    blocked_reason: reason,
+    error: 'nara_price_disabled_for_current_customer',
+    source_text: 'CONSULTA COMERCIAL BLOQUEADA: o contato é cliente atual. Não consulte nem informe preço, tabela, unidade ou disponibilidade. Encaminhe para o pós-venda ou setor responsável.',
+  };
 }
 
 export async function loadNaraCommercialTurnContext(
@@ -446,10 +504,11 @@ export async function loadNaraCommercialTurnContext(
   lead: Lead,
   history: ChatMessage[],
 ): Promise<NaraCommercialTurnContext | null> {
-  if (lead.kind !== 'cliente') return null;
   const latest = lastUserMessage(history);
   if (!latest || !hasCommercialSignal(latest)) return null;
   const consultedAt = new Date().toISOString();
+  const blockedReason = blockedCommercialProfile(lead, history);
+  if (blockedReason) return blockedCommercialContext(blockedReason, consultedAt);
   const calls: NaraCommercialCall[] = [];
 
   try {

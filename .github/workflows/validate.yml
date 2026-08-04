@@ -51,6 +51,8 @@ jobs:
         run: npm run test:nara-price-levels
       - name: Test Nara unit queries
         run: npm run test:nara-unit-queries
+      - name: Test Nara guardrails
+        run: npm run test:nara-guardrails
       - name: Validate environment
         run: npm run check-env
       - name: Lint
