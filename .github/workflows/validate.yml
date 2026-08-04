@@ -49,6 +49,8 @@ jobs:
         run: npm run test:nara-fixed-layer
       - name: Test Nara price levels
         run: npm run test:nara-price-levels
+      - name: Test Nara unit queries
+        run: npm run test:nara-unit-queries
       - name: Validate environment
         run: npm run check-env
       - name: Lint

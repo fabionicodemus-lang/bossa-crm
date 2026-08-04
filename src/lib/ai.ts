@@ -1,5 +1,6 @@
 import { extractNaraPrompt } from './nara-prompt-config';
 import { asksProtectedCommercialDetail, isGeneralPriceRangeReply } from './nara-price-levels';
+import type { NaraCommercialTurnContext } from './nara-unit-queries';
 import type { Lead } from './types';
 
 export interface AiFileOption {
@@ -29,6 +30,7 @@ export interface AiTrainingContext {
     notes: string | null;
   }>;
   files?: AiFileOption[];
+  commercial?: NaraCommercialTurnContext | null;
 }
 
 export interface AiUsageRecord {
@@ -295,7 +297,7 @@ function triageInstructions(context: AiTrainingContext): string {
     .map(([key, value]) => `${key.replace('triagem_', '').replaceAll('_', ' ')}: ${value}`)
     .join('\n');
 
-  return `\n\nPROTEÇÕES DE TRIAGEM E ROTEAMENTO\n${configured}\n\nREGRAS OPERACIONAIS:\n- Na primeira resposta da conversa, cumprimente e apresente-se como Nara, da Bossa. Não diga espontaneamente que é IA.\n- Leia o histórico inteiro e avance a conversa. Nunca repita uma pergunta que o contato já respondeu nem envie a mesma mensagem duas vezes.\n- Faça a leitura do tipo de contato de forma silenciosa ao longo da conversa. Não transforme a triagem em uma etapa visível ou em um checklist obrigatório.\n- Quando a mensagem for compatível com interesse imobiliário, deixe o Prompt final conduzir a conversa naturalmente, sem criar um pedágio antes de entregar valor.\n- Um pedido isolado de preço, valor, tabela, menor apartamento, planta ou disponibilidade não confirma sozinho que o contato é comprador.\n- Se a primeira mensagem pedir preço sem declarar finalidade de compra, moradia ou investimento, não informe valor nesta fase. Use a pergunta de triagem configurada e aguarde. Esta proteção será revista na fase específica de preço.\n- Quando houver ambiguidade real entre possível comprador e outro tipo de atendimento, use a pergunta configurada uma única vez e aguarde, sem iniciar uma sequência fixa de perguntas.\n- Corretor, cliente atual, fornecedor, currículo, pós-venda, financeiro, assistência, reclamação ou assunto institucional não entra na qualificação da Nara. Nesses casos, acolha, resuma o pedido, use handoff=true, mantenha stage=ia e indique o setor ou canal correto em next_action.\n- Para spam ou contato sem relação com a Bossa, use sem_interesse e handoff=true.\n- Nunca use preços lembrados pelo modelo. Um valor só pode ser informado quando estiver explicitamente em uma fonte válida para o turno.\n- A resposta não deve mencionar internamente as palavras “triagem”, “classificação” ou “handoff” para o contato.`;
+  return `\n\nPROTEÇÕES DE TRIAGEM E ROTEAMENTO\n${configured}\n\nREGRAS OPERACIONAIS:\n- Na primeira resposta da conversa, cumprimente e apresente-se como Nara, da Bossa. Não diga espontaneamente que é IA.\n- Leia o histórico inteiro e avance a conversa. Nunca repita uma pergunta que o contato já respondeu nem envie a mesma mensagem duas vezes.\n- Faça a leitura do tipo de contato de forma silenciosa ao longo da conversa. Não transforme a triagem em uma etapa visível ou em um checklist obrigatório.\n- Quando a mensagem for compatível com interesse imobiliário, deixe o Prompt final conduzir a conversa naturalmente, sem criar um pedágio antes de entregar valor.\n- Um pedido isolado de preço, valor, tabela, menor apartamento, planta ou disponibilidade não confirma sozinho que o contato é comprador.\n- Quando houver retorno de faixa_empreendimento nas consultas comerciais deste turno, você pode informar somente a faixa geral mesmo sem intenção confirmada. Isso não libera qualificação, arquivos, tabela, unidade, disponibilidade ou condição específica.\n- Unidade, andar, disponibilidade, entrada, parcela e condição específica só podem ser informados quando a intenção de compra estiver confirmada e houver retorno correspondente da consulta comercial no mesmo turno.\n- Se a consulta comercial estiver vazia ou indisponível, não use valores lembrados: diga que o comercial confirmará a condição vigente.\n- Quando houver ambiguidade real entre possível comprador e outro tipo de atendimento, use a pergunta configurada uma única vez e aguarde, sem iniciar uma sequência fixa de perguntas.\n- Corretor, cliente atual, fornecedor, currículo, pós-venda, financeiro, assistência, reclamação ou assunto institucional não entra na qualificação da Nara. Nesses casos, acolha, resuma o pedido, use handoff=true, mantenha stage=ia e indique o setor ou canal correto em next_action.\n- Para spam ou contato sem relação com a Bossa, use sem_interesse e handoff=true.\n- Nunca use preços lembrados pelo modelo. Um valor só pode ser informado quando estiver explicitamente nas mensagens do contato, na base de conhecimento, ou no retorno das consultas comerciais do sistema no mesmo turno.\n- A resposta não deve mencionar internamente as palavras “triagem”, “classificação” ou “handoff” para o contato.`;
 }
 
 function fileInstructions(files: AiFileOption[]): string {
@@ -332,8 +334,9 @@ export function buildAiInstructions(lead: Lead, context: AiTrainingContext): str
   return `${shared}\n\nUse no máximo duas frases curtas e uma pergunta por mensagem. Você é o Plantão institucional dos corretores parceiros da Bossa. Nunca use nome próprio. Seja prático, direto e de igual para igual, como colega de mercado. Identifique imobiliária, CRECI, região, se o corretor tem cliente ativo, qual empreendimento interessa e qual ajuda precisa. O plantão pode enviar materiais públicos disponíveis na biblioteca, como tabela, book, plantas, imagens, vídeos e andamento de obra. Nunca negocie comissão, nunca confirme disponibilidade de apartamento, nunca reserve apartamento e nunca aceite proposta.\n\nClassificação e etapas permitidas para corretores:\n- n1 / cadastrado: contato novo, perfil ainda incompleto ou sem interação comercial.\n- n2 / curioso: pediu material, tabela ou informações, mas ainda não informou cliente ativo.\n- n3 / ativo: possui cliente ativo, apresenta os produtos ou demonstra atuação comercial concreta.\n- n4 / negociando: existe cliente em visita, proposta, reserva, escolha de apartamento ou negociação; marque handoff=true.\n- n5 / parceiro: relacionamento recorrente, histórico de vendas ou parceria consolidada; use somente quando houver evidência clara e marque handoff=true.\nUse classificação cadastrado, curioso, ativo, negociando ou parceiro. Ao chegar em n4 ou n5, o atendimento automático será pausado para o time comercial continuar.${training}${files}`;
 }
 
-function dynamicLeadContext(lead: Lead): string {
-  return `DADOS DINÂMICOS DESTA CONVERSA:\nContato: ${lead.name}.\nEtapa atual: ${lead.stage}.\nDados atuais: ${JSON.stringify(lead.metadata || {})}.`;
+function dynamicLeadContext(lead: Lead, context: AiTrainingContext): string {
+  const commercial = context.commercial?.source_text?.trim();
+  return `DADOS DINÂMICOS DESTA CONVERSA:\nContato: ${lead.name}.\nEtapa atual: ${lead.stage}.\nDados atuais: ${JSON.stringify(lead.metadata || {})}.${commercial ? `\n\nCONSULTAS COMERCIAIS DESTE TURNO — FONTE ATUAL DO SISTEMA:\n${commercial}\n\nUse somente esses retornos para preço e disponibilidade neste turno. Nunca mencione nomes internos de função ou banco. Resultado vazio significa que não há unidade disponível comprovada para informar, sem explicar o motivo.` : ''}`;
 }
 
 function inputMessage(role: InputMessage['role'], text: string, cacheBreakpoint = false): InputMessage {
@@ -356,7 +359,7 @@ function buildRequestInput(
   const prior = latest?.role === 'user' ? history.slice(0, -1) : history;
   const input: InputMessage[] = [
     inputMessage('system', buildAiInstructions(lead, context), supportsExplicitCache),
-    inputMessage('system', `${dynamicLeadContext(lead)}${summary ? `\n\nRESUMO DA CONVERSA ATÉ AQUI:\n${summary}` : ''}`),
+    inputMessage('system', `${dynamicLeadContext(lead, context)}${summary ? `\n\nRESUMO DA CONVERSA ATÉ AQUI:\n${summary}` : ''}`),
     ...prior.map((item) => inputMessage(item.role, item.content)),
   ];
   if (latest) input.push(inputMessage(latest.role, latest.content));
@@ -576,6 +579,7 @@ function hasUngroundedMoney(reply: string, history: ChatMessage[], context: AiTr
   const corpus = [
     ...history.filter((item) => item.role === 'user').map((item) => item.content),
     recordText(context.config?.knowledge),
+    context.commercial?.source_text ?? '',
   ].join('\n');
   const sourceKeys = new Set(moneyTokens(corpus).map(moneyKey).filter(Boolean));
   return tokens.some((token) => {
