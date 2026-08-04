@@ -1,6 +1,7 @@
 import { generateAiTurn, type AiFileOption } from '@/lib/ai';
 import { loadAiContext } from '@/lib/ai-context';
 import { recordAiUsage } from '@/lib/ai-usage';
+import { loadNaraCommercialTurnContext } from '@/lib/nara-unit-queries';
 import { aiCanReply } from '@/lib/hybrid';
 import { mergeMetaAdAttribution } from '@/lib/meta-ad-attribution';
 import { applyHybridDecision } from '@/lib/hybrid-server';
@@ -249,6 +250,15 @@ async function processConversation(args: {
       error: new Error('IA indisponível — chave ausente ou histórico vazio'),
     });
     return;
+  }
+
+  if (lead.kind === 'cliente') {
+    context.commercial = await loadNaraCommercialTurnContext(
+      args.admin,
+      args.channel.organization_id,
+      lead,
+      history,
+    );
   }
 
   let turn;

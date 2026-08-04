@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { buildAiInstructions, generateAiTurn, type AiFileOption, type AiTrainingContext } from '@/lib/ai';
+import { loadNaraCommercialTurnContext } from '@/lib/nara-unit-queries';
 import {
   naraKnowledgeForEditor,
   normalizeNaraKnowledge,
@@ -353,6 +354,14 @@ export async function POST(request: Request) {
     const config = body.config ? normalizeConfig(body.agent, body.config) : savedConfig;
     const lead = syntheticLead(body.agent, context.organizationId, String(body.scenario ?? ''));
     const aiContext = makeAiContext(config, examples, files);
+    if (body.agent === 'nara') {
+      aiContext.commercial = await loadNaraCommercialTurnContext(
+        context.supabase,
+        context.organizationId,
+        lead,
+        messages,
+      );
+    }
     const turn = await generateAiTurn(lead, messages, aiContext);
     if (!turn) {
       return NextResponse.json({ error: 'A OpenAI não gerou uma resposta.' }, { status: 502 });
