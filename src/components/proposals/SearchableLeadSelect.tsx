@@ -33,13 +33,14 @@ export function SearchableLeadSelect({
   placeholder?: string;
 }) {
   const selectedLead = leads.find((lead) => lead.id === value) ?? null;
-  const [query, setQuery] = useState(selectedLead ? leadLabel(selectedLead) : '');
+  const selectedLabel = selectedLead ? leadLabel(selectedLead) : '';
+  const [query, setQuery] = useState(selectedLabel);
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
 
   const filteredLeads = useMemo(() => {
     const term = normalizeSearch(query);
-    if (!term || selectedLead && query === leadLabel(selectedLead)) return leads.slice(0, 40);
+    if (!term || (selectedLead && query === selectedLabel)) return leads.slice(0, 40);
     return leads.filter((lead) => normalizeSearch([
       lead.name,
       lead.company,
@@ -47,7 +48,7 @@ export function SearchableLeadSelect({
       lead.enterprise,
       lead.group_name,
     ].filter(Boolean).join(' ')).includes(term)).slice(0, 40);
-  }, [leads, query, selectedLead]);
+  }, [leads, query, selectedLabel, selectedLead]);
 
   function selectLead(lead: ProposalLead) {
     setQuery(leadLabel(lead));
@@ -77,9 +78,11 @@ export function SearchableLeadSelect({
         setQuery(event.target.value);
         setOpen(true);
         setActiveIndex(0);
-        if (value) onChange('');
       }}
-      onBlur={() => window.setTimeout(() => setOpen(false), 120)}
+      onBlur={() => window.setTimeout(() => {
+        setOpen(false);
+        setQuery(selectedLabel);
+      }, 120)}
       onKeyDown={(event) => {
         if (event.key === 'ArrowDown') {
           event.preventDefault();
@@ -94,7 +97,7 @@ export function SearchableLeadSelect({
           if (lead) selectLead(lead);
         } else if (event.key === 'Escape') {
           setOpen(false);
-          setQuery(selectedLead ? leadLabel(selectedLead) : '');
+          setQuery(selectedLabel);
         }
       }}
     />
