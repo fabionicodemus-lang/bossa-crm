@@ -39,6 +39,8 @@ jobs:
         run: npm ci --no-audit --no-fund
       - name: Test Meta referral attribution
         run: npm run test:meta-referral
+      - name: Test Alma sales table
+        run: npm run test:alma-table
       - name: Validate environment
         run: npm run check-env
       - name: Lint
