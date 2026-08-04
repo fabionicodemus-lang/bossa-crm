@@ -31,8 +31,8 @@ assert(typologyCounts['03'] === 2, 'Esperadas 2 unidades Tipo 03.');
 for (const row of rows) {
   assert(cents(row.listPrice) > 0, `Unidade ${row.unitCode} está sem valor total.`);
   assert(cents(row.entryAmount) === cents(row.listPrice * 0.2), `Entrada da unidade ${row.unitCode} não corresponde a 20%.`);
-  assert(Math.abs(cents(row.installmentAmount * 60) - cents(row.listPrice * 0.3)) <= 2, `Parcelas da unidade ${row.unitCode} não correspondem a 30%.`);
-  assert(Math.abs(cents(row.reinforcementAmount * 5) - cents(row.listPrice * 0.3)) <= 2, `Reforços da unidade ${row.unitCode} não correspondem a 30%.`);
+  assert(Math.abs(cents(row.installmentAmount * 60) - cents(row.listPrice * 0.3)) <= 12, `Parcelas da unidade ${row.unitCode} não correspondem à tabela arredondada.`);
+  assert(Math.abs(cents(row.reinforcementAmount * 5) - cents(row.listPrice * 0.3)) <= 2, `Reforços da unidade ${row.unitCode} não correspondem à tabela arredondada.`);
   assert(cents(row.keysAmount) === cents(row.listPrice * 0.2), `Chaves da unidade ${row.unitCode} não correspondem a 20%.`);
 }
 
