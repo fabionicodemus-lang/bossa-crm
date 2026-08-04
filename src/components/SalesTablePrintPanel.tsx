@@ -207,20 +207,20 @@ function printHtml({
   col.reinforcement { width: 17%; }
   col.keys { width: 14%; }
   thead { display: table-header-group; }
-  thead th { background: #102130; color: #fff; padding: 2.4mm 2mm; font-size: 7.4pt; letter-spacing: .16em; font-weight: 700; text-align: right; }
+  thead th { background: #102130; color: #fff; padding: 1.92mm 2mm; font-size: 7.4pt; letter-spacing: .16em; font-weight: 700; line-height: 1.05; text-align: right; }
   thead th:first-child { text-align: left; border-radius: 1mm 0 0 0; }
   thead th:last-child { border-radius: 0 1mm 0 0; }
   tr { break-inside: avoid; page-break-inside: avoid; }
-  .type-row td { background: ${theme.soft}; border-top: 1px solid #d9e1e8; border-bottom: 1px solid #d9e1e8; padding: 2.2mm 2mm; white-space: nowrap; overflow: hidden; }
-  .type-pill { display: inline-block; color: #fff; border-radius: 999px; padding: 1.1mm 3mm; font-size: 7.4pt; font-weight: 800; letter-spacing: .12em; vertical-align: middle; }
+  .type-row td { background: ${theme.soft}; border-top: 1px solid #d9e1e8; border-bottom: 1px solid #d9e1e8; padding: 1.76mm 2mm; line-height: 1.05; white-space: nowrap; overflow: hidden; }
+  .type-pill { display: inline-block; color: #fff; border-radius: 999px; padding: .88mm 3mm; font-size: 7.4pt; font-weight: 800; letter-spacing: .12em; vertical-align: middle; }
   .type-meta { margin-left: 2.5mm; font-size: 7.5pt; color: #314960; vertical-align: middle; }
-  .unit-row td { border-bottom: 1px solid #d7e0e7; padding: 2.35mm 2mm; font-size: 8.6pt; text-align: right; vertical-align: middle; }
+  .unit-row td { border-bottom: 1px solid #d7e0e7; padding: 1.88mm 2mm; font-size: 8.6pt; line-height: 1.05; text-align: right; vertical-align: middle; }
   .unit-row.status-reservado td { background: #fffaf0; }
   .unit-row.status-vendido td { background: #f7f7f7; color: #697783; }
   .unit-cell { text-align: left !important; white-space: nowrap; }
   .unit-cell strong { font-size: 10.2pt; color: #102130; }
   .status-vendido .unit-cell strong { color: #596875; }
-  .status-badge { display: inline-block; margin-left: 1.5mm; border-radius: 1mm; padding: .75mm 1.25mm; font-size: 5.7pt; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; background: #e8eef2; color: #526474; vertical-align: 1px; }
+  .status-badge { display: inline-block; margin-left: 1.5mm; border-radius: 1mm; padding: .6mm 1.25mm; font-size: 5.7pt; font-weight: 800; letter-spacing: .05em; line-height: 1; text-transform: uppercase; background: #e8eef2; color: #526474; vertical-align: 1px; }
   .status-disponivel .status-badge { background: #e7f5f8; color: ${theme.accent}; }
   .status-reservado .status-badge { background: #f6e8c9; color: #8b6428; }
   .status-vendido .status-badge { background: #e5e7e9; color: #596875; }
