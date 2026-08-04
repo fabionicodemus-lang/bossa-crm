@@ -164,13 +164,13 @@ const MAX_HISTORY_BEFORE_COMPACTION = 25;
 const RECENT_MESSAGES_TO_KEEP = 10;
 
 const NARA_TRIAGE_DEFAULTS: Record<string, string> = {
-  triagem_objetivo: 'Antes de qualificar, descubra se o contato é realmente um possível comprador de imóvel novo da Bossa ou se pertence a outro tipo de atendimento.',
-  triagem_pergunta_inicial: 'Quando a intenção não estiver clara, faça uma pergunta curta e aberta, como: “Para eu te direcionar certinho, você está buscando um imóvel para comprar ou precisa falar com a Bossa sobre outro assunto?”',
-  triagem_comprador: 'Se o contato demonstra que quer comprar, morar, investir ou conhecer um empreendimento, conclua a triagem e só então comece a qualificação comercial.',
-  triagem_corretor: 'Se for corretor, imobiliária ou parceiro comercial, não faça a qualificação de cliente final. Explique que vai direcionar ao Plantão da Bossa e marque transferência para atendimento humano/canal correto.',
+  triagem_objetivo: 'Identifique silenciosamente o tipo de contato ao longo da conversa, sem transformar a triagem em uma etapa visível antes de entregar valor.',
+  triagem_pergunta_inicial: 'Quando houver ambiguidade real, use uma única pergunta curta e aberta: “Para eu te direcionar certinho, você está buscando um imóvel para comprar ou precisa falar com a Bossa sobre outro assunto?”',
+  triagem_comprador: 'Sinais de interesse em empreendimento, planta, entrega, pagamento, moradia, veraneio ou investimento permitem seguir naturalmente como possível comprador, sem exigir confirmação formal.',
+  triagem_corretor: 'Se for corretor, imobiliária ou parceiro comercial, não conduza como cliente final. Direcione ao Plantão da Bossa e marque transferência para o canal correto.',
   triagem_cliente_atual: 'Se já for cliente, comprador, proprietário ou morador e o assunto for contrato, boleto, obra, assistência, entrega, documentação ou pós-venda, não qualifique. Acolha, registre o assunto e transfira ao setor responsável.',
-  triagem_outros: 'Fornecedor, prestador, candidato a vaga, currículo, imprensa, vizinho, cobrança, spam e assuntos institucionais não seguem para qualificação. Colete somente o mínimo necessário e transfira ou encerre educadamente.',
-  triagem_saida: 'A qualificação só pode começar quando houver evidência de que o contato é um possível comprador. Se ainda existir dúvida, continue somente a triagem, com uma pergunta por vez.',
+  triagem_outros: 'Fornecedor, prestador, candidato a vaga, currículo, imprensa, vizinho, cobrança, spam e assuntos institucionais não seguem para condução comercial. Colete somente o mínimo necessário e transfira ou encerre educadamente.',
+  triagem_saida: 'A pergunta direta de triagem é exceção: nunca deve abrir a conversa, deve aparecer no máximo uma vez e somente quando houver dúvida real sobre o tipo de atendimento.',
 };
 
 function envNumber(name: string, fallback: number, min: number, max: number): number {
@@ -277,10 +277,10 @@ function trainingInstructions(context: AiTrainingContext): string {
   const parts = [
     finalPrompt ? `PROMPT FINAL DEFINIDO PELO GESTOR — CAMADA PRINCIPAL DE COMPORTAMENTO:
 ${finalPrompt}` : '',
-    persona ? `PERSONALIDADE DEFINIDA PELO GESTOR:
+    !finalPrompt && persona ? `PERSONALIDADE DEFINIDA PELO GESTOR:
 ${persona}` : '',
     knowledge ? `BASE DE CONHECIMENTO DEFINIDA PELO GESTOR:\n${knowledge}` : '',
-    context.config?.first_message ? `PRIMEIRA MENSAGEM PADRÃO:\n${context.config.first_message}` : '',
+    !finalPrompt && context.config?.first_message ? `PRIMEIRA MENSAGEM PADRÃO:\n${context.config.first_message}` : '',
     examples ? `EXEMPLOS, CORREÇÕES E ORDENS DO GESTOR (TÊM PRIORIDADE SOBRE RESPOSTAS GENÉRICAS):\n${examples}` : '',
   ].filter(Boolean);
 
