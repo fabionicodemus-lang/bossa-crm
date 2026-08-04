@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { AiFileOption, AiTrainingContext } from './ai';
+import { normalizeNaraKnowledge } from './nara-prompt-config';
 import type { LeadKind } from './types';
 
 export async function loadAiContext(
@@ -36,8 +37,17 @@ export async function loadAiContext(
   if (examplesResult.error) console.error('[ai examples]', examplesResult.error.message);
   if (filesResult.error) console.error('[ai files]', filesResult.error.message);
 
+  const config = configResult.data
+    ? {
+        ...configResult.data,
+        knowledge: agent === 'nara'
+          ? normalizeNaraKnowledge(configResult.data.knowledge)
+          : configResult.data.knowledge,
+      }
+    : null;
+
   return {
-    config: configResult.data ?? null,
+    config,
     examples: examplesResult.data ?? [],
     files: (filesResult.data ?? []) as AiFileOption[],
   };
