@@ -160,10 +160,28 @@ jobs:
           python /tmp/apply-phase6.py
           python <<'PY'
           from pathlib import Path
-          path = Path('src/lib/nara-unit-queries.ts')
-          source = path.read_text(encoding='utf-8')
-          source = source.replace('precos?|valores?|quanto custa', 'precos?|valor(?:es)?|quanto custa')
-          path.write_text(source, encoding='utf-8')
+
+          query_path = Path('src/lib/nara-unit-queries.ts')
+          query_source = query_path.read_text(encoding='utf-8')
+          query_source = query_source.replace('precos?|valores?|quanto custa', 'precos?|valor(?:es)?|quanto custa')
+          query_path.write_text(query_source, encoding='utf-8')
+
+          offer_path = Path('src/lib/nara-offer-log.ts')
+          offer_source = offer_path.read_text(encoding='utf-8')
+          old = """  const parsed = numeric.includes(',')
+            ? Number(numeric.replace(/\\./g, '').replace(',', '.'))
+            : multiplier === 1 && /^\\d{1,3}(?:\\.\\d{3})+$/.test(numeric)
+              ? Number(numeric.replace(/\\./g, ''))
+              : Number(numeric);"""
+          new = """  const cleanNumeric = numeric.replace(/\\.+$/, '');
+            const parsed = cleanNumeric.includes(',')
+              ? Number(cleanNumeric.replace(/\\./g, '').replace(',', '.'))
+              : multiplier === 1 && /^\\d{1,3}(?:\\.\\d{3})+$/.test(cleanNumeric)
+                ? Number(cleanNumeric.replace(/\\./g, ''))
+                : Number(cleanNumeric);"""
+          if old not in offer_source:
+              raise SystemExit('Bloco de normalização monetária não encontrado.')
+          offer_path.write_text(offer_source.replace(old, new, 1), encoding='utf-8')
           PY
 
       - name: Instalar dependências
