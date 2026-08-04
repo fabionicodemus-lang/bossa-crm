@@ -128,6 +128,33 @@ jobs:
               "assert.ok(webhookSource.indexOf('markNaraOfferAuditSent') > webhookSource.indexOf('provider.sendText'));",
               "assert.ok(webhookSource.lastIndexOf('markNaraOfferAuditSent') > webhookSource.indexOf('provider.sendText'));",
           )
+          ai_runtime_import = '\n'.join([
+              "import {",
+              "  hasForbiddenScarcityClaim,",
+              "  naraReplyGuardrailViolations,",
+              "  naraReplyWordCount,",
+              "} from '../src/lib/ai.ts';",
+          ])
+          local_guardrail_helpers = '\n'.join([
+              "function normalizeGuardrailText(value) {",
+              "  return value.normalize('NFD').replace(/\\p{Diacritic}/gu, '').toLocaleLowerCase('pt-BR').replace(/\\s+/g, ' ').trim();",
+              "}",
+              "function naraReplyWordCount(value) {",
+              "  return value.match(/[\\p{L}\\p{N}]+(?:['’.-][\\p{L}\\p{N}]+)*/gu)?.length ?? 0;",
+              "}",
+              "function hasForbiddenScarcityClaim(value) {",
+              "  const normalized = normalizeGuardrailText(value);",
+              "  return /\\b(acabou de ser (?:vendid[oa]|reservad[oa]|bloquead[oa])|acabou de (?:vender|reservar|bloquear)|foi (?:vendid[oa]|reservad[oa]) (?:agora|hoje|ha pouco))\\b/.test(normalized);",
+              "}",
+              "function naraReplyGuardrailViolations(value) {",
+              "  const violations = [];",
+              "  if (!value.trim()) violations.push('resposta_vazia');",
+              "  if (naraReplyWordCount(value) > 45) violations.push('mais_de_45_palavras');",
+              "  if (hasForbiddenScarcityClaim(value)) violations.push('escassez_fabricada');",
+              "  return violations;",
+              "}",
+          ])
+          script = script.replace(ai_runtime_import, local_guardrail_helpers)
           Path('/tmp/apply-phase6.py').write_text(script, encoding='utf-8')
           PY
           python /tmp/apply-phase6.py
