@@ -9,6 +9,7 @@ assert.equal(isGeneralPriceRangeReply('No Flow, os valores começam em R$ 995 mi
 assert.equal(isGeneralPriceRangeReply('Hoje a faixa geral fica entre R$ 995 mil e R$ 1,3 milhão.'), true);
 assert.equal(isGeneralPriceRangeReply('Há opções de R$ 995 mil a R$ 1,3 milhão.'), true);
 assert.equal(isGeneralPriceRangeReply('A unidade 901 custa R$ 995 mil.'), false);
+assert.equal(isGeneralPriceRangeReply('A 901 parte de R$ 995 mil.'), false);
 assert.equal(isGeneralPriceRangeReply('A entrada é de R$ 100 mil e o saldo em 80 parcelas.'), false);
 assert.equal(isGeneralPriceRangeReply('Temos disponibilidade a partir de R$ 995 mil.'), false);
 assert.equal(isGeneralPriceRangeReply('O valor é R$ 995 mil.'), false);
@@ -16,6 +17,7 @@ assert.equal(isGeneralPriceRangeReply('O valor é R$ 995 mil.'), false);
 assert.equal(asksProtectedCommercialDetail('Quanto custa o Flow?'), false);
 assert.equal(asksProtectedCommercialDetail('Qual é o menor apartamento?'), false);
 assert.equal(asksProtectedCommercialDetail('Qual o valor da unidade 901?'), true);
+assert.equal(asksProtectedCommercialDetail('Quanto custa a 901?'), true);
 assert.equal(asksProtectedCommercialDetail('Qual é a entrada mínima?'), true);
 assert.equal(asksProtectedCommercialDetail('Me manda a tabela.'), true);
 assert.equal(asksProtectedCommercialDetail('Tem disponível no 20º andar?'), true);
