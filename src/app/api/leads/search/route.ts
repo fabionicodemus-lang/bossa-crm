@@ -4,18 +4,7 @@ import { createClient } from '@/lib/supabase/server';
 
 type LeadKind = 'cliente' | 'corretor';
 
-type LeadSearchRow = {
-  id: string;
-  kind: LeadKind;
-  name: string;
-  phone: string | null;
-  enterprise: string | null;
-  company: string | null;
-  group_name: string | null;
-};
-
 const SEARCH_COLUMNS = ['name', 'phone', 'enterprise', 'company', 'group_name'] as const;
-const RESULT_LIMIT_PER_COLUMN = 25;
 const FINAL_RESULT_LIMIT = 40;
 
 export async function GET(request: Request) {
@@ -31,32 +20,23 @@ export async function GET(request: Request) {
   }
   if (query.length < 2) return NextResponse.json({ leads: [] });
 
+  const safeQuery = query.replace(/[,%()]/g, ' ').trim();
+  if (safeQuery.length < 2) return NextResponse.json({ leads: [] });
+
   const supabase = await createClient();
-  const searches = await Promise.all(SEARCH_COLUMNS.map((column) => supabase
+  const { data, error } = await supabase
     .from('leads')
     .select('id,kind,name,phone,enterprise,company,group_name')
     .eq('organization_id', context.organization.id)
     .eq('kind', kind)
     .is('archived_at', null)
-    .ilike(column, `%${query}%`)
+    .or(SEARCH_COLUMNS.map((column) => `${column}.ilike.%${safeQuery}%`).join(','))
     .order('name')
-    .limit(RESULT_LIMIT_PER_COLUMN)));
+    .limit(FINAL_RESULT_LIMIT);
 
-  const failedSearch = searches.find((result) => result.error);
-  if (failedSearch?.error) {
-    return NextResponse.json({ error: failedSearch.error.message }, { status: 400 });
-  }
+  if (error) return NextResponse.json({ error: error.message }, { status: 400 });
 
-  const uniqueLeads = new Map<string, LeadSearchRow>();
-  for (const result of searches) {
-    for (const lead of (result.data ?? []) as LeadSearchRow[]) uniqueLeads.set(lead.id, lead);
-  }
-
-  const leads = [...uniqueLeads.values()]
-    .sort((first, second) => first.name.localeCompare(second.name, 'pt-BR'))
-    .slice(0, FINAL_RESULT_LIMIT);
-
-  return NextResponse.json({ leads }, {
+  return NextResponse.json({ leads: data ?? [] }, {
     headers: { 'Cache-Control': 'no-store' },
   });
 }
