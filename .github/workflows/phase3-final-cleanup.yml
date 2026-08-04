@@ -1,0 +1,101 @@
+name: Finalizar Fase 3 da Nara
+
+on:
+  push:
+    branches:
+      - feature/nara-prompt-v3-phase-3
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup-and-validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/nara-prompt-v3-phase-3
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Remover conflitos restantes da camada fixa
+        shell: bash
+        run: |
+          python <<'PY'
+          from pathlib import Path
+
+          path = Path('src/lib/ai.ts')
+          source = path.read_text(encoding='utf-8')
+
+          start = source.index('const NARA_TRIAGE_DEFAULTS: Record<string, string> = {')
+          end = source.index('\n\nfunction envNumber', start)
+          defaults = '''const NARA_TRIAGE_DEFAULTS: Record<string, string> = {
+            triagem_objetivo: 'Identifique silenciosamente o tipo de contato ao longo da conversa, sem transformar a triagem em uma etapa visível antes de entregar valor.',
+            triagem_pergunta_inicial: 'Quando houver ambiguidade real, use uma única pergunta curta e aberta: “Para eu te direcionar certinho, você está buscando um imóvel para comprar ou precisa falar com a Bossa sobre outro assunto?”',
+            triagem_comprador: 'Sinais de interesse em empreendimento, planta, entrega, pagamento, moradia, veraneio ou investimento permitem seguir naturalmente como possível comprador, sem exigir confirmação formal.',
+            triagem_corretor: 'Se for corretor, imobiliária ou parceiro comercial, não conduza como cliente final. Direcione ao Plantão da Bossa e marque transferência para o canal correto.',
+            triagem_cliente_atual: 'Se já for cliente, comprador, proprietário ou morador e o assunto for contrato, boleto, obra, assistência, entrega, documentação ou pós-venda, não qualifique. Acolha, registre o assunto e transfira ao setor responsável.',
+            triagem_outros: 'Fornecedor, prestador, candidato a vaga, currículo, imprensa, vizinho, cobrança, spam e assuntos institucionais não seguem para condução comercial. Colete somente o mínimo necessário e transfira ou encerre educadamente.',
+            triagem_saida: 'A pergunta direta de triagem é exceção: nunca deve abrir a conversa, deve aparecer no máximo uma vez e somente quando houver dúvida real sobre o tipo de atendimento.',
+          };'''
+          source = source[:start] + defaults + source[end:]
+
+          old_persona = "    persona ? `PERSONALIDADE DEFINIDA PELO GESTOR:\n${persona}` : '',"
+          new_persona = "    !finalPrompt && persona ? `PERSONALIDADE DEFINIDA PELO GESTOR:\n${persona}` : '',"
+          if old_persona not in source:
+              raise SystemExit('Linha de persona não encontrada.')
+          source = source.replace(old_persona, new_persona, 1)
+
+          old_first = "    context.config?.first_message ? `PRIMEIRA MENSAGEM PADRÃO:\\n${context.config.first_message}` : '',"
+          new_first = "    !finalPrompt && context.config?.first_message ? `PRIMEIRA MENSAGEM PADRÃO:\\n${context.config.first_message}` : '',"
+          if old_first not in source:
+              raise SystemExit('Linha de primeira mensagem não encontrada.')
+          source = source.replace(old_first, new_first, 1)
+          path.write_text(source, encoding='utf-8')
+
+          test_path = Path('scripts/check-nara-fixed-layer.mjs')
+          test = test_path.read_text(encoding='utf-8')
+          anchor = "assert.match(source, /delete generalKnowledge\\.prompt_final/);"
+          addition = """assert.match(source, /!finalPrompt && persona/);
+          assert.match(source, /!finalPrompt && context\\.config\\?\\.first_message/);
+          assert.doesNotMatch(source, /Sua qualificação só pode começar/);
+          assert.match(source, /A pergunta direta de triagem é exceção/);"""
+          if anchor not in test:
+              raise SystemExit('Âncora do teste não encontrada.')
+          test = test.replace(anchor, anchor + '\n' + addition, 1)
+          test_path.write_text(test, encoding='utf-8')
+          PY
+
+      - name: Instalar dependências
+        run: npm ci
+
+      - name: Validar contrato do prompt
+        run: npm run test:nara-prompt
+
+      - name: Validar camada fixa
+        run: npm run test:nara-fixed-layer
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build
+        run: npm run build
+
+      - name: Gravar somente os arquivos da Fase 3
+        shell: bash
+        run: |
+          git checkout -- next-env.d.ts tsconfig.json
+          rm -f tsconfig.tsbuildinfo
+          rm .github/workflows/phase3-final-cleanup.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/lib/ai.ts scripts/check-nara-fixed-layer.mjs .github/workflows/phase3-final-cleanup.yml
+          git commit -m "Remove conflitos restantes da camada fixa da Nara"
+          git push origin HEAD:feature/nara-prompt-v3-phase-3
