@@ -24,6 +24,7 @@ assert.equal(asksProtectedCommercialDetail('Tem disponível no 20º andar?'), tr
 
 const source = await readFile(new URL('../src/lib/ai.ts', import.meta.url), 'utf8');
 assert.match(source, /const canKeepGeneralPriceRange = asksCommercialValue\(lastUser\)/);
+assert.match(source, /precos\?\|valores\?\|quanto custa\|a partir de\|faixa/);
 assert.match(source, /!asksProtectedCommercialDetail\(lastUser\)/);
 assert.match(source, /isGeneralPriceRangeReply\(turn\.reply\)/);
 assert.match(source, /!hasUngroundedMoney\(turn\.reply, history, context\)/);

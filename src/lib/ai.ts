@@ -438,7 +438,7 @@ function outsideBuyerNextAction(history: ChatMessage[]): string {
 }
 
 function asksCommercialValue(text: string): boolean {
-  return /\b(preco|valor|quanto custa|a partir de|menor apartamento|menor unidade|tabela|condicao de pagamento|entrada|parcela)\b/.test(normalizeText(text));
+  return /\b(precos?|valores?|quanto custa|a partir de|faixa(?: de (?:preco|valor))?|menor apartamento|menor unidade|tabela|condicao de pagamento|entrada|parcela)\b/.test(normalizeText(text));
 }
 
 function configuredTriageQuestion(context: AiTrainingContext): string {
