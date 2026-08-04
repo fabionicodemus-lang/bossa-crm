@@ -9,30 +9,44 @@ import {
 import { getCurrentContext } from '@/lib/auth';
 import { createClient } from '@/lib/supabase/server';
 
-const PROPOSAL_LEADS_LIMIT_PER_KIND = 5000;
+const PROPOSAL_LEADS_PAGE_SIZE = 1000;
+const PROPOSAL_LEADS_MAX_PAGES_PER_KIND = 5;
 
 export default async function ProposalsPage() {
   const context = await getCurrentContext();
   const supabase = await createClient();
   const organizationId = context!.organization.id;
+  const leadRanges = Array.from({ length: PROPOSAL_LEADS_MAX_PAGES_PER_KIND }, (_, page) => ({
+    from: page * PROPOSAL_LEADS_PAGE_SIZE,
+    to: (page + 1) * PROPOSAL_LEADS_PAGE_SIZE - 1,
+  }));
 
-  const [proposalsResult, developmentsResult, unitsResult, clientsResult, brokersResult] = await Promise.all([
+  const [proposalsResult, developmentsResult, unitsResult, leadResults] = await Promise.all([
     supabase.from('proposals').select('*').eq('organization_id', organizationId).order('updated_at', { ascending: false }),
     supabase.from('developments').select('id,name,delivery_date,logo_path,default_payment_plan').eq('organization_id', organizationId).eq('active', true).order('name'),
     supabase.from('development_units').select('id,development_id,unit_code,status,list_price,entry_amount,installment_count,installment_amount,reinforcement_count,reinforcement_amount,keys_amount,payment_plan').eq('organization_id', organizationId).order('floor', { ascending: false, nullsFirst: false }).order('unit_code'),
-    supabase.from('leads').select('id,kind,name,phone,enterprise,company,group_name').eq('organization_id', organizationId).eq('kind', 'cliente').is('archived_at', null).order('name').limit(PROPOSAL_LEADS_LIMIT_PER_KIND),
-    supabase.from('leads').select('id,kind,name,phone,enterprise,company,group_name').eq('organization_id', organizationId).eq('kind', 'corretor').is('archived_at', null).order('name').limit(PROPOSAL_LEADS_LIMIT_PER_KIND),
+    Promise.all((['cliente', 'corretor'] as const).flatMap((kind) => leadRanges.map(({ from, to }) => supabase
+      .from('leads')
+      .select('id,kind,name,phone,enterprise,company,group_name')
+      .eq('organization_id', organizationId)
+      .eq('kind', kind)
+      .is('archived_at', null)
+      .order('name')
+      .range(from, to)))),
   ]);
 
   const schemaError = [
     proposalsResult.error,
     developmentsResult.error,
     unitsResult.error,
-    clientsResult.error,
-    brokersResult.error,
+    ...leadResults.map((result) => result.error),
   ].find(Boolean);
-  const leads = [...(clientsResult.data ?? []), ...(brokersResult.data ?? [])]
-    .sort((first, second) => first.name.localeCompare(second.name, 'pt-BR')) as ProposalLead[];
+  const leadsById = new Map<string, ProposalLead>();
+  for (const result of leadResults) {
+    for (const lead of (result.data ?? []) as ProposalLead[]) leadsById.set(lead.id, lead);
+  }
+  const leads = [...leadsById.values()]
+    .sort((first, second) => first.name.localeCompare(second.name, 'pt-BR'));
 
   return <>
     <PageTopbar title="Propostas" subtitle="Simulação por datas, histórico por lead, PDF e planilha geral da operação comercial" />
