@@ -11,7 +11,8 @@
     "check-env": "node scripts/check-env.mjs",
     "test:meta-referral": "node scripts/check-meta-referral.mjs",
     "test:alma-table": "node scripts/check-alma-sales-table.mjs",
-    "test:flow-table": "node scripts/check-flow-sales-table.mjs"
+    "test:flow-table": "node scripts/check-flow-sales-table.mjs",
+    "test:nara-prompt": "node scripts/check-nara-prompt-contract.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.3",
