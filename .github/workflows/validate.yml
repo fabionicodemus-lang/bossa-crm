@@ -43,6 +43,12 @@ jobs:
         run: npm run test:alma-table
       - name: Test Flow sales table
         run: npm run test:flow-table
+      - name: Test Nara prompt contract
+        run: npm run test:nara-prompt
+      - name: Test Nara fixed layer
+        run: npm run test:nara-fixed-layer
+      - name: Test Nara price levels
+        run: npm run test:nara-price-levels
       - name: Validate environment
         run: npm run check-env
       - name: Lint
