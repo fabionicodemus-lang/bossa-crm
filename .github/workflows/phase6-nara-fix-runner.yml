@@ -158,6 +158,13 @@ jobs:
           Path('/tmp/apply-phase6.py').write_text(script, encoding='utf-8')
           PY
           python /tmp/apply-phase6.py
+          python <<'PY'
+          from pathlib import Path
+          path = Path('src/lib/nara-unit-queries.ts')
+          source = path.read_text(encoding='utf-8')
+          source = source.replace('precos?|valores?|quanto custa', 'precos?|valor(?:es)?|quanto custa')
+          path.write_text(source, encoding='utf-8')
+          PY
 
       - name: Instalar dependências
         run: npm ci --no-audit --no-fund
