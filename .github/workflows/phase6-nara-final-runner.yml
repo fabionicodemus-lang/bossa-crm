@@ -203,13 +203,10 @@ jobs:
       - name: Gravar implementação validada
         shell: bash
         run: |
-          git checkout -- next-env.d.ts tsconfig.json || true
+          git checkout -- next-env.d.ts tsconfig.json .github/workflows/validate.yml || true
           rm -f tsconfig.tsbuildinfo
-          rm -f .github/workflows/phase6-nara-guardrails.yml
-          rm -f .github/workflows/phase6-nara-fix-runner.yml
-          rm -f .github/workflows/phase6-nara-final-runner.yml
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add .github/workflows/validate.yml package.json scripts/check-nara-guardrails.mjs src/lib/ai.ts src/lib/ai-v120.ts src/lib/nara-unit-queries.ts src/lib/nara-offer-log.ts src/lib/whatsapp/webhookProcessor.ts supabase/migrations/017_nara_offer_logs.sql .github/workflows/phase6-nara-guardrails.yml .github/workflows/phase6-nara-fix-runner.yml .github/workflows/phase6-nara-final-runner.yml
+          git add package.json scripts/check-nara-guardrails.mjs src/lib/ai.ts src/lib/ai-v120.ts src/lib/nara-unit-queries.ts src/lib/nara-offer-log.ts src/lib/whatsapp/webhookProcessor.ts supabase/migrations/017_nara_offer_logs.sql
           git commit -m "Adiciona guardrails e auditoria de ofertas da Nara"
           git push origin HEAD:feature/nara-prompt-v3-phase-6
