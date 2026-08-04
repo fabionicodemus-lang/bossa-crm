@@ -51,85 +51,93 @@ jobs:
           module_path = Path('src/lib/nara-unit-queries.ts')
           source = module_path.read_text(encoding='utf-8')
 
-          old = """  return rows.find((row) => {
-            const candidates = [row.name, row.slug, row.code].map(normalizeText);
-            return candidates.some((value) => value.includes(alias) || alias.includes(value));
-          }) ?? null;"""
-          new = """  return rows.find((row) => {
-            const candidates = [row.name, row.slug, row.code]
-              .map(normalizeText)
-              .filter(Boolean);
-            return candidates.some((value) => value.includes(alias) || alias.includes(value));
-          }) ?? null;"""
-          if old not in source:
-              raise SystemExit('Resolução de empreendimento esperada não encontrada.')
-          source = source.replace(old, new, 1)
+          old_resolver = '\n'.join([
+              '  return rows.find((row) => {',
+              '    const candidates = [row.name, row.slug, row.code].map(normalizeText);',
+              '    return candidates.some((value) => value.includes(alias) || alias.includes(value));',
+              '  }) ?? null;',
+          ])
+          new_resolver = '\n'.join([
+              '  return rows.find((row) => {',
+              '    const candidates = [row.name, row.slug, row.code]',
+              '      .map(normalizeText)',
+              '      .filter(Boolean);',
+              '    return candidates.some((value) => value.includes(alias) || alias.includes(value));',
+              '  }) ?? null;',
+          ])
+          if source.count(old_resolver) != 1:
+              raise SystemExit(f'Resolução de empreendimento encontrada {source.count(old_resolver)} vez(es), esperado 1.')
+          source = source.replace(old_resolver, new_resolver, 1)
 
-          old = """function numberAfter(message: string, expression: RegExp): number | null {
-            const match = normalizeText(message).match(expression)?.[1];
-            if (!match) return null;
-            const raw = match.replace(/\\./g, '').replace(',', '.');
-            const value = Number(raw);
-            if (!Number.isFinite(value)) return null;
-            const normalized = normalizeText(message);
-            if (/milhao|milhoes/.test(normalized)) return value * 1_000_000;
-            if (/\\bmil\\b/.test(normalized)) return value * 1_000;
-            return value;
-          }"""
-          new = """function numberAfter(message: string, expression: RegExp): number | null {
-            const match = normalizeText(message).match(expression)?.[1]?.trim();
-            if (!match) return null;
-            const amount = match.match(/(\\d[\\d.,]*)\\s*(milhao|milhoes|mil)?/) ?? [];
-            const raw = String(amount[1] ?? '').replace(/\\./g, '').replace(',', '.');
-            const value = Number(raw);
-            if (!Number.isFinite(value)) return null;
-            const unit = amount[2] ?? '';
-            if (unit === 'milhao' || unit === 'milhoes') return value * 1_000_000;
-            if (unit === 'mil') return value * 1_000;
-            return value;
-          }"""
-          if old not in source:
-              raise SystemExit('Leitura monetária esperada não encontrada.')
-          source = source.replace(old, new, 1)
+          old_number = '\n'.join([
+              'function numberAfter(message: string, expression: RegExp): number | null {',
+              '  const match = normalizeText(message).match(expression)?.[1];',
+              '  if (!match) return null;',
+              "  const raw = match.replace(/\\./g, '').replace(',', '.');",
+              '  const value = Number(raw);',
+              '  if (!Number.isFinite(value)) return null;',
+              '  const normalized = normalizeText(message);',
+              '  if (/milhao|milhoes/.test(normalized)) return value * 1_000_000;',
+              '  if (/\\bmil\\b/.test(normalized)) return value * 1_000;',
+              '  return value;',
+              '}',
+          ])
+          new_number = '\n'.join([
+              'function numberAfter(message: string, expression: RegExp): number | null {',
+              '  const match = normalizeText(message).match(expression)?.[1]?.trim();',
+              '  if (!match) return null;',
+              '  const amount = match.match(/(\\d[\\d.,]*)\\s*(milhao|milhoes|mil)?/) ?? [];',
+              "  const raw = String(amount[1] ?? '').replace(/\\./g, '').replace(',', '.');",
+              '  const value = Number(raw);',
+              '  if (!Number.isFinite(value)) return null;',
+              "  const unit = amount[2] ?? '';",
+              "  if (unit === 'milhao' || unit === 'milhoes') return value * 1_000_000;",
+              "  if (unit === 'mil') return value * 1_000;",
+              '  return value;',
+              '}',
+          ])
+          if source.count(old_number) != 1:
+              raise SystemExit(f'Leitura monetária encontrada {source.count(old_number)} vez(es), esperado 1.')
+          source = source.replace(old_number, new_number, 1)
 
-          old = """  return {
-            empreendimento: enterprise,
-            tipologia: suites ? `${suites} suítes` : bedrooms ? `${bedrooms} quartos` : normalized.includes('duplex') ? 'duplex' : null,
-            andar_min: aboveFloor ? Number(aboveFloor) : exactFloor ? Number(exactFloor) : null,
-            andar_max: belowFloor ? Number(belowFloor) : exactFloor ? Number(exactFloor) : null,
-            valor_max: numberAfter(message, /(?:valor|preco|ate)\\D{0,12}(\\d[\\d.,]*)/),
-            entrada_max: numberAfter(message, /entrada\\D{0,12}(\\d[\\d.,]*)/),
-          };"""
-          new = """  const amountPattern = '(\\\\d[\\\\d.,]*\\\\s*(?:milhao|milhoes|mil)?)';
-            const valueByLabel = numberAfter(
-              message,
-              new RegExp(`\\\\b(?:valor|preco|orcamento|investimento)(?:\\\\s+maximo)?\\\\D{0,16}${amountPattern}`),
-            );
-            const genericValue = valueByLabel === null && !/\\bentrada\\b/.test(normalized)
-              ? numberAfter(message, new RegExp(`\\\\bate\\\\D{0,12}${amountPattern}`))
-              : null;
-            return {
-              empreendimento: enterprise,
-              tipologia: suites ? `${suites} suítes` : bedrooms ? `${bedrooms} quartos` : normalized.includes('duplex') ? 'duplex' : null,
-              andar_min: aboveFloor ? Number(aboveFloor) : exactFloor ? Number(exactFloor) : null,
-              andar_max: belowFloor ? Number(belowFloor) : exactFloor ? Number(exactFloor) : null,
-              valor_max: valueByLabel ?? genericValue,
-              entrada_max: numberAfter(message, new RegExp(`\\\\bentrada\\\\D{0,16}${amountPattern}`)),
-            };"""
-          if old not in source:
-              raise SystemExit('Filtros monetários esperados não encontrados.')
-          source = source.replace(old, new, 1)
+          old_filters = '\n'.join([
+              '  return {',
+              '    empreendimento: enterprise,',
+              "    tipologia: suites ? `${suites} suítes` : bedrooms ? `${bedrooms} quartos` : normalized.includes('duplex') ? 'duplex' : null,",
+              '    andar_min: aboveFloor ? Number(aboveFloor) : exactFloor ? Number(exactFloor) : null,',
+              '    andar_max: belowFloor ? Number(belowFloor) : exactFloor ? Number(exactFloor) : null,',
+              '    valor_max: numberAfter(message, /(?:valor|preco|ate)\\D{0,12}(\\d[\\d.,]*)/),',
+              '    entrada_max: numberAfter(message, /entrada\\D{0,12}(\\d[\\d.,]*)/),',
+              '  };',
+          ])
+          new_filters = '\n'.join([
+              "  const amountPattern = '(\\\\d[\\\\d.,]*\\\\s*(?:milhao|milhoes|mil)?)';",
+              '  const valueByLabel = numberAfter(',
+              '    message,',
+              '    new RegExp(`\\\\b(?:valor|preco|orcamento|investimento)(?:\\\\s+maximo)?\\\\D{0,16}${amountPattern}`),',
+              '  );',
+              '  const genericValue = valueByLabel === null && !/\\bentrada\\b/.test(normalized)',
+              '    ? numberAfter(message, new RegExp(`\\\\bate\\\\D{0,12}${amountPattern}`))',
+              '    : null;',
+              '  return {',
+              '    empreendimento: enterprise,',
+              "    tipologia: suites ? `${suites} suítes` : bedrooms ? `${bedrooms} quartos` : normalized.includes('duplex') ? 'duplex' : null,",
+              '    andar_min: aboveFloor ? Number(aboveFloor) : exactFloor ? Number(exactFloor) : null,',
+              '    andar_max: belowFloor ? Number(belowFloor) : exactFloor ? Number(exactFloor) : null,',
+              '    valor_max: valueByLabel ?? genericValue,',
+              '    entrada_max: numberAfter(message, new RegExp(`\\\\bentrada\\\\D{0,16}${amountPattern}`)),',
+              '  };',
+          ])
+          if source.count(old_filters) != 1:
+              raise SystemExit(f'Bloco de filtros encontrado {source.count(old_filters)} vez(es), esperado 1.')
+          source = source.replace(old_filters, new_filters, 1)
           module_path.write_text(source, encoding='utf-8')
 
           test_path = Path('scripts/check-nara-unit-queries.mjs')
           test = test_path.read_text(encoding='utf-8')
-          marker = """const exactContext = await loadNaraCommercialTurnContext(client, 'org', lead, [
-            { role: 'user', content: 'Quanto custa a 901?' },
-          ]);
-          assert.equal(exactContext?.calls[0]?.name, 'consultar_apartamento');
-          assert.equal(exactContext?.calls[0]?.result?.unidade, '901');
-          """
-          addition = marker + """
+          marker = "assert.equal(exactContext?.calls[0]?.result?.unidade, '901');"
+          addition = """
+
           const filteredContext = await loadNaraCommercialTurnContext(client, 'org', lead, [
             { role: 'user', content: 'Quero 3 quartos no Flow com valor até R$ 1,02 milhão.' },
           ]);
@@ -142,10 +150,10 @@ jobs:
           assert.equal(twoLimitsContext?.calls[0]?.name, 'buscar_apartamentos');
           assert.deepEqual(twoLimitsContext?.calls[0]?.result.map((row) => row.unidade), ['901', '1001']);
           assert.ok(twoLimitsContext?.calls[0]?.result.every((row) => row.entrada <= 195000));
-          """
-          if marker not in test:
-              raise SystemExit('Ponto dos testes monetários não encontrado.')
-          test = test.replace(marker, addition, 1)
+          """.strip('\n')
+          if test.count(marker) != 1:
+              raise SystemExit(f'Ponto dos testes monetários encontrado {test.count(marker)} vez(es), esperado 1.')
+          test = test.replace(marker, marker + '\n' + addition, 1)
           test_path.write_text(test, encoding='utf-8')
           PY
 
