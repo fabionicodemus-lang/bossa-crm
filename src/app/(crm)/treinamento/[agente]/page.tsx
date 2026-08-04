@@ -5,7 +5,7 @@ import { useParams } from 'next/navigation';
 import { PageTopbar } from '@/components/PageTopbar';
 
 type Agent = 'nara' | 'plantao';
-type Tab = 'triagem' | 'simulador' | 'persona' | 'base' | 'correcoes' | 'abertura' | 'prompt';
+type Tab = 'simulador' | 'persona' | 'base' | 'correcoes' | 'prompt';
 type ChatRole = 'user' | 'assistant';
 type FeedbackMode = 'rewrite' | 'comment';
 
@@ -47,49 +47,8 @@ type SimulationResult = {
   attachments: Array<{ id: string; title: string; category: string; original_name: string }>;
 };
 
-type TriageField = {
-  key: string;
-  title: string;
-  help: string;
-};
-
-const TRIAGE_FIELDS: TriageField[] = [
-  {
-    key: 'triagem_objetivo',
-    title: 'Objetivo da triagem',
-    help: 'O que a Nara precisa descobrir antes de começar a qualificar.',
-  },
-  {
-    key: 'triagem_pergunta_inicial',
-    title: 'Pergunta quando a intenção não estiver clara',
-    help: 'A pergunta curta usada para identificar o motivo do contato sem iniciar um interrogatório.',
-  },
-  {
-    key: 'triagem_comprador',
-    title: 'Quem segue para qualificação',
-    help: 'Critérios que confirmam que o contato é um possível comprador.',
-  },
-  {
-    key: 'triagem_corretor',
-    title: 'Corretor ou imobiliária',
-    help: 'Como reconhecer e direcionar corretores para o Plantão da Bossa.',
-  },
-  {
-    key: 'triagem_cliente_atual',
-    title: 'Cliente atual, pós-venda ou financeiro',
-    help: 'Como agir com quem já comprou e procura contrato, boleto, obra, assistência ou entrega.',
-  },
-  {
-    key: 'triagem_outros',
-    title: 'Fornecedores, currículos e outros assuntos',
-    help: 'Tratamento de contatos que não são compradores nem corretores.',
-  },
-  {
-    key: 'triagem_saida',
-    title: 'Regra para encerrar a triagem',
-    help: 'Condição obrigatória para liberar o início da qualificação.',
-  },
-];
+const NARA_PROMPT_MARKER = '# PROMPT FINAL DA NARA';
+const NARA_PROMPT_STORAGE_KEY = 'triagem_pergunta_inicial';
 
 const NARA_TRIAGE_DEFAULTS: Record<string, string> = {
   triagem_objetivo: 'Antes de qualificar, descubra se o contato é realmente um possível comprador de imóvel novo da Bossa ou se pertence a outro tipo de atendimento.',
@@ -169,7 +128,7 @@ function defaultConfig(agent: Agent): AgentConfig {
   };
 }
 
-function withNaraTriage(config: AgentConfig): AgentConfig {
+function withNaraDefaults(config: AgentConfig): AgentConfig {
   return {
     ...config,
     knowledge: {
@@ -179,14 +138,57 @@ function withNaraTriage(config: AgentConfig): AgentConfig {
   };
 }
 
-function buildPrompt(agent: Agent, config: AgentConfig, examples: TrainingExample[]) {
+function titleFromKey(key: string) {
+  return key.replace('triagem_', '').replaceAll('_', ' ').toLocaleUpperCase('pt-BR');
+}
+
+function buildNaraPrompt(config: AgentConfig) {
   const triage = Object.entries(config.knowledge)
-    .filter(([key]) => key.startsWith('triagem_'))
-    .map(([key, value]) => `## ${key.replace('triagem_', '').replaceAll('_', ' ').toUpperCase()}\n${value}`)
+    .filter(([key, value]) => key.startsWith('triagem_') && !String(value).startsWith(NARA_PROMPT_MARKER))
+    .map(([key, value]) => `## ${titleFromKey(key)}\n${value}`)
     .join('\n\n');
-  const base = Object.entries(config.knowledge)
+  const qualification = Object.entries(config.knowledge)
     .filter(([key]) => !key.startsWith('triagem_'))
-    .map(([key, value]) => `## ${key.toUpperCase()}\n${value}`)
+    .map(([key, value]) => `## ${titleFromKey(key)}\n${value}`)
+    .join('\n\n');
+
+  return `${NARA_PROMPT_MARKER}
+
+Você é a Nara, consultora de relacionamento da Bossa Empreendimentos, responsável pelo atendimento de clientes finais no WhatsApp.
+
+# FORMA DE ATENDER
+Nome: ${config.persona.name}
+Papel: ${config.persona.role}
+Tom: ${config.persona.tone}
+Tamanho das mensagens: ${config.persona.length}
+Emojis: ${config.persona.emojis}
+Identidade: ${config.persona.identity}
+
+# TRIAGEM — SEMPRE ANTES DA QUALIFICAÇÃO
+${triage}
+
+# PRIMEIRA MENSAGEM
+Use como referência no começo de uma conversa nova:
+“${config.first_message}”
+Não repita a apresentação nas mensagens seguintes e adapte a abertura ao contexto real recebido.
+
+# QUALIFICAÇÃO E CONHECIMENTO
+${qualification}
+
+# REGRAS GERAIS
+- Responda sempre em português brasileiro.
+- Leia o histórico inteiro e nunca repita uma pergunta já respondida.
+- Faça uma pergunta por vez e mantenha a conversa natural.
+- Nunca invente preço, disponibilidade, metragem, condição de pagamento, prazo de entrega ou informação comercial.
+- Quando faltar uma informação confirmada, diga que o time da Bossa vai verificar.
+- Transfira para atendimento humano em proposta, reserva, negociação, reclamação, urgência, assunto sensível ou pedido explícito.
+- Não revele termos internos como classificação, etapa, triagem ou handoff ao contato.
+- Use as correções salvas pelo gestor como exemplos prioritários de comportamento.`;
+}
+
+function buildPlantaoPrompt(config: AgentConfig, examples: TrainingExample[]) {
+  const base = Object.entries(config.knowledge)
+    .map(([key, value]) => `## ${titleFromKey(key)}\n${value}`)
     .join('\n\n');
   const learning = examples.slice(0, 30).map((item) => {
     if (item.rating === 'approved') return `Contato: ${item.user_message}\nResposta aprovada: ${item.assistant_message}`;
@@ -194,10 +196,39 @@ function buildPrompt(agent: Agent, config: AgentConfig, examples: TrainingExampl
     if (item.rating === 'rejected' && item.notes) return `Contato: ${item.user_message}\nResposta que precisa melhorar: ${item.assistant_message}\nOrientação do gestor: ${item.notes}`;
     return '';
   }).filter(Boolean).join('\n\n');
-  const identity = agent === 'nara'
-    ? 'Você atende clientes finais. A ordem obrigatória é TRIAGEM → QUALIFICAÇÃO → AGENDAMENTO/TRANSFERÊNCIA.'
-    : 'Você atende corretores parceiros fora do horário comercial. Nunca use nome próprio; identifique-se somente como o plantão da Bossa.';
-  return `${identity}\n\n# PERSONA\nNome/identificação: ${config.persona.name}\nPapel: ${config.persona.role}\nTom: ${config.persona.tone}\nTamanho: ${config.persona.length}\nEmojis: ${config.persona.emojis}\nIdentidade: ${config.persona.identity}${agent === 'nara' ? `\n\n# ETAPA 1 — TRIAGEM\n${triage}\n\n# ETAPA 2 — QUALIFICAÇÃO E BASE DE CONHECIMENTO\n${base}` : `\n\n# BASE DE CONHECIMENTO\n${base}`}\n\n# ABERTURA PADRÃO\n${config.first_message}${learning ? `\n\n# EXEMPLOS E ORIENTAÇÕES DO GESTOR\n${learning}` : ''}\n\nResponda em português brasileiro. Nunca invente dados. Quando não tiver certeza, encaminhe ao comercial.`;
+
+  return `Você atende corretores parceiros fora do horário comercial. Nunca use nome próprio; identifique-se somente como o plantão da Bossa.
+
+# PERSONA
+Nome/identificação: ${config.persona.name}
+Papel: ${config.persona.role}
+Tom: ${config.persona.tone}
+Tamanho: ${config.persona.length}
+Emojis: ${config.persona.emojis}
+Identidade: ${config.persona.identity}
+
+# BASE DE CONHECIMENTO
+${base}
+
+# ABERTURA PADRÃO
+${config.first_message}${learning ? `\n\n# EXEMPLOS E ORIENTAÇÕES DO GESTOR\n${learning}` : ''}
+
+Responda em português brasileiro. Nunca invente dados. Quando não tiver certeza, encaminhe ao comercial.`;
+}
+
+function savedNaraPrompt(config: AgentConfig) {
+  const stored = config.knowledge[NARA_PROMPT_STORAGE_KEY]?.trim() ?? '';
+  return stored.startsWith(NARA_PROMPT_MARKER) ? stored : '';
+}
+
+function naraConfigWithPrompt(config: AgentConfig, prompt: string): AgentConfig {
+  return {
+    ...config,
+    first_message: '',
+    knowledge: {
+      [NARA_PROMPT_STORAGE_KEY]: prompt.trim(),
+    },
+  };
 }
 
 async function readJson<T>(response: Response): Promise<T> {
@@ -215,8 +246,9 @@ export default function AgentTrainingPage() {
   const params = useParams<{ agente: string }>();
   const agent: Agent = params.agente === 'plantao' ? 'plantao' : 'nara';
   const isNara = agent === 'nara';
-  const [tab, setTab] = useState<Tab>(isNara ? 'triagem' : 'simulador');
+  const [tab, setTab] = useState<Tab>(isNara ? 'prompt' : 'simulador');
   const [config, setConfig] = useState<AgentConfig>(() => defaultConfig(agent));
+  const [promptText, setPromptText] = useState('');
   const [examples, setExamples] = useState<TrainingExample[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [scenario, setScenario] = useState('');
@@ -233,17 +265,21 @@ export default function AgentTrainingPage() {
   const [lastSimulation, setLastSimulation] = useState<SimulationResult | null>(null);
 
   const scenarios = isNara ? naraScenarios : plantaoScenarios;
-  const prompt = useMemo(() => buildPrompt(agent, config, examples), [agent, config, examples]);
+  const plantaoPrompt = useMemo(() => buildPlantaoPrompt(config, examples), [config, examples]);
   const baseEntries = Object.entries(config.knowledge).filter(([key]) => !key.startsWith('triagem_'));
-  const tabs: Array<{ key: Tab; label: string }> = [
-    ...(isNara ? [{ key: 'triagem' as Tab, label: '🔎 Triagem' }] : []),
-    { key: 'simulador', label: '🎭 Simulador' },
-    { key: 'persona', label: '🗣️ Personalidade' },
-    { key: 'base', label: isNara ? '📚 Qualificação e conhecimento' : '📚 Base do corretor' },
-    { key: 'correcoes', label: `✏️ Correções (${examples.length})` },
-    ...(isNara ? [{ key: 'abertura' as Tab, label: '📤 Primeira mensagem' }] : []),
-    { key: 'prompt', label: '📄 Prompt final' },
-  ];
+  const tabs: Array<{ key: Tab; label: string }> = isNara
+    ? [
+        { key: 'simulador', label: '🎭 Simulador' },
+        { key: 'correcoes', label: `✏️ Correções (${examples.length})` },
+        { key: 'prompt', label: '📄 Prompt final' },
+      ]
+    : [
+        { key: 'simulador', label: '🎭 Simulador' },
+        { key: 'persona', label: '🗣️ Personalidade' },
+        { key: 'base', label: '📚 Base do corretor' },
+        { key: 'correcoes', label: `✏️ Correções (${examples.length})` },
+        { key: 'prompt', label: '📄 Prompt final' },
+      ];
 
   useEffect(() => {
     let cancelled = false;
@@ -254,7 +290,7 @@ export default function AgentTrainingPage() {
       setLoading(true);
       setError('');
       setNotice('');
-      setTab(agent === 'nara' ? 'triagem' : 'simulador');
+      setTab(agent === 'nara' ? 'prompt' : 'simulador');
       setMessages([]);
       setScenario('');
       setFeedbackText('');
@@ -265,7 +301,9 @@ export default function AgentTrainingPage() {
         const response = await fetch(`/api/ai-training?agent=${agent}`, { cache: 'no-store' });
         const data = await readJson<{ config: AgentConfig; examples: TrainingExample[]; ai?: AiStatus }>(response);
         if (cancelled) return;
-        setConfig(agent === 'nara' ? withNaraTriage(data.config) : data.config);
+        const loadedConfig = agent === 'nara' ? withNaraDefaults(data.config) : data.config;
+        setConfig(loadedConfig);
+        setPromptText(agent === 'nara' ? savedNaraPrompt(loadedConfig) || buildNaraPrompt(loadedConfig) : '');
         setExamples(data.examples);
         setAi(data.ai ?? null);
       } catch (caught) {
@@ -299,16 +337,24 @@ export default function AgentTrainingPage() {
   }
 
   async function saveConfig() {
+    if (isNara && !promptText.trim()) {
+      setError('O prompt final da Nara não pode ficar vazio.');
+      setTab('prompt');
+      return;
+    }
+
     setSaving(true);
     setError('');
     setNotice('');
+    const configToSave = isNara ? naraConfigWithPrompt(config, promptText) : config;
     try {
       await readJson<{ ok: boolean }>(await fetch('/api/ai-training', {
         method: 'PUT',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ agent, config }),
+        body: JSON.stringify({ agent, config: configToSave }),
       }));
-      setNotice(isNara ? 'Treinamento salvo. A triagem será executada antes da qualificação.' : 'Configuração salva. O prompt final foi atualizado.');
+      setConfig(configToSave);
+      setNotice(isNara ? 'Prompt final da Nara salvo e aplicado ao simulador e ao atendimento.' : 'Configuração salva. O prompt final foi atualizado.');
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Não foi possível salvar.');
     } finally {
@@ -321,11 +367,12 @@ export default function AgentTrainingPage() {
     setError('');
     setNotice('');
     setLastSimulation(null);
+    const simulationConfig = isNara ? naraConfigWithPrompt(config, promptText) : config;
     try {
       const data = await readJson<{ reply: string; source: 'openai'; classification: string; score: number; stage: string; handoff: boolean; attachments: SimulationResult['attachments'] }>(await fetch('/api/ai-training', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ action: 'simulate', agent, messages: nextMessages, scenario, config }),
+        body: JSON.stringify({ action: 'simulate', agent, messages: nextMessages, scenario, config: simulationConfig }),
       }));
       setMessages([...nextMessages, { role: 'assistant', content: data.reply }]);
       setLastSimulation({
@@ -417,24 +464,29 @@ export default function AgentTrainingPage() {
   }
 
   async function copyPrompt() {
+    const currentPrompt = isNara ? promptText : plantaoPrompt;
     try {
-      await navigator.clipboard.writeText(prompt);
+      await navigator.clipboard.writeText(currentPrompt);
       setNotice('Prompt copiado.');
     } catch {
       setError('O navegador não permitiu copiar automaticamente.');
     }
   }
 
-  const title = isNara ? 'Treinar a Nara' : 'Treinar o Plantão';
+  const title = isNara ? 'Configurar a Nara' : 'Treinar o Plantão';
   const subtitle = isNara
-    ? 'Triagem primeiro, depois qualificação e agendamento'
+    ? 'Simule conversas, registre correções e edite o prompt completo em um só lugar'
     : 'Atendimento de corretores fora do horário — sem nome próprio e sem promessas';
 
   return <>
-    <PageTopbar title={title} subtitle={subtitle} actions={<button className="btn btn-primary btn-sm" onClick={saveConfig} disabled={saving || loading}>{saving ? 'Salvando...' : 'Salvar treinamento'}</button>} />
+    <PageTopbar
+      title={title}
+      subtitle={subtitle}
+      actions={<button className="btn btn-primary btn-sm" onClick={saveConfig} disabled={saving || loading}>{saving ? 'Salvando...' : isNara ? 'Salvar prompt da Nara' : 'Salvar treinamento'}</button>}
+    />
     <div className="page-content">
       {isNara
-        ? <div className="info-box"><strong>Ordem obrigatória da Nara:</strong> 1. Triagem do contato → 2. Qualificação do possível comprador → 3. Agendamento ou transferência. A qualificação nunca começa antes da triagem.</div>
+        ? <div className="info-box"><strong>Configuração centralizada:</strong> a triagem, a qualificação, a primeira mensagem, o tom e as regras da Nara estão dentro do Prompt final. O simulador usa inclusive as alterações ainda não salvas para você testar antes de gravar.</div>
         : <div className="info-box"><strong>O plantão não é a Nara com outro nome.</strong> A Nara conversa com quem compra. O plantão conversa com quem vende, destrava material, responde dúvidas e escala propostas.</div>}
       {error && <div className="error-box">{error}</div>}
       {notice && <div className="success-box">{notice}</div>}
@@ -457,29 +509,11 @@ export default function AgentTrainingPage() {
 
       {loading ? <section className="card"><div className="empty-state">Carregando treinamento...</div></section> : null}
 
-      {!loading && isNara && tab === 'triagem' && <>
-        <section className="card" style={{ marginBottom: 14 }}>
-          <div className="card-head"><h3>Triagem — primeira etapa do atendimento</h3><span className="chip chip-green">RODA PRIMEIRO</span></div>
-          <div className="card-body">
-            <p className="muted" style={{ lineHeight: 1.7, margin: 0 }}>A Nara usa este quadro antes de qualquer pergunta de orçamento, tipologia, prazo ou decisão. Somente contatos identificados como possíveis compradores seguem para a qualificação.</p>
-          </div>
-        </section>
-        <div className="grid grid-2">
-          {TRIAGE_FIELDS.map((field, index) => <section className="card" key={field.key}>
-            <div className="card-head"><h3>{index + 1}. {field.title}</h3></div>
-            <div className="card-body">
-              <p className="muted" style={{ fontSize: 12, lineHeight: 1.55 }}>{field.help}</p>
-              <textarea className="textarea" style={{ minHeight: 155 }} value={config.knowledge[field.key] || ''} onChange={(event) => updateKnowledge(field.key, event.target.value)} />
-            </div>
-          </section>)}
-        </div>
-      </>}
-
       {!loading && tab === 'simulador' && <div className="detail-grid">
         <section className="card whatsapp-panel">
           <div className="wa-head">
             <div className="wa-icon">💬</div>
-            <div><strong>Conversa de treino</strong><div className="faint" style={{ fontSize: 10 }}>{isNara ? 'A resposta executa triagem antes da qualificação.' : 'Você interpreta o corretor e avalia a resposta.'}</div></div>
+            <div><strong>Conversa de treino</strong><div className="faint" style={{ fontSize: 10 }}>{isNara ? 'Testa o conteúdo atual do prompt, mesmo antes de salvar.' : 'Você interpreta o corretor e avalia a resposta.'}</div></div>
             <span className="connection-pill">{ai?.configured ? `OPENAI · ${ai.model}` : 'SEM API'}</span>
           </div>
           <div className="messages">
@@ -497,7 +531,7 @@ export default function AgentTrainingPage() {
                     ? <><strong>Reescreva a resposta:</strong> edite abaixo exatamente como ela deveria ter respondido.</>
                     : <><strong>Explique com suas palavras:</strong> diga o que ficou errado e como a IA deve agir nas próximas conversas.</>}
                 </div>
-                <textarea className="textarea" value={feedbackText} placeholder={feedbackMode === 'rewrite' ? 'Escreva a resposta ideal completa...' : 'Ex.: Este contato ainda não foi identificado como comprador; a Nara deveria concluir a triagem antes de perguntar o orçamento.'} onChange={(event) => setFeedbackText(event.target.value)} />
+                <textarea className="textarea" value={feedbackText} placeholder={feedbackMode === 'rewrite' ? 'Escreva a resposta ideal completa...' : 'Ex.: A Nara deveria confirmar a intenção antes de perguntar o orçamento.'} onChange={(event) => setFeedbackText(event.target.value)} />
                 <div style={{ display: 'flex', gap: 7, justifyContent: 'flex-end' }}>
                   <button className="btn btn-ghost btn-sm" onClick={closeFeedback}>Cancelar</button>
                   <button className="btn btn-primary btn-sm" onClick={() => saveFeedback(index)} disabled={!feedbackText.trim()}>{feedbackMode === 'rewrite' ? 'Salvar resposta corrigida' : 'Salvar comentário'}</button>
@@ -522,11 +556,11 @@ export default function AgentTrainingPage() {
             <div className="info-row"><span>Transfere humano</span><strong>{lastSimulation.handoff ? 'Sim' : 'Não'}</strong></div>
             <div className="info-row"><span>Arquivos</span><strong>{lastSimulation.attachments.length}</strong></div>
           </div></section>}
-          <section className="card"><div className="card-head"><h3>Como treinar</h3></div><div className="card-body muted" style={{ lineHeight: 1.65, fontSize: 12 }}>Aprove quando estiver boa. Para ajustar, reescreva a resposta inteira ou comente o que deve mudar. Os dois formatos entram no treinamento.</div></section>
+          <section className="card"><div className="card-head"><h3>Como treinar</h3></div><div className="card-body muted" style={{ lineHeight: 1.65, fontSize: 12 }}>Aprove quando estiver boa. Para ajustar, reescreva a resposta inteira ou comente o que deve mudar. Os dois formatos entram em Correções.</div></section>
         </aside>
       </div>}
 
-      {!loading && tab === 'persona' && <div className="grid grid-2">
+      {!loading && !isNara && tab === 'persona' && <div className="grid grid-2">
         <section className="card"><div className="card-head"><h3>Identidade e papel</h3></div><div className="card-body">
           <div className="field"><label>Nome ou identificação</label><input className="input" value={config.persona.name} onChange={(event) => updatePersona('name', event.target.value)} /></div>
           <div className="field"><label>Papel</label><textarea className="textarea" value={config.persona.role} onChange={(event) => updatePersona('role', event.target.value)} /></div>
@@ -540,7 +574,7 @@ export default function AgentTrainingPage() {
         </div></section>
       </div>}
 
-      {!loading && tab === 'base' && <div className="grid grid-2">
+      {!loading && !isNara && tab === 'base' && <div className="grid grid-2">
         {baseEntries.map(([key, value]) => <section className="card" key={key}><div className="card-head"><h3>{key.replaceAll('_', ' ')}</h3></div><div className="card-body"><textarea className="textarea" style={{ minHeight: 170 }} value={value} onChange={(event) => updateKnowledge(key, event.target.value)} /></div></section>)}
       </div>}
 
@@ -563,17 +597,25 @@ export default function AgentTrainingPage() {
         </div>
       </section>}
 
-      {!loading && tab === 'abertura' && <div className="grid grid-2">
-        <section className="card"><div className="card-head"><h3>Primeira mensagem</h3></div><div className="card-body">
-          <div className="field"><label>Mensagem enviada no primeiro contato</label><textarea className="textarea" style={{ minHeight: 160 }} value={config.first_message} onChange={(event) => setConfig((current) => ({ ...current, first_message: event.target.value }))} /></div>
-          <div className="info-box">Variáveis disponíveis: <span className="mono">{'{{primeiro_nome}}'}</span> e <span className="mono">{'{{empreendimento}}'}</span>.</div>
-        </div></section>
-        <section className="card"><div className="card-head"><h3>Prévia</h3></div><div className="card-body" style={{ background: '#f2efea', minHeight: 260 }}><div className="message out">{config.first_message.replace('{{primeiro_nome}}', 'Marina').replace('{{empreendimento}}', 'Flow Aptos')}</div></div></section>
-      </div>}
-
       {!loading && tab === 'prompt' && <section className="card">
-        <div className="card-head"><h3>Prompt final consolidado</h3><button className="btn btn-ghost btn-sm" onClick={copyPrompt}>Copiar prompt</button></div>
-        <div className="card-body"><textarea className="textarea mono" style={{ minHeight: 560, fontSize: 11.5, lineHeight: 1.6 }} value={prompt} readOnly /></div>
+        <div className="card-head">
+          <div><h3>Prompt final {isNara ? 'da Nara' : 'consolidado'}</h3>{isNara && <small className="muted">Edite diretamente aqui. Triagem, qualificação e primeira mensagem estão neste texto.</small>}</div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <button className="btn btn-ghost btn-sm" onClick={copyPrompt}>Copiar prompt</button>
+            {isNara && <button className="btn btn-primary btn-sm" onClick={saveConfig} disabled={saving || !promptText.trim()}>{saving ? 'Salvando...' : 'Salvar prompt'}</button>}
+          </div>
+        </div>
+        <div className="card-body">
+          <textarea
+            className="textarea mono"
+            style={{ minHeight: 680, fontSize: 12, lineHeight: 1.55, resize: 'vertical' }}
+            value={isNara ? promptText : plantaoPrompt}
+            readOnly={!isNara}
+            onChange={isNara ? (event) => setPromptText(event.target.value) : undefined}
+            spellCheck={false}
+          />
+          {isNara && <div className="info-box" style={{ marginTop: 12 }}>O botão <strong>Salvar prompt</strong> grava este conteúdo. O simulador usa o texto que está aberto agora, mesmo antes de salvar.</div>}
+        </div>
       </section>}
     </div>
   </>;
