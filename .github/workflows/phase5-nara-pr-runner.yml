@@ -52,7 +52,20 @@ jobs:
           end = workflow.index("\n          PY", start)
           block = workflow[start:end]
           lines = [line[10:] if line.startswith('          ') else line for line in block.splitlines()]
-          Path('/tmp/apply-phase5.py').write_text('\n'.join(lines) + '\n', encoding='utf-8')
+          script = '\n'.join(lines) + '\n'
+          script = script.replace(
+              "assert.match(aiSource, /base de conhecimento, e o retorno das consultas comerciais/);",
+              "assert.match(aiSource, /nas mensagens do contato, na base de conhecimento, ou no retorno das consultas comerciais/);",
+          )
+          script = script.replace(
+              "precos?|valores?|quanto custa|faixa|a partir de|tabela|disponiv|unidade",
+              "precos?|valores?|quanto custa|faixa|a partir de|tabela|disponibilidade|disponive(?:l|is)|unidade",
+          )
+          script = script.replace(
+              "disponiv|unidade|apto|apartamento|entrada",
+              "disponibilidade|disponive(?:l|is)|unidade|apto|apartamento|entrada",
+          )
+          Path('/tmp/apply-phase5.py').write_text(script, encoding='utf-8')
           PY
           python /tmp/apply-phase5.py
 
