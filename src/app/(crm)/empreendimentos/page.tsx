@@ -1,3 +1,4 @@
+import { AlmaSalesTableImporter } from '@/components/AlmaSalesTableImporter';
 import { PageTopbar } from '@/components/PageTopbar';
 import {
   DevelopmentsManager,
@@ -14,6 +15,7 @@ export default async function DevelopmentsPage() {
   const context = await getCurrentContext();
   const supabase = await createClient();
   const organizationId = context!.organization.id;
+  const canEdit = context!.role !== 'viewer';
 
   const [developmentsResult, typologiesResult, unitsResult, filesResult] = await Promise.all([
     supabase.from('developments').select('*').eq('organization_id', organizationId).order('name'),
@@ -27,6 +29,8 @@ export default async function DevelopmentsPage() {
   const schemaError = [developmentsResult.error, typologiesResult.error, unitsResult.error, filesResult.error]
     .find(Boolean);
   const developmentRows = developmentsResult.data ?? [];
+  const typologyRows = (typologiesResult.data ?? []) as DevelopmentTypology[];
+  const unitRows = (unitsResult.data ?? []) as DevelopmentUnit[];
 
   return <>
     <PageTopbar title="Empreendimentos" subtitle="Cadastro, marcas, tipologias, materiais, estoque e condições comerciais" />
@@ -35,15 +39,24 @@ export default async function DevelopmentsPage() {
       : <>
           <DevelopmentLogosPanel
             organizationId={organizationId}
-            canEdit={context!.role !== 'viewer'}
+            canEdit={canEdit}
             initialDevelopments={developmentRows as DevelopmentLogoItem[]}
           />
+          <div className="page-content" style={{ paddingBottom: 0 }}>
+            <AlmaSalesTableImporter
+              organizationId={organizationId}
+              canEdit={canEdit}
+              developments={developmentRows as Development[]}
+              typologies={typologyRows}
+              units={unitRows}
+            />
+          </div>
           <DevelopmentsManager
             organizationId={organizationId}
-            canEdit={context!.role !== 'viewer'}
+            canEdit={canEdit}
             initialDevelopments={developmentRows as Development[]}
-            initialTypologies={(typologiesResult.data ?? []) as DevelopmentTypology[]}
-            initialUnits={(unitsResult.data ?? []) as DevelopmentUnit[]}
+            initialTypologies={typologyRows}
+            initialUnits={unitRows}
             initialFiles={(filesResult.data ?? []) as DevelopmentFile[]}
           />
         </>}
