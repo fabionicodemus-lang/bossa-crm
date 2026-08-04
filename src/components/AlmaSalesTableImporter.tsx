@@ -95,6 +95,7 @@ export function AlmaSalesTableImporter({
   const availableVgv = almaRows.reduce((total, row) => total + (row.sourceStatus === 'disponivel' ? row.listPrice : 0), 0);
 
   if (!canEdit || !alma) return null;
+  const almaId = alma.id;
 
   async function applyTable() {
     if (missingRows.length > 0) {
@@ -121,7 +122,7 @@ export function AlmaSalesTableImporter({
         return {
           id: unit.id,
           organization_id: organizationId,
-          development_id: alma.id,
+          development_id: almaId,
           typology_id: typology?.id ?? unit.typology_id,
           unit_code: unit.unit_code,
           floor: row.floor,
