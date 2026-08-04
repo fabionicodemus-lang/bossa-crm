@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - feature/nara-prompt-v3-phase-3
+  pull_request:
+    branches:
+      - main
 
 permissions:
   contents: write
