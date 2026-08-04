@@ -40,13 +40,20 @@ assert(unit2901?.sourceStatus === 'reservado' && cents(unit2901.listPrice) === 0
 const availableVgvCents = rows
   .filter((row) => row.sourceStatus === 'disponivel')
   .reduce((total, row) => total + cents(row.listPrice), 0);
-assert(availableVgvCents === 5_166_397_765, `VGV disponível divergente: ${(availableVgvCents / 100).toFixed(2)}.`);
+assert(availableVgvCents === 5_040_388_060, `VGV disponível divergente: ${(availableVgvCents / 100).toFixed(2)}.`);
 
 const unit901 = rows.find((row) => row.unitCode === '901');
-assert(cents(unit901?.listPrice) === 137_783_686, 'Valor atualizado da unidade 901 divergente.');
-assert(cents(unit901.listPrice * 0.15) === 20_667_553, 'Entrada da unidade 901 divergente.');
-assert(cents((unit901.listPrice * 0.32) / 80) === 551_135, 'Parcela mensal da unidade 901 divergente.');
-assert(cents((unit901.listPrice * 0.43) / 7) === 8_463_855, 'Reforço da unidade 901 divergente.');
-assert(cents(unit901.listPrice * 0.1) === 13_778_369, 'Chaves da unidade 901 divergentes.');
+assert(cents(unit901?.listPrice) === 134_423_108, 'Valor exato da planilha para a unidade 901 divergente.');
+assert(cents(unit901.listPrice * 0.15) === 20_163_466, 'Entrada da unidade 901 divergente.');
+assert(cents((unit901.listPrice * 0.32) / 80) === 537_692, 'Parcela mensal da unidade 901 divergente.');
+assert(cents((unit901.listPrice * 0.43) / 7) === 8_257_419, 'Reforço da unidade 901 divergente.');
+assert(cents(unit901.listPrice * 0.1) === 13_442_311, 'Chaves da unidade 901 divergentes.');
 
-console.log('Tabela Alma validada: 48 unidades, 32 disponíveis, 11 reservadas, 5 permutantes e VGV de R$ 51.663.977,65.');
+const unit2501 = rows.find((row) => row.unitCode === '2501');
+assert(cents(unit2501?.listPrice) === 169_223_108, 'A unidade 2501 deve ter exatamente R$ 1.692.231,08.');
+assert(cents(unit2501.listPrice * 0.15) === 25_383_466, 'Entrada da unidade 2501 divergente.');
+assert(cents((unit2501.listPrice * 0.32) / 80) === 676_892, 'Parcela mensal da unidade 2501 divergente.');
+assert(cents((unit2501.listPrice * 0.43) / 7) === 10_395_134, 'Reforço da unidade 2501 divergente.');
+assert(cents(unit2501.listPrice * 0.1) === 16_922_311, 'Chaves da unidade 2501 divergentes.');
+
+console.log('Tabela Alma validada com os valores exatos da planilha: 48 unidades, 32 disponíveis, 11 reservadas, 5 permutantes e VGV de R$ 50.403.880,60.');
