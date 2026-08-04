@@ -1,5 +1,9 @@
 import { NextResponse } from 'next/server';
 import { buildAiInstructions, generateAiTurn, type AiFileOption, type AiTrainingContext } from '@/lib/ai';
+import {
+  naraKnowledgeForEditor,
+  normalizeNaraKnowledge,
+} from '@/lib/nara-prompt-config';
 import { createClient } from '@/lib/supabase/server';
 import type { Lead } from '@/lib/types';
 
@@ -94,16 +98,26 @@ function normalizeConfig(agent: Agent, value: unknown): AgentConfig {
     emojis: String(personaInput.emojis ?? fallback.persona.emojis).slice(0, 500),
     identity: String(personaInput.identity ?? fallback.persona.identity).slice(0, 3000),
   };
-  const knowledge = Object.fromEntries(
-    Object.entries(knowledgeInput)
-      .slice(0, 30)
-      .map(([key, item]) => [key.slice(0, 80), String(item ?? '').slice(0, 10000)]),
-  );
+  const knowledge = agent === 'nara'
+    ? normalizeNaraKnowledge(knowledgeInput)
+    : Object.fromEntries(
+        Object.entries(knowledgeInput)
+          .slice(0, 30)
+          .map(([key, item]) => [key.slice(0, 80), String(item ?? '').slice(0, 10000)]),
+      );
   return {
     persona,
     knowledge: Object.keys(knowledge).length ? knowledge : fallback.knowledge,
     first_message: String(input.first_message ?? fallback.first_message).slice(0, 3000),
     active: input.active !== false,
+  };
+}
+
+function configForEditor(agent: Agent, config: AgentConfig): AgentConfig {
+  if (agent !== 'nara') return config;
+  return {
+    ...config,
+    knowledge: naraKnowledgeForEditor(config.knowledge),
   };
 }
 
@@ -238,7 +252,7 @@ export async function GET(request: Request) {
     const lead = syntheticLead(agentRaw, context.organizationId);
     const aiContext = makeAiContext(config, examples, files);
     return NextResponse.json({
-      config,
+      config: configForEditor(agentRaw, config),
       examples,
       prompt: buildAiInstructions(lead, aiContext),
       ai: aiStatus(files.length),
@@ -253,8 +267,8 @@ export async function PUT(request: Request) {
   if ('response' in context) return context.response;
   const body = await request.json().catch(() => ({})) as { agent?: unknown; config?: unknown };
   if (!isAgent(body.agent)) return NextResponse.json({ error: 'Agente inválido.' }, { status: 400 });
-  const config = normalizeConfig(body.agent, body.config);
   try {
+    const config = normalizeConfig(body.agent, body.config);
     const { error } = await context.supabase.from('ai_agent_configs').upsert({
       organization_id: context.organizationId,
       agent: body.agent,
@@ -351,7 +365,7 @@ export async function POST(request: Request) {
     return NextResponse.json({
       reply: turn.reply,
       source: 'openai',
-      model: process.env.OPENAI_MODEL || 'gpt-5-mini',
+      model: turn.model_used || process.env.OPENAI_MODEL || 'gpt-5-mini',
       classification: turn.classification,
       score: turn.score,
       stage: turn.stage,
