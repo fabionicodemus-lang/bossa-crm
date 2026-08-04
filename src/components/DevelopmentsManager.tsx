@@ -111,10 +111,26 @@ const fileCategories = [
 
 const money = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 const decimal = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+const moneyNumber = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 function numberValue(value: unknown): number {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function localizedNumberValue(value: unknown): number {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
+  const text = String(value ?? '').trim();
+  if (!text) return 0;
+  const normalized = text.includes(',')
+    ? text.replace(/\./g, '').replace(',', '.')
+    : text;
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function formatMoneyNumber(value: unknown): string {
+  return moneyNumber.format(numberValue(value));
 }
 
 function nullableNumber(value: unknown): number | null {
@@ -329,13 +345,13 @@ export function DevelopmentsManager({
       floor: nullableNumber(form.get('floor')),
       status: String(form.get('status') ?? 'disponivel') as UnitStatus,
       private_area_m2: nullableNumber(form.get('private_area_m2')) ?? typology?.private_area_m2 ?? null,
-      list_price: numberValue(form.get('list_price')),
-      entry_amount: numberValue(form.get('entry_amount')),
+      list_price: localizedNumberValue(form.get('list_price')),
+      entry_amount: localizedNumberValue(form.get('entry_amount')),
       installment_count: numberValue(form.get('installment_count')),
-      installment_amount: numberValue(form.get('installment_amount')),
+      installment_amount: localizedNumberValue(form.get('installment_amount')),
       reinforcement_count: numberValue(form.get('reinforcement_count')),
-      reinforcement_amount: numberValue(form.get('reinforcement_amount')),
-      keys_amount: numberValue(form.get('keys_amount')),
+      reinforcement_amount: localizedNumberValue(form.get('reinforcement_amount')),
+      keys_amount: localizedNumberValue(form.get('keys_amount')),
       notes: String(form.get('notes') ?? '').trim() || null,
       payment_plan: {},
       metadata: {},
@@ -362,7 +378,14 @@ export function DevelopmentsManager({
   async function saveUnit(item: DevelopmentUnit, patch: Partial<DevelopmentUnit>) {
     if (!canEdit) return;
     clearMessages();
+    const unitCode = String(patch.unit_code ?? item.unit_code).trim();
+    if (!unitCode) {
+      setError('Informe o número da unidade.');
+      return;
+    }
     const payload = {
+      unit_code: unitCode,
+      floor: nullableNumber(patch.floor ?? item.floor),
       status: patch.status ?? item.status,
       typology_id: patch.typology_id ?? item.typology_id,
       private_area_m2: nullableNumber(patch.private_area_m2 ?? item.private_area_m2),
@@ -383,7 +406,34 @@ export function DevelopmentsManager({
       return;
     }
     setUnits((current) => current.map((row) => row.id === item.id ? data as DevelopmentUnit : row));
-    setNotice(`Unidade ${item.unit_code} atualizada.`);
+    setNotice(`Unidade ${unitCode} atualizada.`);
+  }
+
+  async function deleteUnit(item: DevelopmentUnit) {
+    if (!canEdit || !window.confirm(`Excluir definitivamente a unidade ${item.unit_code}? Esta ação não pode ser desfeita.`)) return;
+    clearMessages();
+
+    const { count, error: proposalsError } = await supabase.from('proposals')
+      .select('id', { count: 'exact', head: true })
+      .eq('organization_id', organizationId)
+      .eq('unit_id', item.id);
+    if (proposalsError) {
+      setError(proposalsError.message);
+      return;
+    }
+    if ((count ?? 0) > 0) {
+      setError(`A unidade ${item.unit_code} está vinculada a uma proposta e não pode ser excluída. Altere o status ou a unidade da proposta antes.`);
+      return;
+    }
+
+    const { error: deleteError } = await supabase.from('development_units')
+      .delete().eq('id', item.id).eq('organization_id', organizationId);
+    if (deleteError) {
+      setError(deleteError.message);
+      return;
+    }
+    setUnits((current) => current.filter((row) => row.id !== item.id));
+    setNotice(`Unidade ${item.unit_code} excluída.`);
   }
 
   async function applyAdjustment() {
@@ -607,8 +657,8 @@ export function DevelopmentsManager({
             <div className="card-head"><h3>Tabela de vendas</h3><span className="chip">{selectedUnits.length} unidades</span></div>
             <div className="table-wrap" style={{ overflowX: 'auto' }}>
               <table>
-                <thead><tr><th>Unidade</th><th>Tipo</th><th>Status</th><th>Valor</th><th>Entrada</th><th>Parcelas</th><th>Valor parcela</th><th>Reforços</th><th>Valor reforço</th><th>Chaves</th><th></th></tr></thead>
-                <tbody>{selectedUnits.map((item) => <EditableUnitRow key={item.id} item={item} typologies={selectedTypologies} canEdit={canEdit} onSave={saveUnit} />)}</tbody>
+                <thead><tr><th>Unidade</th><th>Andar</th><th>Tipologia</th><th>Área m²</th><th>Status</th><th>Valor</th><th>Entrada</th><th>Parcelas</th><th>Valor parcela</th><th>Reforços</th><th>Valor reforço</th><th>Chaves</th><th>Observação</th><th></th></tr></thead>
+                <tbody>{selectedUnits.map((item) => <EditableUnitRow key={item.id} item={item} typologies={selectedTypologies} canEdit={canEdit} onSave={saveUnit} onDelete={deleteUnit} />)}</tbody>
               </table>
             </div>
           </section>
@@ -622,13 +672,13 @@ export function DevelopmentsManager({
                 <div className="field"><label>Tipologia</label><select className="select" name="typology_id"><option value="">Sem tipologia</option>{selectedTypologies.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></div>
                 <div className="field"><label>Status</label><select className="select" name="status" defaultValue="disponivel">{Object.entries(unitStatusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></div>
                 <div className="field"><label>Área m²</label><input className="input" name="private_area_m2" type="number" step="0.01" /></div>
-                <div className="field"><label>Valor</label><input className="input" name="list_price" type="number" step="0.01" /></div>
-                <div className="field"><label>Entrada</label><input className="input" name="entry_amount" type="number" step="0.01" /></div>
+                <div className="field"><label>Valor</label><MoneyInput name="list_price" /></div>
+                <div className="field"><label>Entrada</label><MoneyInput name="entry_amount" /></div>
                 <div className="field"><label>Qtd. parcelas</label><input className="input" name="installment_count" type="number" defaultValue={planNumber(selected.default_payment_plan, 'installment_count') || ''} /></div>
-                <div className="field"><label>Valor parcela</label><input className="input" name="installment_amount" type="number" step="0.01" /></div>
+                <div className="field"><label>Valor parcela</label><MoneyInput name="installment_amount" /></div>
                 <div className="field"><label>Qtd. reforços</label><input className="input" name="reinforcement_count" type="number" defaultValue={planNumber(selected.default_payment_plan, 'reinforcement_count') || ''} /></div>
-                <div className="field"><label>Valor reforço</label><input className="input" name="reinforcement_amount" type="number" step="0.01" /></div>
-                <div className="field"><label>Chaves</label><input className="input" name="keys_amount" type="number" step="0.01" /></div>
+                <div className="field"><label>Valor reforço</label><MoneyInput name="reinforcement_amount" /></div>
+                <div className="field"><label>Chaves</label><MoneyInput name="keys_amount" /></div>
               </div>
               <div className="field"><label>Observação</label><input className="input" name="notes" /></div>
               <button className="btn btn-primary" disabled={saving}>Adicionar unidade</button>
@@ -665,11 +715,13 @@ function EditableUnitRow({
   typologies,
   canEdit,
   onSave,
+  onDelete,
 }: {
   item: DevelopmentUnit;
   typologies: DevelopmentTypology[];
   canEdit: boolean;
   onSave: (item: DevelopmentUnit, patch: Partial<DevelopmentUnit>) => Promise<void>;
+  onDelete: (item: DevelopmentUnit) => Promise<void>;
 }) {
   const [draft, setDraft] = useState(item);
 
@@ -684,8 +736,10 @@ function EditableUnitRow({
   const typology = typologies.find((row) => row.id === draft.typology_id);
 
   return <tr>
-    <td><strong>{item.unit_code}</strong><div className="faint">{item.floor ? `${item.floor}º andar` : ''}</div></td>
-    <td>{canEdit ? <select className="select" style={{ minWidth: 115 }} value={draft.typology_id ?? ''} onChange={(event) => field('typology_id', event.target.value || null)}><option value="">—</option>{typologies.map((row) => <option key={row.id} value={row.id}>{row.code}</option>)}</select> : typology?.code ?? '—'}</td>
+    <td>{canEdit ? <input className="input mono" style={{ width: 90 }} value={draft.unit_code} onChange={(event) => field('unit_code', event.target.value)} /> : <strong>{item.unit_code}</strong>}</td>
+    <NumberCell value={draft.floor ?? 0} disabled={!canEdit} onChange={(value) => field('floor', value || null)} />
+    <td>{canEdit ? <select className="select" style={{ minWidth: 150 }} value={draft.typology_id ?? ''} onChange={(event) => field('typology_id', event.target.value || null)}><option value="">Sem tipologia</option>{typologies.map((row) => <option key={row.id} value={row.id}>{row.name}</option>)}</select> : typology?.name ?? 'Sem tipologia'}</td>
+    <DecimalCell value={draft.private_area_m2} disabled={!canEdit} onChange={(value) => field('private_area_m2', value)} />
     <td>{canEdit ? <select className="select" style={{ minWidth: 120 }} value={draft.status} onChange={(event) => field('status', event.target.value as UnitStatus)}>{Object.entries(unitStatusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select> : unitStatusLabels[item.status]}</td>
     <MoneyCell value={draft.list_price} disabled={!canEdit} onChange={(value) => field('list_price', value)} />
     <MoneyCell value={draft.entry_amount} disabled={!canEdit} onChange={(value) => field('entry_amount', value)} />
@@ -694,14 +748,59 @@ function EditableUnitRow({
     <NumberCell value={draft.reinforcement_count} disabled={!canEdit} onChange={(value) => field('reinforcement_count', value)} />
     <MoneyCell value={draft.reinforcement_amount} disabled={!canEdit} onChange={(value) => field('reinforcement_amount', value)} />
     <MoneyCell value={draft.keys_amount} disabled={!canEdit} onChange={(value) => field('keys_amount', value)} />
-    <td>{canEdit && <button className="btn btn-primary btn-sm" onClick={() => void onSave(item, draft)}>Salvar</button>}</td>
+    <td>{canEdit ? <input className="input" style={{ minWidth: 150 }} value={draft.notes ?? ''} onChange={(event) => field('notes', event.target.value || null)} /> : item.notes ?? '—'}</td>
+    <td>{canEdit && <div style={{ display: 'flex', gap: 6 }}><button type="button" className="btn btn-primary btn-sm" onClick={() => void onSave(item, draft)}>Salvar</button><button type="button" className="btn btn-danger btn-sm" onClick={() => void onDelete(item)}>Excluir</button></div>}</td>
   </tr>;
 }
 
+function MoneyInput({
+  name,
+  value = 0,
+  disabled = false,
+  onChange,
+  width = 128,
+}: {
+  name?: string;
+  value?: number;
+  disabled?: boolean;
+  onChange?: (value: number) => void;
+  width?: number;
+}) {
+  const [numericValue, setNumericValue] = useState(numberValue(value));
+
+  useEffect(() => {
+    queueMicrotask(() => setNumericValue(numberValue(value)));
+  }, [value]);
+
+  function change(rawValue: string) {
+    const digits = rawValue.replace(/\D/g, '');
+    const nextValue = digits ? Number(digits) / 100 : 0;
+    setNumericValue(nextValue);
+    onChange?.(nextValue);
+  }
+
+  return <>
+    {name && <input type="hidden" name={name} value={numericValue} />}
+    <input
+      className="input mono"
+      style={{ width }}
+      type="text"
+      inputMode="numeric"
+      value={formatMoneyNumber(numericValue)}
+      disabled={disabled}
+      onChange={(event) => change(event.target.value)}
+    />
+  </>;
+}
+
 function MoneyCell({ value, disabled, onChange }: { value: number; disabled: boolean; onChange: (value: number) => void }) {
-  return <td>{disabled ? money.format(numberValue(value)) : <input className="input mono" style={{ width: 128 }} type="number" step="0.01" value={numberValue(value)} onChange={(event) => onChange(numberValue(event.target.value))} />}</td>;
+  return <td>{disabled ? formatMoneyNumber(value) : <MoneyInput value={value} onChange={onChange} />}</td>;
 }
 
 function NumberCell({ value, disabled, onChange }: { value: number; disabled: boolean; onChange: (value: number) => void }) {
   return <td>{disabled ? numberValue(value) : <input className="input mono" style={{ width: 75 }} type="number" value={numberValue(value)} onChange={(event) => onChange(numberValue(event.target.value))} />}</td>;
+}
+
+function DecimalCell({ value, disabled, onChange }: { value: number | null; disabled: boolean; onChange: (value: number | null) => void }) {
+  return <td>{disabled ? (value === null ? '—' : decimal.format(value)) : <input className="input mono" style={{ width: 90 }} type="number" step="0.01" value={value ?? ''} onChange={(event) => onChange(nullableNumber(event.target.value))} />}</td>;
 }
