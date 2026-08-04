@@ -83,7 +83,7 @@ export function SearchableLeadSelect({
       } finally {
         if (!controller.signal.aborted) setLoading(false);
       }
-    }, 180);
+    }, 60);
 
     return () => {
       window.clearTimeout(timer);
@@ -168,57 +168,59 @@ export function SearchableLeadSelect({
       role="listbox"
       style={{
         position: 'absolute',
-        zIndex: 60,
+        isolation: 'isolate',
+        zIndex: 100,
         top: 'calc(100% + 4px)',
         left: 0,
         right: 0,
         maxHeight: 320,
         overflowY: 'auto',
-        border: '1px solid var(--border)',
+        overscrollBehavior: 'contain',
+        border: '1px solid #d8d2c8',
         borderRadius: 10,
-        background: 'var(--card)',
-        boxShadow: '0 12px 28px rgba(15, 23, 42, 0.16)',
+        backgroundColor: '#ffffff',
+        color: '#2c2925',
+        boxShadow: '0 16px 36px rgba(36, 30, 24, 0.22)',
       }}
     >
       {!canSearch && !showingSelectedValue
-        ? <div className="faint" style={{ padding: 12 }}>Digite ao menos 2 letras para buscar.</div>
+        ? <div className="faint" style={{ padding: 12, backgroundColor: '#ffffff' }}>Digite ao menos 2 letras para buscar.</div>
         : loading && filteredLeads.length === 0
-          ? <div className="faint" style={{ padding: 12 }}>Buscando…</div>
+          ? <div className="faint" style={{ padding: 12, backgroundColor: '#ffffff' }}>Buscando…</div>
           : filteredLeads.length === 0
-            ? <div className="faint" style={{ padding: 12 }}>Nenhum resultado encontrado.</div>
-            : <>
-                {loading && <div className="faint" style={{ padding: '8px 12px', borderBottom: '1px solid var(--border)' }}>Atualizando resultados…</div>}
-                {filteredLeads.map((lead, index) => <button
-                  key={lead.id}
-                  type="button"
-                  role="option"
-                  aria-selected={lead.id === value}
-                  onMouseDown={(event) => event.preventDefault()}
-                  onMouseEnter={() => setActiveIndex(index)}
-                  onClick={() => selectLead(lead)}
-                  style={{
-                    display: 'block',
-                    width: '100%',
-                    height: 'auto',
-                    minHeight: 58,
-                    boxSizing: 'border-box',
-                    border: 0,
-                    borderBottom: index < filteredLeads.length - 1 ? '1px solid var(--border)' : 0,
-                    padding: '10px 12px',
-                    textAlign: 'left',
-                    cursor: 'pointer',
-                    background: index === activeIndex ? 'var(--bg)' : 'transparent',
-                    color: 'inherit',
-                    font: 'inherit',
-                    lineHeight: 1.3,
-                    whiteSpace: 'normal',
-                    overflow: 'visible',
-                  }}
-                >
-                  <strong style={{ display: 'block', lineHeight: 1.3, overflowWrap: 'anywhere' }}>{leadLabel(lead)}</strong>
-                  {leadDetails(lead) && <small className="faint" style={{ display: 'block', marginTop: 4, lineHeight: 1.35, overflowWrap: 'anywhere' }}>{leadDetails(lead)}</small>}
-                </button>)}
-              </>}
+            ? <div className="faint" style={{ padding: 12, backgroundColor: '#ffffff' }}>Nenhum resultado encontrado.</div>
+            : filteredLeads.map((lead, index) => <button
+                key={lead.id}
+                type="button"
+                role="option"
+                aria-selected={lead.id === value}
+                onMouseDown={(event) => {
+                  event.preventDefault();
+                  selectLead(lead);
+                }}
+                onMouseEnter={() => setActiveIndex(index)}
+                style={{
+                  display: 'block',
+                  width: '100%',
+                  height: 'auto',
+                  minHeight: 58,
+                  boxSizing: 'border-box',
+                  border: 0,
+                  borderBottom: index < filteredLeads.length - 1 ? '1px solid #e6e1d9' : 0,
+                  padding: '10px 12px',
+                  textAlign: 'left',
+                  cursor: 'pointer',
+                  backgroundColor: index === activeIndex ? '#f3efe9' : '#ffffff',
+                  color: '#2c2925',
+                  font: 'inherit',
+                  lineHeight: 1.3,
+                  whiteSpace: 'normal',
+                  overflow: 'visible',
+                }}
+              >
+                <strong style={{ display: 'block', lineHeight: 1.3, overflowWrap: 'anywhere' }}>{leadLabel(lead)}</strong>
+                {leadDetails(lead) && <small className="faint" style={{ display: 'block', marginTop: 4, lineHeight: 1.35, overflowWrap: 'anywhere' }}>{leadDetails(lead)}</small>}
+              </button>)}
     </div>}
   </div>;
 }
