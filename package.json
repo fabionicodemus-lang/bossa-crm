@@ -12,7 +12,8 @@
     "test:meta-referral": "node scripts/check-meta-referral.mjs",
     "test:alma-table": "node scripts/check-alma-sales-table.mjs",
     "test:flow-table": "node scripts/check-flow-sales-table.mjs",
-    "test:nara-prompt": "node scripts/check-nara-prompt-contract.mjs"
+    "test:nara-prompt": "node scripts/check-nara-prompt-contract.mjs",
+    "test:nara-fixed-layer": "node scripts/check-nara-fixed-layer.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.3",
