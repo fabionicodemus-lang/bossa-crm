@@ -1,4 +1,5 @@
 import { extractNaraPrompt } from './nara-prompt-config';
+import { asksProtectedCommercialDetail, isGeneralPriceRangeReply } from './nara-price-levels';
 import type { Lead } from './types';
 
 export interface AiFileOption {
@@ -437,7 +438,7 @@ function outsideBuyerNextAction(history: ChatMessage[]): string {
 }
 
 function asksCommercialValue(text: string): boolean {
-  return /\b(preco|valor|quanto custa|a partir de|menor apartamento|menor unidade|tabela|condicao de pagamento|entrada|parcela)\b/.test(normalizeText(text));
+  return /\b(precos?|valores?|quanto custa|a partir de|faixa(?: de (?:preco|valor))?|menor apartamento|menor unidade|tabela|condicao de pagamento|entrada|parcela)\b/.test(normalizeText(text));
 }
 
 function configuredTriageQuestion(context: AiTrainingContext): string {
@@ -599,8 +600,27 @@ function enforceNaraTriage(turn: AiTurn, lead: Lead, history: ChatMessage[], con
   const askedBefore = hasTriageQuestionBeenAsked(history, context);
   const triageAttempts = assistantMessages(history)
     .filter((message) => looksLikeTriageQuestion(message, context)).length;
+  const canKeepGeneralPriceRange = asksCommercialValue(lastUser)
+    && !asksProtectedCommercialDetail(lastUser)
+    && isGeneralPriceRangeReply(turn.reply)
+    && !hasUngroundedMoney(turn.reply, history, context);
 
   if (!buyerConfirmed && !routed) {
+    if (canKeepGeneralPriceRange) {
+      turn.reply = ensureFirstTurnIntroduction(turn.reply, history, context);
+      turn.classification = 'frio';
+      turn.score = Math.min(turn.score, 20);
+      turn.stage = 'ia';
+      turn.summary = 'Contato recebeu somente uma faixa geral de preço; a intenção de compra ainda não foi confirmada.';
+      turn.next_action = 'Continuar a conversa sem liberar unidade específica, tabela, disponibilidade ou condição de pagamento até confirmar a intenção.';
+      turn.handoff = false;
+      turn.attachment_ids = [];
+      turn.extracted.budget = '';
+      turn.extracted.typology = '';
+      turn.extracted.deadline = '';
+      turn.extracted.decision_maker = '';
+      return turn;
+    }
     if (triageAttempts >= 2) {
       turn.reply = ensureFirstTurnIntroduction(
         'Vou encaminhar você para um atendente da Bossa; por favor, diga em uma frase qual é o assunto para o time continuar.',
