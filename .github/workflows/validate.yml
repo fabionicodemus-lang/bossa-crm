@@ -41,6 +41,8 @@ jobs:
         run: npm run test:meta-referral
       - name: Test Alma sales table
         run: npm run test:alma-table
+      - name: Test Flow sales table
+        run: npm run test:flow-table
       - name: Validate environment
         run: npm run check-env
       - name: Lint
