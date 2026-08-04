@@ -19,6 +19,9 @@ type FlowSalesTableRow = {
   keysAmount: number;
 };
 
+type LinkedProposalRow = { unit_id: string | null };
+type AppliedUnitRow = { id: string; unit_code: string; list_price: number | string };
+
 const flowRows = flowRowsData as FlowSalesTableRow[];
 const money = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 const SOURCE_FILE = 'Flow Aptos · tabela vigente maio/2026 (imagem enviada)';
@@ -71,6 +74,7 @@ export function FlowSalesTableImporter({
 
   if (!canEdit || !flow) return null;
   const flowId = flow.id;
+  const flowDefaultPaymentPlan = flow.default_payment_plan;
 
   async function applyTable() {
     if (missingTypologies.length > 0) {
@@ -118,7 +122,11 @@ export function FlowSalesTableImporter({
         const { data: linkedRows, error: linkedError } = await supabase.from('proposals')
           .select('unit_id').eq('organization_id', organizationId).in('unit_id', legacyIds);
         if (linkedError) throw linkedError;
-        const linkedIds = new Set((linkedRows ?? []).map((item) => item.unit_id).filter(Boolean));
+        const linkedIds = new Set<string>(
+          ((linkedRows ?? []) as LinkedProposalRow[])
+            .map((item) => item.unit_id)
+            .filter((id): id is string => Boolean(id)),
+        );
         const deletableIds = legacyIds.filter((id) => !linkedIds.has(id));
         if (deletableIds.length > 0) {
           const { error: deleteError } = await supabase.from('development_units')
@@ -170,7 +178,7 @@ export function FlowSalesTableImporter({
 
       const { error: developmentError } = await supabase.from('developments').update({
         default_payment_plan: {
-          ...(flow.default_payment_plan ?? {}),
+          ...(flowDefaultPaymentPlan ?? {}),
           currency: 'BRL',
           entry_percent: 20,
           installment_count: 60,
@@ -184,7 +192,8 @@ export function FlowSalesTableImporter({
       }).eq('id', flowId).eq('organization_id', organizationId);
       if (developmentError) throw developmentError;
 
-      const unit1601 = (data ?? []).find((item) => item.unit_code === '1601');
+      const appliedRows = (data ?? []) as AppliedUnitRow[];
+      const unit1601 = appliedRows.find((item) => item.unit_code === '1601');
       if (!unit1601 || Number(unit1601.list_price) !== 1_406_450) {
         throw new Error('A conferência final da unidade 1601 não retornou o valor esperado de R$ 1.406.450,00.');
       }
