@@ -138,30 +138,30 @@ async function sendSelectedFiles(args: {
     .map((id) => args.files.find((file) => file.id === id))
     .filter((file): file is AiFileOption => Boolean(file))
     .slice(0, 3);
-    const { provider, accessToken, phoneNumberId } = channelAccess(args.channel);
-    const destination = normalizeWaId(args.lead.phone ?? '');
-    if (!destination) return;
-  
-    for (const file of selected) {
-      try {
-        const { data: signed, error: signedError } = await args.admin.storage
-          .from(file.storage_bucket)
-          .createSignedUrl(file.storage_path, 3600);
-        if (signedError || !signed?.signedUrl) {
-          throw signedError ?? new Error('Não foi possível gerar o link temporário do arquivo.');
-        }
-  
-        const type = whatsappMediaType(file);
-        const result = await provider.sendMedia({
-          phoneNumberId,
-          accessToken,
-          to: destination,
-          type,
-          link: signed.signedUrl,
-          caption: type === 'audio' ? undefined : file.title,
-          filename: type === 'document' ? file.original_name : undefined,
-        });
-  
+  const { provider, accessToken, phoneNumberId } = channelAccess(args.channel);
+  const destination = normalizeWaId(args.lead.phone ?? '');
+  if (!destination) return;
+
+  for (const file of selected) {
+    try {
+      const { data: signed, error: signedError } = await args.admin.storage
+        .from(file.storage_bucket)
+        .createSignedUrl(file.storage_path, 3600);
+      if (signedError || !signed?.signedUrl) {
+        throw signedError ?? new Error('Não foi possível gerar o link temporário do arquivo.');
+      }
+
+      const type = whatsappMediaType(file);
+      const result = await provider.sendMedia({
+        phoneNumberId,
+        accessToken,
+        to: destination,
+        type,
+        link: signed.signedUrl,
+        caption: type === 'audio' ? undefined : file.title,
+        filename: type === 'document' ? file.original_name : undefined,
+      });
+
       await recordOutbound({
         admin: args.admin,
         channel: args.channel,
@@ -324,16 +324,42 @@ async function processConversation(args: {
 
   let offerAuditIds: string[] = [];
   if (lead.kind === 'cliente') {
+    try {
+      offerAuditIds = await prepareNaraOfferAudit(args.admin, {
+        organizationId: args.channel.organization_id,
+        leadId: lead.id,
+        conversationId: args.conversation.id,
+        reply,
+        commercial: context.commercial,
+      });
+    } catch (error) {
+      console.error('[nara offer audit prepare]', error);
+      await handleAiFailure({
+        admin: args.admin,
+        channel: args.channel,
+        conversation: args.conversation,
+        lead,
+        error,
+      });
+      return;
+    }
+  }
+
+  const { provider, accessToken, phoneNumberId } = channelAccess(args.channel);
+  let result: Awaited<ReturnType<typeof provider.sendText>>;
   try {
-    offerAuditIds = await prepareNaraOfferAudit(args.admin, {
-      organizationId: args.channel.organization_id,
-      leadId: lead.id,
-      conversationId: args.conversation.id,
-      reply,
-      commercial: context.commercial,
+    result = await provider.sendText({
+      phoneNumberId,
+      accessToken,
+      to: destination,
+      body: reply,
     });
   } catch (error) {
-    console.error('[nara offer audit prepare]', error);
+    try {
+      await markNaraOfferAuditFailed(args.admin, offerAuditIds, error);
+    } catch (auditError) {
+      console.error('[nara offer audit failed status]', auditError);
+    }
     await handleAiFailure({
       admin: args.admin,
       channel: args.channel,
@@ -343,40 +369,12 @@ async function processConversation(args: {
     });
     return;
   }
-  
-  }
 
-const { provider, accessToken, phoneNumberId } = channelAccess(args.channel);
-let result: Awaited<ReturnType<typeof provider.sendText>>;
-try {
-  result = await provider.sendText({
-    phoneNumberId,
-    accessToken,
-    to: destination,
-    body: reply,
-  });
-} catch (error) {
   try {
-    await markNaraOfferAuditFailed(args.admin, offerAuditIds, error);
-  } catch (auditError) {
-    console.error('[nara offer audit failed status]', auditError);
+    await markNaraOfferAuditSent(args.admin, offerAuditIds, result.messageId);
+  } catch (error) {
+    console.error('[nara offer audit sent status]', error);
   }
-  await handleAiFailure({
-    admin: args.admin,
-    channel: args.channel,
-    conversation: args.conversation,
-    lead,
-    error,
-  });
-  return;
-}
-
-try {
-  await markNaraOfferAuditSent(args.admin, offerAuditIds, result.messageId);
-} catch (error) {
-  console.error('[nara offer audit sent status]', error);
-}
-
   await recordOutbound({
     admin: args.admin,
     channel: args.channel,
