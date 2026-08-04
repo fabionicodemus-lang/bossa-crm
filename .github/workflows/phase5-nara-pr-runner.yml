@@ -96,12 +96,10 @@ jobs:
       - name: Gravar implementação validada
         shell: bash
         run: |
-          git checkout -- next-env.d.ts tsconfig.json || true
+          git checkout -- next-env.d.ts tsconfig.json .github/workflows/validate.yml || true
           rm -f tsconfig.tsbuildinfo
-          rm -f .github/workflows/phase5-nara-unit-queries.yml
-          rm -f .github/workflows/phase5-nara-pr-runner.yml
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add src/lib/nara-unit-queries.ts src/lib/ai.ts src/lib/whatsapp/webhookProcessor.ts src/app/api/ai-training/route.ts scripts/check-nara-unit-queries.mjs package.json .github/workflows/validate.yml .github/workflows/phase5-nara-unit-queries.yml .github/workflows/phase5-nara-pr-runner.yml
+          git add src/lib/nara-unit-queries.ts src/lib/ai.ts src/lib/whatsapp/webhookProcessor.ts src/app/api/ai-training/route.ts scripts/check-nara-unit-queries.mjs package.json
           git commit -m "Integra consultas de unidades e preços à Nara"
           git push origin HEAD:feature/nara-prompt-v3-phase-5
