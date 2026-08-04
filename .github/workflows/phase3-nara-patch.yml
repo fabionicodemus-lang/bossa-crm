@@ -31,6 +31,7 @@ jobs:
           python <<'PY'
           from pathlib import Path
           import json
+          import re
 
           path = Path('src/lib/ai.ts')
           source = path.read_text(encoding='utf-8')
@@ -41,25 +42,33 @@ jobs:
               raise SystemExit('Import base de ai.ts não encontrado.')
           source = source.replace(old_import, new_import, 1)
 
-          old_knowledge = """  const { general } = splitKnowledge(context.config?.knowledge);
-          const knowledge = recordText(general);"""
-          new_knowledge = """  const { general } = splitKnowledge(context.config?.knowledge);
-          const finalPrompt = extractNaraPrompt(context.config?.knowledge);
-          const generalKnowledge = { ...general };
-          delete generalKnowledge.prompt_final;
-          const knowledge = recordText(generalKnowledge);"""
-          if old_knowledge not in source:
+          pattern = re.compile(
+              r"(?P<indent>\s*)const \{ general \} = splitKnowledge\(context\.config\?\.knowledge\);\n"
+              r"(?P=indent)const knowledge = recordText\(general\);"
+          )
+          replacement = (
+              "\\g<indent>const { general } = splitKnowledge(context.config?.knowledge);\n"
+              "\\g<indent>const finalPrompt = extractNaraPrompt(context.config?.knowledge);\n"
+              "\\g<indent>const generalKnowledge = { ...general };\n"
+              "\\g<indent>delete generalKnowledge.prompt_final;\n"
+              "\\g<indent>const knowledge = recordText(generalKnowledge);"
+          )
+          source, count = pattern.subn(replacement, source, count=1)
+          if count != 1:
               raise SystemExit('Bloco de conhecimento do treinamento não encontrado.')
-          source = source.replace(old_knowledge, new_knowledge, 1)
 
-          old_parts = """  const parts = [
-              persona ? `PERSONALIDADE DEFINIDA PELO GESTOR:\\n${persona}` : '',"""
-          new_parts = """  const parts = [
-              finalPrompt ? `PROMPT FINAL DEFINIDO PELO GESTOR — CAMADA PRINCIPAL DE COMPORTAMENTO:\\n${finalPrompt}` : '',
-              persona ? `PERSONALIDADE DEFINIDA PELO GESTOR:\\n${persona}` : '',"""
-          if old_parts not in source:
+          parts_pattern = re.compile(
+              r"(?P<indent>\s*)const parts = \[\n"
+              r"(?P<itemindent>\s*)persona \? `PERSONALIDADE DEFINIDA PELO GESTOR:\\n\$\{persona\}` : '',"
+          )
+          parts_replacement = (
+              "\\g<indent>const parts = [\n"
+              "\\g<itemindent>finalPrompt ? `PROMPT FINAL DEFINIDO PELO GESTOR — CAMADA PRINCIPAL DE COMPORTAMENTO:\\n${finalPrompt}` : '',\n"
+              "\\g<itemindent>persona ? `PERSONALIDADE DEFINIDA PELO GESTOR:\\n${persona}` : '',"
+          )
+          source, count = parts_pattern.subn(parts_replacement, source, count=1)
+          if count != 1:
               raise SystemExit('Lista de instruções de treinamento não encontrada.')
-          source = source.replace(old_parts, new_parts, 1)
 
           triage_start = source.index('function triageInstructions(context: AiTrainingContext): string {')
           triage_end = source.index('\n\nfunction fileInstructions', triage_start)
@@ -146,6 +155,7 @@ jobs:
         shell: bash
         run: |
           rm .github/workflows/phase3-nara-patch.yml
+          rm -f docs/.phase3-trigger
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
