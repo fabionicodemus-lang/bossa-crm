@@ -108,6 +108,18 @@ const exactContext = await loadNaraCommercialTurnContext(client, 'org', lead, [
 ]);
 assert.equal(exactContext?.calls[0]?.name, 'consultar_apartamento');
 assert.equal(exactContext?.calls[0]?.result?.unidade, '901');
+const filteredContext = await loadNaraCommercialTurnContext(client, 'org', lead, [
+  { role: 'user', content: 'Quero 3 quartos no Flow com valor até R$ 1,02 milhão.' },
+]);
+assert.equal(filteredContext?.calls[0]?.name, 'buscar_apartamentos');
+assert.deepEqual(filteredContext?.calls[0]?.result.map((row) => row.unidade), ['1101']);
+
+const twoLimitsContext = await loadNaraCommercialTurnContext(client, 'org', lead, [
+  { role: 'user', content: 'No Flow, entrada até 195 mil e valor até R$ 1,2 milhão.' },
+]);
+assert.equal(twoLimitsContext?.calls[0]?.name, 'buscar_apartamentos');
+assert.deepEqual(twoLimitsContext?.calls[0]?.result.map((row) => row.unidade), ['901', '1001']);
+assert.ok(twoLimitsContext?.calls[0]?.result.every((row) => row.entrada <= 195000));
 
 const aiSource = await readFile(new URL('../src/lib/ai.ts', import.meta.url), 'utf8');
 const webhookSource = await readFile(new URL('../src/lib/whatsapp/webhookProcessor.ts', import.meta.url), 'utf8');

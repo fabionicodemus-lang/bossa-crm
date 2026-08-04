@@ -145,7 +145,9 @@ async function resolveDevelopment(
 
   const alias = target.includes('flow') ? 'flow' : target.includes('alma') ? 'alma' : target;
   return rows.find((row) => {
-    const candidates = [row.name, row.slug, row.code].map(normalizeText);
+    const candidates = [row.name, row.slug, row.code]
+      .map(normalizeText)
+      .filter(Boolean);
     return candidates.some((value) => value.includes(alias) || alias.includes(value));
   }) ?? null;
 }
@@ -393,14 +395,15 @@ function unitCodeFromMessage(message: string): string {
 }
 
 function numberAfter(message: string, expression: RegExp): number | null {
-  const match = normalizeText(message).match(expression)?.[1];
+  const match = normalizeText(message).match(expression)?.[1]?.trim();
   if (!match) return null;
-  const raw = match.replace(/\./g, '').replace(',', '.');
+  const amount = match.match(/(\d[\d.,]*)\s*(milhao|milhoes|mil)?/) ?? [];
+  const raw = String(amount[1] ?? '').replace(/\./g, '').replace(',', '.');
   const value = Number(raw);
   if (!Number.isFinite(value)) return null;
-  const normalized = normalizeText(message);
-  if (/milhao|milhoes/.test(normalized)) return value * 1_000_000;
-  if (/\bmil\b/.test(normalized)) return value * 1_000;
+  const unit = amount[2] ?? '';
+  if (unit === 'milhao' || unit === 'milhoes') return value * 1_000_000;
+  if (unit === 'mil') return value * 1_000;
   return value;
 }
 
@@ -411,13 +414,21 @@ function filtersFromMessage(enterprise: string, message: string): NaraApartmentF
   const exactFloor = normalized.match(/\b(?:andar|no)\s*(\d{1,2})\b/)?.[1];
   const aboveFloor = normalized.match(/\b(?:acima|a partir)\s+(?:do |de )?(\d{1,2})(?:o|º)?\s*andar\b/)?.[1];
   const belowFloor = normalized.match(/\b(?:ate|abaixo)\s+(?:o |do )?(\d{1,2})(?:o|º)?\s*andar\b/)?.[1];
+  const amountPattern = '(\\d[\\d.,]*\\s*(?:milhao|milhoes|mil)?)';
+  const valueByLabel = numberAfter(
+    message,
+    new RegExp(`\\b(?:valor|preco|orcamento|investimento)(?:\\s+maximo)?\\D{0,16}${amountPattern}`),
+  );
+  const genericValue = valueByLabel === null && !/\bentrada\b/.test(normalized)
+    ? numberAfter(message, new RegExp(`\\bate\\D{0,12}${amountPattern}`))
+    : null;
   return {
     empreendimento: enterprise,
     tipologia: suites ? `${suites} suítes` : bedrooms ? `${bedrooms} quartos` : normalized.includes('duplex') ? 'duplex' : null,
     andar_min: aboveFloor ? Number(aboveFloor) : exactFloor ? Number(exactFloor) : null,
     andar_max: belowFloor ? Number(belowFloor) : exactFloor ? Number(exactFloor) : null,
-    valor_max: numberAfter(message, /(?:valor|preco|ate)\D{0,12}(\d[\d.,]*)/),
-    entrada_max: numberAfter(message, /entrada\D{0,12}(\d[\d.,]*)/),
+    valor_max: valueByLabel ?? genericValue,
+    entrada_max: numberAfter(message, new RegExp(`\\bentrada\\D{0,16}${amountPattern}`)),
   };
 }
 
