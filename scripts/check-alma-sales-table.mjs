@@ -40,13 +40,13 @@ assert(unit2901?.sourceStatus === 'reservado' && cents(unit2901.listPrice) === 0
 const availableVgvCents = rows
   .filter((row) => row.sourceStatus === 'disponivel')
   .reduce((total, row) => total + cents(row.listPrice), 0);
-assert(availableVgvCents === 5_007_399_628, `VGV disponível divergente: ${(availableVgvCents / 100).toFixed(2)}.`);
+assert(availableVgvCents === 5_166_397_765, `VGV disponível divergente: ${(availableVgvCents / 100).toFixed(2)}.`);
 
 const unit901 = rows.find((row) => row.unitCode === '901');
-assert(cents(unit901?.listPrice) === 137_780_611, 'Valor atualizado da unidade 901 divergente.');
-assert(cents(unit901.listPrice * 0.15) === 20_667_092, 'Entrada da unidade 901 divergente.');
-assert(cents((unit901.listPrice * 0.32) / 80) === 551_122, 'Parcela mensal da unidade 901 divergente.');
-assert(cents((unit901.listPrice * 0.43) / 7) === 8_463_666, 'Reforço da unidade 901 divergente.');
-assert(cents(unit901.listPrice * 0.1) === 13_778_061, 'Chaves da unidade 901 divergentes.');
+assert(cents(unit901?.listPrice) === 137_783_686, 'Valor atualizado da unidade 901 divergente.');
+assert(cents(unit901.listPrice * 0.15) === 20_667_553, 'Entrada da unidade 901 divergente.');
+assert(cents((unit901.listPrice * 0.32) / 80) === 551_135, 'Parcela mensal da unidade 901 divergente.');
+assert(cents((unit901.listPrice * 0.43) / 7) === 8_463_855, 'Reforço da unidade 901 divergente.');
+assert(cents(unit901.listPrice * 0.1) === 13_778_369, 'Chaves da unidade 901 divergentes.');
 
-console.log('Tabela Alma validada: 48 unidades, 32 disponíveis, 11 reservadas, 5 permutantes e VGV de R$ 50.073.996,28.');
+console.log('Tabela Alma validada: 48 unidades, 32 disponíveis, 11 reservadas, 5 permutantes e VGV de R$ 51.663.977,65.');
