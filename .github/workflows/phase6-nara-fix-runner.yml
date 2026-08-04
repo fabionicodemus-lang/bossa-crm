@@ -59,7 +59,7 @@ jobs:
           section_start = script.index("old_send = dedent(r'''")
           section_end_marker = "webhook = webhook.replace(old_send, new_send, 1)\n"
           section_end = script.index(section_end_marker, section_start) + len(section_end_marker)
-          replacement = r'''send_start = "  const { provider, accessToken, phoneNumberId } = channelAccess(args.channel);\n  const result = await provider.sendText({"
+          replacement = r"""send_start = "  const { provider, accessToken, phoneNumberId } = channelAccess(args.channel);\n  const result = await provider.sendText({"
           record_marker = "  await recordOutbound({"
           send_position = webhook.index(send_start)
           record_position = webhook.index(record_marker, send_position)
@@ -118,7 +118,7 @@ jobs:
 
           ''')
           webhook = webhook[:send_position] + new_send + webhook[record_position:]
-          '''
+          """
           script = script[:section_start] + replacement + script[section_end:]
           script = script.replace(
               "assert.ok(webhookSource.indexOf('prepareNaraOfferAudit') < webhookSource.indexOf('provider.sendText'));",
