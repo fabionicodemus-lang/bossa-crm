@@ -1,4 +1,5 @@
 const MONEY_PATTERN = /R\$\s*\d[\d.\s]*(?:,\d{1,2})?|\b\d+(?:[.,]\d+)?\s*(?:milh(?:ao|ão|oes|ões)|mil)\b/giu;
+const NORMALIZED_MONEY_PATTERN = /r\$\s*\d[\d.\s]*(?:,\d{1,2})?|\b\d+(?:[.,]\d+)?\s*(?:milhao|milhoes|mil)\b/giu;
 
 function normalizePriceText(value: string): string {
   return value
@@ -10,8 +11,13 @@ function normalizePriceText(value: string): string {
 }
 
 function hasSpecificUnitReference(value: string): boolean {
+  const withoutMoney = value.replace(NORMALIZED_MONEY_PATTERN, ' ');
+  const hasBareCode = /\b\d{3,4}\b/.test(withoutMoney)
+    && /\b(preco|valor|quanto custa|unidade|apto|apartamento|disponibilidade|disponivel)\b/.test(value);
+
   return /\b(?:unidade|apto|apartamento)\s*(?:n(?:umero)?\s*)?\d{2,4}\b/.test(value)
-    || /\b\d{1,2}\s*(?:o|º)?\s*andar\b/.test(value);
+    || /\b\d{1,2}\s*(?:o|º)?\s*andar\b/.test(value)
+    || hasBareCode;
 }
 
 export function asksProtectedCommercialDetail(text: string): boolean {
