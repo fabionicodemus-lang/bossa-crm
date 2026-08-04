@@ -2,6 +2,7 @@ import { generateAiTurn, type AiFileOption } from '@/lib/ai';
 import { loadAiContext } from '@/lib/ai-context';
 import { recordAiUsage } from '@/lib/ai-usage';
 import { loadNaraCommercialTurnContext } from '@/lib/nara-unit-queries';
+import { markNaraOfferAuditFailed, markNaraOfferAuditSent, prepareNaraOfferAudit } from '@/lib/nara-offer-log';
 import { aiCanReply } from '@/lib/hybrid';
 import { mergeMetaAdAttribution } from '@/lib/meta-ad-attribution';
 import { applyHybridDecision } from '@/lib/hybrid-server';
@@ -320,13 +321,59 @@ async function processConversation(args: {
   const reply = turn.reply.trim();
   if (!destination || !reply) return;
 
-  const { provider, accessToken, phoneNumberId } = channelAccess(args.channel);
-  const result = await provider.sendText({
+
+let offerAuditIds: string[] = [];
+try {
+  offerAuditIds = await prepareNaraOfferAudit(args.admin, {
+    organizationId: args.channel.organization_id,
+    leadId: lead.id,
+    conversationId: args.conversation.id,
+    reply,
+    commercial: context.commercial,
+  });
+} catch (error) {
+  console.error('[nara offer audit prepare]', error);
+  await handleAiFailure({
+    admin: args.admin,
+    channel: args.channel,
+    conversation: args.conversation,
+    lead,
+    error,
+  });
+  return;
+}
+
+const { provider, accessToken, phoneNumberId } = channelAccess(args.channel);
+let result: Awaited<ReturnType<typeof provider.sendText>>;
+try {
+  result = await provider.sendText({
     phoneNumberId,
     accessToken,
     to: destination,
     body: reply,
   });
+} catch (error) {
+  try {
+    await markNaraOfferAuditFailed(args.admin, offerAuditIds, error);
+  } catch (auditError) {
+    console.error('[nara offer audit failed status]', auditError);
+  }
+  await handleAiFailure({
+    admin: args.admin,
+    channel: args.channel,
+    conversation: args.conversation,
+    lead,
+    error,
+  });
+  return;
+}
+
+try {
+  await markNaraOfferAuditSent(args.admin, offerAuditIds, result.messageId);
+} catch (error) {
+  console.error('[nara offer audit sent status]', error);
+}
+
   await recordOutbound({
     admin: args.admin,
     channel: args.channel,
@@ -342,6 +389,7 @@ async function processConversation(args: {
       ai_model: turn.model_used ?? null,
       ai_compacted: turn.compacted ?? false,
       ai_usage: turn.usage_records ?? [],
+      nara_offer_audit_ids: offerAuditIds,
     },
   });
 

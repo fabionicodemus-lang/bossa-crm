@@ -1,4 +1,4 @@
-import { generateAiTurn as generateCoreAiTurn } from './ai';
+import { enforceNaraReplyGuardrails, generateAiTurn as generateCoreAiTurn } from './ai';
 import type { AiTrainingContext, AiTurn } from './ai';
 import type { Lead } from './types';
 
@@ -135,5 +135,6 @@ export async function generateAiTurn(
 
   const turn = await generateCoreAiTurn(effectiveLead, history, context);
   if (!turn || lead.kind !== 'cliente') return turn;
-  return postProcessNaraTurn(turn, history);
+  const processed = postProcessNaraTurn(turn, history);
+  return enforceNaraReplyGuardrails(processed, effectiveLead, history, context);
 }

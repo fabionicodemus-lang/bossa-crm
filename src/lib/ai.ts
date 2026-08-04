@@ -158,6 +158,16 @@ export class OpenAiExhaustedError extends Error {
   }
 }
 
+export class NaraReplyGuardrailError extends Error {
+  readonly violations: string[];
+
+  constructor(violations: string[]) {
+    super(`A resposta da Nara não passou pelos guardrails: ${violations.join(', ')}.`);
+    this.name = 'NaraReplyGuardrailError';
+    this.violations = violations;
+  }
+}
+
 const CLIENT_CLASSIFICATIONS = ['frio', 'morno', 'quente', 'agendamento', 'sem_interesse'] as const;
 const CLIENT_STAGES = ['novo', 'ia', 'qualificado', 'agendado', 'negociacao', 'fechado'] as const;
 const BROKER_CLASSIFICATIONS = ['cadastrado', 'curioso', 'ativo', 'negociando', 'parceiro'] as const;
@@ -165,6 +175,8 @@ const BROKER_STAGES = ['n1', 'n2', 'n3', 'n4', 'n5'] as const;
 const LONG_CONTEXT_THRESHOLD = 272_000;
 const MAX_HISTORY_BEFORE_COMPACTION = 25;
 const RECENT_MESSAGES_TO_KEEP = 10;
+const NARA_REPLY_WORD_LIMIT = 45;
+const NARA_REPLY_REGENERATION_ATTEMPTS = 2;
 
 const NARA_TRIAGE_DEFAULTS: Record<string, string> = {
   triagem_objetivo: 'Identifique silenciosamente o tipo de contato ao longo da conversa, sem transformar a triagem em uma etapa visível antes de entregar valor.',
@@ -297,7 +309,7 @@ function triageInstructions(context: AiTrainingContext): string {
     .map(([key, value]) => `${key.replace('triagem_', '').replaceAll('_', ' ')}: ${value}`)
     .join('\n');
 
-  return `\n\nPROTEÇÕES DE TRIAGEM E ROTEAMENTO\n${configured}\n\nREGRAS OPERACIONAIS:\n- Na primeira resposta da conversa, cumprimente e apresente-se como Nara, da Bossa. Não diga espontaneamente que é IA.\n- Leia o histórico inteiro e avance a conversa. Nunca repita uma pergunta que o contato já respondeu nem envie a mesma mensagem duas vezes.\n- Faça a leitura do tipo de contato de forma silenciosa ao longo da conversa. Não transforme a triagem em uma etapa visível ou em um checklist obrigatório.\n- Quando a mensagem for compatível com interesse imobiliário, deixe o Prompt final conduzir a conversa naturalmente, sem criar um pedágio antes de entregar valor.\n- Um pedido isolado de preço, valor, tabela, menor apartamento, planta ou disponibilidade não confirma sozinho que o contato é comprador.\n- Quando houver retorno de faixa_empreendimento nas consultas comerciais deste turno, você pode informar somente a faixa geral mesmo sem intenção confirmada. Isso não libera qualificação, arquivos, tabela, unidade, disponibilidade ou condição específica.\n- Unidade, andar, disponibilidade, entrada, parcela e condição específica só podem ser informados quando a intenção de compra estiver confirmada e houver retorno correspondente da consulta comercial no mesmo turno.\n- Se a consulta comercial estiver vazia ou indisponível, não use valores lembrados: diga que o comercial confirmará a condição vigente.\n- Quando houver ambiguidade real entre possível comprador e outro tipo de atendimento, use a pergunta configurada uma única vez e aguarde, sem iniciar uma sequência fixa de perguntas.\n- Corretor, cliente atual, fornecedor, currículo, pós-venda, financeiro, assistência, reclamação ou assunto institucional não entra na qualificação da Nara. Nesses casos, acolha, resuma o pedido, use handoff=true, mantenha stage=ia e indique o setor ou canal correto em next_action.\n- Para spam ou contato sem relação com a Bossa, use sem_interesse e handoff=true.\n- Nunca use preços lembrados pelo modelo. Um valor só pode ser informado quando estiver explicitamente nas mensagens do contato, na base de conhecimento, ou no retorno das consultas comerciais do sistema no mesmo turno.\n- A resposta não deve mencionar internamente as palavras “triagem”, “classificação” ou “handoff” para o contato.`;
+  return `\n\nPROTEÇÕES DE TRIAGEM E ROTEAMENTO\n${configured}\n\nREGRAS OPERACIONAIS:\n- Na primeira resposta da conversa, cumprimente e apresente-se como Nara, da Bossa. Não diga espontaneamente que é IA.\n- Leia o histórico inteiro e avance a conversa. Nunca repita uma pergunta que o contato já respondeu nem envie a mesma mensagem duas vezes.\n- Faça a leitura do tipo de contato de forma silenciosa ao longo da conversa. Não transforme a triagem em uma etapa visível ou em um checklist obrigatório.\n- Quando a mensagem for compatível com interesse imobiliário, deixe o Prompt final conduzir a conversa naturalmente, sem criar um pedágio antes de entregar valor.\n- Um pedido isolado de preço, valor, tabela, menor apartamento, planta ou disponibilidade não confirma sozinho que o contato é comprador.\n- Quando houver retorno de faixa_empreendimento nas consultas comerciais deste turno, você pode informar somente a faixa geral mesmo sem intenção confirmada. Isso não libera qualificação, arquivos, tabela, unidade, disponibilidade ou condição específica.\n- Unidade, andar, disponibilidade, entrada, parcela e condição específica só podem ser informados quando a intenção de compra estiver confirmada e houver retorno correspondente da consulta comercial no mesmo turno.\n- Se a consulta comercial estiver vazia ou indisponível, não use valores lembrados: diga que o comercial confirmará a condição vigente.\n- Se a consulta comercial estiver bloqueada por perfil de corretor ou cliente atual, não informe nenhum preço: transfira para o Plantão ou pós-venda conforme indicado.\n- Quando houver ambiguidade real entre possível comprador e outro tipo de atendimento, use a pergunta configurada uma única vez e aguarde, sem iniciar uma sequência fixa de perguntas.\n- Corretor, cliente atual, fornecedor, currículo, pós-venda, financeiro, assistência, reclamação ou assunto institucional não entra na qualificação da Nara. Nesses casos, acolha, resuma o pedido, use handoff=true, mantenha stage=ia e indique o setor ou canal correto em next_action.\n- Para spam ou contato sem relação com a Bossa, use sem_interesse e handoff=true.\n- Nunca use preços lembrados pelo modelo. Um valor só pode ser informado quando estiver explicitamente nas mensagens do contato, na base de conhecimento, ou no retorno das consultas comerciais do sistema no mesmo turno.\n- A resposta não deve mencionar internamente as palavras “triagem”, “classificação” ou “handoff” para o contato.`;
 }
 
 function fileInstructions(files: AiFileOption[]): string {
@@ -520,7 +532,7 @@ function repeatedReply(reply: string, history: ChatMessage[]): boolean {
 }
 
 function moneyTokens(value: string): string[] {
-  return value.match(/R\$\s*\d[\d.\s]*(?:,\d{1,2})?|\b\d+(?:[.,]\d+)?\s*(?:milh(?:ao|ão|oes|ões)|mil)\b/giu) ?? [];
+  return value.match(/R\$\s*\d[\d.\s]*(?:,\d{1,2})?\s*(?:milh(?:ao|ão|oes|ões)|mil)?|\b\d+(?:[.,]\d+)?\s*(?:milh(?:ao|ão|oes|ões)|mil)\b/giu) ?? [];
 }
 
 function nextQualificationQuestion(history: ChatMessage[]): string {
@@ -586,6 +598,67 @@ function hasUngroundedMoney(reply: string, history: ChatMessage[], context: AiTr
     const key = moneyKey(token);
     return key && !sourceKeys.has(key);
   });
+}
+
+
+export function naraReplyWordCount(value: string): number {
+  return value.match(/[\p{L}\p{N}]+(?:['’.-][\p{L}\p{N}]+)*/gu)?.length ?? 0;
+}
+
+export function hasForbiddenScarcityClaim(value: string): boolean {
+  const normalized = normalizeText(value);
+  return /\b(acabou de ser (?:vendid[oa]|reservad[oa]|bloquead[oa])|acabou de (?:vender|reservar|bloquear)|foi (?:vendid[oa]|reservad[oa]) (?:agora|hoje|ha pouco))\b/.test(normalized);
+}
+
+export function naraReplyGuardrailViolations(value: string): string[] {
+  const violations: string[] = [];
+  if (!value.trim()) violations.push('resposta_vazia');
+  if (naraReplyWordCount(value) > NARA_REPLY_WORD_LIMIT) violations.push('mais_de_45_palavras');
+  if (hasForbiddenScarcityClaim(value)) violations.push('escassez_fabricada');
+  return violations;
+}
+
+function cleanedRewrittenReply(value: string): string {
+  const trimmed = value.trim();
+  const quoted = trimmed.match(/^["“](.*)["”]$/s)?.[1];
+  return (quoted ?? trimmed).trim();
+}
+
+export async function enforceNaraReplyGuardrails(
+  turn: AiTurn,
+  lead: Lead,
+  history: ChatMessage[],
+  context: AiTrainingContext,
+): Promise<AiTurn> {
+  turn.reply = ensureFirstTurnIntroduction(turn.reply, history, context);
+  let violations = naraReplyGuardrailViolations(turn.reply);
+  if (hasUngroundedMoney(turn.reply, history, context)) violations.push('valor_sem_fonte');
+  if (!violations.length) return turn;
+
+  for (let attempt = 0; attempt < NARA_REPLY_REGENERATION_ATTEMPTS; attempt += 1) {
+    const currentDraft = turn.reply;
+    const result = await runWithRetryAndFallback((model, fallbackUsed) => ({
+      model,
+      input: [
+        inputMessage('system', `Reescreva uma resposta de WhatsApp da Nara, da Bossa. Entregue somente o texto final, sem aspas e sem explicações. O texto completo deve ter no máximo ${NARA_REPLY_WORD_LIMIT} palavras; não corte no meio. Preserve apenas fatos e valores já presentes no rascunho. Não acrescente preço, unidade ou condição. Nunca diga que algo acabou de ser vendido, reservado ou bloqueado; diga apenas que não está disponível e ofereça verificar alternativas. Se houver valor sem fonte, remova-o. Mantenha no máximo uma pergunta.`),
+        inputMessage('system', `Última mensagem do contato: ${lastUserText(history) || 'não informada'}\nConsulta comercial válida deste turno: ${context.commercial?.source_text || 'nenhuma'}`),
+        inputMessage('user', `Motivos da revisão: ${violations.join(', ')}\nRascunho: ${currentDraft}`),
+      ],
+      requestKind: 'response',
+      compacted: Boolean(turn.compacted),
+      fallbackUsed,
+      maxOutputTokens: 240,
+      reasoningEffort: 'low',
+      verbosity: 'low',
+    }));
+    turn.usage_records = [...(turn.usage_records ?? []), result.usage];
+    turn.reply = ensureFirstTurnIntroduction(cleanedRewrittenReply(result.outputText), history, context);
+    violations = naraReplyGuardrailViolations(turn.reply);
+    if (hasUngroundedMoney(turn.reply, history, context)) violations.push('valor_sem_fonte');
+    if (!violations.length) return turn;
+  }
+
+  throw new NaraReplyGuardrailError(violations);
 }
 
 function normalizeClientDecision(turn: AiTurn): AiTurn {
@@ -971,9 +1044,11 @@ export async function generateAiTurn(
     finalTurn.usage_records = usageRecords;
     finalTurn.model_used = result.usage.model;
     finalTurn.compacted = compacted;
-    return finalTurn;
+    return lead.kind === 'cliente'
+      ? await enforceNaraReplyGuardrails(finalTurn, lead, effectiveHistory, context)
+      : finalTurn;
   } catch (error) {
-    if (error instanceof OpenAiExhaustedError) throw error;
+    if (error instanceof OpenAiExhaustedError || error instanceof NaraReplyGuardrailError) throw error;
     throw new Error('A resposta estruturada da OpenAI não pôde ser interpretada.');
   }
 }
