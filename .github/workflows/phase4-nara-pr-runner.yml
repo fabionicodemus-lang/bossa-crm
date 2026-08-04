@@ -74,7 +74,7 @@ jobs:
               raise SystemExit('Ponto de aplicação da triagem não encontrado.')
           ai_path.write_text(source, encoding='utf-8')
 
-          price_module = dedent(r'''\
+          price_module = dedent(r'''
           const MONEY_PATTERN = /R\$\s*\d[\d.\s]*(?:,\d{1,2})?|\b\d+(?:[.,]\d+)?\s*(?:milh(?:ao|ão|oes|ões)|mil)\b/giu;
 
           function normalizePriceText(value: string): string {
@@ -113,10 +113,10 @@ jobs:
 
             return !asksProtectedCommercialDetail(reply);
           }
-          ''')
+          ''').lstrip()
           Path('src/lib/nara-price-levels.ts').write_text(price_module, encoding='utf-8')
 
-          test = dedent(r'''\
+          test = dedent(r'''
           import assert from 'node:assert/strict';
           import { readFile } from 'node:fs/promises';
           import {
@@ -149,7 +149,7 @@ jobs:
           assert.match(source, /turn\.attachment_ids = \[\]/);
 
           console.log('Níveis de preço da Nara validados: faixa geral liberada e detalhes protegidos.');
-          ''')
+          ''').lstrip()
           Path('scripts/check-nara-price-levels.mjs').write_text(test, encoding='utf-8')
 
           package_path = Path('package.json')
