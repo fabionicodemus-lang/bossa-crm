@@ -9,6 +9,10 @@ import {
   type DevelopmentUnit,
 } from '@/components/DevelopmentsManager';
 import { DevelopmentLogosPanel, type DevelopmentLogoItem } from '@/components/DevelopmentLogosPanel';
+import {
+  SalesTablePrintPanel,
+  type SalesTablePrintDevelopment,
+} from '@/components/SalesTablePrintPanel';
 import { getCurrentContext } from '@/lib/auth';
 import { createClient } from '@/lib/supabase/server';
 
@@ -44,6 +48,11 @@ export default async function DevelopmentsPage() {
             initialDevelopments={developmentRows as DevelopmentLogoItem[]}
           />
           <div className="page-content" style={{ paddingBottom: 0 }}>
+            <SalesTablePrintPanel
+              developments={developmentRows as SalesTablePrintDevelopment[]}
+              typologies={typologyRows}
+              units={unitRows}
+            />
             <FlowSalesTableImporter
               organizationId={organizationId}
               canEdit={canEdit}
