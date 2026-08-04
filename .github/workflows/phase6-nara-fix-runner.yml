@@ -1,9 +1,11 @@
 name: Executar implementação corrigida da Fase 6
 
 on:
-  pull_request:
+  push:
     branches:
-      - main
+      - feature/nara-prompt-v3-phase-6
+    paths:
+      - .github/workflows/phase6-nara-fix-runner.yml
 
 permissions:
   contents: write
