@@ -118,7 +118,7 @@ jobs:
 
           ''')
           webhook = webhook[:send_position] + new_send + webhook[record_position:]
-'''
+          '''
           script = script[:section_start] + replacement + script[section_end:]
           script = script.replace(
               "assert.ok(webhookSource.indexOf('prepareNaraOfferAudit') < webhookSource.indexOf('provider.sendText'));",
