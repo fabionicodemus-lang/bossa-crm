@@ -85,6 +85,14 @@ jobs:
               raise SystemExit('Janela de aberturas repetidas não encontrada em ai-v120.ts.')
           v120_path.write_text(v120_source.replace(old_openings, new_openings, 1), encoding='utf-8')
 
+          acceptance_path = Path('scripts/check-nara-phase10.mjs')
+          acceptance_source = acceptance_path.read_text(encoding='utf-8')
+          old_acceptance = "  assert.equal(result.reply, reply);"
+          new_acceptance = "  assert.ok(result.reply.endsWith(reply));"
+          if old_acceptance not in acceptance_source:
+              raise SystemExit('Aceite rígido da resposta da unidade não encontrado.')
+          acceptance_path.write_text(acceptance_source.replace(old_acceptance, new_acceptance, 1), encoding='utf-8')
+
           package_path = Path('package.json')
           package_source = package_path.read_text(encoding='utf-8')
           replacements = {
