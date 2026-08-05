@@ -1,5 +1,3 @@
-import { AlmaSalesTableImporter } from '@/components/AlmaSalesTableImporter';
-import { FlowSalesTableImporter } from '@/components/FlowSalesTableImporter';
 import { PageTopbar } from '@/components/PageTopbar';
 import {
   DevelopmentsManager,
@@ -42,6 +40,14 @@ export default async function DevelopmentsPage() {
     {schemaError
       ? <div className="page-content"><div className="error-box">A estrutura deste módulo ainda não existe no Supabase. Execute as migrações 007 e 010 e atualize esta página.</div></div>
       : <>
+          <DevelopmentsManager
+            organizationId={organizationId}
+            canEdit={canEdit}
+            initialDevelopments={developmentRows as Development[]}
+            initialTypologies={typologyRows}
+            initialUnits={unitRows}
+            initialFiles={(filesResult.data ?? []) as DevelopmentFile[]}
+          />
           <DevelopmentLogosPanel
             organizationId={organizationId}
             canEdit={canEdit}
@@ -53,29 +59,7 @@ export default async function DevelopmentsPage() {
               typologies={typologyRows}
               units={unitRows}
             />
-            <FlowSalesTableImporter
-              organizationId={organizationId}
-              canEdit={canEdit}
-              developments={developmentRows as Development[]}
-              typologies={typologyRows}
-              units={unitRows}
-            />
-            <AlmaSalesTableImporter
-              organizationId={organizationId}
-              canEdit={canEdit}
-              developments={developmentRows as Development[]}
-              typologies={typologyRows}
-              units={unitRows}
-            />
           </div>
-          <DevelopmentsManager
-            organizationId={organizationId}
-            canEdit={canEdit}
-            initialDevelopments={developmentRows as Development[]}
-            initialTypologies={typologyRows}
-            initialUnits={unitRows}
-            initialFiles={(filesResult.data ?? []) as DevelopmentFile[]}
-          />
         </>}
   </>;
 }
