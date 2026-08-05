@@ -34,6 +34,19 @@ function hasPriorTriage(history: ChatMessage[]): boolean {
   return assistantMessages(history).some(looksLikeTriageQuestion);
 }
 
+export function naraReplyOpeningKey(value: string): string {
+  const firstClause = normalizeText(value.split(/[.!?]/, 1)[0] ?? '');
+  if (!firstClause) return '';
+  return firstClause.split(' ').slice(0, 4).join(' ');
+}
+
+function withoutRepeatedOpening(value: string): string {
+  const match = value.trim().match(/^[^.!?]+[.!?]\s*(.+)$/s);
+  if (!match?.[1]?.trim()) return '';
+  const remainder = match[1].trim();
+  return remainder.charAt(0).toLocaleUpperCase('pt-BR') + remainder.slice(1);
+}
+
 function applyConversationDecision(
   turn: AiTurn,
   values: {
@@ -59,9 +72,20 @@ function applyConversationDecision(
   return turn;
 }
 
-function postProcessNaraTurn(turn: AiTurn, history: ChatMessage[]): AiTurn {
+export function postProcessNaraTurn(turn: AiTurn, history: ChatMessage[]): AiTurn {
   const latest = normalizeText(lastUserText(history));
-  const priorReplies = assistantMessages(history).map(normalizeText);
+  const priorMessages = assistantMessages(history);
+  const priorReplies = priorMessages.map(normalizeText);
+
+  const asksIfRobot = /\b(voce e|vc e|e uma|eh uma)\s*(?:um |uma )?(?:robo|robot|ia|inteligencia artificial)|\bassistente digital\b/.test(latest);
+  if (asksIfRobot) {
+    return applyConversationDecision(turn, {
+      reply: 'Sou a assistente digital da Bossa, sim 🙂 Se preferir falar com uma pessoa, chamo alguém do time agora. Quer que eu faça isso?',
+      handoff: true,
+      summary: 'Contato perguntou se a Nara é uma inteligência artificial.',
+      nextAction: 'Oferecer passagem imediata para atendimento humano.',
+    });
+  }
 
   const asksAboutBossa = /\b(o que|oq|quem e|quem eh|como funciona|me fale sobre).*\bbossa\b/.test(latest)
     || /\bsobre a bossa\b/.test(latest);
@@ -100,6 +124,13 @@ function postProcessNaraTurn(turn: AiTurn, history: ChatMessage[]): AiTurn {
       summary: 'Contato ainda está avaliando e quer entender melhor antes de decidir.',
       nextAction: 'Apresentar informações introdutórias sem pressionar e descobrir o tema de maior interesse.',
     });
+  }
+
+  const currentOpening = naraReplyOpeningKey(turn.reply);
+  const priorOpenings = priorMessages.map(naraReplyOpeningKey).filter(Boolean);
+  if (currentOpening && priorOpenings.includes(currentOpening)) {
+    const rewritten = withoutRepeatedOpening(turn.reply);
+    if (rewritten) turn.reply = rewritten;
   }
 
   const normalizedReply = normalizeText(turn.reply);

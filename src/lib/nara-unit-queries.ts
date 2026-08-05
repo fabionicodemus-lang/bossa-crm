@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Lead } from './types';
+import { isAssistedSaleSignal, isBrokerRoutingSignal, isCurrentCustomerSignal } from './nara-contact-routing';
 
 type ChatMessage = { role: 'user' | 'assistant'; content: string };
 type JsonRecord = Record<string, unknown>;
@@ -79,7 +80,7 @@ export type NaraCommercialTurnContext = {
   calls: NaraCommercialCall[];
   source_text: string;
   error?: string;
-  blocked_reason?: 'corretor' | 'cliente_atual';
+  blocked_reason?: 'corretor' | 'cliente_atual' | 'venda_assistida';
 };
 
 const UNIT_SELECT = 'id,development_id,typology_id,unit_code,floor,list_price,entry_amount,installment_count,installment_amount,payment_plan,price_updated_at';
@@ -442,42 +443,36 @@ function asksForSpecificOptions(message: string): boolean {
 }
 
 
-function routingProfileText(value: string): string {
-  let normalized = normalizeText(value);
-  if (/\bnao sou (?:um |uma )?corretor(?:a)?\b/.test(normalized)) {
-    normalized = normalized.replace(/\b(corretor|corretora|imobiliaria|creci)\b/g, ' ');
-  }
-  if (/\bnao sou (?:um |uma )?cliente\b/.test(normalized)) {
-    normalized = normalized.replace(/\b(ja comprei|sou cliente|segunda via|boleto)\b/g, ' ');
-  }
-  return normalized.replace(/\s+/g, ' ').trim();
-}
-
 function blockedCommercialProfile(
   lead: Lead,
   history: ChatMessage[],
-): 'corretor' | 'cliente_atual' | null {
+): 'corretor' | 'cliente_atual' | 'venda_assistida' | null {
   if (lead.kind === 'corretor') return 'corretor';
   const userMessages = history
     .filter((item) => item.role === 'user')
-    .map((item) => routingProfileText(item.content));
-  const full = userMessages.join('\n');
-  const metadata = routingProfileText(JSON.stringify(lead.metadata ?? {}));
-  const brokerSelfIdentification = /\b(?:sou|trabalho como|atuo como|falo como)\s+(?:um |uma )?(?:corretor|corretora)\b/.test(full)
-    || /\b(?:minha|da nossa) imobiliaria\b/.test(full)
-    || /\b(?:meu )?creci\s*[-:]?\s*\d+/i.test(full)
-    || /\bperfil[_ ]?(?:de[_ ])?corretor\b/.test(metadata);
-  if (brokerSelfIdentification) return 'corretor';
-
-  const currentCustomerSignal = /\b(ja comprei|sou cliente|comprei com voces|segunda via|boleto|meu contrato|minha unidade|assistencia tecnica|pos-venda)\b/.test(full)
-    || /\b(?:cliente_atual|current_customer|pos_venda)\b/.test(metadata);
-  return currentCustomerSignal ? 'cliente_atual' : null;
+    .map((item) => item.content);
+  if (userMessages.some(isAssistedSaleSignal)) return 'venda_assistida';
+  if (userMessages.some(isBrokerRoutingSignal)) return 'corretor';
+  const metadata = JSON.stringify(lead.metadata ?? {});
+  if (isBrokerRoutingSignal(metadata)) return 'corretor';
+  if (userMessages.some(isCurrentCustomerSignal) || isCurrentCustomerSignal(metadata)) return 'cliente_atual';
+  return null;
 }
 
 function blockedCommercialContext(
-  reason: 'corretor' | 'cliente_atual',
+  reason: 'corretor' | 'cliente_atual' | 'venda_assistida',
   consultedAt: string,
 ): NaraCommercialTurnContext {
+  if (reason === 'venda_assistida') {
+    return {
+      consulted_at: consultedAt,
+      source_table: 'development_units',
+      calls: [],
+      blocked_reason: reason,
+      error: 'nara_price_disabled_for_assisted_sale',
+      source_text: 'CONSULTA COMERCIAL BLOQUEADA: o contato informou que veio indicado por corretor ou imobiliária. Não conduza venda direta nem informe preço, tabela, unidade ou disponibilidade. Registre a origem e encaminhe ao comercial.',
+    };
+  }
   if (reason === 'corretor') {
     return {
       consulted_at: consultedAt,
@@ -505,10 +500,11 @@ export async function loadNaraCommercialTurnContext(
   history: ChatMessage[],
 ): Promise<NaraCommercialTurnContext | null> {
   const latest = lastUserMessage(history);
-  if (!latest || !hasCommercialSignal(latest)) return null;
+  if (!latest) return null;
   const consultedAt = new Date().toISOString();
   const blockedReason = blockedCommercialProfile(lead, history);
   if (blockedReason) return blockedCommercialContext(blockedReason, consultedAt);
+  if (!hasCommercialSignal(latest)) return null;
   const calls: NaraCommercialCall[] = [];
 
   try {
