@@ -1,6 +1,7 @@
 import { generateAiTurn, type AiFileOption } from '@/lib/ai';
 import { loadAiContext } from '@/lib/ai-context';
 import { recordAiUsage } from '@/lib/ai-usage';
+import { loadNaraDynamicTurnContext } from '@/lib/nara-dynamic-context';
 import { loadNaraCommercialTurnContext } from '@/lib/nara-unit-queries';
 import { markNaraOfferAuditFailed, markNaraOfferAuditSent, prepareNaraOfferAudit } from '@/lib/nara-offer-log';
 import { aiCanReply } from '@/lib/hybrid';
@@ -254,12 +255,21 @@ async function processConversation(args: {
   }
 
   if (lead.kind === 'cliente') {
-    context.commercial = await loadNaraCommercialTurnContext(
-      args.admin,
-      args.channel.organization_id,
-      lead,
-      history,
-    );
+    const [commercial, dynamic] = await Promise.all([
+      loadNaraCommercialTurnContext(
+        args.admin,
+        args.channel.organization_id,
+        lead,
+        history,
+      ),
+      loadNaraDynamicTurnContext(
+        args.admin,
+        args.channel.organization_id,
+        lead.id,
+      ),
+    ]);
+    context.commercial = commercial;
+    context.dynamic = dynamic;
   }
 
   let turn;

@@ -16,7 +16,8 @@
     "test:nara-fixed-layer": "node scripts/check-nara-fixed-layer.mjs",
     "test:nara-price-levels": "node --experimental-strip-types scripts/check-nara-price-levels.mjs",
     "test:nara-unit-queries": "node --experimental-strip-types scripts/check-nara-unit-queries.mjs",
-    "test:nara-guardrails": "node --experimental-strip-types scripts/check-nara-guardrails.mjs"
+    "test:nara-guardrails": "node --experimental-strip-types scripts/check-nara-guardrails.mjs",
+    "test:nara-dynamic-context": "node --experimental-strip-types --experimental-loader ./scripts/ts-extension-loader.mjs scripts/check-nara-dynamic-context.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.3",
