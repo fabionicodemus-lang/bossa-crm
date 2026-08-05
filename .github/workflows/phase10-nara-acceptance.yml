@@ -42,6 +42,24 @@ jobs:
           node-version: 22
           cache: npm
 
+      - name: Corrigir ponto de aplicação
+        shell: bash
+        run: |
+          python <<'PY'
+          from pathlib import Path
+          path = Path('scripts/apply-nara-phase10.py')
+          source = path.read_text(encoding='utf-8')
+          old = '''replace_once(hybrid_server,
+          "        routed_to_kind: routedToBroker ? 'corretor' : null,\\n        stage_before:",
+          "        routed_to_kind: routedToBroker ? 'corretor' : null,\\n        sale_assisted: routedToAssistedSale,\\n        stage_before:")'''
+          new = '''replace_once(hybrid_server,
+          "        kind_after: routedToBroker ? 'corretor' : args.lead.kind,\\n        stage_before:",
+          "        kind_after: routedToBroker ? 'corretor' : args.lead.kind,\\n        sale_assisted: routedToAssistedSale,\\n        stage_before:")'''
+          if old not in source:
+              raise SystemExit('Bloco de correção da atividade não encontrado no aplicador.')
+          path.write_text(source.replace(old, new, 1), encoding='utf-8')
+          PY
+
       - name: Aplicar implementação
         run: python scripts/apply-nara-phase10.py
 
