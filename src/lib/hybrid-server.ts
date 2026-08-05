@@ -2,29 +2,12 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { AiTurn } from './ai';
 import { deriveHybridDecision, type HybridDecision } from './hybrid';
 import type { Lead } from './types';
+import { isAssistedSaleSignal, isBrokerRoutingSignal } from './nara-contact-routing';
 
 export type AdminClient = SupabaseClient;
 
 function changed(value: unknown, previous: unknown): boolean {
   return JSON.stringify(value ?? null) !== JSON.stringify(previous ?? null);
-}
-
-function normalize(value: string): string {
-  return value
-    .normalize('NFD')
-    .replace(/\p{Diacritic}/gu, '')
-    .toLocaleLowerCase('pt-BR')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-function explicitlyIdentifiesAsBroker(value: string): boolean {
-  const text = normalize(value);
-  if (/\b(nao sou|não sou) (?:um |uma )?corretor(?:a)?\b/.test(text)) return false;
-  return /\b(?:sou|trabalho como|atuo como|falo como) (?:um |uma )?corretor(?:a)?(?: de imoveis)?\b/.test(text)
-    || /\b(?:sou|trabalho|atuo) (?:em|numa|na) (?:uma )?imobiliaria\b/.test(text)
-    || /\bmeu creci\b/.test(text)
-    || /\bcorretor(?:a)? parceiro(?:a)?\b/.test(text);
 }
 
 function brokerRoutingDecision(base: HybridDecision, turn: AiTurn): HybridDecision {
@@ -52,6 +35,32 @@ function brokerRoutingDecision(base: HybridDecision, turn: AiTurn): HybridDecisi
   };
 }
 
+function assistedSaleDecision(base: HybridDecision, turn: AiTurn): HybridDecision {
+  const dueAt = new Date(Date.now() + 5 * 60_000).toISOString();
+  return {
+    ...base,
+    stage: 'passagem_pendente',
+    priorityClass: 'A1',
+    ownerMode: 'ai',
+    aiEnabled: true,
+    handoffRequired: true,
+    handoffReason: 'O contato informou que veio indicado por corretor ou imobiliária; a parceria precisa ser preservada.',
+    nextAction: 'Registrar o corretor e a imobiliária de origem e assumir o atendimento comercial sem condução direta pela Nara.',
+    nextActionType: 'venda_assistida',
+    nextActionDueAt: dueAt,
+    reactivationAt: null,
+    noteTitle: 'Nara identificou venda assistida por corretor',
+    noteDescription: turn.summary
+      ? `${turn.summary} A indicação do corretor deve ser registrada antes da continuidade comercial.`
+      : 'O contato veio indicado por corretor ou imobiliária e foi encaminhado para continuidade humana.',
+    taskTitle: 'Assumir venda assistida',
+    taskDescription: 'Registrar corretor e imobiliária de origem e continuar o atendimento preservando a parceria.',
+    taskPriority: 'urgent',
+    taskDueAt: dueAt,
+    taskDedupeKey: 'handoff:venda-assistida',
+  };
+}
+
 export async function applyHybridDecision(args: {
   admin: AdminClient;
   organizationId: string;
@@ -65,11 +74,16 @@ export async function applyHybridDecision(args: {
     turn: args.turn,
     lastUserMessage: args.lastUserMessage,
   });
+  const routedToAssistedSale = args.lead.kind === 'cliente'
+    && isAssistedSaleSignal(args.lastUserMessage);
   const routedToBroker = args.lead.kind === 'cliente'
-    && explicitlyIdentifiesAsBroker(args.lastUserMessage);
-  const decision = routedToBroker
-    ? brokerRoutingDecision(baseDecision, args.turn)
-    : baseDecision;
+    && !routedToAssistedSale
+    && isBrokerRoutingSignal(args.lastUserMessage);
+  const decision = routedToAssistedSale
+    ? assistedSaleDecision(baseDecision, args.turn)
+    : routedToBroker
+      ? brokerRoutingDecision(baseDecision, args.turn)
+      : baseDecision;
   const classification = routedToBroker ? 'cadastrado' : args.turn.classification;
   const now = new Date().toISOString();
   const metadata = {
@@ -79,6 +93,11 @@ export async function applyHybridDecision(args: {
       contact_kind_routed_to: 'corretor',
       contact_kind_routed_at: now,
       contact_kind_routed_reason: args.lastUserMessage,
+    } : {}),
+    ...(routedToAssistedSale ? {
+      sale_assisted: true,
+      sale_assisted_detected_at: now,
+      sale_assisted_source_message: args.lastUserMessage,
     } : {}),
     ai_extracted: {
       ...((args.lead.metadata?.ai_extracted && typeof args.lead.metadata.ai_extracted === 'object')
@@ -150,6 +169,7 @@ export async function applyHybridDecision(args: {
   }
 
   const shouldLog = routedToBroker
+    || routedToAssistedSale
     || changed(decision.stage, args.lead.stage)
     || changed(decision.priorityClass, args.lead.priority_class)
     || changed(classification, args.lead.ai_classification)
@@ -159,13 +179,18 @@ export async function applyHybridDecision(args: {
     await args.admin.from('activities').insert({
       organization_id: args.organizationId,
       lead_id: args.lead.id,
-      type: routedToBroker ? 'lead_direcionado_corretor' : 'analise_hibrida_ia',
+      type: routedToBroker
+        ? 'lead_direcionado_corretor'
+        : routedToAssistedSale
+          ? 'venda_assistida_identificada'
+          : 'analise_hibrida_ia',
       title: decision.noteTitle,
       description: decision.noteDescription,
       metadata: {
         source_message_id: args.sourceMessageId ?? null,
         kind_before: args.lead.kind,
         kind_after: routedToBroker ? 'corretor' : args.lead.kind,
+        sale_assisted: routedToAssistedSale,
         stage_before: args.lead.stage,
         stage_after: decision.stage,
         owner_mode: decision.ownerMode,
@@ -198,6 +223,7 @@ export async function applyHybridDecision(args: {
         priority_class: decision.priorityClass,
         stage: decision.stage,
         routed_to_kind: routedToBroker ? 'corretor' : null,
+        sale_assisted: routedToAssistedSale,
       },
     };
     const { data: existingTask } = await args.admin

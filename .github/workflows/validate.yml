@@ -59,6 +59,8 @@ jobs:
         run: npm run test:nara-phase8
       - name: Test Nara score and classification vocabulary
         run: npm run test:nara-phase9
+      - name: Test Nara final acceptance matrix
+        run: npm run test:nara-phase10
       - name: Validate environment
         run: npm run check-env
       - name: Lint

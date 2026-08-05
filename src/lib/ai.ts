@@ -1,4 +1,5 @@
 import { extractNaraPrompt } from './nara-prompt-config';
+import { isAssistedSaleSignal, isBrokerRoutingSignal, isCurrentCustomerSignal } from './nara-contact-routing';
 import type { NaraDynamicTurnContext } from './nara-dynamic-context';
 import { asksProtectedCommercialDetail, isGeneralPriceRangeReply } from './nara-price-levels';
 import type { NaraCommercialTurnContext } from './nara-unit-queries';
@@ -397,7 +398,7 @@ function assistantMessages(history: ChatMessage[]): string[] {
   return history.filter((item) => item.role === 'assistant').map((item) => item.content);
 }
 
-type OutsideBuyerDestination = 'plantao' | 'pos_venda' | 'equipe';
+type OutsideBuyerDestination = 'plantao' | 'pos_venda' | 'equipe' | 'venda_assistida';
 
 function routingText(value: string): string {
   let normalized = normalizeText(value);
@@ -411,18 +412,19 @@ function routingText(value: string): string {
 }
 
 function outsideBuyerDestination(history: ChatMessage[]): OutsideBuyerDestination | null {
-  const fullHistory = history
+  const userMessages = history
     .filter((item) => item.role === 'user')
-    .map((item) => routingText(item.content))
-    .join('\n');
+    .map((item) => item.content);
+  const fullHistory = userMessages.map(routingText).join('\n');
   const current = routingText(lastUserText(history));
 
-  if (/\b(corretor|corretora|imobiliaria|creci)\b/.test(fullHistory)) return 'plantao';
-  if (/\b(ja comprei|sou cliente|segunda via|boleto)\b/.test(fullHistory)) return 'pos_venda';
-  if (/\b(fornecedor|prestador|curriculo|vaga|trabalhar com voces|cobranca|imprensa)\b/.test(fullHistory)) return 'equipe';
+  if (userMessages.some(isAssistedSaleSignal)) return 'venda_assistida';
+  if (userMessages.some(isBrokerRoutingSignal)) return 'plantao';
+  if (userMessages.some(isCurrentCustomerSignal)) return 'pos_venda';
+  if (/(fornecedor|prestador|curriculo|vaga|trabalhar com voces|cobranca|imprensa)/.test(fullHistory)) return 'equipe';
 
-  const ambiguousSignal = /\b(entrega|chaves|contrato|pos-venda|assistencia)\b/.test(current);
-  const existingClientSignal = /\b(ja comprei|sou cliente|minha unidade|meu apartamento|comprei com voces|minha obra)\b/.test(current);
+  const ambiguousSignal = /(entrega|chaves|contrato|pos-venda|assistencia)/.test(current);
+  const existingClientSignal = /(ja comprei|sou cliente|minha unidade|meu apartamento|comprei com voces|minha obra)/.test(current);
   return ambiguousSignal && existingClientSignal ? 'pos_venda' : null;
 }
 
@@ -438,6 +440,9 @@ function outsideBuyerReply(history: ChatMessage[], context: AiTrainingContext): 
   const destination = outsideBuyerDestination(history);
   const current = routingText(lastUserText(history));
   const consultant = runtimeVariable(context, 'consultant_on_duty_name');
+  if (destination === 'venda_assistida') {
+    return 'Como você veio indicado por um corretor, vou registrar a parceria e passar seu atendimento ao comercial. Qual é o nome do corretor e da imobiliária?';
+  }
   if (destination === 'plantao') {
     const phone = runtimeVariable(context, 'partners_on_call_phone');
     if (phone) return `O Plantão da Bossa atende pelo ${phone}. Vou direcionar você${consultant ? ` para ${consultant}` : ''} continuar.`;
@@ -466,6 +471,7 @@ function outsideBuyerReply(history: ChatMessage[], context: AiTrainingContext): 
 function outsideBuyerSummary(history: ChatMessage[]): string {
   const destination = outsideBuyerDestination(history);
   if (destination === 'plantao') return 'Contato se identificou como corretor ou imobiliária e deve continuar pelo Plantão.';
+  if (destination === 'venda_assistida') return 'Possível comprador informou que veio indicado por corretor ou imobiliária; a venda deve preservar a parceria.';
   if (destination === 'pos_venda') return 'Contato indicou que já é cliente e precisa de atendimento de pós-venda.';
   return 'Contato precisa de atendimento da equipe responsável fora da esteira de compradores.';
 }
@@ -473,6 +479,7 @@ function outsideBuyerSummary(history: ChatMessage[]): string {
 function outsideBuyerNextAction(history: ChatMessage[]): string {
   const destination = outsideBuyerDestination(history);
   if (destination === 'plantao') return 'Continuar o atendimento pelo Plantão no pipeline de corretores.';
+  if (destination === 'venda_assistida') return 'Registrar o corretor e a imobiliária de origem e encaminhar ao comercial sem conduzir venda direta.';
   if (destination === 'pos_venda') return 'Encaminhar para o pós-venda e identificar o assunto informado pelo cliente.';
   return 'Encaminhar para a equipe humana responsável e identificar o assunto solicitado.';
 }
@@ -528,7 +535,7 @@ function hasExplicitBuyerIntent(lead: Lead, history: ChatMessage[], context: AiT
   if (contextualBuyerReply(history, context)) return true;
 
   const value = normalizeText(userText(history));
-  const strongIntent = /\b(para morar|quero morar|pretendo morar|moradia|para investir|quero investir|pretendo investir|investimento|renda com aluguel|para revenda|quero comprar|pretendo comprar|busco (?:um |uma )?(?:apartamento|imovel)|procuro (?:um |uma )?(?:apartamento|imovel)|tenho interesse(?: no| na| em)?|quero conhecer (?:o |a )?(?:flow|alma)|vi (?:um )?anuncio.*(?:flow|alma|apartamento|imovel|empreendimento)|quero saber mais.*empreendimento)\b/.test(value);
+  const strongIntent = /\b(para morar|quero morar|pretendo morar|moradia|para investir|quero investir|pretendo investir|investimento|renda com aluguel|para revenda|quero comprar|pretendo comprar|busco (?:um |uma )?(?:apartamento|imovel)|procuro (?:um |uma )?(?:apartamento|imovel)|tenho interesse(?: no| na| em)?|quero conhecer (?:o |a )?(?:flow|alma)|vi (?:um )?anuncio.*(?:flow|alma|apartamento|imovel|empreendimento)|vi (?:um )?anuncio(?: de voces| da bossa)?|quero saber mais.*empreendimento)\b/.test(value);
   if (!strongIntent) return false;
   const onlyCommercialQuestion = asksCommercialValue(value)
     && !/\b(morar|investir|investimento|comprar|tenho interesse|quero conhecer|vi (?:um )?anuncio)\b/.test(value);
@@ -630,6 +637,10 @@ export function naraReplyWordCount(value: string): number {
   return value.match(/[\p{L}\p{N}]+(?:['’.-][\p{L}\p{N}]+)*/gu)?.length ?? 0;
 }
 
+export function naraReplyQuestionCount(value: string): number {
+  return value.match(/\?/g)?.length ?? 0;
+}
+
 export function hasForbiddenScarcityClaim(value: string): boolean {
   const normalized = normalizeText(value);
   return /\b(acabou de ser (?:vendid[oa]|reservad[oa]|bloquead[oa])|acabou de (?:vender|reservar|bloquear)|foi (?:vendid[oa]|reservad[oa]) (?:agora|hoje|ha pouco))\b/.test(normalized);
@@ -639,6 +650,7 @@ export function naraReplyGuardrailViolations(value: string): string[] {
   const violations: string[] = [];
   if (!value.trim()) violations.push('resposta_vazia');
   if (naraReplyWordCount(value) > NARA_REPLY_WORD_LIMIT) violations.push('mais_de_45_palavras');
+  if (naraReplyQuestionCount(value) > 1) violations.push('mais_de_uma_pergunta');
   if (hasForbiddenScarcityClaim(value)) violations.push('escassez_fabricada');
   return violations;
 }
@@ -694,7 +706,7 @@ function normalizeClientDecision(turn: AiTurn): AiTurn {
   return turn;
 }
 
-function enforceNaraTriage(turn: AiTurn, lead: Lead, history: ChatMessage[], context: AiTrainingContext): AiTurn {
+export function enforceNaraTriage(turn: AiTurn, lead: Lead, history: ChatMessage[], context: AiTrainingContext): AiTurn {
   normalizeClientDecision(turn);
   const lastUser = lastUserText(history);
   const routed = routeOutsideBuyerProfile(history);
