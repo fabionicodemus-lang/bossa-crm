@@ -85,6 +85,27 @@ jobs:
               raise SystemExit('Janela de aberturas repetidas não encontrada em ai-v120.ts.')
           v120_path.write_text(v120_source.replace(old_openings, new_openings, 1), encoding='utf-8')
 
+          units_path = Path('src/lib/nara-unit-queries.ts')
+          units_source = units_path.read_text(encoding='utf-8')
+          old_order = """  const latest = lastUserMessage(history);
+          if (!latest || !hasCommercialSignal(latest)) return null;
+          const consultedAt = new Date().toISOString();
+          const blockedReason = blockedCommercialProfile(lead, history);
+          if (blockedReason) return blockedCommercialContext(blockedReason, consultedAt);
+          const calls: NaraCommercialCall[] = [];
+          """
+          new_order = """  const latest = lastUserMessage(history);
+          if (!latest) return null;
+          const consultedAt = new Date().toISOString();
+          const blockedReason = blockedCommercialProfile(lead, history);
+          if (blockedReason) return blockedCommercialContext(blockedReason, consultedAt);
+          if (!hasCommercialSignal(latest)) return null;
+          const calls: NaraCommercialCall[] = [];
+          """
+          if old_order not in units_source:
+              raise SystemExit('Ordem de bloqueio comercial não encontrada em nara-unit-queries.ts.')
+          units_path.write_text(units_source.replace(old_order, new_order, 1), encoding='utf-8')
+
           acceptance_path = Path('scripts/check-nara-phase10.mjs')
           acceptance_source = acceptance_path.read_text(encoding='utf-8')
           old_acceptance = "  assert.equal(result.reply, reply);"
