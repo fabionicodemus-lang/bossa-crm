@@ -90,11 +90,17 @@ jobs:
       - name: Gravar implementação validada
         shell: bash
         run: |
-          git checkout -- next-env.d.ts tsconfig.json || true
+          git checkout -- next-env.d.ts tsconfig.json .github/workflows/validate.yml || true
           rm -f tsconfig.tsbuildinfo
-          rm -f scripts/apply-nara-phase10.py scripts/postprocess-nara-phase10.py .github/workflows/phase10-nara-acceptance.yml
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
+          git add package.json \
+            docs/nara-phase10-acceptance.md \
+            scripts/check-nara-phase10.mjs \
+            src/lib/ai.ts \
+            src/lib/ai-v120.ts \
+            src/lib/hybrid-server.ts \
+            src/lib/nara-contact-routing.ts \
+            src/lib/nara-unit-queries.ts
           git commit -m "Valida os 20 casos finais da Nara"
           git push origin HEAD:feature/nara-prompt-v3-phase-10
