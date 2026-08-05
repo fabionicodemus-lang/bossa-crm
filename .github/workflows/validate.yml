@@ -53,6 +53,8 @@ jobs:
         run: npm run test:nara-unit-queries
       - name: Test Nara guardrails
         run: npm run test:nara-guardrails
+      - name: Test Nara dynamic context
+        run: npm run test:nara-dynamic-context
       - name: Validate environment
         run: npm run check-env
       - name: Lint
