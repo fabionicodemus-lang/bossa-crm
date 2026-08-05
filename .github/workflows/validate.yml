@@ -57,6 +57,8 @@ jobs:
         run: npm run test:nara-dynamic-context
       - name: Test Nara prompt versions and simulator diagnostics
         run: npm run test:nara-phase8
+      - name: Test Nara score and classification vocabulary
+        run: npm run test:nara-phase9
       - name: Validate environment
         run: npm run check-env
       - name: Lint
