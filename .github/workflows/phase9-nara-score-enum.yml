@@ -42,6 +42,16 @@ jobs:
           node-version: 22
           cache: npm
 
+      - name: Corrigir escapes do aplicador
+        shell: bash
+        run: |
+          python <<'PY'
+          from pathlib import Path
+          path = Path('scripts/apply-nara-phase9.py')
+          source = path.read_text(encoding='utf-8')
+          path.write_text(source.replace(r'\\`', r'\`'), encoding='utf-8')
+          PY
+
       - name: Aplicar implementação
         run: python scripts/apply-nara-phase9.py
 
