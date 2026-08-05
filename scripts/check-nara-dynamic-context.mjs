@@ -88,6 +88,7 @@ assert.match(dynamic.source_text, /R\$\s*900\.000,00/);
 assert.match(dynamic.source_text, /Texto efetivamente enviado/);
 assert.doesNotMatch(dynamic.source_text, /1001/);
 assert.match(dynamic.source_text, /não os apresente novamente como condição vigente/i);
+assert.match(dynamic.source_text, /\[PREENCHER\]/);
 
 const emptyState = {
   values: emptyNaraRuntimeVariables(),

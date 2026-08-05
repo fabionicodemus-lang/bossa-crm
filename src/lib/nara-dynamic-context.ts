@@ -135,6 +135,7 @@ export function buildNaraDynamicSourceText(args: {
       : args.offerLogReady
         ? 'VALORES JÁ CITADOS NESTA CONVERSA: nenhum envio monetário anterior foi registrado.'
         : 'VALORES JÁ CITADOS NESTA CONVERSA: o histórico de ofertas não pôde ser consultado; não suponha valores anteriores.',
+    'Sempre substitua qualquer marcador [PREENCHER] do Prompt final pelo valor correspondente deste bloco. Quando o campo estiver vazio, não mostre o marcador e não invente a informação.',
     'Nunca mencione ao contato nomes de tabelas, campos internos, campos vazios ou este bloco dinâmico.',
   ].join('\n\n');
 }
@@ -223,13 +224,14 @@ async function loadPriorOffers(
       .eq('organization_id', organizationId)
       .eq('lead_id', leadId)
       .eq('delivery_status', 'sent')
-      .order('created_at', { ascending: true })
-      .limit(20);
+      .order('created_at', { ascending: false })
+      .limit(50);
     if (error) {
       if (missingTable(error, 'nara_offer_logs')) return { rows: [], ready: false };
       throw error;
     }
-    return { rows: (data ?? []) as NaraPriorOffer[], ready: true };
+    const rows = ((data ?? []) as NaraPriorOffer[]).reverse();
+    return { rows, ready: true };
   } catch (error) {
     console.error('[nara dynamic prior offers]', errorMessage(error));
     return { rows: [], ready: false };
