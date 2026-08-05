@@ -42,7 +42,7 @@ jobs:
           node-version: 22
           cache: npm
 
-      - name: Corrigir ponto de aplicação
+      - name: Corrigir ponto de aplicação do motor híbrido
         shell: bash
         run: |
           python <<'PY'
@@ -56,78 +56,15 @@ jobs:
           "        kind_after: routedToBroker ? 'corretor' : args.lead.kind,\\n        stage_before:",
           "        kind_after: routedToBroker ? 'corretor' : args.lead.kind,\\n        sale_assisted: routedToAssistedSale,\\n        stage_before:")'''
           if old not in source:
-              raise SystemExit('Bloco de correção da atividade não encontrado no aplicador.')
+              raise SystemExit('Ponto de correção do motor híbrido não encontrado.')
           path.write_text(source.replace(old, new, 1), encoding='utf-8')
           PY
 
       - name: Aplicar implementação
         run: python scripts/apply-nara-phase10.py
 
-      - name: Corrigir código gerado e resolução dos testes
-        shell: bash
-        run: |
-          python <<'PY'
-          from pathlib import Path
-
-          ai_path = Path('src/lib/ai.ts')
-          ai_source = ai_path.read_text(encoding='utf-8')
-          broken = "const fullHistory = userMessages.map(routingText).join('\n');"
-          fixed = "const fullHistory = userMessages.map(routingText).join('\\n');"
-          if broken not in ai_source:
-              raise SystemExit('Quebra de linha gerada em ai.ts não encontrada.')
-          ai_path.write_text(ai_source.replace(broken, fixed, 1), encoding='utf-8')
-
-          v120_path = Path('src/lib/ai-v120.ts')
-          v120_source = v120_path.read_text(encoding='utf-8')
-          old_openings = "const priorOpenings = priorMessages.slice(-12).map(naraReplyOpeningKey).filter(Boolean);"
-          new_openings = "const priorOpenings = priorMessages.map(naraReplyOpeningKey).filter(Boolean);"
-          if old_openings not in v120_source:
-              raise SystemExit('Janela de aberturas repetidas não encontrada em ai-v120.ts.')
-          v120_path.write_text(v120_source.replace(old_openings, new_openings, 1), encoding='utf-8')
-
-          units_path = Path('src/lib/nara-unit-queries.ts')
-          units_source = units_path.read_text(encoding='utf-8')
-          old_order = """  const latest = lastUserMessage(history);
-          if (!latest || !hasCommercialSignal(latest)) return null;
-          const consultedAt = new Date().toISOString();
-          const blockedReason = blockedCommercialProfile(lead, history);
-          if (blockedReason) return blockedCommercialContext(blockedReason, consultedAt);
-          const calls: NaraCommercialCall[] = [];
-          """
-          new_order = """  const latest = lastUserMessage(history);
-          if (!latest) return null;
-          const consultedAt = new Date().toISOString();
-          const blockedReason = blockedCommercialProfile(lead, history);
-          if (blockedReason) return blockedCommercialContext(blockedReason, consultedAt);
-          if (!hasCommercialSignal(latest)) return null;
-          const calls: NaraCommercialCall[] = [];
-          """
-          if old_order not in units_source:
-              raise SystemExit('Ordem de bloqueio comercial não encontrada em nara-unit-queries.ts.')
-          units_path.write_text(units_source.replace(old_order, new_order, 1), encoding='utf-8')
-
-          acceptance_path = Path('scripts/check-nara-phase10.mjs')
-          acceptance_source = acceptance_path.read_text(encoding='utf-8')
-          old_acceptance = "  assert.equal(result.reply, reply);"
-          new_acceptance = "  assert.ok(result.reply.endsWith(reply));"
-          if old_acceptance not in acceptance_source:
-              raise SystemExit('Aceite rígido da resposta da unidade não encontrado.')
-          acceptance_path.write_text(acceptance_source.replace(old_acceptance, new_acceptance, 1), encoding='utf-8')
-
-          package_path = Path('package.json')
-          package_source = package_path.read_text(encoding='utf-8')
-          replacements = {
-            '"test:nara-unit-queries": "node --experimental-strip-types scripts/check-nara-unit-queries.mjs"':
-              '"test:nara-unit-queries": "node --experimental-strip-types --experimental-loader ./scripts/ts-extension-loader.mjs scripts/check-nara-unit-queries.mjs"',
-            '"test:nara-guardrails": "node --experimental-strip-types scripts/check-nara-guardrails.mjs"':
-              '"test:nara-guardrails": "node --experimental-strip-types --experimental-loader ./scripts/ts-extension-loader.mjs scripts/check-nara-guardrails.mjs"',
-          }
-          for old, new in replacements.items():
-              if old not in package_source:
-                  raise SystemExit(f'Script de teste não encontrado: {old}')
-              package_source = package_source.replace(old, new, 1)
-          package_path.write_text(package_source, encoding='utf-8')
-          PY
+      - name: Aplicar correções finais
+        run: python scripts/postprocess-nara-phase10.py
 
       - name: Instalar dependências
         run: npm ci --no-audit --no-fund
@@ -155,7 +92,7 @@ jobs:
         run: |
           git checkout -- next-env.d.ts tsconfig.json || true
           rm -f tsconfig.tsbuildinfo
-          rm -f scripts/apply-nara-phase10.py .github/workflows/phase10-nara-acceptance.yml
+          rm -f scripts/apply-nara-phase10.py scripts/postprocess-nara-phase10.py .github/workflows/phase10-nara-acceptance.yml
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
