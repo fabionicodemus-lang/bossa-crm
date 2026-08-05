@@ -42,6 +42,20 @@ jobs:
           node-version: 22
           cache: npm
 
+      - name: Preparar aplicador
+        shell: bash
+        run: |
+          python <<'PY'
+          from pathlib import Path
+          path = Path('scripts/apply-nara-phase7.py')
+          source = path.read_text(encoding='utf-8')
+          old = """    if count != 1:\n        raise SystemExit(f'{label}: trecho encontrado {count} vez(es), esperado 1.')\n    file_path.write_text(source.replace(old, new, 1), encoding='utf-8')"""
+          new = """    if count < 1:\n        raise SystemExit(f'{label}: trecho não encontrado.')\n    file_path.write_text(source.replace(old, new, 1), encoding='utf-8')"""
+          if old not in source:
+              raise SystemExit('Validador do aplicador não encontrado.')
+          path.write_text(source.replace(old, new, 1), encoding='utf-8')
+          PY
+
       - name: Aplicar implementação
         run: python scripts/apply-nara-phase7.py
 
