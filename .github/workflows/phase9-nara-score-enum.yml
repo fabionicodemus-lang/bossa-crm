@@ -55,6 +55,26 @@ jobs:
       - name: Aplicar implementação
         run: python scripts/apply-nara-phase9.py
 
+      - name: Preparar validação permanente da Fase 9
+        shell: bash
+        run: |
+          python <<'PY'
+          from pathlib import Path
+          path = Path('.github/workflows/validate.yml')
+          source = path.read_text(encoding='utf-8')
+          anchor = """      - name: Test Nara prompt versions and simulator diagnostics
+        run: npm run test:nara-phase8
+"""
+          addition = anchor + """      - name: Test Nara score and classification vocabulary
+        run: npm run test:nara-phase9
+"""
+          if 'test:nara-phase9' not in source:
+              if source.count(anchor) != 1:
+                  raise SystemExit('Ponto de inclusão do teste permanente não encontrado.')
+              source = source.replace(anchor, addition, 1)
+          path.write_text(source, encoding='utf-8')
+          PY
+
       - name: Instalar dependências
         run: npm ci --no-audit --no-fund
 
@@ -76,7 +96,7 @@ jobs:
       - name: Gravar implementação validada
         shell: bash
         run: |
-          git checkout -- next-env.d.ts tsconfig.json || true
+          git checkout -- next-env.d.ts tsconfig.json .github/workflows/validate.yml || true
           rm -f tsconfig.tsbuildinfo
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
