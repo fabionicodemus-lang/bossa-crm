@@ -3,9 +3,16 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { PageTopbar } from '@/components/PageTopbar';
+import {
+  emptyNaraRuntimeVariables,
+  NARA_RUNTIME_VARIABLE_FIELDS,
+  NARA_RUNTIME_VARIABLE_GROUPS,
+  type NaraRuntimeVariableKey,
+  type NaraRuntimeVariables,
+} from '@/lib/nara-runtime-variables';
 
 type Agent = 'nara' | 'plantao';
-type Tab = 'simulador' | 'persona' | 'base' | 'correcoes' | 'prompt';
+type Tab = 'simulador' | 'persona' | 'base' | 'correcoes' | 'variaveis' | 'prompt';
 type ChatRole = 'user' | 'assistant';
 type FeedbackMode = 'rewrite' | 'comment';
 
@@ -45,6 +52,14 @@ type SimulationResult = {
   stage: string;
   handoff: boolean;
   attachments: Array<{ id: string; title: string; category: string; original_name: string }>;
+};
+
+type RuntimeVariablesState = {
+  values: NaraRuntimeVariables;
+  missing: NaraRuntimeVariableKey[];
+  schema_ready: boolean;
+  updated_at: string | null;
+  error?: string;
 };
 
 const NARA_PROMPT_MARKER = '# PROMPT FINAL DA NARA';
@@ -263,6 +278,11 @@ export default function AgentTrainingPage() {
   const [error, setError] = useState('');
   const [ai, setAi] = useState<AiStatus | null>(null);
   const [lastSimulation, setLastSimulation] = useState<SimulationResult | null>(null);
+  const [runtimeVariables, setRuntimeVariables] = useState<NaraRuntimeVariables>(() => emptyNaraRuntimeVariables());
+  const [missingRuntimeVariables, setMissingRuntimeVariables] = useState<NaraRuntimeVariableKey[]>(() => NARA_RUNTIME_VARIABLE_FIELDS.map((field) => field.key));
+  const [runtimeVariablesSchemaReady, setRuntimeVariablesSchemaReady] = useState(true);
+  const [runtimeVariablesUpdatedAt, setRuntimeVariablesUpdatedAt] = useState<string | null>(null);
+  const [savingVariables, setSavingVariables] = useState(false);
 
   const scenarios = isNara ? naraScenarios : plantaoScenarios;
   const plantaoPrompt = useMemo(() => buildPlantaoPrompt(config, examples), [config, examples]);
@@ -271,6 +291,7 @@ export default function AgentTrainingPage() {
     ? [
         { key: 'simulador', label: '🎭 Simulador' },
         { key: 'correcoes', label: `✏️ Correções (${examples.length})` },
+        { key: 'variaveis', label: `⚙️ Variáveis${missingRuntimeVariables.length ? ` (${missingRuntimeVariables.length})` : ''}` },
         { key: 'prompt', label: '📄 Prompt final' },
       ]
     : [
@@ -299,13 +320,19 @@ export default function AgentTrainingPage() {
 
       try {
         const response = await fetch(`/api/ai-training?agent=${agent}`, { cache: 'no-store' });
-        const data = await readJson<{ config: AgentConfig; examples: TrainingExample[]; ai?: AiStatus }>(response);
+        const data = await readJson<{ config: AgentConfig; examples: TrainingExample[]; ai?: AiStatus; runtime_variables?: RuntimeVariablesState | null }>(response);
         if (cancelled) return;
         const loadedConfig = agent === 'nara' ? withNaraDefaults(data.config) : data.config;
         setConfig(loadedConfig);
         setPromptText(agent === 'nara' ? savedNaraPrompt(loadedConfig) || buildNaraPrompt(loadedConfig) : '');
         setExamples(data.examples);
         setAi(data.ai ?? null);
+        if (agent === 'nara' && data.runtime_variables) {
+          setRuntimeVariables(data.runtime_variables.values);
+          setMissingRuntimeVariables(data.runtime_variables.missing);
+          setRuntimeVariablesSchemaReady(data.runtime_variables.schema_ready);
+          setRuntimeVariablesUpdatedAt(data.runtime_variables.updated_at);
+        }
       } catch (caught) {
         if (!cancelled) setError(caught instanceof Error ? caught.message : 'Não foi possível carregar o treinamento.');
       } finally {
@@ -359,6 +386,37 @@ export default function AgentTrainingPage() {
       setError(caught instanceof Error ? caught.message : 'Não foi possível salvar.');
     } finally {
       setSaving(false);
+    }
+  }
+
+  function updateRuntimeVariable(key: NaraRuntimeVariableKey, value: string) {
+    setRuntimeVariables((current) => ({ ...current, [key]: value }));
+    setMissingRuntimeVariables((current) => value.trim()
+      ? current.filter((item) => item !== key)
+      : current.includes(key) ? current : [...current, key]);
+  }
+
+  async function saveRuntimeVariables() {
+    setSavingVariables(true);
+    setError('');
+    setNotice('');
+    try {
+      const data = await readJson<{ ok: boolean; runtime_variables: RuntimeVariablesState }>(await fetch('/api/ai-training', {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ agent: 'nara', action: 'variables', variables: runtimeVariables }),
+      }));
+      setRuntimeVariables(data.runtime_variables.values);
+      setMissingRuntimeVariables(data.runtime_variables.missing);
+      setRuntimeVariablesSchemaReady(data.runtime_variables.schema_ready);
+      setRuntimeVariablesUpdatedAt(data.runtime_variables.updated_at);
+      setNotice(data.runtime_variables.missing.length
+        ? `Variáveis salvas. Ainda existem ${data.runtime_variables.missing.length} campos vazios.`
+        : 'Variáveis operacionais salvas. O bloco dinâmico da Nara está completo.');
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Não foi possível salvar as variáveis.');
+    } finally {
+      setSavingVariables(false);
     }
   }
 
@@ -482,7 +540,13 @@ export default function AgentTrainingPage() {
     <PageTopbar
       title={title}
       subtitle={subtitle}
-      actions={<button className="btn btn-primary btn-sm" onClick={saveConfig} disabled={saving || loading}>{saving ? 'Salvando...' : isNara ? 'Salvar prompt da Nara' : 'Salvar treinamento'}</button>}
+      actions={<button
+        className="btn btn-primary btn-sm"
+        onClick={isNara && tab === 'variaveis' ? saveRuntimeVariables : saveConfig}
+        disabled={loading || (isNara && tab === 'variaveis' ? savingVariables || !runtimeVariablesSchemaReady : saving)}
+      >{isNara && tab === 'variaveis'
+          ? savingVariables ? 'Salvando...' : 'Salvar variáveis'
+          : saving ? 'Salvando...' : isNara ? 'Salvar prompt da Nara' : 'Salvar treinamento'}</button>}
     />
     <div className="page-content">
       {isNara
@@ -596,6 +660,56 @@ export default function AgentTrainingPage() {
           </div>)}</div>}
         </div>
       </section>}
+
+
+{!loading && isNara && tab === 'variaveis' && <div className="grid">
+  {!runtimeVariablesSchemaReady && <div className="error-box">
+    <strong>Estrutura pendente no Supabase:</strong> execute a migration <code>018_nara_dynamic_context.sql</code> antes de salvar estes campos.
+  </div>}
+  {runtimeVariablesSchemaReady && missingRuntimeVariables.length > 0 && <div className="info-box" style={{ borderColor: '#f59e0b' }}>
+    <strong>Atenção:</strong> {missingRuntimeVariables.length} de {NARA_RUNTIME_VARIABLE_FIELDS.length} campos estão vazios. A Nara não inventará contato, documento ou prazo ausente.
+  </div>}
+  {runtimeVariablesSchemaReady && missingRuntimeVariables.length === 0 && <div className="success-box">
+    Todos os campos operacionais obrigatórios estão preenchidos.
+  </div>}
+  {NARA_RUNTIME_VARIABLE_GROUPS.map((group) => {
+    const fields = NARA_RUNTIME_VARIABLE_FIELDS.filter((field) => field.group === group.key);
+    return <section className="card" key={group.key}>
+      <div className="card-head">
+        <div><h3>{group.label}</h3><small className="muted">{group.description}</small></div>
+        <span className="chip">{fields.filter((field) => runtimeVariables[field.key].trim()).length}/{fields.length}</span>
+      </div>
+      <div className="card-body grid grid-2">
+        {fields.map((field) => {
+          const missing = !runtimeVariables[field.key].trim();
+          return <div className="field" key={field.key}>
+            <label style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+              <span>{field.label}</span>
+              {missing && <span className="chip chip-orange">Pendente</span>}
+            </label>
+            <input
+              className="input"
+              value={runtimeVariables[field.key]}
+              placeholder={field.placeholder}
+              disabled={!runtimeVariablesSchemaReady}
+              onChange={(event) => updateRuntimeVariable(field.key, event.target.value)}
+            />
+          </div>;
+        })}
+      </div>
+    </section>;
+  })}
+  <section className="card">
+    <div className="card-body" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+      <div className="muted" style={{ fontSize: 12 }}>
+        {runtimeVariablesUpdatedAt ? `Última atualização: ${new Date(runtimeVariablesUpdatedAt).toLocaleString('pt-BR')}` : 'As variáveis ainda não foram salvas.'}
+      </div>
+      <button className="btn btn-primary" onClick={saveRuntimeVariables} disabled={savingVariables || !runtimeVariablesSchemaReady}>
+        {savingVariables ? 'Salvando...' : 'Salvar variáveis operacionais'}
+      </button>
+    </div>
+  </section>
+</div>}
 
       {!loading && tab === 'prompt' && <section className="card">
         <div className="card-head">

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { buildAiInstructions, generateAiTurn, type AiFileOption, type AiTrainingContext } from '@/lib/ai';
+import { loadNaraDynamicTurnContext, loadNaraRuntimeVariables, saveNaraRuntimeVariables } from '@/lib/nara-dynamic-context';
 import { loadNaraCommercialTurnContext } from '@/lib/nara-unit-queries';
 import {
   naraKnowledgeForEditor,
@@ -142,6 +143,8 @@ function databaseError(message: string) {
   const missing = message.includes('ai_agent_configs')
     || message.includes('ai_training_examples')
     || message.includes('ai_files')
+    || message.includes('nara_runtime_variables')
+    || message.includes('nara_offer_logs')
     || message.includes('schema cache');
   return NextResponse.json({
     error: missing
@@ -245,10 +248,13 @@ export async function GET(request: Request) {
   const agentRaw = new URL(request.url).searchParams.get('agent');
   if (!isAgent(agentRaw)) return NextResponse.json({ error: 'Agente inválido.' }, { status: 400 });
   try {
-    const [config, examples, files] = await Promise.all([
+    const [config, examples, files, runtimeVariables] = await Promise.all([
       loadConfig(context.supabase, context.organizationId, agentRaw),
       loadExamples(context.supabase, context.organizationId, agentRaw),
       loadFiles(context.supabase, context.organizationId, agentRaw),
+      agentRaw === 'nara'
+        ? loadNaraRuntimeVariables(context.supabase, context.organizationId)
+        : Promise.resolve(null),
     ]);
     const lead = syntheticLead(agentRaw, context.organizationId);
     const aiContext = makeAiContext(config, examples, files);
@@ -257,6 +263,7 @@ export async function GET(request: Request) {
       examples,
       prompt: buildAiInstructions(lead, aiContext),
       ai: aiStatus(files.length),
+      runtime_variables: runtimeVariables,
     });
   } catch (error) {
     return databaseError(error instanceof Error ? error.message : 'Erro ao carregar treinamento.');
@@ -266,9 +273,19 @@ export async function GET(request: Request) {
 export async function PUT(request: Request) {
   const context = await requireAdminContext();
   if ('response' in context) return context.response;
-  const body = await request.json().catch(() => ({})) as { agent?: unknown; config?: unknown };
+  const body = await request.json().catch(() => ({})) as { agent?: unknown; config?: unknown; action?: unknown; variables?: unknown };
   if (!isAgent(body.agent)) return NextResponse.json({ error: 'Agente inválido.' }, { status: 400 });
   try {
+    if (body.action === 'variables') {
+      if (body.agent !== 'nara') return NextResponse.json({ error: 'Variáveis operacionais existem somente para a Nara.' }, { status: 400 });
+      const runtimeVariables = await saveNaraRuntimeVariables(context.supabase, {
+        organizationId: context.organizationId,
+        userId: context.user.id,
+        values: body.variables,
+      });
+      return NextResponse.json({ ok: true, runtime_variables: runtimeVariables });
+    }
+
     const config = normalizeConfig(body.agent, body.config);
     const { error } = await context.supabase.from('ai_agent_configs').upsert({
       organization_id: context.organizationId,
@@ -355,12 +372,21 @@ export async function POST(request: Request) {
     const lead = syntheticLead(body.agent, context.organizationId, String(body.scenario ?? ''));
     const aiContext = makeAiContext(config, examples, files);
     if (body.agent === 'nara') {
-      aiContext.commercial = await loadNaraCommercialTurnContext(
-        context.supabase,
-        context.organizationId,
-        lead,
-        messages,
-      );
+      const [commercial, dynamic] = await Promise.all([
+        loadNaraCommercialTurnContext(
+          context.supabase,
+          context.organizationId,
+          lead,
+          messages,
+        ),
+        loadNaraDynamicTurnContext(
+          context.supabase,
+          context.organizationId,
+          null,
+        ),
+      ]);
+      aiContext.commercial = commercial;
+      aiContext.dynamic = dynamic;
     }
     const turn = await generateAiTurn(lead, messages, aiContext);
     if (!turn) {

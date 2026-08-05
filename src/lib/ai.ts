@@ -1,4 +1,5 @@
 import { extractNaraPrompt } from './nara-prompt-config';
+import type { NaraDynamicTurnContext } from './nara-dynamic-context';
 import { asksProtectedCommercialDetail, isGeneralPriceRangeReply } from './nara-price-levels';
 import type { NaraCommercialTurnContext } from './nara-unit-queries';
 import type { Lead } from './types';
@@ -31,6 +32,7 @@ export interface AiTrainingContext {
   }>;
   files?: AiFileOption[];
   commercial?: NaraCommercialTurnContext | null;
+  dynamic?: NaraDynamicTurnContext | null;
 }
 
 export interface AiUsageRecord {
@@ -348,7 +350,8 @@ export function buildAiInstructions(lead: Lead, context: AiTrainingContext): str
 
 function dynamicLeadContext(lead: Lead, context: AiTrainingContext): string {
   const commercial = context.commercial?.source_text?.trim();
-  return `DADOS DINÂMICOS DESTA CONVERSA:\nContato: ${lead.name}.\nEtapa atual: ${lead.stage}.\nDados atuais: ${JSON.stringify(lead.metadata || {})}.${commercial ? `\n\nCONSULTAS COMERCIAIS DESTE TURNO — FONTE ATUAL DO SISTEMA:\n${commercial}\n\nUse somente esses retornos para preço e disponibilidade neste turno. Nunca mencione nomes internos de função ou banco. Resultado vazio significa que não há unidade disponível comprovada para informar, sem explicar o motivo.` : ''}`;
+  const runtime = context.dynamic?.source_text?.trim();
+  return `DADOS DINÂMICOS DESTA CONVERSA:\nContato: ${lead.name}.\nEtapa atual: ${lead.stage}.\nDados atuais: ${JSON.stringify(lead.metadata || {})}.${runtime ? `\n\n${runtime}` : ''}${commercial ? `\n\nCONSULTAS COMERCIAIS DESTE TURNO — FONTE ATUAL DO SISTEMA:\n${commercial}\n\nUse somente esses retornos para preço e disponibilidade neste turno. Nunca mencione nomes internos de função ou banco. Resultado vazio significa que não há unidade disponível comprovada para informar, sem explicar o motivo.` : ''}`;
 }
 
 function inputMessage(role: InputMessage['role'], text: string, cacheBreakpoint = false): InputMessage {
@@ -427,14 +430,36 @@ function routeOutsideBuyerProfile(history: ChatMessage[]): boolean {
   return outsideBuyerDestination(history) !== null;
 }
 
-function outsideBuyerReply(history: ChatMessage[]): string {
+function runtimeVariable(context: AiTrainingContext, key: keyof NonNullable<AiTrainingContext['dynamic']>['values']): string {
+  return context.dynamic?.values[key]?.trim() ?? '';
+}
+
+function outsideBuyerReply(history: ChatMessage[], context: AiTrainingContext): string {
   const destination = outsideBuyerDestination(history);
+  const current = routingText(lastUserText(history));
+  const consultant = runtimeVariable(context, 'consultant_on_duty_name');
   if (destination === 'plantao') {
+    const phone = runtimeVariable(context, 'partners_on_call_phone');
+    if (phone) return `O Plantão da Bossa atende pelo ${phone}. Vou direcionar você${consultant ? ` para ${consultant}` : ''} continuar.`;
     return 'Vou direcionar você para o Plantão da Bossa, que atende corretores parceiros.';
   }
   if (destination === 'pos_venda') {
+    const phone = /\b(boleto|financeiro|parcela|pagamento)\b/.test(current)
+      ? runtimeVariable(context, 'finance_phone')
+      : /\b(assistencia|problema|defeito|manutencao)\b/.test(current)
+        ? runtimeVariable(context, 'technical_assistance_phone')
+        : runtimeVariable(context, 'post_construction_phone');
+    if (phone) return `O setor responsável atende pelo ${phone}. Vou encaminhar seu pedido para a equipe continuar.`;
     return 'Vou encaminhar você para o pós-venda da Bossa; por favor, diga em uma frase qual é o assunto para a equipe continuar.';
   }
+  const phone = /\b(fornecedor|prestador|suprimento)\b/.test(current)
+    ? runtimeVariable(context, 'supplies_phone')
+    : /\b(curriculo|vaga|trabalhar)\b/.test(current)
+      ? runtimeVariable(context, 'hr_phone')
+      : /\b(imprensa|marketing|midia)\b/.test(current)
+        ? runtimeVariable(context, 'marketing_phone')
+        : runtimeVariable(context, 'administration_phone');
+  if (phone) return `A equipe responsável atende pelo ${phone}. Vou encaminhar seu pedido para o setor correto.`;
   return 'Vou encaminhar você para a equipe responsável da Bossa; por favor, diga em uma frase qual atendimento precisa.';
 }
 
@@ -747,7 +772,7 @@ function enforceNaraTriage(turn: AiTurn, lead: Lead, history: ChatMessage[], con
     turn.score = Math.min(turn.score, 20);
     turn.summary = outsideBuyerSummary(history);
     turn.next_action = outsideBuyerNextAction(history);
-    turn.reply = ensureFirstTurnIntroduction(outsideBuyerReply(history), history, context);
+    turn.reply = ensureFirstTurnIntroduction(outsideBuyerReply(history, context), history, context);
     return turn;
   }
 
