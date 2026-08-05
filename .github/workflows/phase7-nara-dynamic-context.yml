@@ -59,6 +59,38 @@ jobs:
       - name: Aplicar implementação
         run: python scripts/apply-nara-phase7.py
 
+      - name: Preparar resolução TypeScript dos testes
+        shell: bash
+        run: |
+          cat > scripts/ts-extension-loader.mjs <<'EOF'
+          export async function resolve(specifier, context, nextResolve) {
+            try {
+              return await nextResolve(specifier, context);
+            } catch (error) {
+              const relative = specifier.startsWith('./') || specifier.startsWith('../');
+              const hasExtension = /\.[cm]?[jt]sx?$/.test(specifier);
+              if (relative && !hasExtension) {
+                for (const extension of ['.ts', '.tsx']) {
+                  try {
+                    return await nextResolve(`${specifier}${extension}`, context);
+                  } catch {
+                    // Tenta a próxima extensão.
+                  }
+                }
+              }
+              throw error;
+            }
+          }
+          EOF
+          python <<'PY'
+          from pathlib import Path
+          import json
+          path = Path('package.json')
+          package = json.loads(path.read_text(encoding='utf-8'))
+          package['scripts']['test:nara-dynamic-context'] = 'node --experimental-strip-types --experimental-loader ./scripts/ts-extension-loader.mjs scripts/check-nara-dynamic-context.mjs'
+          path.write_text(json.dumps(package, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+          PY
+
       - name: Instalar dependências
         run: npm ci --no-audit --no-fund
 
@@ -84,6 +116,6 @@ jobs:
           rm -f tsconfig.tsbuildinfo
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add package.json scripts/check-nara-dynamic-context.mjs src/lib/nara-runtime-variables.ts src/lib/nara-dynamic-context.ts src/lib/ai.ts src/lib/whatsapp/webhookProcessor.ts src/app/api/ai-training/route.ts 'src/app/(crm)/treinamento/[agente]/page.tsx' supabase/migrations/018_nara_dynamic_context.sql supabase/migrations/README.md
+          git add package.json scripts/check-nara-dynamic-context.mjs scripts/ts-extension-loader.mjs src/lib/nara-runtime-variables.ts src/lib/nara-dynamic-context.ts src/lib/ai.ts src/lib/whatsapp/webhookProcessor.ts src/app/api/ai-training/route.ts 'src/app/(crm)/treinamento/[agente]/page.tsx' supabase/migrations/018_nara_dynamic_context.sql supabase/migrations/README.md
           git commit -m "Adiciona bloco dinâmico e variáveis da Nara"
           git push origin HEAD:feature/nara-prompt-v3-phase-7
