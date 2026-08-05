@@ -62,12 +62,8 @@ jobs:
           from pathlib import Path
           path = Path('.github/workflows/validate.yml')
           source = path.read_text(encoding='utf-8')
-          anchor = """      - name: Test Nara prompt versions and simulator diagnostics
-        run: npm run test:nara-phase8
-"""
-          addition = anchor + """      - name: Test Nara score and classification vocabulary
-        run: npm run test:nara-phase9
-"""
+          anchor = "      - name: Test Nara prompt versions and simulator diagnostics\n        run: npm run test:nara-phase8\n"
+          addition = anchor + "      - name: Test Nara score and classification vocabulary\n        run: npm run test:nara-phase9\n"
           if 'test:nara-phase9' not in source:
               if source.count(anchor) != 1:
                   raise SystemExit('Ponto de inclusão do teste permanente não encontrado.')
