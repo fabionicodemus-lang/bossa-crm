@@ -18,7 +18,8 @@
     "test:nara-unit-queries": "node --experimental-strip-types scripts/check-nara-unit-queries.mjs",
     "test:nara-guardrails": "node --experimental-strip-types scripts/check-nara-guardrails.mjs",
     "test:nara-dynamic-context": "node --experimental-strip-types --experimental-loader ./scripts/ts-extension-loader.mjs scripts/check-nara-dynamic-context.mjs",
-    "test:nara-phase8": "node --experimental-strip-types --experimental-loader ./scripts/ts-extension-loader.mjs scripts/check-nara-phase8.mjs"
+    "test:nara-phase8": "node --experimental-strip-types --experimental-loader ./scripts/ts-extension-loader.mjs scripts/check-nara-phase8.mjs",
+    "test:nara-phase9": "node --experimental-strip-types --experimental-loader ./scripts/ts-extension-loader.mjs scripts/check-nara-phase9.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.3",
