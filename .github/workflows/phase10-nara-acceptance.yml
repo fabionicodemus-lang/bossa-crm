@@ -63,13 +63,22 @@ jobs:
       - name: Aplicar implementação
         run: python scripts/apply-nara-phase10.py
 
-      - name: Preparar resolução TypeScript dos testes
+      - name: Corrigir código gerado e resolução dos testes
         shell: bash
         run: |
           python <<'PY'
           from pathlib import Path
-          path = Path('package.json')
-          source = path.read_text(encoding='utf-8')
+
+          ai_path = Path('src/lib/ai.ts')
+          ai_source = ai_path.read_text(encoding='utf-8')
+          broken = "const fullHistory = userMessages.map(routingText).join('\n');"
+          fixed = "const fullHistory = userMessages.map(routingText).join('\\n');"
+          if broken not in ai_source:
+              raise SystemExit('Quebra de linha gerada em ai.ts não encontrada.')
+          ai_path.write_text(ai_source.replace(broken, fixed, 1), encoding='utf-8')
+
+          package_path = Path('package.json')
+          package_source = package_path.read_text(encoding='utf-8')
           replacements = {
             '"test:nara-unit-queries": "node --experimental-strip-types scripts/check-nara-unit-queries.mjs"':
               '"test:nara-unit-queries": "node --experimental-strip-types --experimental-loader ./scripts/ts-extension-loader.mjs scripts/check-nara-unit-queries.mjs"',
@@ -77,10 +86,10 @@ jobs:
               '"test:nara-guardrails": "node --experimental-strip-types --experimental-loader ./scripts/ts-extension-loader.mjs scripts/check-nara-guardrails.mjs"',
           }
           for old, new in replacements.items():
-              if old not in source:
+              if old not in package_source:
                   raise SystemExit(f'Script de teste não encontrado: {old}')
-              source = source.replace(old, new, 1)
-          path.write_text(source, encoding='utf-8')
+              package_source = package_source.replace(old, new, 1)
+          package_path.write_text(package_source, encoding='utf-8')
           PY
 
       - name: Instalar dependências
