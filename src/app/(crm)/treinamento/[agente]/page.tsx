@@ -12,7 +12,7 @@ import {
 } from '@/lib/nara-runtime-variables';
 
 type Agent = 'nara' | 'plantao';
-type Tab = 'simulador' | 'persona' | 'base' | 'correcoes' | 'variaveis' | 'prompt';
+type Tab = 'simulador' | 'persona' | 'base' | 'correcoes' | 'variaveis' | 'versoes' | 'prompt';
 type ChatRole = 'user' | 'assistant';
 type FeedbackMode = 'rewrite' | 'comment';
 
@@ -43,7 +43,7 @@ type TrainingExample = {
   created_at: string;
 };
 
-type ChatMessage = { role: ChatRole; content: string };
+type ChatMessage = { role: ChatRole; content: string; diagnostics?: SimulationResult };
 type Scenario = { key: string; name: string; first: string };
 type AiStatus = { configured: boolean; model: string; files_count: number; simulator_mode: string };
 type SimulationResult = {
@@ -51,7 +51,26 @@ type SimulationResult = {
   score: number;
   stage: string;
   handoff: boolean;
+  priority: string;
+  word_count: number;
+  price_consulted: boolean;
+  returned_units: string[];
+  consultation_names: string[];
   attachments: Array<{ id: string; title: string; category: string; original_name: string }>;
+};
+
+type PromptVersion = {
+  id: string;
+  prompt_text: string;
+  reason: 'save' | 'restore_backup';
+  restored_from_id: string | null;
+  created_at: string;
+};
+
+type PromptVersionsState = {
+  versions: PromptVersion[];
+  schema_ready: boolean;
+  error?: string;
 };
 
 type RuntimeVariablesState = {
@@ -283,6 +302,9 @@ export default function AgentTrainingPage() {
   const [runtimeVariablesSchemaReady, setRuntimeVariablesSchemaReady] = useState(true);
   const [runtimeVariablesUpdatedAt, setRuntimeVariablesUpdatedAt] = useState<string | null>(null);
   const [savingVariables, setSavingVariables] = useState(false);
+  const [promptVersions, setPromptVersions] = useState<PromptVersion[]>([]);
+  const [promptVersionsSchemaReady, setPromptVersionsSchemaReady] = useState(true);
+  const [restoringVersionId, setRestoringVersionId] = useState<string | null>(null);
 
   const scenarios = isNara ? naraScenarios : plantaoScenarios;
   const plantaoPrompt = useMemo(() => buildPlantaoPrompt(config, examples), [config, examples]);
@@ -292,6 +314,7 @@ export default function AgentTrainingPage() {
         { key: 'simulador', label: '🎭 Simulador' },
         { key: 'correcoes', label: `✏️ Correções (${examples.length})` },
         { key: 'variaveis', label: `⚙️ Variáveis${missingRuntimeVariables.length ? ` (${missingRuntimeVariables.length})` : ''}` },
+        { key: 'versoes', label: `🕘 Versões (${promptVersions.length})` },
         { key: 'prompt', label: '📄 Prompt final' },
       ]
     : [
@@ -320,7 +343,7 @@ export default function AgentTrainingPage() {
 
       try {
         const response = await fetch(`/api/ai-training?agent=${agent}`, { cache: 'no-store' });
-        const data = await readJson<{ config: AgentConfig; examples: TrainingExample[]; ai?: AiStatus; runtime_variables?: RuntimeVariablesState | null }>(response);
+        const data = await readJson<{ config: AgentConfig; examples: TrainingExample[]; ai?: AiStatus; runtime_variables?: RuntimeVariablesState | null; prompt_versions?: PromptVersionsState | null }>(response);
         if (cancelled) return;
         const loadedConfig = agent === 'nara' ? withNaraDefaults(data.config) : data.config;
         setConfig(loadedConfig);
@@ -332,6 +355,10 @@ export default function AgentTrainingPage() {
           setMissingRuntimeVariables(data.runtime_variables.missing);
           setRuntimeVariablesSchemaReady(data.runtime_variables.schema_ready);
           setRuntimeVariablesUpdatedAt(data.runtime_variables.updated_at);
+        }
+        if (agent === 'nara' && data.prompt_versions) {
+          setPromptVersions(data.prompt_versions.versions);
+          setPromptVersionsSchemaReady(data.prompt_versions.schema_ready);
         }
       } catch (caught) {
         if (!cancelled) setError(caught instanceof Error ? caught.message : 'Não foi possível carregar o treinamento.');
@@ -375,12 +402,16 @@ export default function AgentTrainingPage() {
     setNotice('');
     const configToSave = isNara ? naraConfigWithPrompt(config, promptText) : config;
     try {
-      await readJson<{ ok: boolean }>(await fetch('/api/ai-training', {
+      const data = await readJson<{ ok: boolean; config?: AgentConfig; prompt_versions?: PromptVersionsState }>(await fetch('/api/ai-training', {
         method: 'PUT',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ agent, config: configToSave }),
       }));
-      setConfig(configToSave);
+      setConfig(data.config ? withNaraDefaults(data.config) : configToSave);
+      if (data.prompt_versions) {
+        setPromptVersions(data.prompt_versions.versions);
+        setPromptVersionsSchemaReady(data.prompt_versions.schema_ready);
+      }
       setNotice(isNara ? 'Prompt final da Nara salvo e aplicado ao simulador e ao atendimento.' : 'Configuração salva. O prompt final foi atualizado.');
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Não foi possível salvar.');
@@ -420,6 +451,33 @@ export default function AgentTrainingPage() {
     }
   }
 
+
+async function restorePromptVersion(version: PromptVersion) {
+  const confirmed = window.confirm(`Restaurar a versão de ${new Date(version.created_at).toLocaleString('pt-BR')}? O prompt atual será guardado no histórico antes da troca.`);
+  if (!confirmed) return;
+  setRestoringVersionId(version.id);
+  setError('');
+  setNotice('');
+  try {
+    const data = await readJson<{ ok: boolean; config: AgentConfig; prompt_versions: PromptVersionsState }>(await fetch('/api/ai-training', {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ agent: 'nara', action: 'restore_prompt', version_id: version.id }),
+    }));
+    const restoredConfig = withNaraDefaults(data.config);
+    setConfig(restoredConfig);
+    setPromptText(savedNaraPrompt(restoredConfig) || buildNaraPrompt(restoredConfig));
+    setPromptVersions(data.prompt_versions.versions);
+    setPromptVersionsSchemaReady(data.prompt_versions.schema_ready);
+    setTab('prompt');
+    setNotice('Versão restaurada. O prompt anterior também foi preservado no histórico.');
+  } catch (caught) {
+    setError(caught instanceof Error ? caught.message : 'Não foi possível restaurar a versão.');
+  } finally {
+    setRestoringVersionId(null);
+  }
+}
+
   async function requestReply(nextMessages: ChatMessage[]) {
     setSending(true);
     setError('');
@@ -427,19 +485,25 @@ export default function AgentTrainingPage() {
     setLastSimulation(null);
     const simulationConfig = isNara ? naraConfigWithPrompt(config, promptText) : config;
     try {
-      const data = await readJson<{ reply: string; source: 'openai'; classification: string; score: number; stage: string; handoff: boolean; attachments: SimulationResult['attachments'] }>(await fetch('/api/ai-training', {
+      const data = await readJson<{ reply: string; source: 'openai'; classification: string; score: number; stage: string; handoff: boolean; priority: string; word_count: number; price_consulted: boolean; returned_units: string[]; consultation_names: string[]; attachments: SimulationResult['attachments'] }>(await fetch('/api/ai-training', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ action: 'simulate', agent, messages: nextMessages, scenario, config: simulationConfig }),
       }));
-      setMessages([...nextMessages, { role: 'assistant', content: data.reply }]);
-      setLastSimulation({
+      const diagnostics: SimulationResult = {
         classification: data.classification,
         score: data.score,
         stage: data.stage,
         handoff: data.handoff,
+        priority: data.priority,
+        word_count: data.word_count,
+        price_consulted: data.price_consulted,
+        returned_units: data.returned_units ?? [],
+        consultation_names: data.consultation_names ?? [],
         attachments: data.attachments ?? [],
-      });
+      };
+      setMessages([...nextMessages, { role: 'assistant', content: data.reply, diagnostics }]);
+      setLastSimulation(diagnostics);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Não foi possível gerar a resposta.');
     } finally {
@@ -540,10 +604,10 @@ export default function AgentTrainingPage() {
     <PageTopbar
       title={title}
       subtitle={subtitle}
-      actions={<button
+      actions={isNara && tab === 'versoes' ? null : <button
         className="btn btn-primary btn-sm"
         onClick={isNara && tab === 'variaveis' ? saveRuntimeVariables : saveConfig}
-        disabled={loading || (isNara && tab === 'variaveis' ? savingVariables || !runtimeVariablesSchemaReady : saving)}
+        disabled={loading || (isNara && tab === 'variaveis' ? savingVariables || !runtimeVariablesSchemaReady : saving || (isNara && !promptVersionsSchemaReady))}
       >{isNara && tab === 'variaveis'
           ? savingVariables ? 'Salvando...' : 'Salvar variáveis'
           : saving ? 'Salvando...' : isNara ? 'Salvar prompt da Nara' : 'Salvar treinamento'}</button>}
@@ -584,6 +648,16 @@ export default function AgentTrainingPage() {
             {messages.length === 0 && <div className="empty-state">Escolha um cenário para começar.</div>}
             {messages.map((message, index) => <div key={`${index}-${message.content.slice(0, 12)}`} className={`message ${message.role === 'user' ? 'in' : 'out'}`}>
               {message.content}
+              {message.role === 'assistant' && message.diagnostics && <div className="info-box" style={{ marginTop: 9, fontSize: 11 }}>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 6 }}>
+                  <span className="chip">{message.diagnostics.word_count} palavras</span>
+                  <span className="chip">Preço consultado: {message.diagnostics.price_consulted ? 'sim' : 'não'}</span>
+                  <span className="chip">Prioridade {message.diagnostics.priority}</span>
+                  <span className="chip">Score {message.diagnostics.score}</span>
+                </div>
+                <div><strong>Classificação:</strong> {message.diagnostics.classification} · <strong>Etapa:</strong> {message.diagnostics.stage}</div>
+                <div style={{ marginTop: 4 }}><strong>Unidades retornadas:</strong> {message.diagnostics.returned_units.length ? message.diagnostics.returned_units.join(', ') : 'nenhuma'}</div>
+              </div>}
               {message.role === 'assistant' && <div style={{ display: 'flex', gap: 6, marginTop: 9, flexWrap: 'wrap' }}>
                 <button className="btn btn-ghost btn-sm" onClick={() => saveExample(index, 'approved')}>👍 Aprovar</button>
                 <button className="btn btn-ghost btn-sm" onClick={() => openFeedback(index, 'rewrite', message.content)}>✏️ Reescrever resposta</button>
@@ -616,7 +690,11 @@ export default function AgentTrainingPage() {
           {lastSimulation && <section className="card"><div className="card-head"><h3>Decisão da IA</h3></div><div className="card-body info-list">
             <div className="info-row"><span>Classificação</span><strong>{lastSimulation.classification}</strong></div>
             <div className="info-row"><span>Pontuação</span><strong>{lastSimulation.score}</strong></div>
+            <div className="info-row"><span>Prioridade</span><strong>{lastSimulation.priority}</strong></div>
             <div className="info-row"><span>Etapa</span><strong>{lastSimulation.stage}</strong></div>
+            <div className="info-row"><span>Palavras</span><strong>{lastSimulation.word_count}</strong></div>
+            <div className="info-row"><span>Consultou preço</span><strong>{lastSimulation.price_consulted ? 'Sim' : 'Não'}</strong></div>
+            <div className="info-row"><span>Unidades retornadas</span><strong>{lastSimulation.returned_units.length ? lastSimulation.returned_units.join(', ') : 'Nenhuma'}</strong></div>
             <div className="info-row"><span>Transfere humano</span><strong>{lastSimulation.handoff ? 'Sim' : 'Não'}</strong></div>
             <div className="info-row"><span>Arquivos</span><strong>{lastSimulation.attachments.length}</strong></div>
           </div></section>}
@@ -711,6 +789,43 @@ export default function AgentTrainingPage() {
   </section>
 </div>}
 
+
+{!loading && isNara && tab === 'versoes' && <div className="grid">
+  {!promptVersionsSchemaReady && <div className="error-box">
+    <strong>Histórico indisponível:</strong> execute a migration <code>019_nara_prompt_versions.sql</code>. Enquanto ela não for aplicada, o salvamento do Prompt final fica bloqueado para evitar alterações sem versão de retorno.
+  </div>}
+  <section className="card">
+    <div className="card-head">
+      <div><h3>Versão atual</h3><small className="muted">Este é o texto que está ativo agora no atendimento e no simulador.</small></div>
+      <span className="chip chip-green">Atual</span>
+    </div>
+    <div className="card-body">
+      <div className="muted" style={{ fontSize: 12 }}>{promptText.length.toLocaleString('pt-BR')} caracteres</div>
+      <div style={{ marginTop: 8, whiteSpace: 'pre-wrap', maxHeight: 180, overflow: 'auto', fontSize: 12 }}>{promptText.slice(0, 1200)}{promptText.length > 1200 ? '…' : ''}</div>
+    </div>
+  </section>
+  <section className="card">
+    <div className="card-head"><div><h3>Histórico do Prompt final</h3><small className="muted">Cada salvamento guarda a versão anterior. Restaurar exige o clique no botão e uma confirmação.</small></div><span className="chip">{promptVersions.length} versões</span></div>
+    <div className="card-body">
+      {promptVersions.length === 0
+        ? <div className="empty-state">Nenhuma versão anterior foi registrada ainda.</div>
+        : <div className="timeline">{promptVersions.map((version, index) => <div className="timeline-item" key={version.id}>
+            <div className="timeline-icon">{index + 1}</div>
+            <div style={{ minWidth: 0, width: '100%' }}>
+              <div className="timeline-title">{new Date(version.created_at).toLocaleString('pt-BR')} · {version.reason === 'restore_backup' ? 'Backup antes de restauração' : 'Versão anterior salva'}</div>
+              <div className="timeline-desc" style={{ whiteSpace: 'pre-wrap', maxHeight: 120, overflow: 'auto' }}>{version.prompt_text.slice(0, 700)}{version.prompt_text.length > 700 ? '…' : ''}</div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'center', marginTop: 8, flexWrap: 'wrap' }}>
+                <span className="muted" style={{ fontSize: 11 }}>{version.prompt_text.length.toLocaleString('pt-BR')} caracteres</span>
+                <button className="btn btn-secondary btn-sm" onClick={() => restorePromptVersion(version)} disabled={restoringVersionId !== null || !promptVersionsSchemaReady}>
+                  {restoringVersionId === version.id ? 'Restaurando...' : 'Restaurar esta versão'}
+                </button>
+              </div>
+            </div>
+          </div>)}</div>}
+    </div>
+  </section>
+</div>}
+
       {!loading && tab === 'prompt' && <section className="card">
         <div className="card-head">
           <div><h3>Prompt final {isNara ? 'da Nara' : 'consolidado'}</h3>{isNara && <small className="muted">Edite diretamente aqui. Triagem, qualificação e primeira mensagem estão neste texto.</small>}</div>
@@ -728,7 +843,8 @@ export default function AgentTrainingPage() {
             onChange={isNara ? (event) => setPromptText(event.target.value) : undefined}
             spellCheck={false}
           />
-          {isNara && <div className="info-box" style={{ marginTop: 12 }}>O botão <strong>Salvar prompt</strong> grava este conteúdo. O simulador usa o texto que está aberto agora, mesmo antes de salvar.</div>}
+          {isNara && !promptVersionsSchemaReady && <div className="error-box" style={{ marginTop: 12 }}>Execute a migration <code>019_nara_prompt_versions.sql</code> para habilitar salvamento e restauração com histórico.</div>}
+          {isNara && <div className="info-box" style={{ marginTop: 12 }}>O botão <strong>Salvar prompt</strong> guarda automaticamente a versão anterior. O simulador usa o texto aberto agora, mesmo antes de salvar.</div>}
         </div>
       </section>}
     </div>
