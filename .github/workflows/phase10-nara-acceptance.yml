@@ -77,6 +77,14 @@ jobs:
               raise SystemExit('Quebra de linha gerada em ai.ts não encontrada.')
           ai_path.write_text(ai_source.replace(broken, fixed, 1), encoding='utf-8')
 
+          v120_path = Path('src/lib/ai-v120.ts')
+          v120_source = v120_path.read_text(encoding='utf-8')
+          old_openings = "const priorOpenings = priorMessages.slice(-12).map(naraReplyOpeningKey).filter(Boolean);"
+          new_openings = "const priorOpenings = priorMessages.map(naraReplyOpeningKey).filter(Boolean);"
+          if old_openings not in v120_source:
+              raise SystemExit('Janela de aberturas repetidas não encontrada em ai-v120.ts.')
+          v120_path.write_text(v120_source.replace(old_openings, new_openings, 1), encoding='utf-8')
+
           package_path = Path('package.json')
           package_source = package_path.read_text(encoding='utf-8')
           replacements = {
