@@ -63,6 +63,20 @@ jobs:
       - name: Aplicar implementação
         run: python scripts/apply-nara-phase10.py
 
+      - name: Preparar resolução TypeScript dos testes
+        shell: bash
+        run: |
+          python <<'PY'
+          from pathlib import Path
+          path = Path('package.json')
+          source = path.read_text(encoding='utf-8')
+          old = '"test:nara-unit-queries": "node --experimental-strip-types scripts/check-nara-unit-queries.mjs"'
+          new = '"test:nara-unit-queries": "node --experimental-strip-types --experimental-loader ./scripts/ts-extension-loader.mjs scripts/check-nara-unit-queries.mjs"'
+          if old not in source:
+              raise SystemExit('Script test:nara-unit-queries não encontrado.')
+          path.write_text(source.replace(old, new, 1), encoding='utf-8')
+          PY
+
       - name: Instalar dependências
         run: npm ci --no-audit --no-fund
 
