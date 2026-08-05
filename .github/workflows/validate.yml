@@ -55,6 +55,8 @@ jobs:
         run: npm run test:nara-guardrails
       - name: Test Nara dynamic context
         run: npm run test:nara-dynamic-context
+      - name: Test Nara prompt versions and simulator diagnostics
+        run: npm run test:nara-phase8
       - name: Validate environment
         run: npm run check-env
       - name: Lint

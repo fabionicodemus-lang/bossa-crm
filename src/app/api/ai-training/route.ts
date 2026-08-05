@@ -1,8 +1,12 @@
 import { NextResponse } from 'next/server';
 import { buildAiInstructions, generateAiTurn, type AiFileOption, type AiTrainingContext } from '@/lib/ai';
 import { loadNaraDynamicTurnContext, loadNaraRuntimeVariables, saveNaraRuntimeVariables } from '@/lib/nara-dynamic-context';
+import { deriveHybridDecision } from '@/lib/hybrid';
 import { loadNaraCommercialTurnContext } from '@/lib/nara-unit-queries';
+import { countReplyWords, naraCommercialDiagnostics } from '@/lib/nara-simulator-diagnostics';
+import { archiveNaraPromptVersion, getNaraPromptVersion, loadNaraPromptVersions } from '@/lib/nara-prompt-versions';
 import {
+  extractNaraPrompt,
   naraKnowledgeForEditor,
   normalizeNaraKnowledge,
 } from '@/lib/nara-prompt-config';
@@ -145,6 +149,7 @@ function databaseError(message: string) {
     || message.includes('ai_files')
     || message.includes('nara_runtime_variables')
     || message.includes('nara_offer_logs')
+    || message.includes('nara_prompt_versions')
     || message.includes('schema cache');
   return NextResponse.json({
     error: missing
@@ -248,12 +253,15 @@ export async function GET(request: Request) {
   const agentRaw = new URL(request.url).searchParams.get('agent');
   if (!isAgent(agentRaw)) return NextResponse.json({ error: 'Agente inválido.' }, { status: 400 });
   try {
-    const [config, examples, files, runtimeVariables] = await Promise.all([
+    const [config, examples, files, runtimeVariables, promptVersions] = await Promise.all([
       loadConfig(context.supabase, context.organizationId, agentRaw),
       loadExamples(context.supabase, context.organizationId, agentRaw),
       loadFiles(context.supabase, context.organizationId, agentRaw),
       agentRaw === 'nara'
         ? loadNaraRuntimeVariables(context.supabase, context.organizationId)
+        : Promise.resolve(null),
+      agentRaw === 'nara'
+        ? loadNaraPromptVersions(context.supabase, context.organizationId)
         : Promise.resolve(null),
     ]);
     const lead = syntheticLead(agentRaw, context.organizationId);
@@ -264,6 +272,7 @@ export async function GET(request: Request) {
       prompt: buildAiInstructions(lead, aiContext),
       ai: aiStatus(files.length),
       runtime_variables: runtimeVariables,
+      prompt_versions: promptVersions,
     });
   } catch (error) {
     return databaseError(error instanceof Error ? error.message : 'Erro ao carregar treinamento.');
@@ -273,9 +282,57 @@ export async function GET(request: Request) {
 export async function PUT(request: Request) {
   const context = await requireAdminContext();
   if ('response' in context) return context.response;
-  const body = await request.json().catch(() => ({})) as { agent?: unknown; config?: unknown; action?: unknown; variables?: unknown };
+  const body = await request.json().catch(() => ({})) as { agent?: unknown; config?: unknown; action?: unknown; variables?: unknown; version_id?: unknown };
   if (!isAgent(body.agent)) return NextResponse.json({ error: 'Agente inválido.' }, { status: 400 });
   try {
+
+if (body.action === 'restore_prompt') {
+  if (body.agent !== 'nara') return NextResponse.json({ error: 'Somente o Prompt final da Nara possui histórico.' }, { status: 400 });
+  const versionId = String(body.version_id ?? '').trim();
+  if (!versionId) return NextResponse.json({ error: 'Versão não informada.' }, { status: 400 });
+  const versionsState = await loadNaraPromptVersions(context.supabase, context.organizationId);
+  if (!versionsState.schema_ready) {
+    return NextResponse.json({ error: 'Execute a migration 019_nara_prompt_versions.sql antes de restaurar versões.' }, { status: 503 });
+  }
+  const selected = await getNaraPromptVersion(context.supabase, context.organizationId, versionId);
+  if (!selected) return NextResponse.json({ error: 'A versão escolhida não foi encontrada.' }, { status: 404 });
+
+  const currentConfig = await loadConfig(context.supabase, context.organizationId, 'nara');
+  const currentPrompt = extractNaraPrompt(currentConfig.knowledge);
+  if (currentPrompt && currentPrompt !== selected.prompt_text) {
+    await archiveNaraPromptVersion(context.supabase, {
+      organizationId: context.organizationId,
+      promptText: currentPrompt,
+      createdBy: context.user.id,
+      reason: 'restore_backup',
+      restoredFromId: selected.id,
+    });
+  }
+  const restoredConfig = normalizeConfig('nara', {
+    ...currentConfig,
+    first_message: '',
+    knowledge: {
+      ...currentConfig.knowledge,
+      prompt_final: selected.prompt_text,
+    },
+  });
+  const { error } = await context.supabase.from('ai_agent_configs').upsert({
+    organization_id: context.organizationId,
+    agent: 'nara',
+    persona: restoredConfig.persona,
+    knowledge: restoredConfig.knowledge,
+    first_message: restoredConfig.first_message,
+    active: restoredConfig.active,
+    updated_by: context.user.id,
+  }, { onConflict: 'organization_id,agent' });
+  if (error) throw error;
+  return NextResponse.json({
+    ok: true,
+    config: configForEditor('nara', restoredConfig),
+    prompt_versions: await loadNaraPromptVersions(context.supabase, context.organizationId),
+  });
+}
+
     if (body.action === 'variables') {
       if (body.agent !== 'nara') return NextResponse.json({ error: 'Variáveis operacionais existem somente para a Nara.' }, { status: 400 });
       const runtimeVariables = await saveNaraRuntimeVariables(context.supabase, {
@@ -287,6 +344,29 @@ export async function PUT(request: Request) {
     }
 
     const config = normalizeConfig(body.agent, body.config);
+    if (body.agent === 'nara') {
+      const versionsState = await loadNaraPromptVersions(context.supabase, context.organizationId);
+      if (!versionsState.schema_ready) {
+        return NextResponse.json({ error: 'Execute a migration 019_nara_prompt_versions.sql antes de salvar o Prompt final da Nara.' }, { status: 503 });
+      }
+      const { data: stored, error: storedError } = await context.supabase
+        .from('ai_agent_configs')
+        .select('knowledge')
+        .eq('organization_id', context.organizationId)
+        .eq('agent', 'nara')
+        .maybeSingle();
+      if (storedError) throw storedError;
+      const previousPrompt = extractNaraPrompt(stored?.knowledge);
+      const nextPrompt = extractNaraPrompt(config.knowledge);
+      if (previousPrompt && previousPrompt !== nextPrompt) {
+        await archiveNaraPromptVersion(context.supabase, {
+          organizationId: context.organizationId,
+          promptText: previousPrompt,
+          createdBy: context.user.id,
+          reason: 'save',
+        });
+      }
+    }
     const { error } = await context.supabase.from('ai_agent_configs').upsert({
       organization_id: context.organizationId,
       agent: body.agent,
@@ -297,6 +377,13 @@ export async function PUT(request: Request) {
       updated_by: context.user.id,
     }, { onConflict: 'organization_id,agent' });
     if (error) throw error;
+    if (body.agent === 'nara') {
+      return NextResponse.json({
+        ok: true,
+        config: configForEditor('nara', config),
+        prompt_versions: await loadNaraPromptVersions(context.supabase, context.organizationId),
+      });
+    }
     return NextResponse.json({ ok: true });
   } catch (error) {
     return databaseError(error instanceof Error ? error.message : 'Erro ao salvar treinamento.');
@@ -392,6 +479,9 @@ export async function POST(request: Request) {
     if (!turn) {
       return NextResponse.json({ error: 'A OpenAI não gerou uma resposta.' }, { status: 502 });
     }
+    const lastUserMessage = [...messages].reverse().find((item) => item.role === 'user')?.content ?? '';
+    const hybridDecision = deriveHybridDecision({ lead, turn, lastUserMessage });
+    const commercialDiagnostics = naraCommercialDiagnostics(aiContext.commercial);
     const attachments = turn.attachment_ids
       .map((id) => files.find((file) => file.id === id))
       .filter((file): file is AiFileOption => Boolean(file))
@@ -403,8 +493,13 @@ export async function POST(request: Request) {
       model: turn.model_used || process.env.OPENAI_MODEL || 'gpt-5-mini',
       classification: turn.classification,
       score: turn.score,
-      stage: turn.stage,
-      handoff: turn.handoff,
+      stage: hybridDecision.stage,
+      handoff: hybridDecision.handoffRequired,
+      priority: hybridDecision.priorityClass,
+      word_count: countReplyWords(turn.reply),
+      price_consulted: commercialDiagnostics.price_consulted,
+      returned_units: commercialDiagnostics.returned_units,
+      consultation_names: commercialDiagnostics.consultation_names,
       attachments,
     });
   } catch (error) {
