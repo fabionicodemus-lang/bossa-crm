@@ -43,6 +43,8 @@ jobs:
         run: npm run test:alma-table
       - name: Test Flow sales table
         run: npm run test:flow-table
+      - name: Test AI files commercial access
+        run: npm run test:ai-files-commercial
       - name: Test Nara prompt contract
         run: npm run test:nara-prompt
       - name: Test Nara fixed layer
