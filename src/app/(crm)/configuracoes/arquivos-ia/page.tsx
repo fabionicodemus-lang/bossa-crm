@@ -101,7 +101,7 @@ export default function AiFilesPage() {
           .limit(1)
           .maybeSingle();
         if (membershipError) throw membershipError;
-        if (!membership || membership.role !== 'admin') {
+        if (!membership || !['admin', 'comercial'].includes(membership.role)) {
           router.replace('/dashboard');
           return;
         }
