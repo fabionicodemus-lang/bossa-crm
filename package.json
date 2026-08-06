@@ -12,6 +12,7 @@
     "test:meta-referral": "node scripts/check-meta-referral.mjs",
     "test:alma-table": "node scripts/check-alma-sales-table.mjs",
     "test:flow-table": "node scripts/check-flow-sales-table.mjs",
+    "test:ai-files-commercial": "node scripts/check-ai-files-commercial-access.mjs",
     "test:nara-prompt": "node scripts/check-nara-prompt-contract.mjs",
     "test:nara-fixed-layer": "node scripts/check-nara-fixed-layer.mjs",
     "test:nara-price-levels": "node --experimental-strip-types scripts/check-nara-price-levels.mjs",
