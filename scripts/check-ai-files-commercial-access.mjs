@@ -5,10 +5,16 @@ const sidebar = readFileSync('src/components/Sidebar.tsx', 'utf8');
 const page = readFileSync('src/app/(crm)/configuracoes/arquivos-ia/page.tsx', 'utf8');
 const migration = readFileSync('supabase/migrations/021_ai_files_commercial_access.sql', 'utf8');
 
+const aiFilesMenu = sidebar.match(/\{ href: '\/configuracoes\/arquivos-ia'[^\n]+/u)?.[0] ?? '';
 assert.match(
-  sidebar,
-  /href: '\/configuracoes\/arquivos-ia'[\s\S]*roles: \['admin', 'comercial'\]/,
+  aiFilesMenu,
+  /roles: \['admin', 'comercial'\]/,
   'O menu Arquivos da IA deve ser visível para admin e comercial.',
+);
+assert.doesNotMatch(
+  aiFilesMenu,
+  /viewer/,
+  'Usuários viewer não devem receber acesso ao menu Arquivos da IA.',
 );
 
 assert.match(
