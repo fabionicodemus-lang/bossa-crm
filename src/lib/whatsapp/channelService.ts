@@ -112,19 +112,33 @@ export async function findChannelByPhoneNumberId(
   return data as WhatsAppChannelRecord | null;
 }
 
+export async function findConversation(
+  admin: AdminClient,
+  channelId: string,
+  contactWaId: string,
+) {
+  const { data, error } = await admin
+    .from('whatsapp_conversations')
+    .select('*')
+    .eq('channel_id', channelId)
+    .eq('contact_wa_id', contactWaId)
+    .maybeSingle();
+  if (error) throw error;
+  return data as WhatsAppConversationRecord | null;
+}
+
 export async function ensureConversation(args: {
   admin: AdminClient;
   channel: WhatsAppChannelRecord;
   contactWaId: string;
   leadId?: string | null;
+  // Quem já leu a conversa em paralelo com outra consulta entrega a linha aqui
+  // e economiza uma ida ao banco no caminho da mensagem recebida.
+  prefetched?: WhatsAppConversationRecord | null;
 }) {
-  const { data: current, error: readError } = await args.admin
-    .from('whatsapp_conversations')
-    .select('*')
-    .eq('channel_id', args.channel.id)
-    .eq('contact_wa_id', args.contactWaId)
-    .maybeSingle();
-  if (readError) throw readError;
+  const current = args.prefetched !== undefined
+    ? args.prefetched
+    : await findConversation(args.admin, args.channel.id, args.contactWaId);
 
   if (current) {
     if (args.leadId && current.lead_id !== args.leadId) {
@@ -160,12 +174,14 @@ export async function openConversationWindow(args: {
   contactWaId: string;
   leadId: string;
   receivedAt: string;
+  prefetched?: WhatsAppConversationRecord | null;
 }) {
   const current = await ensureConversation({
     admin: args.admin,
     channel: args.channel,
     contactWaId: args.contactWaId,
     leadId: args.leadId,
+    prefetched: args.prefetched,
   });
   const incomingTime = new Date(args.receivedAt).getTime();
   const currentTime = current.last_inbound_at

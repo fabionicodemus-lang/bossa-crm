@@ -14,6 +14,7 @@ import type { WhatsAppMediaType, WhatsAppMessageCategory } from '@/lib/whatsapp/
 import {
   channelAccess,
   findChannelByPhoneNumberId,
+  findConversation,
   openConversationWindow,
   type WhatsAppChannelRecord,
   type WhatsAppConversationRecord,
@@ -522,80 +523,101 @@ async function findOrCreateLead(args: {
   return leadData as Lead;
 }
 
-async function processInboundMessage(args: {
+type PersistedInbound = {
+  channel: WhatsAppChannelRecord;
+  conversation: WhatsAppConversationRecord;
+  leadId: string;
+  storedMessageId: string;
+};
+
+// Grava a mensagem recebida e devolve o contexto necessário para a IA responder
+// depois. A separação é proposital: a linha em `messages` é o que o Realtime
+// entrega para a tela, então nada de lento pode acontecer antes dela.
+async function persistInboundMessage(args: {
   admin: AdminClient;
   channel: WhatsAppChannelRecord;
   message: MetaWebhookMessage;
   contactWaId: string;
   contactName: string;
-}) {
+}): Promise<PersistedInbound | null> {
   const inboundWamid = String(args.message.id ?? '').trim();
-  if (!inboundWamid) return;
+  if (!inboundWamid) return null;
 
   const waId = normalizeWaId(String(args.message.from ?? args.contactWaId));
-  if (!waId) return;
+  if (!waId) return null;
 
   const createdAt = metaTimestamp(args.message.timestamp);
-  const lead = await findOrCreateLead({
-    admin: args.admin,
-    channel: args.channel,
-    waId,
-    contactName: args.contactName,
-    receivedAt: createdAt,
-    referral: args.message.referral,
-  });
+  // Lead e conversa são procurados pelo mesmo contato, mas por chaves
+  // diferentes: dá para buscar os dois de uma vez e só depois reconciliar.
+  const [lead, existingConversation] = await Promise.all([
+    findOrCreateLead({
+      admin: args.admin,
+      channel: args.channel,
+      waId,
+      contactName: args.contactName,
+      receivedAt: createdAt,
+      referral: args.message.referral,
+    }),
+    findConversation(args.admin, args.channel.id, waId),
+  ]);
   const conversation = await openConversationWindow({
     admin: args.admin,
     channel: args.channel,
     contactWaId: waId,
     leadId: lead.id,
     receivedAt: createdAt,
+    prefetched: existingConversation,
   });
   const body = messageBody(args.message);
 
-  const { data: storedTransport, error: transportError } = await args.admin
-    .from('whatsapp_messages')
-    .upsert({
-      organization_id: args.channel.organization_id,
-      channel_id: args.channel.id,
-      conversation_id: conversation.id,
-      lead_id: lead.id,
-      wamid: inboundWamid,
-      direction: 'in',
-      sender_kind: 'lead',
-      type: args.message.type || 'unknown',
-      body,
-      payload: args.message,
-      status: 'received',
-      category: null,
-      sent_at: createdAt,
-      created_at: createdAt,
-    }, { onConflict: 'wamid', ignoreDuplicates: true })
-    .select('id')
-    .maybeSingle();
-  if (transportError) throw transportError;
-  if (!storedTransport) return;
+  // As duas gravações são independentes e cada uma tem sua própria chave de
+  // deduplicação, então vão juntas para tirar uma ida ao banco do caminho.
+  const [transportResult, messageResult] = await Promise.all([
+    args.admin
+      .from('whatsapp_messages')
+      .upsert({
+        organization_id: args.channel.organization_id,
+        channel_id: args.channel.id,
+        conversation_id: conversation.id,
+        lead_id: lead.id,
+        wamid: inboundWamid,
+        direction: 'in',
+        sender_kind: 'lead',
+        type: args.message.type || 'unknown',
+        body,
+        payload: args.message,
+        status: 'received',
+        category: null,
+        sent_at: createdAt,
+        created_at: createdAt,
+      }, { onConflict: 'wamid', ignoreDuplicates: true })
+      .select('id')
+      .maybeSingle(),
+    args.admin
+      .from('messages')
+      .upsert({
+        organization_id: args.channel.organization_id,
+        lead_id: lead.id,
+        whatsapp_connection_id: args.channel.legacy_connection_id ?? args.channel.id,
+        whatsapp_channel_id: args.channel.id,
+        whatsapp_conversation_id: conversation.id,
+        direction: 'in',
+        sender_kind: 'lead',
+        body,
+        status: 'received',
+        whatsapp_message_id: inboundWamid,
+        raw_payload: args.message,
+        created_at: createdAt,
+      }, { onConflict: 'whatsapp_message_id', ignoreDuplicates: true })
+      .select('id')
+      .maybeSingle(),
+  ]);
+  if (transportResult.error) throw transportResult.error;
+  if (messageResult.error) throw messageResult.error;
 
-  const { data: storedMessage, error: messageError } = await args.admin
-    .from('messages')
-    .upsert({
-      organization_id: args.channel.organization_id,
-      lead_id: lead.id,
-      whatsapp_connection_id: args.channel.legacy_connection_id ?? args.channel.id,
-      whatsapp_channel_id: args.channel.id,
-      whatsapp_conversation_id: conversation.id,
-      direction: 'in',
-      sender_kind: 'lead',
-      body,
-      status: 'received',
-      whatsapp_message_id: inboundWamid,
-      raw_payload: args.message,
-      created_at: createdAt,
-    }, { onConflict: 'whatsapp_message_id', ignoreDuplicates: true })
-    .select('id')
-    .maybeSingle();
-  if (messageError) throw messageError;
-  if (!storedMessage) return;
+  const storedMessage = messageResult.data;
+  // Reentrega da Meta: a mensagem já está na conversa e a IA já respondeu.
+  if (!storedMessage) return null;
 
   const attribution = mergeMetaAdAttribution(lead.metadata, args.message.referral, createdAt);
   const metadata = {
@@ -612,13 +634,12 @@ async function processInboundMessage(args: {
     updated_at: new Date().toISOString(),
   }).eq('id', lead.id);
 
-  await processConversation({
-    admin: args.admin,
+  return {
     channel: args.channel,
     conversation,
     leadId: lead.id,
-    sourceMessageId: storedMessage.id,
-  });
+    storedMessageId: storedMessage.id,
+  };
 }
 
 async function claimEvent(admin: AdminClient, eventId: string) {
@@ -630,9 +651,16 @@ async function claimEvent(admin: AdminClient, eventId: string) {
   return (row ?? null) as StoredMetaWebhookEvent | null;
 }
 
-export async function processWebhookEvent(eventId: string) {
+export async function processWebhookEvent(eventId: string, knownPhoneNumberId?: string) {
   const admin = createAdminClient();
-  const event = await claimEvent(admin, eventId);
+  // O webhook ao vivo já sabe de qual número veio o evento, então a busca do
+  // canal deixa de esperar a reserva do evento e corre junto com ela.
+  const [event, prefetchedChannel] = await Promise.all([
+    claimEvent(admin, eventId),
+    knownPhoneNumberId
+      ? findChannelByPhoneNumberId(admin, knownPhoneNumberId)
+      : Promise.resolve(null),
+  ]);
   if (!event) return { processed: false, reason: 'not_claimed' };
 
   try {
@@ -652,7 +680,9 @@ export async function processWebhookEvent(eventId: string) {
       return { processed: true, reason: 'missing_phone_number_id' };
     }
 
-    const channel = await findChannelByPhoneNumberId(admin, phoneNumberId);
+    const channel = prefetchedChannel?.phone_number_id === phoneNumberId
+      ? prefetchedChannel
+      : await findChannelByPhoneNumberId(admin, phoneNumberId);
     if (!channel) {
       await admin.from('whatsapp_webhook_events').update({
         phone_number_id: phoneNumberId,
@@ -662,27 +692,46 @@ export async function processWebhookEvent(eventId: string) {
       return { processed: true, reason: 'unknown_channel' };
     }
 
-    await admin.from('whatsapp_webhook_events').update({
-      organization_id: channel.organization_id,
-      channel_id: channel.id,
-      phone_number_id: phoneNumberId,
-    }).eq('id', event.id);
+    // Associação do evento e confirmações de entrega são rastreabilidade: saem
+    // do caminho crítico e correm enquanto as mensagens recebidas são gravadas.
+    // Os status seguem em série entre si porque um mesmo wamid pode chegar como
+    // `sent` e `delivered` no mesmo lote e a ordem da gravação importa.
+    let sideEffectError: unknown = null;
+    const sideEffects = (async () => {
+      const { error: associateError } = await admin.from('whatsapp_webhook_events').update({
+        organization_id: channel.organization_id,
+        channel_id: channel.id,
+        phone_number_id: phoneNumberId,
+      }).eq('id', event.id);
+      if (associateError) throw associateError;
 
-    for (const status of value.statuses ?? []) {
-      await processStatus(admin, status);
-    }
+      for (const status of value.statuses ?? []) {
+        await processStatus(admin, status);
+      }
+    })().catch((error: unknown) => {
+      sideEffectError = error;
+    });
 
     const contactName = String(value.contacts?.[0]?.profile?.name ?? '').trim();
     const contactWaId = String(value.contacts?.[0]?.wa_id ?? '').trim();
+
+    // Primeiro todas as mensagens entram na conversa. Antes, a segunda mensagem
+    // de um mesmo lote só era gravada depois da IA terminar de responder a
+    // primeira — dezenas de segundos de atraso na tela.
+    const persisted: PersistedInbound[] = [];
     for (const message of value.messages ?? []) {
-      await processInboundMessage({
+      const stored = await persistInboundMessage({
         admin,
         channel,
         message,
         contactWaId,
         contactName,
       });
+      if (stored) persisted.push(stored);
     }
+
+    await sideEffects;
+    if (sideEffectError) throw sideEffectError;
 
     await admin.from('whatsapp_webhook_events').update({
       organization_id: channel.organization_id,
@@ -691,6 +740,32 @@ export async function processWebhookEvent(eventId: string) {
       processing_started_at: null,
       error: null,
     }).eq('id', event.id);
+
+    // Só agora a IA entra em cena. Uma falha aqui já tem tratamento próprio e
+    // não deve reabrir o evento para reprocessamento pelo worker de recuperação,
+    // que reenviaria a mesma resposta ao cliente.
+    const aiErrors: string[] = [];
+    for (const inbound of persisted) {
+      try {
+        await processConversation({
+          admin,
+          channel: inbound.channel,
+          conversation: inbound.conversation,
+          leadId: inbound.leadId,
+          sourceMessageId: inbound.storedMessageId,
+        });
+      } catch (aiError) {
+        console.error('[whatsapp ai turn]', event.id, inbound.leadId, aiError);
+        aiErrors.push(aiError instanceof Error ? aiError.message : 'Falha desconhecida na resposta da IA.');
+      }
+    }
+
+    if (aiErrors.length) {
+      await admin.from('whatsapp_webhook_events').update({
+        error: `Mensagens gravadas; resposta da IA falhou: ${aiErrors.join(' | ')}`.slice(0, 2000),
+      }).eq('id', event.id);
+    }
+
     return { processed: true, reason: 'ok' };
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Falha desconhecida no processamento.';

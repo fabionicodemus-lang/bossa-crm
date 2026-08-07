@@ -344,21 +344,33 @@ async function processCoexistenceEvent(eventId: string) {
   }
 }
 
-export async function dispatchWebhookEvent(eventId: string) {
-  const admin = createAdminClient();
-  const { data, error } = await admin
-    .from('whatsapp_webhook_events')
-    .select('raw')
-    .eq('id', eventId)
-    .maybeSingle();
-  if (error) throw error;
-  const raw = data?.raw as StoredEvent['raw'] | undefined;
-  const field = String(raw?.change?.field ?? '');
+const COEXISTENCE_FIELDS = ['smb_message_echoes', 'history', 'smb_app_state_sync'];
 
-  if (['smb_message_echoes', 'history', 'smb_app_state_sync'].includes(field)) {
+export async function dispatchWebhookEvent(
+  eventId: string,
+  knownField?: string,
+  knownPhoneNumberId?: string,
+) {
+  let field = knownField ?? '';
+
+  // O recuperador de eventos pendentes não conhece o `field`; nesse caso vale a
+  // leitura extra. O webhook ao vivo já informa e pula direto para o processador.
+  if (knownField === undefined) {
+    const admin = createAdminClient();
+    const { data, error } = await admin
+      .from('whatsapp_webhook_events')
+      .select('raw')
+      .eq('id', eventId)
+      .maybeSingle();
+    if (error) throw error;
+    const raw = data?.raw as StoredEvent['raw'] | undefined;
+    field = String(raw?.change?.field ?? '');
+  }
+
+  if (COEXISTENCE_FIELDS.includes(field)) {
     return processCoexistenceEvent(eventId);
   }
-  return processWebhookEvent(eventId);
+  return processWebhookEvent(eventId, knownPhoneNumberId);
 }
 
 export async function processPendingWebhookEvents(limit = 5) {
