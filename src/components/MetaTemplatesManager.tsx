@@ -94,9 +94,11 @@ function buttonLabel(type: ButtonDraft['type']) {
 export function MetaTemplatesManager({
   initialTemplates,
   connections,
+  canEdit,
 }: {
   initialTemplates: MetaTemplateRow[];
   connections: MetaTemplateConnection[];
+  canEdit: boolean;
 }) {
   const connected = connections.filter((connection) => connection.status === 'connected');
   const [templates, setTemplates] = useState(initialTemplates);
@@ -234,11 +236,11 @@ export function MetaTemplatesManager({
     <div className="page-head">
       <div>
         <h2>Modelos de mensagem</h2>
-        <p>Crie modelos pela API oficial e acompanhe a aprovação antes de usá-los nas Transmissões.</p>
+        <p>Crie modelos pela API oficial da Meta e acompanhe a aprovação antes de usá-los nas campanhas.</p>
       </div>
       <div className="page-actions">
         <button type="button" className="btn btn-ghost" onClick={() => void syncTemplates()} disabled={!selectedConnection || syncing}>{syncing ? 'Sincronizando…' : '↻ Sincronizar Meta'}</button>
-        <button type="button" className="btn btn-primary" onClick={() => { setShowForm((value) => !value); setError(''); }} disabled={!selectedConnection}>+ Novo modelo</button>
+        {canEdit && <button type="button" className="btn btn-primary" onClick={() => { setShowForm((value) => !value); setError(''); }} disabled={!selectedConnection}>+ Novo modelo</button>}
       </div>
     </div>
 
@@ -254,7 +256,7 @@ export function MetaTemplatesManager({
       </div>
     </section>
 
-    {showForm && selectedConnection && <form onSubmit={submitTemplate} className="card" style={{ marginTop: 14 }}>
+    {canEdit && showForm && selectedConnection && <form onSubmit={submitTemplate} className="card" style={{ marginTop: 14 }}>
       <div className="card-head"><h3>Novo modelo para aprovação</h3><span className="chip">{category === 'MARKETING' ? 'Marketing' : 'Utilidade'}</span></div>
       <div className="card-body" style={{ display: 'grid', gap: 16 }}>
         <div className="grid grid-3">

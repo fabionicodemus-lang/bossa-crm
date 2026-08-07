@@ -27,7 +27,7 @@ const links: NavItem[] = [
   { href: '/treinamento/nara', icon: '🎓', label: 'Treinar a Nara', roles: ['admin'] },
   { href: '/treinamento/plantao', icon: '🌙', label: 'Treinar o Plantão', roles: ['admin'] },
   { href: '/configuracoes/whatsapp', icon: '📱', label: 'Canais WhatsApp', roles: ['admin'] },
-  { href: '/modelos-meta', icon: '🧩', label: 'Modelos da Meta', roles: ['admin'] },
+  // Modelos da Meta virou aba de Transmissões: um caminho só para a mesma coisa.
   { href: '/usuarios', icon: '👥', label: 'Usuários', roles: ['admin'] },
 ];
 
