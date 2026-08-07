@@ -121,8 +121,10 @@ export async function POST(request: Request) {
     .eq('user_id', user.id)
     .limit(1)
     .maybeSingle();
-  if (!membership || membership.role !== 'admin') {
-    return NextResponse.json({ error: 'Somente administradores podem criar modelos na Meta.' }, { status: 403 });
+  // Criar e enviar modelo acompanha a permissão de edição das Transmissões, onde
+  // a tela agora vive. Somente leitor continua barrado.
+  if (!membership || membership.role === 'viewer') {
+    return NextResponse.json({ error: 'Você não possui permissão para criar modelos na Meta.' }, { status: 403 });
   }
 
   try {

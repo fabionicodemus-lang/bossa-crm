@@ -187,6 +187,9 @@ button { cursor: pointer; }
 .tabs { display: flex; border-top: 1px solid var(--line); padding: 0 14px; gap: 3px; overflow-x: auto; }
 .tab { border: 0; background: transparent; padding: 11px 13px; color: var(--ink-soft); font-weight: 700; font-size: 12px; border-bottom: 2px solid transparent; }
 .tab.on { color: var(--orange); border-color: var(--orange); }
+/* Abas no nível da página, logo abaixo do cabeçalho fixo. */
+.tabs-page { border-top: 0; border-bottom: 1px solid var(--line); background: var(--panel); padding: 0 26px; }
+.tabs-page .tab { padding: 13px 14px; font-size: 13px; }
 .detail-grid { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 14px; }
 .whatsapp-panel { min-height: 560px; display: flex; flex-direction: column; }
 .wa-head { padding: 13px 16px; border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 10px; }

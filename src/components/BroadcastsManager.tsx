@@ -96,11 +96,13 @@ export function BroadcastsManager({
   initialTemplates,
   connections,
   stageCounts,
+  onOpenTemplates,
 }: {
   organizationId: string;
   canEdit: boolean;
   initialBroadcasts: Broadcast[];
   initialTemplates: BroadcastTemplate[];
+  onOpenTemplates?: () => void;
   connections: BroadcastConnection[];
   stageCounts: Record<string, { total: number; eligible: number }>;
 }) {
@@ -343,7 +345,7 @@ export function BroadcastsManager({
             {!connection && <div className="error-box">O WhatsApp deste público ainda não está conectado.</div>}
             {connection && <div className="info-box" style={{ marginTop: 0 }}><strong>{connection.verified_name || 'WhatsApp conectado'}</strong> · {connection.display_phone_number || 'número não informado'} · Qualidade {connection.quality_rating || 'não informada'}</div>}
             <div className="field"><label>Modelo Marketing aprovado</label><select className="select" value={templateId} onChange={(event) => chooseTemplate(event.target.value)} disabled={!connection}><option value="">Selecione um modelo</option>{approvedTemplates.map((template) => <option value={template.id} key={template.id}>{template.name} · {template.language} · {template.header_format}</option>)}</select></div>
-            {connection && approvedTemplates.length === 0 && <div className="info-box">Nenhum modelo Marketing aprovado foi encontrado. Crie o modelo no WhatsApp Manager, aguarde a aprovação da Meta e clique em “Sincronizar Meta”.</div>}
+            {connection && approvedTemplates.length === 0 && <div className="info-box">Nenhum modelo Marketing aprovado foi encontrado neste canal. Crie o modelo na aba <strong>Modelos da Meta</strong>, aguarde a aprovação e clique em “Sincronizar Meta”.{onOpenTemplates && <><br /><button type="button" className="btn btn-ghost btn-sm" style={{ marginTop: 9 }} onClick={onOpenTemplates}>🧩 Ir para Modelos da Meta</button></>}</div>}
             {selectedTemplate && <><div className="field"><label>Variáveis do corpo</label>{mappings.length === 0 ? <div className="faint">Este modelo não possui variáveis.</div> : <div className="grid grid-2">{mappings.map((mapping, index) => <div className="card" style={{ padding: 10 }} key={index}><label style={{ fontSize: 11, fontWeight: 800 }}>{`{{${index + 1}}}`}</label><select className="select" value={mapping.source} onChange={(event) => setMapping(index, event.target.value as MappingSource)}>{Object.entries(mappingLabels).map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select>{mapping.source === 'fixed' && <input className="input" style={{ marginTop: 7 }} value={mapping.value || ''} onChange={(event) => setMapping(index, 'fixed', event.target.value)} placeholder="Texto que será igual para todos" />}</div>)}</div>}</div>
               <div className="card" style={{ padding: 14, background: 'var(--bg)' }}><div className="faint" style={{ fontSize: 10, marginBottom: 7 }}>PRÉVIA DO WHATSAPP</div><div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.55 }}>{preview || selectedTemplate.body_text}</div>{selectedTemplate.footer_text && <div className="faint" style={{ marginTop: 10 }}>{selectedTemplate.footer_text}</div>}</div></>}
           </div></section>

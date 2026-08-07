@@ -1,5 +1,7 @@
 import { PageTopbar } from '@/components/PageTopbar';
-import { BroadcastsManager, type Broadcast, type BroadcastConnection, type BroadcastTemplate } from '@/components/BroadcastsManager';
+import type { Broadcast, BroadcastConnection } from '@/components/BroadcastsManager';
+import type { MetaTemplateRow } from '@/components/MetaTemplatesManager';
+import { BroadcastsWorkspace, isBroadcastsTab } from '@/components/BroadcastsWorkspace';
 import { getCurrentContext } from '@/lib/auth';
 import { createClient } from '@/lib/supabase/server';
 
@@ -16,7 +18,12 @@ type BroadcastMessageRow = {
   raw_payload: Record<string, unknown> | null;
 };
 
-export default async function BroadcastsPage() {
+export default async function BroadcastsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ aba?: string }>;
+}) {
+  const { aba } = await searchParams;
   const context = await getCurrentContext();
   const supabase = await createClient();
   const organizationId = context!.organization.id;
@@ -61,14 +68,15 @@ export default async function BroadcastsPage() {
   });
 
   return <>
-    <PageTopbar title="Transmissões" subtitle="Campanhas segmentadas com modelos aprovados pela Meta e acompanhamento de entrega" />
+    <PageTopbar title="Transmissões" subtitle="Modelos aprovados pela Meta, campanhas segmentadas e acompanhamento de entrega" />
     {schemaError
       ? <div className="page-content"><div className="error-box">A estrutura de transmissões ainda não está disponível no Supabase. Execute a migração 009_transmissoes_whatsapp.sql e atualize esta página.</div></div>
-      : <BroadcastsManager
+      : <BroadcastsWorkspace
           organizationId={organizationId}
           canEdit={context!.role !== 'viewer'}
+          initialTab={isBroadcastsTab(aba) ? aba : 'campanhas'}
           initialBroadcasts={broadcasts}
-          initialTemplates={(templatesResult.data ?? []) as BroadcastTemplate[]}
+          initialTemplates={(templatesResult.data ?? []) as MetaTemplateRow[]}
           connections={(connectionsResult.data ?? []) as BroadcastConnection[]}
           stageCounts={stageCounts}
         />}
