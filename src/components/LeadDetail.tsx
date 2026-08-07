@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { FormEvent, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import type { Activity, Lead, LeadTask, Message, TeamMember } from '@/lib/types';
 import { displayPhone, formatDateTime, initials } from '@/lib/format';
@@ -15,6 +15,10 @@ import {
 } from '@/lib/whatsapp/window';
 
 type Tab = 'whatsapp' | 'historico' | 'tarefas' | 'dados';
+
+// Margem em que a conversa ainda conta como "no fim": o usuário pode estar
+// alguns pixels acima sem que a mensagem nova deixe de acompanhá-lo.
+const BOTTOM_THRESHOLD_PX = 80;
 
 type AiUsageSummary = {
   calls: number;
@@ -145,6 +149,30 @@ export function LeadDetail({
     };
   }, []);
 
+  // Rolagem no estilo WhatsApp Web: a conversa abre e permanece na última
+  // mensagem, mas nunca arranca o usuário do lugar enquanto ele lê o histórico.
+  const messagesRef = useRef<HTMLDivElement | null>(null);
+  const pinnedToBottom = useRef(true);
+  const pendingScroll = useRef(false);
+  const openedConversation = useRef(false);
+  const [unseenCount, setUnseenCount] = useState(0);
+
+  const scrollToBottom = useCallback((behavior: ScrollBehavior) => {
+    const node = messagesRef.current;
+    if (!node) return;
+    node.scrollTo({ top: node.scrollHeight, behavior });
+    pinnedToBottom.current = true;
+    setUnseenCount(0);
+  }, []);
+
+  const handleMessagesScroll = useCallback(() => {
+    const node = messagesRef.current;
+    if (!node) return;
+    const distanceFromBottom = node.scrollHeight - node.scrollTop - node.clientHeight;
+    pinnedToBottom.current = distanceFromBottom <= BOTTOM_THRESHOLD_PX;
+    if (pinnedToBottom.current) setUnseenCount(0);
+  }, []);
+
   // Guarda o que já está na tela para que Realtime, sincronização incremental e
   // respostas otimistas do próprio usuário nunca dupliquem nem reprocessem.
   const knownMessages = useRef(new Map(initialMessages.map((message) => [message.id, messageSignature(message)])));
@@ -156,7 +184,16 @@ export function LeadDetail({
   const applyMessages = useCallback((incoming: Message[]) => {
     const fresh = incoming.filter((message) => knownMessages.current.get(message.id) !== messageSignature(message));
     if (!fresh.length) return;
+    // `fresh` também traz confirmação de entrega de mensagem já visível. Só as
+    // linhas realmente novas contam para a rolagem e para o aviso de não lidas.
+    const added = fresh.filter((message) => !knownMessages.current.has(message.id));
     fresh.forEach((message) => knownMessages.current.set(message.id, messageSignature(message)));
+
+    if (added.length) {
+      pendingScroll.current = true;
+      const unread = added.filter((message) => message.direction === 'in').length;
+      if (unread && !pinnedToBottom.current) setUnseenCount((current) => current + unread);
+    }
 
     const newest = newestCreatedAt(fresh);
     if (newest && (!latestMessageAt.current || newest > latestMessageAt.current)) {
@@ -215,6 +252,28 @@ export function LeadDetail({
       ? current.map((item) => item.id === task.id ? task : item)
       : [task, ...current]);
   }, []);
+
+  // A rolagem acontece depois da pintura, com `useLayoutEffect`, para a
+  // mensagem nova nunca chegar a piscar fora da área visível.
+  useLayoutEffect(() => {
+    if (tab !== 'whatsapp') return;
+    const node = messagesRef.current;
+    if (!node) return;
+    if (!openedConversation.current) {
+      // Primeira pintura da aba: cai direto na última mensagem, sem animação.
+      openedConversation.current = true;
+      scrollToBottom('auto');
+      pendingScroll.current = false;
+      return;
+    }
+    if (!pendingScroll.current) return;
+    pendingScroll.current = false;
+    if (pinnedToBottom.current) scrollToBottom('smooth');
+  }, [tab, messages, scrollToBottom]);
+
+  useEffect(() => {
+    if (tab !== 'whatsapp') openedConversation.current = false;
+  }, [tab]);
 
   const feedStatus = useLeadLiveFeed(lead.id, {
     onMessages: applyMessages,
@@ -383,7 +442,7 @@ export function LeadDetail({
 
     <div className="detail-grid">
       <section className="card">
-        {tab === 'whatsapp' && <div className="whatsapp-panel"><div className="wa-head"><div className="wa-icon">☏</div><div><strong>Conversa no WhatsApp</strong><div className="faint" style={{ fontSize: 11 }}>IA e humano compartilham o histórico</div></div><span className={`connection-pill ${whatsappConnected ? '' : 'off'}`}>{whatsappConnected ? 'Canal conectado' : 'Aguardando integração'}</span><span className={`connection-pill ${windowOpen ? '' : 'off'}`}>{windowOpen ? 'Janela de 24h aberta' : 'Janela fechada'}</span><span className={`connection-pill ${feedStatus === 'live' ? '' : 'off'}`} title="Mensagens recebidas aparecem sozinhas, sem recarregar a página.">{feedStatus === 'live' ? 'Tempo real ativo' : feedStatus === 'connecting' ? 'Conectando…' : 'Reconectando…'}</span></div><div className="messages">{messages.length === 0 ? <div className="empty-state">As mensagens aparecerão aqui.</div> : messages.map((message) => <div className={`message ${messageClass(message)}`} key={message.id}><small style={{ fontWeight: 700, display: 'block', marginBottom: 3 }}>{senderLabel(message)}</small>{message.body}<span className="message-meta">{formatDateTime(message.created_at)}{message.status ? ` · ${message.status}` : ''}</span></div>)}</div>{!canEdit ? <div className="blocked"><span><strong>Acesso somente para consulta.</strong></span></div> : lead.owner_mode === 'ai' && lead.ai_enabled ? <div className="blocked"><span><strong>{persona} é a dona deste contato.</strong><br />Aceite a passagem ou assuma para enviar mensagens humanas.</span><button className="btn btn-primary btn-sm" onClick={() => void toggleAi(false)}>Assumir conversa</button></div> : !whatsappConnected ? <div className="blocked"><span><strong>WhatsApp ainda não conectado.</strong></span></div> : !windowOpen ? <div className="blocked"><span><strong>{OUTSIDE_WINDOW_MESSAGE}</strong><br />Aguarde uma mensagem do contato ou envie um template pela área de Transmissões.</span></div> : <form className="composer" onSubmit={sendMessage}><textarea value={text} onChange={(event) => setText(event.target.value)} placeholder="Escreva uma mensagem…" onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} /><button className="btn btn-primary" disabled={loading}>{loading ? 'Enviando…' : 'Enviar'}</button></form>}</div>}
+        {tab === 'whatsapp' && <div className="whatsapp-panel"><div className="wa-head"><div className="wa-icon">☏</div><div><strong>Conversa no WhatsApp</strong><div className="faint" style={{ fontSize: 11 }}>IA e humano compartilham o histórico</div></div><span className={`connection-pill ${whatsappConnected ? '' : 'off'}`}>{whatsappConnected ? 'Canal conectado' : 'Aguardando integração'}</span><span className={`connection-pill ${windowOpen ? '' : 'off'}`}>{windowOpen ? 'Janela de 24h aberta' : 'Janela fechada'}</span><span className={`connection-pill ${feedStatus === 'live' ? '' : 'off'}`} title="Mensagens recebidas aparecem sozinhas, sem recarregar a página.">{feedStatus === 'live' ? 'Tempo real ativo' : feedStatus === 'connecting' ? 'Conectando…' : 'Reconectando…'}</span></div><div className="messages-wrap"><div className="messages" ref={messagesRef} onScroll={handleMessagesScroll}>{messages.length === 0 ? <div className="empty-state">As mensagens aparecerão aqui.</div> : messages.map((message) => <div className={`message ${messageClass(message)}`} key={message.id}><small style={{ fontWeight: 700, display: 'block', marginBottom: 3 }}>{senderLabel(message)}</small>{message.body}<span className="message-meta">{formatDateTime(message.created_at)}{message.status ? ` · ${message.status}` : ''}</span></div>)}</div>{unseenCount > 0 && <button type="button" className="btn btn-primary btn-sm new-messages-jump" onClick={() => scrollToBottom('smooth')}>↓ {unseenCount} {unseenCount === 1 ? 'nova mensagem' : 'novas mensagens'}</button>}</div>{!canEdit ? <div className="blocked"><span><strong>Acesso somente para consulta.</strong></span></div> : lead.owner_mode === 'ai' && lead.ai_enabled ? <div className="blocked"><span><strong>{persona} é a dona deste contato.</strong><br />Aceite a passagem ou assuma para enviar mensagens humanas.</span><button className="btn btn-primary btn-sm" onClick={() => void toggleAi(false)}>Assumir conversa</button></div> : !whatsappConnected ? <div className="blocked"><span><strong>WhatsApp ainda não conectado.</strong></span></div> : !windowOpen ? <div className="blocked"><span><strong>{OUTSIDE_WINDOW_MESSAGE}</strong><br />Aguarde uma mensagem do contato ou envie um template pela área de Transmissões.</span></div> : <form className="composer" onSubmit={sendMessage}><textarea value={text} onChange={(event) => setText(event.target.value)} placeholder="Escreva uma mensagem…" onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} /><button className="btn btn-primary" disabled={loading}>{loading ? 'Enviando…' : 'Enviar'}</button></form>}</div>}
 
         {tab === 'historico' && <div><div className="card-head"><h3>Histórico e próxima ação</h3></div><div className="card-body">{canEdit && <form onSubmit={addNote} style={{ marginBottom: 20 }}><div className="field"><label>O que aconteceu</label><textarea className="textarea" value={note} onChange={(event) => setNote(event.target.value)} placeholder="Ex.: avaliou o fluxo, vai conversar com a esposa e pediu retorno na sexta." /></div><div className="grid grid-2"><div className="field"><label>Próxima ação {lead.owner_mode === 'human' ? '(obrigatória)' : ''}</label><input className="input" value={nextAction} onChange={(event) => setNextAction(event.target.value)} /></div><div className="field"><label>Data e hora</label><input className="input" type="datetime-local" value={nextActionDue} onChange={(event) => setNextActionDue(event.target.value)} /></div></div><button className="btn btn-secondary btn-sm" disabled={loading}>Salvar registro e tarefa</button></form>}<div className="timeline">{activities.length === 0 ? <div className="empty-state">Nenhum histórico registrado.</div> : activities.map((item) => <div className="timeline-item" key={item.id}><div className="timeline-icon">•</div><div><div className="timeline-title">{item.title}</div>{item.description && <div className="timeline-desc">{item.description}</div>}<div className="timeline-time">{formatDateTime(item.created_at)}</div></div></div>)}</div></div></div>}
 

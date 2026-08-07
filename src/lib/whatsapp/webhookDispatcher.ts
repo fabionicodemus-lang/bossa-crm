@@ -346,7 +346,11 @@ async function processCoexistenceEvent(eventId: string) {
 
 const COEXISTENCE_FIELDS = ['smb_message_echoes', 'history', 'smb_app_state_sync'];
 
-export async function dispatchWebhookEvent(eventId: string, knownField?: string) {
+export async function dispatchWebhookEvent(
+  eventId: string,
+  knownField?: string,
+  knownPhoneNumberId?: string,
+) {
   let field = knownField ?? '';
 
   // O recuperador de eventos pendentes não conhece o `field`; nesse caso vale a
@@ -366,7 +370,7 @@ export async function dispatchWebhookEvent(eventId: string, knownField?: string)
   if (COEXISTENCE_FIELDS.includes(field)) {
     return processCoexistenceEvent(eventId);
   }
-  return processWebhookEvent(eventId);
+  return processWebhookEvent(eventId, knownPhoneNumberId);
 }
 
 export async function processPendingWebhookEvents(limit = 5) {

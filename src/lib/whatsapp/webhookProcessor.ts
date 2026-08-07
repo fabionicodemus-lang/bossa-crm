@@ -14,6 +14,7 @@ import type { WhatsAppMediaType, WhatsAppMessageCategory } from '@/lib/whatsapp/
 import {
   channelAccess,
   findChannelByPhoneNumberId,
+  findConversation,
   openConversationWindow,
   type WhatsAppChannelRecord,
   type WhatsAppConversationRecord,
@@ -546,20 +547,26 @@ async function persistInboundMessage(args: {
   if (!waId) return null;
 
   const createdAt = metaTimestamp(args.message.timestamp);
-  const lead = await findOrCreateLead({
-    admin: args.admin,
-    channel: args.channel,
-    waId,
-    contactName: args.contactName,
-    receivedAt: createdAt,
-    referral: args.message.referral,
-  });
+  // Lead e conversa são procurados pelo mesmo contato, mas por chaves
+  // diferentes: dá para buscar os dois de uma vez e só depois reconciliar.
+  const [lead, existingConversation] = await Promise.all([
+    findOrCreateLead({
+      admin: args.admin,
+      channel: args.channel,
+      waId,
+      contactName: args.contactName,
+      receivedAt: createdAt,
+      referral: args.message.referral,
+    }),
+    findConversation(args.admin, args.channel.id, waId),
+  ]);
   const conversation = await openConversationWindow({
     admin: args.admin,
     channel: args.channel,
     contactWaId: waId,
     leadId: lead.id,
     receivedAt: createdAt,
+    prefetched: existingConversation,
   });
   const body = messageBody(args.message);
 
@@ -644,9 +651,16 @@ async function claimEvent(admin: AdminClient, eventId: string) {
   return (row ?? null) as StoredMetaWebhookEvent | null;
 }
 
-export async function processWebhookEvent(eventId: string) {
+export async function processWebhookEvent(eventId: string, knownPhoneNumberId?: string) {
   const admin = createAdminClient();
-  const event = await claimEvent(admin, eventId);
+  // O webhook ao vivo já sabe de qual número veio o evento, então a busca do
+  // canal deixa de esperar a reserva do evento e corre junto com ela.
+  const [event, prefetchedChannel] = await Promise.all([
+    claimEvent(admin, eventId),
+    knownPhoneNumberId
+      ? findChannelByPhoneNumberId(admin, knownPhoneNumberId)
+      : Promise.resolve(null),
+  ]);
   if (!event) return { processed: false, reason: 'not_claimed' };
 
   try {
@@ -666,7 +680,9 @@ export async function processWebhookEvent(eventId: string) {
       return { processed: true, reason: 'missing_phone_number_id' };
     }
 
-    const channel = await findChannelByPhoneNumberId(admin, phoneNumberId);
+    const channel = prefetchedChannel?.phone_number_id === phoneNumberId
+      ? prefetchedChannel
+      : await findChannelByPhoneNumberId(admin, phoneNumberId);
     if (!channel) {
       await admin.from('whatsapp_webhook_events').update({
         phone_number_id: phoneNumberId,

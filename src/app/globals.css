@@ -193,7 +193,11 @@ button { cursor: pointer; }
 .wa-icon { width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center; background: #25d366; color: #fff; font-size: 18px; }
 .connection-pill { margin-left: auto; border-radius: 20px; padding: 4px 9px; font-size: 10px; font-weight: 800; background: var(--green-soft); color: var(--green); }
 .connection-pill.off { background: #f3e8d3; color: #8a6a1f; }
-.messages { flex: 1; overflow-y: auto; background: #f2efea; padding: 17px; display: flex; flex-direction: column; gap: 9px; min-height: 390px; }
+/* O `min-height` que segurava a altura da lista passa para o invólucro, que
+   ancora o botão de novas mensagens. A geometria da conversa fica idêntica. */
+.messages-wrap { position: relative; flex: 1; display: flex; flex-direction: column; min-height: 390px; }
+.messages { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; background: #f2efea; padding: 17px; display: flex; flex-direction: column; gap: 9px; }
+.new-messages-jump { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); z-index: 2; white-space: nowrap; box-shadow: 0 6px 18px rgba(0, 0, 0, .2); }
 .message { max-width: 76%; border-radius: 11px; padding: 9px 12px; line-height: 1.45; font-size: 13px; }
 .message.in { align-self: flex-start; background: #fff; border: 1px solid var(--line); border-bottom-left-radius: 3px; }
 .message.out { align-self: flex-end; background: #ddeadf; border-bottom-right-radius: 3px; }

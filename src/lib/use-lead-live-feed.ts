@@ -9,7 +9,11 @@ import type { Activity, LeadTask, Message } from '@/lib/types';
 // quando o token expira, quando a aba dorme ou quando a rede oscila. Por isso o
 // feed combina três garantias: assinatura Realtime, reconexão com recuo
 // exponencial e uma sincronização incremental que fecha qualquer buraco.
-const POLL_INTERVAL_MS = 12_000;
+// Enquanto o Realtime está de pé ele entrega em milissegundos e a sincronização
+// quase sempre volta vazia; o intervalo curto existe para o caso degradado, em
+// que o socket caiu e a mensagem não pode esperar.
+const POLL_INTERVAL_LIVE_MS = 15_000;
+const POLL_INTERVAL_DEGRADED_MS = 4_000;
 const FIRST_RECONNECT_DELAY_MS = 1_000;
 const MAX_RECONNECT_DELAY_MS = 20_000;
 const CATCH_UP_LIMIT = 200;
@@ -79,6 +83,18 @@ export function useLeadLiveFeed(leadId: string, handlers: LeadFeedHandlers) {
       catchUp().catch((error) => console.error('[lead feed catch-up]', error));
     };
 
+    // Rede de segurança: mesmo com o Realtime derrubado, a conversa nunca
+    // atrasa mais do que um intervalo de polling. O passo acelera enquanto o
+    // canal não está de pé e volta ao ritmo lento assim que ele assina.
+    let pollTimer: number | undefined;
+    const startPolling = (interval: number) => {
+      if (pollTimer !== undefined) window.clearInterval(pollTimer);
+      pollTimer = window.setInterval(() => {
+        if (document.visibilityState !== 'visible') return;
+        runCatchUp();
+      }, interval);
+    };
+
     const teardownChannel = () => {
       if (!channel) return;
       const current = channel;
@@ -132,25 +148,21 @@ export function useLeadLiveFeed(leadId: string, handlers: LeadFeedHandlers) {
           if (state === 'SUBSCRIBED') {
             attempt = 0;
             setStatus('live');
+            startPolling(POLL_INTERVAL_LIVE_MS);
             // Cobre a janela entre a renderização no servidor e a assinatura.
             runCatchUp();
             return;
           }
           if (state === 'CHANNEL_ERROR' || state === 'TIMED_OUT' || state === 'CLOSED') {
             setStatus('reconnecting');
+            startPolling(POLL_INTERVAL_DEGRADED_MS);
             scheduleReconnect();
           }
         });
     };
 
     void connect();
-
-    // Rede de segurança: mesmo com o Realtime derrubado, a conversa nunca
-    // atrasa mais do que um intervalo de polling.
-    const pollTimer = window.setInterval(() => {
-      if (document.visibilityState !== 'visible') return;
-      runCatchUp();
-    }, POLL_INTERVAL_MS);
+    startPolling(POLL_INTERVAL_DEGRADED_MS);
 
     const resync = () => {
       if (document.visibilityState !== 'visible') return;
@@ -163,7 +175,7 @@ export function useLeadLiveFeed(leadId: string, handlers: LeadFeedHandlers) {
     return () => {
       disposed = true;
       if (reconnectTimer !== undefined) window.clearTimeout(reconnectTimer);
-      window.clearInterval(pollTimer);
+      if (pollTimer !== undefined) window.clearInterval(pollTimer);
       document.removeEventListener('visibilitychange', resync);
       window.removeEventListener('focus', resync);
       window.removeEventListener('online', runCatchUp);

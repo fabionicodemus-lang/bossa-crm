@@ -122,7 +122,11 @@ export async function POST(request: Request) {
     // ficaria esperando a IA responder a primeira.
     await Promise.allSettled(events.map(async (event, index) => {
       try {
-        await dispatchWebhookEvent(event.id, fields[index] ?? undefined);
+        await dispatchWebhookEvent(
+          event.id,
+          fields[index] ?? undefined,
+          rows[index]?.phone_number_id ?? undefined,
+        );
       } catch (processError) {
         console.error('[whatsapp webhook async]', event.id, processError);
       }
