@@ -68,7 +68,7 @@ assert.match(migration, /jsonb_set\(changed\.knowledge, '\{prompt_final\}'/);
 assert.match(migration, /### Score comercial \(0–100\)/);
 assert.match(migration, /### Efeito do preço no score e na classificação/);
 assert.match(readme, /020_nara_prompt_score_enum\.sql/);
-assert.match(readme, /próximo número disponível é `021`/);
+assert.match(readme, /próximo número disponível é `022`/);
 assert.match(workflow, /test:nara-phase9/);
 
 console.log('Fase 9 validada: prompt na escala 0–100 e classificação limitada ao enum real da Nara.');
