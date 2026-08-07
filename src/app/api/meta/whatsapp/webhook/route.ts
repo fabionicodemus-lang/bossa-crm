@@ -78,6 +78,10 @@ export async function POST(request: Request) {
     raw: Record<string, unknown>;
     signature_valid: true;
   }> = [];
+  // O `field` já é conhecido aqui. Guardá-lo evita que o despachante releia o
+  // evento só para decidir a rota, economizando uma ida ao banco no caminho
+  // crítico entre a Meta e a tela do comercial.
+  const fields: Array<string | null> = [];
 
   for (const entry of payload.entry ?? []) {
     for (const change of entry.changes ?? []) {
@@ -90,6 +94,7 @@ export async function POST(request: Request) {
         },
         signature_valid: true,
       });
+      fields.push(String(change.field ?? '') || null);
     }
   }
 
@@ -99,6 +104,7 @@ export async function POST(request: Request) {
       raw: payload as Record<string, unknown>,
       signature_valid: true,
     });
+    fields.push(null);
   }
 
   const { data: events, error } = await admin
@@ -112,13 +118,15 @@ export async function POST(request: Request) {
   }
 
   after(async () => {
-    for (const event of events) {
+    // Um lote com várias mudanças não pode ser serializado: a segunda conversa
+    // ficaria esperando a IA responder a primeira.
+    await Promise.allSettled(events.map(async (event, index) => {
       try {
-        await dispatchWebhookEvent(event.id);
+        await dispatchWebhookEvent(event.id, fields[index] ?? undefined);
       } catch (processError) {
         console.error('[whatsapp webhook async]', event.id, processError);
       }
-    }
+    }));
   });
 
   return NextResponse.json({ received: true }, { status: 200 });

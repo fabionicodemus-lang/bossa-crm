@@ -1,11 +1,11 @@
 'use client';
 
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import type { Activity, Lead, LeadTask, Message, TeamMember } from '@/lib/types';
 import { displayPhone, formatDateTime, initials } from '@/lib/format';
 import { stageLabel, stagesFor } from '@/lib/stages';
-import { createClient } from '@/lib/supabase/client';
+import { useLeadLiveFeed } from '@/lib/use-lead-live-feed';
 import { metaAdSourceLabel, readMetaAdAttribution } from '@/lib/meta-ad-attribution';
 import {
   isCustomerServiceWindowOpen,
@@ -14,8 +14,6 @@ import {
   windowExpiresFromInbound,
 } from '@/lib/whatsapp/window';
 
-type InsertPayload<T> = { new: T };
-type UpdatePayload<T> = { new: T };
 type Tab = 'whatsapp' | 'historico' | 'tarefas' | 'dados';
 
 type AiUsageSummary = {
@@ -64,6 +62,28 @@ function readAiUsage(metadata: Record<string, unknown> | null | undefined): AiUs
     last_model: typeof value.last_model === 'string' ? value.last_model : null,
     last_at: typeof value.last_at === 'string' ? value.last_at : null,
   };
+}
+
+// Uma mensagem também muda quando a Meta confirma entrega/leitura, então o
+// controle de duplicidade precisa considerar o corpo e o status, não só o id.
+function messageSignature(message: Message) {
+  return `${message.created_at}|${message.status ?? ''}|${message.body}`;
+}
+
+function byCreatedAt(a: { created_at: string }, b: { created_at: string }) {
+  return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+}
+
+// O Realtime e a Data API entregam o timestamp em formatos diferentes. O cursor
+// da sincronização incremental é sempre normalizado em ISO para que a
+// comparação e o filtro `gte` continuem confiáveis.
+function newestCreatedAt(rows: Array<{ created_at: string }>): string | null {
+  let newest = Number.NEGATIVE_INFINITY;
+  for (const row of rows) {
+    const time = new Date(row.created_at).getTime();
+    if (Number.isFinite(time) && time > newest) newest = time;
+  }
+  return Number.isFinite(newest) ? new Date(newest).toISOString() : null;
 }
 
 function localToIso(value: string): string | null {
@@ -125,41 +145,85 @@ export function LeadDetail({
     };
   }, []);
 
-  useEffect(() => {
-    const supabase = createClient();
-    const channel = supabase
-      .channel(`lead-${lead.id}`)
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `lead_id=eq.${lead.id}` }, (payload: InsertPayload<Message>) => {
-        const item = payload.new;
-        setMessages((current) => current.some((message) => message.id === item.id) ? current : [...current, item]);
-        if (item.direction === 'in') {
-          const windowExpiresAt = windowExpiresFromInbound(item.created_at);
-          setLead((current) => ({
-            ...current,
-            last_inbound_at: item.created_at,
-            metadata: {
-              ...(current.metadata || {}),
-              whatsapp_window_expires_at: windowExpiresAt,
-            },
-          }));
-          setClock(Date.now());
-        }
-      })
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'activities', filter: `lead_id=eq.${lead.id}` }, (payload: InsertPayload<Activity>) => {
-        const item = payload.new;
-        setActivities((current) => current.some((activity) => activity.id === item.id) ? current : [item, ...current]);
-      })
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'lead_tasks', filter: `lead_id=eq.${lead.id}` }, (payload: InsertPayload<LeadTask>) => {
-        const item = payload.new;
-        setTasks((current) => current.some((task) => task.id === item.id) ? current : [item, ...current]);
-      })
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'lead_tasks', filter: `lead_id=eq.${lead.id}` }, (payload: UpdatePayload<LeadTask>) => {
-        const item = payload.new;
-        setTasks((current) => current.map((task) => task.id === item.id ? item : task));
-      })
-      .subscribe();
-    return () => { void supabase.removeChannel(channel); };
-  }, [lead.id]);
+  // Guarda o que já está na tela para que Realtime, sincronização incremental e
+  // respostas otimistas do próprio usuário nunca dupliquem nem reprocessem.
+  const knownMessages = useRef(new Map(initialMessages.map((message) => [message.id, messageSignature(message)])));
+  const knownActivities = useRef(new Map(initialActivities.map((activity) => [activity.id, activity.created_at])));
+  const knownTasks = useRef(new Set(initialTasks.map((task) => task.id)));
+  const latestMessageAt = useRef(newestCreatedAt(initialMessages));
+  const latestActivityAt = useRef(newestCreatedAt(initialActivities));
+
+  const applyMessages = useCallback((incoming: Message[]) => {
+    const fresh = incoming.filter((message) => knownMessages.current.get(message.id) !== messageSignature(message));
+    if (!fresh.length) return;
+    fresh.forEach((message) => knownMessages.current.set(message.id, messageSignature(message)));
+
+    const newest = newestCreatedAt(fresh);
+    if (newest && (!latestMessageAt.current || newest > latestMessageAt.current)) {
+      latestMessageAt.current = newest;
+    }
+
+    setMessages((current) => {
+      const merged = [...current];
+      for (const message of fresh) {
+        const index = merged.findIndex((item) => item.id === message.id);
+        if (index >= 0) merged[index] = message;
+        else merged.push(message);
+      }
+      return merged.sort(byCreatedAt);
+    });
+
+    const newestInbound = newestCreatedAt(fresh.filter((message) => message.direction === 'in'));
+    if (!newestInbound) return;
+    setLead((current) => {
+      const known = current.last_inbound_at ? new Date(current.last_inbound_at).getTime() : Number.NEGATIVE_INFINITY;
+      if (known >= new Date(newestInbound).getTime()) return current;
+      return {
+        ...current,
+        last_inbound_at: newestInbound,
+        metadata: {
+          ...(current.metadata || {}),
+          whatsapp_window_expires_at: windowExpiresFromInbound(newestInbound),
+        },
+      };
+    });
+    setClock(Date.now());
+  }, []);
+
+  const applyActivities = useCallback((incoming: Activity[]) => {
+    const fresh = incoming.filter((activity) => !knownActivities.current.has(activity.id));
+    if (!fresh.length) return;
+    fresh.forEach((activity) => knownActivities.current.set(activity.id, activity.created_at));
+
+    const newest = newestCreatedAt(fresh);
+    if (newest && (!latestActivityAt.current || newest > latestActivityAt.current)) {
+      latestActivityAt.current = newest;
+    }
+
+    setActivities((current) => [...fresh, ...current].sort((a, b) => byCreatedAt(b, a)));
+  }, []);
+
+  const applyTaskInsert = useCallback((task: LeadTask) => {
+    if (knownTasks.current.has(task.id)) return;
+    knownTasks.current.add(task.id);
+    setTasks((current) => [task, ...current]);
+  }, []);
+
+  const applyTaskUpdate = useCallback((task: LeadTask) => {
+    knownTasks.current.add(task.id);
+    setTasks((current) => current.some((item) => item.id === task.id)
+      ? current.map((item) => item.id === task.id ? task : item)
+      : [task, ...current]);
+  }, []);
+
+  const feedStatus = useLeadLiveFeed(lead.id, {
+    onMessages: applyMessages,
+    onActivities: applyActivities,
+    onTaskInsert: applyTaskInsert,
+    onTaskUpdate: applyTaskUpdate,
+    latestMessageAt: () => latestMessageAt.current,
+    latestActivityAt: () => latestActivityAt.current,
+  });
 
   const persona = lead.kind === 'cliente' ? 'Nara' : 'Plantão';
   const owner = teamMembers.find((member) => member.user_id === lead.owner_id);
@@ -249,7 +313,7 @@ export function LeadDetail({
     try {
       const payload = await requestJson('/api/whatsapp/send', 'POST', { leadId: lead.id, body });
       setText('');
-      if (payload.message) setMessages((current) => current.some((message) => message.id === payload.message.id) ? current : [...current, payload.message]);
+      if (payload.message) applyMessages([payload.message]);
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Falha ao enviar mensagem.'); }
     setLoading(false);
   }
@@ -272,8 +336,8 @@ export function LeadDetail({
       setNote('');
       setNextAction('');
       setNextActionDue('');
-      if (payload.activity) setActivities((current) => current.some((activity) => activity.id === payload.activity.id) ? current : [payload.activity, ...current]);
-      if (payload.task) setTasks((current) => current.some((task) => task.id === payload.task.id) ? current : [payload.task, ...current]);
+      if (payload.activity) applyActivities([payload.activity]);
+      if (payload.task) applyTaskInsert(payload.task);
       setLead((current) => ({ ...current, next_action: payload.task?.title ?? current.next_action, next_action_due_at: payload.task?.due_at ?? current.next_action_due_at }));
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Não foi possível salvar o registro.'); }
     setLoading(false);
@@ -287,7 +351,7 @@ export function LeadDetail({
     try {
       const payload = await requestJson(`/api/leads/${lead.id}/tasks`, 'POST', { title: taskTitle.trim(), description: taskDescription.trim(), dueAt: localToIso(taskDue), priority: taskPriority });
       setTaskTitle(''); setTaskDescription(''); setTaskDue(''); setTaskPriority('normal');
-      if (payload.task) setTasks((current) => current.some((task) => task.id === payload.task.id) ? current : [payload.task, ...current]);
+      if (payload.task) applyTaskInsert(payload.task);
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Não foi possível criar a tarefa.'); }
     setLoading(false);
   }
@@ -297,7 +361,7 @@ export function LeadDetail({
     setError('');
     try {
       const payload = await requestJson(`/api/leads/${lead.id}/tasks`, 'PATCH', { taskId, action: 'complete' });
-      if (payload.task) setTasks((current) => current.map((task) => task.id === payload.task.id ? payload.task : task));
+      if (payload.task) applyTaskUpdate(payload.task);
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Não foi possível concluir a tarefa.'); }
   }
 
@@ -319,7 +383,7 @@ export function LeadDetail({
 
     <div className="detail-grid">
       <section className="card">
-        {tab === 'whatsapp' && <div className="whatsapp-panel"><div className="wa-head"><div className="wa-icon">☏</div><div><strong>Conversa no WhatsApp</strong><div className="faint" style={{ fontSize: 11 }}>IA e humano compartilham o histórico</div></div><span className={`connection-pill ${whatsappConnected ? '' : 'off'}`}>{whatsappConnected ? 'Canal conectado' : 'Aguardando integração'}</span><span className={`connection-pill ${windowOpen ? '' : 'off'}`}>{windowOpen ? 'Janela de 24h aberta' : 'Janela fechada'}</span></div><div className="messages">{messages.length === 0 ? <div className="empty-state">As mensagens aparecerão aqui.</div> : messages.map((message) => <div className={`message ${messageClass(message)}`} key={message.id}><small style={{ fontWeight: 700, display: 'block', marginBottom: 3 }}>{senderLabel(message)}</small>{message.body}<span className="message-meta">{formatDateTime(message.created_at)}{message.status ? ` · ${message.status}` : ''}</span></div>)}</div>{!canEdit ? <div className="blocked"><span><strong>Acesso somente para consulta.</strong></span></div> : lead.owner_mode === 'ai' && lead.ai_enabled ? <div className="blocked"><span><strong>{persona} é a dona deste contato.</strong><br />Aceite a passagem ou assuma para enviar mensagens humanas.</span><button className="btn btn-primary btn-sm" onClick={() => void toggleAi(false)}>Assumir conversa</button></div> : !whatsappConnected ? <div className="blocked"><span><strong>WhatsApp ainda não conectado.</strong></span></div> : !windowOpen ? <div className="blocked"><span><strong>{OUTSIDE_WINDOW_MESSAGE}</strong><br />Aguarde uma mensagem do contato ou envie um template pela área de Transmissões.</span></div> : <form className="composer" onSubmit={sendMessage}><textarea value={text} onChange={(event) => setText(event.target.value)} placeholder="Escreva uma mensagem…" onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} /><button className="btn btn-primary" disabled={loading}>{loading ? 'Enviando…' : 'Enviar'}</button></form>}</div>}
+        {tab === 'whatsapp' && <div className="whatsapp-panel"><div className="wa-head"><div className="wa-icon">☏</div><div><strong>Conversa no WhatsApp</strong><div className="faint" style={{ fontSize: 11 }}>IA e humano compartilham o histórico</div></div><span className={`connection-pill ${whatsappConnected ? '' : 'off'}`}>{whatsappConnected ? 'Canal conectado' : 'Aguardando integração'}</span><span className={`connection-pill ${windowOpen ? '' : 'off'}`}>{windowOpen ? 'Janela de 24h aberta' : 'Janela fechada'}</span><span className={`connection-pill ${feedStatus === 'live' ? '' : 'off'}`} title="Mensagens recebidas aparecem sozinhas, sem recarregar a página.">{feedStatus === 'live' ? 'Tempo real ativo' : feedStatus === 'connecting' ? 'Conectando…' : 'Reconectando…'}</span></div><div className="messages">{messages.length === 0 ? <div className="empty-state">As mensagens aparecerão aqui.</div> : messages.map((message) => <div className={`message ${messageClass(message)}`} key={message.id}><small style={{ fontWeight: 700, display: 'block', marginBottom: 3 }}>{senderLabel(message)}</small>{message.body}<span className="message-meta">{formatDateTime(message.created_at)}{message.status ? ` · ${message.status}` : ''}</span></div>)}</div>{!canEdit ? <div className="blocked"><span><strong>Acesso somente para consulta.</strong></span></div> : lead.owner_mode === 'ai' && lead.ai_enabled ? <div className="blocked"><span><strong>{persona} é a dona deste contato.</strong><br />Aceite a passagem ou assuma para enviar mensagens humanas.</span><button className="btn btn-primary btn-sm" onClick={() => void toggleAi(false)}>Assumir conversa</button></div> : !whatsappConnected ? <div className="blocked"><span><strong>WhatsApp ainda não conectado.</strong></span></div> : !windowOpen ? <div className="blocked"><span><strong>{OUTSIDE_WINDOW_MESSAGE}</strong><br />Aguarde uma mensagem do contato ou envie um template pela área de Transmissões.</span></div> : <form className="composer" onSubmit={sendMessage}><textarea value={text} onChange={(event) => setText(event.target.value)} placeholder="Escreva uma mensagem…" onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} /><button className="btn btn-primary" disabled={loading}>{loading ? 'Enviando…' : 'Enviar'}</button></form>}</div>}
 
         {tab === 'historico' && <div><div className="card-head"><h3>Histórico e próxima ação</h3></div><div className="card-body">{canEdit && <form onSubmit={addNote} style={{ marginBottom: 20 }}><div className="field"><label>O que aconteceu</label><textarea className="textarea" value={note} onChange={(event) => setNote(event.target.value)} placeholder="Ex.: avaliou o fluxo, vai conversar com a esposa e pediu retorno na sexta." /></div><div className="grid grid-2"><div className="field"><label>Próxima ação {lead.owner_mode === 'human' ? '(obrigatória)' : ''}</label><input className="input" value={nextAction} onChange={(event) => setNextAction(event.target.value)} /></div><div className="field"><label>Data e hora</label><input className="input" type="datetime-local" value={nextActionDue} onChange={(event) => setNextActionDue(event.target.value)} /></div></div><button className="btn btn-secondary btn-sm" disabled={loading}>Salvar registro e tarefa</button></form>}<div className="timeline">{activities.length === 0 ? <div className="empty-state">Nenhum histórico registrado.</div> : activities.map((item) => <div className="timeline-item" key={item.id}><div className="timeline-icon">•</div><div><div className="timeline-title">{item.title}</div>{item.description && <div className="timeline-desc">{item.description}</div>}<div className="timeline-time">{formatDateTime(item.created_at)}</div></div></div>)}</div></div></div>}
 
