@@ -1,7 +1,7 @@
 import { PageTopbar } from '@/components/PageTopbar';
 import type { Broadcast, BroadcastConnection } from '@/components/BroadcastsManager';
 import type { MetaTemplateRow } from '@/components/MetaTemplatesManager';
-import { BroadcastsWorkspace, isBroadcastsTab } from '@/components/BroadcastsWorkspace';
+import { BroadcastsWorkspace } from '@/components/BroadcastsWorkspace';
 import { getCurrentContext } from '@/lib/auth';
 import { createClient } from '@/lib/supabase/server';
 
@@ -67,6 +67,8 @@ export default async function BroadcastsPage({
     } : broadcast;
   });
 
+  const initialTab = aba === 'modelos' ? 'modelos' : 'campanhas';
+
   return <>
     <PageTopbar title="Transmissões" subtitle="Modelos aprovados pela Meta, campanhas segmentadas e acompanhamento de entrega" />
     {schemaError
@@ -74,7 +76,7 @@ export default async function BroadcastsPage({
       : <BroadcastsWorkspace
           organizationId={organizationId}
           canEdit={context!.role !== 'viewer'}
-          initialTab={isBroadcastsTab(aba) ? aba : 'campanhas'}
+          initialTab={initialTab}
           initialBroadcasts={broadcasts}
           initialTemplates={(templatesResult.data ?? []) as MetaTemplateRow[]}
           connections={(connectionsResult.data ?? []) as BroadcastConnection[]}
