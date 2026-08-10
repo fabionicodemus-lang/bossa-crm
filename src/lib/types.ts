@@ -73,6 +73,8 @@ export interface Message {
   body: string;
   status: string | null;
   whatsapp_message_id: string | null;
+  whatsapp_channel_id?: string | null;
+  raw_payload?: Record<string, unknown> | null;
   created_at: string;
 }
 
