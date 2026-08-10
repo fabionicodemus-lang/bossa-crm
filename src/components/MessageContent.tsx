@@ -10,7 +10,7 @@ type RawMedia = {
   mime_type?: string;
 };
 
-type TranscriptionState = 'idle' | 'loading' | 'error';
+type TranscriptionState = 'idle' | 'error';
 
 function rawPayload(message: Message) {
   return message.raw_payload && typeof message.raw_payload === 'object'
@@ -48,7 +48,6 @@ export function MessageContent({ message }: { message: Message }) {
     let active = true;
     const controller = new AbortController();
 
-    setTranscriptionState('loading');
     void fetch(`/api/messages/${message.id}/transcribe`, {
       method: 'POST',
       signal: controller.signal,
@@ -72,11 +71,6 @@ export function MessageContent({ message }: { message: Message }) {
       controller.abort();
     };
   }, [audio?.id, message.id, retry, transcript]);
-
-  useEffect(() => {
-    const next = audio ? audioTranscript(message) : null;
-    if (next) setTranscript(next);
-  }, [audio, message]);
 
   if (image?.id) {
     const src = `/api/messages/${message.id}/media`;
@@ -102,7 +96,7 @@ export function MessageContent({ message }: { message: Message }) {
       {transcript
         ? <div style={{ whiteSpace: 'pre-wrap' }}><strong style={{ fontSize: 11 }}>Transcrição</strong><br />{transcript}</div>
         : transcriptionState === 'error'
-          ? <div className="faint" style={{ fontSize: 11 }}>Não foi possível transcrever automaticamente. <button type="button" className="btn btn-ghost btn-sm" onClick={() => setRetry((value) => value + 1)}>Tentar novamente</button></div>
+          ? <div className="faint" style={{ fontSize: 11 }}>Não foi possível transcrever automaticamente. <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setTranscriptionState('idle'); setRetry((value) => value + 1); }}>Tentar novamente</button></div>
           : <div className="faint" style={{ fontSize: 11 }}>Transcrevendo áudio…</div>}
     </div>;
   }
