@@ -87,17 +87,19 @@ export async function POST(
     };
     const body = `🎙️ ${result.text}`;
 
-    const updates = [
-      admin.from('messages').update({ body, raw_payload: enrichedPayload }).eq('id', message.id),
-    ];
+    const { error: messageUpdateError } = await admin
+      .from('messages')
+      .update({ body, raw_payload: enrichedPayload })
+      .eq('id', message.id);
+    if (messageUpdateError) throw messageUpdateError;
+
     if (message.whatsapp_message_id) {
-      updates.push(
-        admin.from('whatsapp_messages').update({ body, payload: enrichedPayload }).eq('wamid', message.whatsapp_message_id),
-      );
+      const { error: transportUpdateError } = await admin
+        .from('whatsapp_messages')
+        .update({ body, payload: enrichedPayload })
+        .eq('wamid', message.whatsapp_message_id);
+      if (transportUpdateError) throw transportUpdateError;
     }
-    const results = await Promise.all(updates);
-    const updateError = results.find((item) => item.error)?.error;
-    if (updateError) throw updateError;
 
     return Response.json({ transcript: result.text, cached: false });
   } catch (cause) {
