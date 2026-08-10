@@ -1,4 +1,7 @@
+'use client';
+
 import Image from 'next/image';
+import { useEffect, useState } from 'react';
 import type { Message } from '@/lib/types';
 
 type RawMedia = {
@@ -6,6 +9,8 @@ type RawMedia = {
   caption?: string;
   mime_type?: string;
 };
+
+type TranscriptionState = 'idle' | 'loading' | 'error';
 
 function rawPayload(message: Message) {
   return message.raw_payload && typeof message.raw_payload === 'object'
@@ -32,6 +37,47 @@ function audioTranscript(message: Message) {
 
 export function MessageContent({ message }: { message: Message }) {
   const image = mediaValue(message, 'image');
+  const audio = mediaValue(message, 'audio');
+  const initialTranscript = audio ? audioTranscript(message) : null;
+  const [transcript, setTranscript] = useState<string | null>(initialTranscript);
+  const [transcriptionState, setTranscriptionState] = useState<TranscriptionState>('idle');
+  const [retry, setRetry] = useState(0);
+
+  useEffect(() => {
+    if (!audio?.id || transcript) return;
+    let active = true;
+    const controller = new AbortController();
+
+    setTranscriptionState('loading');
+    void fetch(`/api/messages/${message.id}/transcribe`, {
+      method: 'POST',
+      signal: controller.signal,
+    })
+      .then(async (response) => {
+        const payload = await response.json().catch(() => ({})) as { transcript?: string; error?: string };
+        if (!response.ok || !payload.transcript) {
+          throw new Error(payload.error || 'Não foi possível transcrever o áudio.');
+        }
+        if (!active) return;
+        setTranscript(payload.transcript);
+        setTranscriptionState('idle');
+      })
+      .catch((cause: unknown) => {
+        if (!active || (cause instanceof DOMException && cause.name === 'AbortError')) return;
+        setTranscriptionState('error');
+      });
+
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [audio?.id, message.id, retry, transcript]);
+
+  useEffect(() => {
+    const next = audio ? audioTranscript(message) : null;
+    if (next) setTranscript(next);
+  }, [audio, message]);
+
   if (image?.id) {
     const src = `/api/messages/${message.id}/media`;
     const caption = image.caption?.trim() || (message.body !== '[Imagem]' ? message.body.trim() : '');
@@ -50,15 +96,14 @@ export function MessageContent({ message }: { message: Message }) {
     </div>;
   }
 
-  const audio = mediaValue(message, 'audio');
   if (audio?.id) {
-    const transcript = audioTranscript(message);
-    const transcriptionFailed = Boolean(rawPayload(message)?.bossa_transcription_error);
     return <div style={{ display: 'grid', gap: 8, minWidth: 250 }}>
       <audio controls preload="metadata" src={`/api/messages/${message.id}/media`} style={{ width: 'min(340px, 100%)' }} />
       {transcript
         ? <div style={{ whiteSpace: 'pre-wrap' }}><strong style={{ fontSize: 11 }}>Transcrição</strong><br />{transcript}</div>
-        : <div className="faint" style={{ fontSize: 11 }}>{transcriptionFailed ? 'Transcrição indisponível.' : 'Transcrevendo áudio…'}</div>}
+        : transcriptionState === 'error'
+          ? <div className="faint" style={{ fontSize: 11 }}>Não foi possível transcrever automaticamente. <button type="button" className="btn btn-ghost btn-sm" onClick={() => setRetry((value) => value + 1)}>Tentar novamente</button></div>
+          : <div className="faint" style={{ fontSize: 11 }}>Transcrevendo áudio…</div>}
     </div>;
   }
 
