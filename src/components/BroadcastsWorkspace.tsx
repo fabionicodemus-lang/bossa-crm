@@ -14,10 +14,6 @@ import {
 
 export type BroadcastsTab = 'campanhas' | 'modelos';
 
-export function isBroadcastsTab(value: unknown): value is BroadcastsTab {
-  return value === 'campanhas' || value === 'modelos';
-}
-
 export function BroadcastsWorkspace({
   organizationId,
   canEdit,
