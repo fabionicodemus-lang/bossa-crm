@@ -1,13 +1,32 @@
 'use client';
 
 import Link from 'next/link';
-import { FormEvent, useMemo, useState } from 'react';
+import { FormEvent, useCallback, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import type { Lead, LeadKind } from '@/lib/types';
 import { defaultStage, isAiStage, isHumanStage, stagesFor } from '@/lib/stages';
 import { displayPhone, normalizePhone } from '@/lib/format';
 import { createClient } from '@/lib/supabase/client';
+import { usePipelineLeadsFeed } from '@/lib/use-pipeline-leads-feed';
 import { metaAdSourceLabel, readMetaAdAttribution } from '@/lib/meta-ad-attribution';
+
+function updatedAtTime(value: string | null | undefined) {
+  const time = value ? new Date(value).getTime() : NaN;
+  return Number.isFinite(time) ? time : 0;
+}
+
+function maxUpdatedAt(rows: Lead[]): string | null {
+  let bestIso: string | null = null;
+  let bestTime = Number.NEGATIVE_INFINITY;
+  for (const row of rows) {
+    const time = updatedAtTime(row.updated_at);
+    if (time > bestTime) {
+      bestTime = time;
+      bestIso = row.updated_at;
+    }
+  }
+  return bestIso;
+}
 
 function temperatureColor(value: number) {
   if (value >= 75) return 'var(--red)';
@@ -46,6 +65,42 @@ export function PipelineBoard({ initialLeads, kind, organizationId, canEdit }: {
   const [bulkSaving, setBulkSaving] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+
+  // Sincronização incremental do quadro: novo lead (inclusive o criado pelo
+  // webhook quando o cliente manda a primeira mensagem), troca de etapa e
+  // arquivamento passam a aparecer sem recarregar a página.
+  const knownLeads = useRef(new Map(initialLeads.map((lead) => [lead.id, lead.updated_at])));
+  const latestUpdatedAt = useRef(maxUpdatedAt(initialLeads));
+
+  const applyLeads = useCallback((rows: Lead[]) => {
+    const changed = rows.filter((lead) => knownLeads.current.get(lead.id) !== lead.updated_at);
+    if (!changed.length) return;
+    changed.forEach((lead) => knownLeads.current.set(lead.id, lead.updated_at));
+
+    const newest = maxUpdatedAt(changed);
+    if (newest && updatedAtTime(newest) > updatedAtTime(latestUpdatedAt.current)) {
+      latestUpdatedAt.current = newest;
+    }
+
+    setLeads((current) => {
+      const map = new Map(current.map((lead) => [lead.id, lead]));
+      for (const lead of changed) {
+        // Arquivado por outra pessoa sai do quadro; qualquer outra mudança
+        // atualiza o card no lugar, preservando a posição e sem interromper
+        // um arraste em andamento de outro card.
+        if (lead.archived_at) map.delete(lead.id);
+        else map.set(lead.id, lead);
+      }
+      return [...map.values()];
+    });
+  }, []);
+
+  usePipelineLeadsFeed({
+    organizationId,
+    kind,
+    latestUpdatedAt: () => latestUpdatedAt.current,
+    onLeads: applyLeads,
+  });
 
   const stages = stagesFor(kind);
   const filtered = useMemo(() => {
@@ -198,7 +253,7 @@ export function PipelineBoard({ initialLeads, kind, organizationId, canEdit }: {
       <div className="page-head">
         <div>
           <h2>{kind === 'cliente' ? 'Pipeline de Clientes' : 'Pipeline de Corretores'}</h2>
-          <p>A IA lê as conversas, atualiza classificação e estado; o humano aceita a passagem e registra a próxima ação.</p>
+          <p>A IA lê as conversas, atualiza classificação e estado; o humano aceita a passagem e registra a próxima ação. O quadro atualiza sozinho conforme os leads mudam.</p>
         </div>
         <div className="page-actions">
           <input className="input" style={{ width: 230 }} placeholder="Buscar nome, ação, prioridade…" value={query} onChange={(e) => setQuery(e.target.value)} />
