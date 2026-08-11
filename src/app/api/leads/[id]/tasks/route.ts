@@ -16,7 +16,19 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const title = String(body.title ?? '').trim().slice(0, 180);
   const description = String(body.description ?? '').trim().slice(0, 5000) || null;
   const dueAt = String(body.dueAt ?? '').trim() || null;
-  const assignedTo = String(body.assignedTo ?? '').trim() || user.id;
+  const requestedAssignedTo = String(body.assignedTo ?? '').trim();
+  let assignedTo = user.id;
+  if (membership.role === 'admin' && requestedAssignedTo) {
+    const { data: assignedMembership } = await supabase.from('memberships')
+      .select('user_id')
+      .eq('organization_id', membership.organization_id)
+      .eq('user_id', requestedAssignedTo)
+      .maybeSingle();
+    if (!assignedMembership) {
+      return NextResponse.json({ error: 'O responsável selecionado não pertence a esta organização.' }, { status: 400 });
+    }
+    assignedTo = requestedAssignedTo;
+  }
   const priority = ['urgent', 'high', 'normal', 'low'].includes(String(body.priority))
     ? String(body.priority)
     : 'normal';
@@ -79,6 +91,18 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   if (!taskId || !['complete', 'cancel', 'reopen'].includes(action)) {
     return NextResponse.json({ error: 'Ação de tarefa inválida.' }, { status: 400 });
   }
+
+  const { data: existingTask } = await supabase.from('lead_tasks')
+    .select('id,lead_id,assigned_to')
+    .eq('id', taskId)
+    .eq('lead_id', leadId)
+    .eq('organization_id', membership.organization_id)
+    .maybeSingle();
+  if (!existingTask) return NextResponse.json({ error: 'Tarefa não encontrada.' }, { status: 404 });
+  if (membership.role !== 'admin' && existingTask.assigned_to !== user.id) {
+    return NextResponse.json({ error: 'Você só pode alterar tarefas atribuídas a você.' }, { status: 403 });
+  }
+
   const now = new Date().toISOString();
   const status = action === 'complete' ? 'completed' : action === 'cancel' ? 'cancelled' : 'pending';
   const { data: task, error } = await supabase.from('lead_tasks').update({
