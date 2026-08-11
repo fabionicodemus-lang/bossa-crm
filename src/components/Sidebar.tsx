@@ -18,6 +18,7 @@ const links: NavItem[] = [
   { href: '/corretores', icon: '🤝', label: 'Pipeline Corretores' },
   { href: '/importar?tipo=corretor', icon: '📥', label: 'Importar corretores', roles: ['admin', 'comercial'] },
   { section: 'Comercial' },
+  { href: '/tarefas', icon: '✅', label: 'Tarefas' },
   { href: '/empreendimentos', icon: '🏢', label: 'Empreendimentos' },
   { href: '/configuracoes/arquivos-ia', icon: '🗂️', label: 'Arquivos da IA', roles: ['admin', 'comercial'] },
   { href: '/propostas', icon: '🧾', label: 'Propostas' },
@@ -31,7 +32,7 @@ const links: NavItem[] = [
   { href: '/usuarios', icon: '👥', label: 'Usuários', roles: ['admin'] },
 ];
 
-export function Sidebar({ context, aiCount }: { context: UserContext; aiCount: number }) {
+export function Sidebar({ context, aiCount, overdueTaskCount }: { context: UserContext; aiCount: number; overdueTaskCount: number }) {
   const pathname = usePathname();
   return (
     <aside className="sidebar">
@@ -41,7 +42,7 @@ export function Sidebar({ context, aiCount }: { context: UserContext; aiCount: n
           if ('section' in item) return item.roles && !item.roles.includes(context.role) ? null : <div className="nav-label" key={`${item.section}-${index}`}>{item.section}</div>;
           if (item.roles && !item.roles.includes(context.role)) return null;
           const active = pathname === item.href.split('?')[0] || (item.href.startsWith('/leads/') && pathname.startsWith('/leads/'));
-          return <Link className={`nav-link ${active ? 'active' : ''}`} href={item.href} key={item.href}><span>{item.icon}</span><span className="nav-text">{item.label}</span>{item.href === '/ia' && aiCount > 0 && <span className="nav-badge">{aiCount}</span>}</Link>;
+          return <Link className={`nav-link ${active ? 'active' : ''}`} href={item.href} key={item.href}><span>{item.icon}</span><span className="nav-text">{item.label}</span>{item.href === '/ia' && aiCount > 0 && <span className="nav-badge">{aiCount}</span>}{item.href === '/tarefas' && overdueTaskCount > 0 && <span className="nav-badge">{overdueTaskCount}</span>}</Link>;
         })}
       </nav>
       <div className="sidebar-user">
