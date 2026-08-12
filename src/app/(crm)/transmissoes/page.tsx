@@ -1,9 +1,15 @@
 import { PageTopbar } from '@/components/PageTopbar';
-import type { Broadcast, BroadcastConnection } from '@/components/BroadcastsManager';
+import type {
+  AudienceDiagnostics,
+  Broadcast,
+  BroadcastConnection,
+  StageAudienceCount,
+} from '@/components/BroadcastsManager';
 import type { MetaTemplateRow } from '@/components/MetaTemplatesManager';
 import { BroadcastsWorkspace } from '@/components/BroadcastsWorkspace';
 import { getCurrentContext } from '@/lib/auth';
 import { createClient } from '@/lib/supabase/server';
+import { normalizeWaId } from '@/lib/whatsapp';
 
 type StageCountRow = {
   kind: 'cliente' | 'corretor';
@@ -17,6 +23,10 @@ type BroadcastMessageRow = {
   status: string | null;
   raw_payload: Record<string, unknown> | null;
 };
+
+function emptyDiagnostics(): AudienceDiagnostics {
+  return { total: 0, withoutPhone: 0, optOut: 0, paused: 0, duplicates: 0, eligible: 0 };
+}
 
 export default async function BroadcastsPage({
   searchParams,
@@ -37,12 +47,58 @@ export default async function BroadcastsPage({
   ]);
 
   const schemaError = [broadcastsResult.error, templatesResult.error].find(Boolean);
-  const stageCounts: Record<string, { total: number; eligible: number }> = {};
+  const stageCounts: Record<string, StageAudienceCount> = {};
+  const audienceDiagnostics: Record<'cliente' | 'corretor', AudienceDiagnostics> = {
+    cliente: emptyDiagnostics(),
+    corretor: emptyDiagnostics(),
+  };
+  const seenGlobal: Record<'cliente' | 'corretor', Set<string>> = {
+    cliente: new Set<string>(),
+    corretor: new Set<string>(),
+  };
+  const seenByStage = new Map<string, Set<string>>();
+
   for (const lead of (leadsResult.data ?? []) as StageCountRow[]) {
     const key = `${lead.kind}:${lead.stage}`;
-    const current = stageCounts[key] ?? { total: 0, eligible: 0 };
+    const current = stageCounts[key] ?? { ...emptyDiagnostics() };
+    const overall = audienceDiagnostics[lead.kind];
+    const normalizedPhone = normalizeWaId(String(lead.phone ?? ''));
+
     current.total++;
-    if (lead.phone && !lead.opt_out && !lead.automation_paused) current.eligible++;
+    overall.total++;
+
+    if (!normalizedPhone) {
+      current.withoutPhone++;
+      overall.withoutPhone++;
+      stageCounts[key] = current;
+      continue;
+    }
+    if (lead.opt_out) {
+      current.optOut++;
+      overall.optOut++;
+      stageCounts[key] = current;
+      continue;
+    }
+    if (lead.automation_paused) {
+      current.paused++;
+      overall.paused++;
+      stageCounts[key] = current;
+      continue;
+    }
+
+    const stageSeen = seenByStage.get(key) ?? new Set<string>();
+    if (stageSeen.has(normalizedPhone)) current.duplicates++;
+    else {
+      stageSeen.add(normalizedPhone);
+      current.eligible++;
+      seenByStage.set(key, stageSeen);
+    }
+
+    if (seenGlobal[lead.kind].has(normalizedPhone)) overall.duplicates++;
+    else {
+      seenGlobal[lead.kind].add(normalizedPhone);
+      overall.eligible++;
+    }
     stageCounts[key] = current;
   }
 
@@ -81,6 +137,7 @@ export default async function BroadcastsPage({
           initialTemplates={(templatesResult.data ?? []) as MetaTemplateRow[]}
           connections={(connectionsResult.data ?? []) as BroadcastConnection[]}
           stageCounts={stageCounts}
+          audienceDiagnostics={audienceDiagnostics}
         />}
   </>;
 }

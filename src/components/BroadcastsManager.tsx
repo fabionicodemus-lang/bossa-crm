@@ -55,6 +55,17 @@ export type Broadcast = {
   completed_at: string | null;
 };
 
+export type AudienceDiagnostics = {
+  total: number;
+  withoutPhone: number;
+  optOut: number;
+  paused: number;
+  duplicates: number;
+  eligible: number;
+};
+
+export type StageAudienceCount = AudienceDiagnostics;
+
 const statusLabels: Record<string, string> = {
   draft: 'Rascunho', ready: 'Pronta para enviar', running: 'Em envio', paused: 'Pausada', completed: 'Concluída', cancelled: 'Cancelada', failed: 'Falhou',
 };
@@ -89,6 +100,10 @@ function renderedPreview(template: BroadcastTemplate | null, mappings: VariableM
   return mappings.reduce((text, mapping, index) => text.replaceAll(`{{${index + 1}}}`, previewValue(mapping)), template.body_text);
 }
 
+function emptyAudienceDiagnostics(): AudienceDiagnostics {
+  return { total: 0, withoutPhone: 0, optOut: 0, paused: 0, duplicates: 0, eligible: 0 };
+}
+
 export function BroadcastsManager({
   organizationId,
   canEdit,
@@ -96,6 +111,7 @@ export function BroadcastsManager({
   initialTemplates,
   connections,
   stageCounts,
+  audienceDiagnostics,
   onOpenTemplates,
 }: {
   organizationId: string;
@@ -104,7 +120,8 @@ export function BroadcastsManager({
   initialTemplates: BroadcastTemplate[];
   onOpenTemplates?: () => void;
   connections: BroadcastConnection[];
-  stageCounts: Record<string, { total: number; eligible: number }>;
+  stageCounts: Record<string, StageAudienceCount>;
+  audienceDiagnostics: Record<'cliente' | 'corretor', AudienceDiagnostics>;
 }) {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
@@ -134,10 +151,21 @@ export function BroadcastsManager({
   const approvedTemplates = channelTemplates.filter((template) => template.status.toUpperCase() === 'APPROVED' && template.category.toUpperCase() === 'MARKETING');
   const selectedTemplate = templates.find((template) => template.id === templateId) ?? null;
   const mediaRequired = Boolean(selectedTemplate && ['IMAGE', 'VIDEO', 'DOCUMENT'].includes(selectedTemplate.header_format));
-  const totals = selectedStages.reduce((acc, stage) => {
-    const count = stageCounts[`${kind}:${stage}`] ?? { total: 0, eligible: 0 };
-    return { total: acc.total + count.total, eligible: acc.eligible + count.eligible };
-  }, { total: 0, eligible: 0 });
+  const allStagesSelected = stages.length > 0 && stages.every((stage) => selectedStages.includes(stage.id));
+  const baseDiagnostics = audienceDiagnostics[kind] ?? emptyAudienceDiagnostics();
+  const selectedDiagnostics = allStagesSelected
+    ? baseDiagnostics
+    : selectedStages.reduce((acc, stage) => {
+        const count = stageCounts[`${kind}:${stage}`] ?? emptyAudienceDiagnostics();
+        acc.total += count.total;
+        acc.withoutPhone += count.withoutPhone;
+        acc.optOut += count.optOut;
+        acc.paused += count.paused;
+        acc.duplicates += count.duplicates;
+        acc.eligible += count.eligible;
+        return acc;
+      }, emptyAudienceDiagnostics());
+  const totals = { total: selectedDiagnostics.total, eligible: selectedDiagnostics.eligible };
   const preview = renderedPreview(selectedTemplate, mappings);
 
   const allRecipients = broadcasts.reduce((sum, item) => sum + Number(item.recipient_count || 0), 0);
@@ -163,6 +191,10 @@ export function BroadcastsManager({
 
   function toggleStage(stage: string) {
     setSelectedStages((current) => current.includes(stage) ? current.filter((item) => item !== stage) : [...current, stage]);
+  }
+
+  function toggleAllStages() {
+    setSelectedStages(allStagesSelected ? [] : stages.map((stage) => stage.id));
   }
 
   function chooseTemplate(id: string) {
@@ -337,8 +369,22 @@ export function BroadcastsManager({
               <div className="field"><label>Nome da transmissão</label><input className="input" value={name} onChange={(event) => setName(event.target.value)} placeholder="Ex.: Reativação da base antiga · Flow" /></div>
               <div className="field"><label>Público / número remetente</label><select className="select" value={channel} onChange={(event) => chooseChannel(event.target.value as Channel)}><option value="clientes">Clientes finais · WhatsApp Clientes</option><option value="corretores">Corretores · WhatsApp Corretores</option></select></div>
             </div>
-            <div className="field"><label>Etapas que receberão a mensagem</label><div className="grid grid-3">{stages.map((stage) => { const count = stageCounts[`${kind}:${stage.id}`] ?? { total: 0, eligible: 0 }; return <label key={stage.id} className="card" style={{ padding: 11, cursor: 'pointer', borderColor: selectedStages.includes(stage.id) ? 'var(--orange)' : undefined }}><input type="checkbox" checked={selectedStages.includes(stage.id)} onChange={() => toggleStage(stage.id)} /> <strong>{stage.label}</strong><br /><small className="faint">{count.eligible} elegíveis de {count.total}</small></label>; })}</div></div>
-            <div className="info-box"><strong>{totals.eligible} contatos elegíveis</strong> de {totals.total} registros nas etapas. O sistema exclui arquivados, opt-outs, automações pausadas, telefones inválidos e números duplicados.</div>
+            <div className="field">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, marginBottom: 7 }}>
+                <label style={{ marginBottom: 0 }}>Etapas que receberão a mensagem</label>
+                <button type="button" className="btn btn-ghost btn-sm" onClick={toggleAllStages}>{allStagesSelected ? 'Limpar seleção' : 'Selecionar todas as etapas'}</button>
+              </div>
+              <div className="grid grid-3">{stages.map((stage) => { const count = stageCounts[`${kind}:${stage.id}`] ?? emptyAudienceDiagnostics(); return <label key={stage.id} className="card" style={{ padding: 11, cursor: 'pointer', borderColor: selectedStages.includes(stage.id) ? 'var(--orange)' : undefined }}><input type="checkbox" checked={selectedStages.includes(stage.id)} onChange={() => toggleStage(stage.id)} /> <strong>{stage.label}</strong><br /><small className="faint">{count.eligible} elegíveis de {count.total}</small></label>; })}</div>
+            </div>
+            <div className="info-box">
+              <strong>{selectedDiagnostics.eligible} contatos elegíveis</strong> nas etapas selecionadas.<br />
+              <span style={{ lineHeight: 1.8 }}><strong>{selectedDiagnostics.total}</strong> registros → <strong>{selectedDiagnostics.withoutPhone}</strong> sem telefone → <strong>{selectedDiagnostics.optOut}</strong> opt-out → <strong>{selectedDiagnostics.paused}</strong> pausados → <strong>{selectedDiagnostics.duplicates}</strong> duplicados → <strong>{selectedDiagnostics.eligible}</strong> elegíveis.</span>
+            </div>
+            <div className="info-box" style={{ marginTop: 10 }}>
+              <strong>Base completa de {channel === 'clientes' ? 'clientes finais' : 'corretores'}</strong><br />
+              <span style={{ lineHeight: 1.8 }}><strong>{baseDiagnostics.total}</strong> leads ativos → <strong>{baseDiagnostics.withoutPhone}</strong> sem telefone → <strong>{baseDiagnostics.optOut}</strong> opt-out → <strong>{baseDiagnostics.paused}</strong> pausados → <strong>{baseDiagnostics.duplicates}</strong> duplicados → <strong>{baseDiagnostics.eligible}</strong> elegíveis.</span><br />
+              <small className="faint">Arquivados já ficam fora da base. A preparação da campanha repete a validação e a deduplicação antes do envio.</small>
+            </div>
           </div></section>
 
           <section className="card"><div className="card-head"><h3>2. Modelo aprovado pela Meta</h3><button className="btn btn-ghost btn-sm" disabled={syncing || !connection} onClick={() => void syncTemplates()}>{syncing ? 'Sincronizando…' : '↻ Sincronizar Meta'}</button></div><div className="card-body">
