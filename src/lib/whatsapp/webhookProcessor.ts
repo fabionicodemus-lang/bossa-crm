@@ -332,7 +332,6 @@ async function processConversation(args: {
   const reply = turn.reply.trim();
   if (!destination || !reply) return;
 
-
   let offerAuditIds: string[] = [];
   if (lead.kind === 'cliente') {
     try {
@@ -485,20 +484,9 @@ async function findOrCreateLead(args: {
   if (readError) throw readError;
   let leadData = existingLead;
 
-  if (!leadData) {
-    const { data: routedLead, error: routedReadError } = await args.admin
-      .from('leads')
-      .select('*')
-      .eq('organization_id', args.channel.organization_id)
-      .eq('phone', args.waId)
-      .is('archived_at', null)
-      .order('updated_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    if (routedReadError) throw routedReadError;
-    leadData = routedLead;
-  }
-
+  // O canal define o contexto comercial. Um mesmo telefone pode existir como
+  // cliente e corretor, mas uma mensagem recebida no canal da Nara nunca deve
+  // reaproveitar o cadastro de corretor (e vice-versa).
   if (!leadData) {
     const attribution = mergeMetaAdAttribution({}, args.referral, args.receivedAt);
     const { data, error } = await args.admin.from('leads').insert({
