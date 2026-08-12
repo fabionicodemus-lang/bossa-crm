@@ -236,6 +236,7 @@ async function runFollowupWorker() {
           ai_enabled: false,
           handoff_requested_at: nowIso,
           handoff_accepted_at: nowIso,
+          last_human_activity_at: nowIso,
           next_action: 'Fazer contato humano após 3 dias sem resposta à IA.',
           next_action_type: 'resgate_sem_resposta_3d',
           next_action_due_at: nowIso,
