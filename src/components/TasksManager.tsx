@@ -142,7 +142,7 @@ export function TasksManager({
   }, [assigneeScopedTasks, nowMs, search, statusFilter]);
 
   function assigneeLabel(task: LeadTask) {
-    if (!task.assigned_to) return task.assigned_mode === 'ai' ? 'IA / sem responsável' : 'Sem responsável';
+    if (!task.assigned_to) return task.assigned_mode === 'ai' ? 'IA' : 'Sem responsável';
     const member = memberMap.get(task.assigned_to);
     return member?.full_name || 'Usuário';
   }
@@ -207,7 +207,7 @@ export function TasksManager({
             </label>)}
             <label className="chip chip-orange" style={{ cursor: 'pointer', gap: 6, padding: '6px 9px' }}>
               <input type="checkbox" checked={selectedAssignees.includes(AI_ASSIGNEE)} onChange={() => toggleSelectedAssignee(AI_ASSIGNEE)} />
-              IA / sem responsável
+              IA
             </label>
           </div>}
         </div>}
