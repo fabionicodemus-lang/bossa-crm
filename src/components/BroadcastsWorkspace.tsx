@@ -4,8 +4,10 @@ import { useCallback, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   BroadcastsManager,
+  type AudienceDiagnostics,
   type Broadcast,
   type BroadcastConnection,
+  type StageAudienceCount,
 } from '@/components/BroadcastsManager';
 import {
   MetaTemplatesManager,
@@ -22,6 +24,7 @@ export function BroadcastsWorkspace({
   initialTemplates,
   connections,
   stageCounts,
+  audienceDiagnostics,
 }: {
   organizationId: string;
   canEdit: boolean;
@@ -29,7 +32,8 @@ export function BroadcastsWorkspace({
   initialBroadcasts: Broadcast[];
   initialTemplates: MetaTemplateRow[];
   connections: BroadcastConnection[];
-  stageCounts: Record<string, { total: number; eligible: number }>;
+  stageCounts: Record<string, StageAudienceCount>;
+  audienceDiagnostics: Record<'cliente' | 'corretor', AudienceDiagnostics>;
 }) {
   const router = useRouter();
   const [tab, setTab] = useState<BroadcastsTab>(initialTab);
@@ -67,6 +71,7 @@ export function BroadcastsWorkspace({
           initialTemplates={initialTemplates}
           connections={connections}
           stageCounts={stageCounts}
+          audienceDiagnostics={audienceDiagnostics}
           onOpenTemplates={() => openTab('modelos')}
         />
       : <MetaTemplatesManager
