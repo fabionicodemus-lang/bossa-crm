@@ -1,3 +1,4 @@
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { PageTopbar } from '@/components/PageTopbar';
 import type {
   AudienceDiagnostics,
@@ -24,8 +25,30 @@ type BroadcastMessageRow = {
   raw_payload: Record<string, unknown> | null;
 };
 
+const PAGE_SIZE = 100;
+
 function emptyDiagnostics(): AudienceDiagnostics {
   return { total: 0, withoutPhone: 0, optOut: 0, paused: 0, duplicates: 0, eligible: 0 };
+}
+
+async function fetchAllLeadRows(supabase: SupabaseClient, organizationId: string) {
+  const rows: StageCountRow[] = [];
+
+  for (let from = 0; ; from += PAGE_SIZE) {
+    const { data, error } = await supabase
+      .from('leads')
+      .select('kind,stage,phone,opt_out,automation_paused')
+      .eq('organization_id', organizationId)
+      .is('archived_at', null)
+      .order('id', { ascending: true })
+      .range(from, from + PAGE_SIZE - 1);
+
+    if (error) return { data: rows, error };
+
+    const batch = (data ?? []) as StageCountRow[];
+    rows.push(...batch);
+    if (batch.length < PAGE_SIZE) return { data: rows, error: null };
+  }
 }
 
 export default async function BroadcastsPage({
@@ -42,11 +65,11 @@ export default async function BroadcastsPage({
     supabase.from('broadcasts').select('*').eq('organization_id', organizationId).order('created_at', { ascending: false }).limit(500),
     supabase.from('whatsapp_templates').select('*').eq('organization_id', organizationId).order('status').order('name'),
     supabase.from('whatsapp_connections').select('id,channel,display_phone_number,verified_name,quality_rating,status').eq('organization_id', organizationId).order('channel'),
-    supabase.from('leads').select('kind,stage,phone,opt_out,automation_paused').eq('organization_id', organizationId).is('archived_at', null).limit(10000),
+    fetchAllLeadRows(supabase, organizationId),
     supabase.from('messages').select('status,raw_payload').eq('organization_id', organizationId).eq('direction', 'out').limit(20000),
   ]);
 
-  const schemaError = [broadcastsResult.error, templatesResult.error].find(Boolean);
+  const schemaError = [broadcastsResult.error, templatesResult.error, leadsResult.error].find(Boolean);
   const stageCounts: Record<string, StageAudienceCount> = {};
   const audienceDiagnostics: Record<'cliente' | 'corretor', AudienceDiagnostics> = {
     cliente: emptyDiagnostics(),
@@ -58,7 +81,7 @@ export default async function BroadcastsPage({
   };
   const seenByStage = new Map<string, Set<string>>();
 
-  for (const lead of (leadsResult.data ?? []) as StageCountRow[]) {
+  for (const lead of leadsResult.data) {
     const key = `${lead.kind}:${lead.stage}`;
     const current = stageCounts[key] ?? { ...emptyDiagnostics() };
     const overall = audienceDiagnostics[lead.kind];
