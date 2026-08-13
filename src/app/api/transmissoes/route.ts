@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { normalizeWaId } from '@/lib/whatsapp';
@@ -7,11 +8,51 @@ import type { LeadKind } from '@/lib/types';
 
 type Channel = 'clientes' | 'corretores';
 type VariableMapping = { source: 'name' | 'enterprise' | 'company' | 'stage' | 'fixed'; value?: string };
+type BroadcastLeadRow = {
+  id: string;
+  name: string;
+  phone: string | null;
+  stage: string;
+  enterprise: string | null;
+  company: string | null;
+  group_name: string | null;
+  source: string | null;
+  opt_out: boolean | null;
+  automation_paused: boolean | null;
+};
+
+const PAGE_SIZE = 100;
 
 function headerHasDynamicText(components: unknown) {
   if (!Array.isArray(components)) return false;
   const header = components.find((item) => item && typeof item === 'object' && String((item as { type?: unknown }).type).toUpperCase() === 'HEADER') as { text?: unknown } | undefined;
   return /\{\{\d+\}\}/.test(String(header?.text ?? ''));
+}
+
+async function fetchAllBroadcastLeads(
+  admin: SupabaseClient,
+  organizationId: string,
+  kind: LeadKind,
+  stages: string[],
+) {
+  const rows: BroadcastLeadRow[] = [];
+
+  for (let from = 0; ; from += PAGE_SIZE) {
+    const { data, error } = await admin.from('leads')
+      .select('id,name,phone,stage,enterprise,company,group_name,source,opt_out,automation_paused')
+      .eq('organization_id', organizationId)
+      .eq('kind', kind)
+      .in('stage', stages)
+      .is('archived_at', null)
+      .order('id', { ascending: true })
+      .range(from, from + PAGE_SIZE - 1);
+
+    if (error) return { data: rows, error };
+
+    const batch = (data ?? []) as BroadcastLeadRow[];
+    rows.push(...batch);
+    if (batch.length < PAGE_SIZE) return { data: rows, error: null };
+  }
 }
 
 export async function POST(request: Request) {
@@ -81,19 +122,18 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: `O modelo exige um anexo do tipo ${headerType.toLowerCase()}.` }, { status: 400 });
   }
 
-  const { data: leads, error: leadsError } = await admin.from('leads')
-    .select('id,name,phone,stage,enterprise,company,group_name,source,opt_out,automation_paused')
-    .eq('organization_id', membership.organization_id)
-    .eq('kind', kind)
-    .in('stage', stages)
-    .is('archived_at', null)
-    .limit(10000);
+  const { data: leads, error: leadsError } = await fetchAllBroadcastLeads(
+    admin,
+    membership.organization_id,
+    kind,
+    stages,
+  );
   if (leadsError) return NextResponse.json({ error: leadsError.message }, { status: 400 });
 
   const recipients: Array<Record<string, unknown>> = [];
   const seenPhones = new Set<string>();
   let skipped = 0;
-  for (const lead of leads ?? []) {
+  for (const lead of leads) {
     const phone = normalizeWaId(String(lead.phone ?? ''));
     if (!phone || lead.opt_out || lead.automation_paused || seenPhones.has(phone)) {
       skipped++;
