@@ -4,7 +4,7 @@ import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 
 type DevelopmentStatus = 'planejamento' | 'lancamento' | 'em_construcao' | 'entregue' | 'pausado' | 'arquivado' | 'ativo';
-type UnitStatus = 'disponivel' | 'reservado' | 'vendido' | 'oculto' | 'bloqueado';
+type UnitStatus = 'disponivel' | 'reservado' | 'em_contrato' | 'vendido' | 'oculto' | 'bloqueado';
 type Tab = 'cadastro' | 'tipologias' | 'tabela' | 'arquivos';
 
 export type Development = {
@@ -92,6 +92,7 @@ const statusLabels: Record<DevelopmentStatus, string> = {
 const unitStatusLabels: Record<UnitStatus, string> = {
   disponivel: 'Disponível',
   reservado: 'Reservada',
+  em_contrato: 'Em contrato',
   vendido: 'Vendida',
   oculto: 'Oculta',
   bloqueado: 'Bloqueada',

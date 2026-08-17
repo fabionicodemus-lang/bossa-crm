@@ -14,7 +14,7 @@ export type SalesTablePrintDevelopment = {
 };
 
 type ThemeKey = 'flow' | 'alma';
-type PrintedStatus = 'disponivel' | 'reservado' | 'vendido';
+type PrintedStatus = 'disponivel' | 'reservado' | 'em_contrato' | 'vendido';
 type PrintableUnit = { unit: DevelopmentUnit; printedStatus: PrintedStatus };
 
 type PrintTheme = {
@@ -64,13 +64,14 @@ function isPermutante(unit: DevelopmentUnit) {
 
 function printedStatus(unit: DevelopmentUnit, theme: ThemeKey): PrintedStatus | null {
   if (isPermutante(unit)) return theme === 'alma' ? 'reservado' : 'vendido';
-  if (unit.status === 'disponivel' || unit.status === 'reservado' || unit.status === 'vendido') return unit.status;
+  if (unit.status === 'disponivel' || unit.status === 'reservado' || unit.status === 'em_contrato' || unit.status === 'vendido') return unit.status;
   return null;
 }
 
 function statusLabel(status: PrintedStatus) {
   if (status === 'disponivel') return 'Disponível';
   if (status === 'reservado') return 'Reservada';
+  if (status === 'em_contrato') return 'Em contrato';
   return 'Vendida';
 }
 
@@ -155,10 +156,16 @@ function printHtml({
   const installmentHeader = installmentCounts.length === 1
     ? `PARCELAS (${installmentCounts[0]}×)`
     : 'PARCELAS';
+  const reinforcementCounts = [...new Set(printableUnits
+    .map(({ unit }) => numberValue(unit.reinforcement_count))
+    .filter((count) => count > 0))];
+  const reinforcementHeader = reinforcementCounts.length === 1
+    ? `REFORÇO ANUAL (${reinforcementCounts[0]}×)`
+    : 'REFORÇO ANUAL';
   const statusCounts = printableUnits.reduce<Record<PrintedStatus, number>>((result, item) => {
     result[item.printedStatus] += 1;
     return result;
-  }, { disponivel: 0, reservado: 0, vendido: 0 });
+  }, { disponivel: 0, reservado: 0, em_contrato: 0, vendido: 0 });
   const printedAt = new Date();
   const monthYear = printedAt.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }).toLocaleUpperCase('pt-BR');
   const printedDate = printedAt.toLocaleDateString('pt-BR');
@@ -216,6 +223,7 @@ function printHtml({
   .type-meta { margin-left: 2.5mm; font-size: 7.5pt; color: #314960; vertical-align: middle; }
   .unit-row td { border-bottom: 1px solid #d7e0e7; padding: 1.88mm 2mm; font-size: 8.6pt; line-height: 1.05; text-align: right; vertical-align: middle; }
   .unit-row.status-reservado td { background: #fffaf0; }
+  .unit-row.status-em_contrato td { background: #eef6fb; }
   .unit-row.status-vendido td { background: #f7f7f7; color: #697783; }
   .unit-cell { text-align: left !important; white-space: nowrap; }
   .unit-cell strong { font-size: 10.2pt; color: #102130; }
@@ -223,6 +231,7 @@ function printHtml({
   .status-badge { display: inline-block; margin-left: 1.5mm; border-radius: 1mm; padding: .6mm 1.25mm; font-size: 5.7pt; font-weight: 800; letter-spacing: .05em; line-height: 1; text-transform: uppercase; background: #e8eef2; color: #526474; vertical-align: 1px; }
   .status-disponivel .status-badge { background: #e7f5f8; color: ${theme.accent}; }
   .status-reservado .status-badge { background: #f6e8c9; color: #8b6428; }
+  .status-em_contrato .status-badge { background: #dcecf6; color: #315f7d; }
   .status-vendido .status-badge { background: #e5e7e9; color: #596875; }
   .money { white-space: nowrap; font-variant-numeric: tabular-nums; }
   .money.total { color: ${theme.accent}; font-weight: 800; font-size: 9.2pt; }
@@ -241,11 +250,12 @@ function printHtml({
   <div class="summary">
     <span><strong>${statusCounts.disponivel}</strong> disponíveis</span>
     <span><strong>${statusCounts.reservado}</strong> reservadas</span>
+    <span><strong>${statusCounts.em_contrato}</strong> em contrato</span>
     <span><strong>${statusCounts.vendido}</strong> vendidas</span>
   </div>
   <table>
     <colgroup><col class="unit" /><col class="total" /><col class="entry" /><col class="installment" /><col class="reinforcement" /><col class="keys" /></colgroup>
-    <thead><tr><th>UNIDADE</th><th>VALOR TOTAL</th><th>ENTRADA</th><th>${escapeHtml(installmentHeader)}</th><th>REFORÇO ANUAL</th><th>CHAVES</th></tr></thead>
+    <thead><tr><th>UNIDADE</th><th>VALOR TOTAL</th><th>ENTRADA</th><th>${escapeHtml(installmentHeader)}</th><th>${escapeHtml(reinforcementHeader)}</th><th>CHAVES</th></tr></thead>
     <tbody>${rows}</tbody>
   </table>
   <footer class="footer">${escapeHtml(development.name)} · BOSSA EMPREENDIMENTOS · TABELA VIGENTE ${escapeHtml(monthYear)} · VALORES SUJEITOS A ALTERAÇÃO SEM AVISO PRÉVIO<div class="print-date">Impressa em ${escapeHtml(printedDate)}</div></footer>
@@ -301,7 +311,7 @@ export function SalesTablePrintPanel({
       const printableCount = units
         .filter((unit) => unit.development_id === development.id)
         .filter((unit) => Boolean(printedStatus(unit, themeKey))).length;
-      if (printableCount === 0) throw new Error(`O ${development.name} não possui unidades disponíveis, reservadas ou vendidas para imprimir.`);
+      if (printableCount === 0) throw new Error(`O ${development.name} não possui unidades disponíveis, reservadas, em contrato ou vendidas para imprimir.`);
 
       const { data, error: signedError } = await supabase.storage
         .from('development-files')
@@ -336,7 +346,7 @@ export function SalesTablePrintPanel({
     <div className="card-body">
       {error && <div className="error-box" style={{ marginBottom: 12 }}>{error}</div>}
       <div className="info-box" style={{ marginTop: 0, marginBottom: 14 }}>
-        A impressão inclui unidades disponíveis, reservadas e vendidas. Permutantes aparecem como reservadas no Alma e como vendidas no Flow.
+        A impressão inclui unidades disponíveis, reservadas, em contrato e vendidas. Permutantes aparecem como reservadas no Alma e como vendidas no Flow.
       </div>
       <div className="grid grid-2">
         {targets.map((development) => {
