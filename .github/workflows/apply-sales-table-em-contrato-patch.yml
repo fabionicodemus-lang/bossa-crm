@@ -1,0 +1,104 @@
+name: Apply sales table em contrato patch
+
+on:
+  push:
+    branches:
+      - feat/tabela-reforcos-em-contrato
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/tabela-reforcos-em-contrato
+      - name: Apply requested patch
+        shell: python
+        run: |
+          from pathlib import Path
+
+          manager_path = Path('src/components/DevelopmentsManager.tsx')
+          manager = manager_path.read_text()
+          replacements = [
+              (
+                  "type UnitStatus = 'disponivel' | 'reservado' | 'vendido' | 'oculto' | 'bloqueado';",
+                  "type UnitStatus = 'disponivel' | 'reservado' | 'em_contrato' | 'vendido' | 'oculto' | 'bloqueado';",
+              ),
+              (
+                  "  reservado: 'Reservada',\n  vendido: 'Vendida',",
+                  "  reservado: 'Reservada',\n  em_contrato: 'Em contrato',\n  vendido: 'Vendida',",
+              ),
+          ]
+          for old, new in replacements:
+              if old not in manager:
+                  raise SystemExit(f'Expected DevelopmentsManager snippet not found: {old!r}')
+              manager = manager.replace(old, new, 1)
+          manager_path.write_text(manager)
+
+          print_path = Path('src/components/SalesTablePrintPanel.tsx')
+          printed = print_path.read_text()
+          replacements = [
+              (
+                  "type PrintedStatus = 'disponivel' | 'reservado' | 'vendido';",
+                  "type PrintedStatus = 'disponivel' | 'reservado' | 'em_contrato' | 'vendido';",
+              ),
+              (
+                  "  if (unit.status === 'disponivel' || unit.status === 'reservado' || unit.status === 'vendido') return unit.status;",
+                  "  if (unit.status === 'disponivel' || unit.status === 'reservado' || unit.status === 'em_contrato' || unit.status === 'vendido') return unit.status;",
+              ),
+              (
+                  "  if (status === 'reservado') return 'Reservada';\n  return 'Vendida';",
+                  "  if (status === 'reservado') return 'Reservada';\n  if (status === 'em_contrato') return 'Em contrato';\n  return 'Vendida';",
+              ),
+              (
+                  "  const installmentHeader = installmentCounts.length === 1\n    ? `PARCELAS (${installmentCounts[0]}×)`\n    : 'PARCELAS';\n  const statusCounts = printableUnits.reduce<Record<PrintedStatus, number>>((result, item) => {",
+                  "  const installmentHeader = installmentCounts.length === 1\n    ? `PARCELAS (${installmentCounts[0]}×)`\n    : 'PARCELAS';\n  const reinforcementCounts = [...new Set(printableUnits\n    .map(({ unit }) => numberValue(unit.reinforcement_count))\n    .filter((count) => count > 0))];\n  const reinforcementHeader = reinforcementCounts.length === 1\n    ? `REFORÇO ANUAL (${reinforcementCounts[0]}×)`\n    : 'REFORÇO ANUAL';\n  const statusCounts = printableUnits.reduce<Record<PrintedStatus, number>>((result, item) => {",
+              ),
+              (
+                  "  }, { disponivel: 0, reservado: 0, vendido: 0 });",
+                  "  }, { disponivel: 0, reservado: 0, em_contrato: 0, vendido: 0 });",
+              ),
+              (
+                  "  .unit-row.status-reservado td { background: #fffaf0; }\n  .unit-row.status-vendido td { background: #f7f7f7; color: #697783; }",
+                  "  .unit-row.status-reservado td { background: #fffaf0; }\n  .unit-row.status-em_contrato td { background: #eef6fb; }\n  .unit-row.status-vendido td { background: #f7f7f7; color: #697783; }",
+              ),
+              (
+                  "  .status-reservado .status-badge { background: #f6e8c9; color: #8b6428; }\n  .status-vendido .status-badge { background: #e5e7e9; color: #596875; }",
+                  "  .status-reservado .status-badge { background: #f6e8c9; color: #8b6428; }\n  .status-em_contrato .status-badge { background: #dcecf6; color: #315f7d; }\n  .status-vendido .status-badge { background: #e5e7e9; color: #596875; }",
+              ),
+              (
+                  "    <span><strong>${statusCounts.reservado}</strong> reservadas</span>\n    <span><strong>${statusCounts.vendido}</strong> vendidas</span>",
+                  "    <span><strong>${statusCounts.reservado}</strong> reservadas</span>\n    <span><strong>${statusCounts.em_contrato}</strong> em contrato</span>\n    <span><strong>${statusCounts.vendido}</strong> vendidas</span>",
+              ),
+              (
+                  "<th>${escapeHtml(installmentHeader)}</th><th>REFORÇO ANUAL</th><th>CHAVES</th>",
+                  "<th>${escapeHtml(installmentHeader)}</th><th>${escapeHtml(reinforcementHeader)}</th><th>CHAVES</th>",
+              ),
+              (
+                  "não possui unidades disponíveis, reservadas ou vendidas para imprimir.",
+                  "não possui unidades disponíveis, reservadas, em contrato ou vendidas para imprimir.",
+              ),
+              (
+                  "A impressão inclui unidades disponíveis, reservadas e vendidas. Permutantes aparecem como reservadas no Alma e como vendidas no Flow.",
+                  "A impressão inclui unidades disponíveis, reservadas, em contrato e vendidas. Permutantes aparecem como reservadas no Alma e como vendidas no Flow.",
+              ),
+          ]
+          for old, new in replacements:
+              if old not in printed:
+                  raise SystemExit(f'Expected SalesTablePrintPanel snippet not found: {old!r}')
+              printed = printed.replace(old, new, 1)
+          print_path.write_text(printed)
+
+          migration = Path('supabase/migrations/022_unit_status_em_contrato.sql')
+          migration.write_text("""-- BOSSA CRM — adiciona o status comercial Em contrato às unidades\n\nbegin;\n\nalter table public.development_units\n  drop constraint if exists development_units_status_check;\n\nalter table public.development_units\n  add constraint development_units_status_check\n  check (status in ('disponivel','reservado','em_contrato','vendido','oculto','bloqueado'));\n\ncommit;\n""")
+      - name: Commit patch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/components/DevelopmentsManager.tsx src/components/SalesTablePrintPanel.tsx supabase/migrations/022_unit_status_em_contrato.sql
+          git commit -m "feat: adiciona em contrato e quantidade de reforços"
+          git push origin HEAD:feat/tabela-reforcos-em-contrato
