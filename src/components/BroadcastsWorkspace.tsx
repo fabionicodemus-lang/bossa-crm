@@ -78,7 +78,9 @@ export function BroadcastsWorkspace({
   }, [connections]);
 
   useEffect(() => {
-    if (tab === 'modelos' && !templatesReady) void syncTemplates();
+    if (tab !== 'modelos' || templatesReady) return;
+    const timer = window.setTimeout(() => void syncTemplates(), 0);
+    return () => window.clearTimeout(timer);
   }, [syncTemplates, tab, templatesReady]);
 
   // A aba fica na URL para que o atalho vindo da campanha, o botão de voltar do
