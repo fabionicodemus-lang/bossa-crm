@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { requestSmbAppDataSync } from '@/lib/whatsapp/coexistenceSync';
+import { ensureCoexistenceWebhookFields } from '@/lib/whatsapp/metaAppWebhook';
 import type { WhatsAppChannelRecord } from '@/lib/whatsapp/channelService';
 
 export const runtime = 'nodejs';
@@ -18,10 +19,35 @@ type SyncChannel = WhatsAppChannelRecord & {
   contacts_sync_request_id?: string | null;
   contacts_sync_completed_at?: string | null;
   contacts_sync_error?: string | null;
+  coexistence_webhooks_ensured_at?: string | null;
+  coexistence_webhooks_error?: string | null;
 };
+
+async function ensureCoexistenceWebhooks(admin: ReturnType<typeof createAdminClient>, channel: SyncChannel) {
+  if (channel.connection_mode !== 'coexistence') return;
+  if (channel.coexistence_webhooks_ensured_at || channel.coexistence_webhooks_error) return;
+
+  try {
+    await ensureCoexistenceWebhookFields();
+    await admin.from('whatsapp_channels').update({
+      coexistence_webhooks_ensured_at: new Date().toISOString(),
+      coexistence_webhooks_error: null,
+    }).eq('id', channel.id);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Falha ao configurar os webhooks da Coexistência.';
+    await admin.from('whatsapp_channels').update({
+      coexistence_webhooks_error: message.slice(0, 2000),
+    }).eq('id', channel.id);
+  }
+}
 
 async function requestInitialSync(admin: ReturnType<typeof createAdminClient>, channel: SyncChannel) {
   if (channel.connection_mode !== 'coexistence') return;
+
+  // Os callbacks de history/contacts/echoes precisam estar habilitados no app
+  // Meta antes de solicitar o backfill. Esse passo também corrige conexões já
+  // feitas com uma configuração antiga do webhook.
+  await ensureCoexistenceWebhooks(admin, channel);
 
   const connectedAt = channel.registered_at ? new Date(channel.registered_at).getTime() : Date.now();
   const onboardingAgeHours = (Date.now() - connectedAt) / 3_600_000;
@@ -124,7 +150,7 @@ export async function GET(request: Request) {
 
     const { data: channel, error: refreshedChannelError } = await admin
       .from('whatsapp_channels')
-      .select('id,label,display_phone_number,verified_name,status,connection_mode,history_sync_requested_at,history_sync_request_id,history_sync_completed_at,history_sync_progress,history_sync_phase,history_sync_error,contacts_sync_requested_at,contacts_sync_completed_at,contacts_sync_error')
+      .select('id,label,display_phone_number,verified_name,status,connection_mode,history_sync_requested_at,history_sync_request_id,history_sync_completed_at,history_sync_progress,history_sync_phase,history_sync_error,contacts_sync_requested_at,contacts_sync_completed_at,contacts_sync_error,coexistence_webhooks_ensured_at,coexistence_webhooks_error')
       .eq('id', internalChannel.id)
       .single();
     if (refreshedChannelError) throw refreshedChannelError;
