@@ -5,6 +5,7 @@ import {
   findChannelByPhoneNumberId,
   type WhatsAppChannelRecord,
 } from '@/lib/whatsapp/channelService';
+import { importHistory, importStateSync } from '@/lib/whatsapp/coexistenceSync';
 import { processWebhookEvent } from '@/lib/whatsapp/webhookProcessor';
 import { metaTimestamp, normalizeWaId } from '@/lib/whatsapp/utils';
 
@@ -37,6 +38,8 @@ type StoredEvent = {
         metadata?: { phone_number_id?: string };
         contacts?: Array<{ wa_id?: string; profile?: { name?: string } }>;
         message_echoes?: LooseMessage[];
+        history?: Array<Record<string, unknown>>;
+        state_sync?: Array<Record<string, unknown>>;
         [key: string]: unknown;
       };
     };
@@ -327,11 +330,20 @@ async function processCoexistenceEvent(eventId: string) {
           contactName,
         });
       }
+    } else if (field === 'history') {
+      await importHistory({
+        admin,
+        channel,
+        history: (value.history ?? []) as Parameters<typeof importHistory>[0]['history'],
+      });
+    } else if (field === 'smb_app_state_sync') {
+      await importStateSync({
+        admin,
+        channel,
+        stateSync: (value.state_sync ?? []) as Parameters<typeof importStateSync>[0]['stateSync'],
+      });
     }
 
-    // history e smb_app_state_sync permanecem preservados no log bruto.
-    // A importação do histórico anterior ao onboarding fica para uma etapa separada,
-    // evitando misturar mensagens antigas com o pipeline comercial atual.
     await finishEvent(admin, event.id);
     return { processed: true, reason: field || 'coexistence_event' };
   } catch (error) {
