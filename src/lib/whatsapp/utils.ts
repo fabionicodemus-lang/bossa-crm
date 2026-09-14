@@ -1,7 +1,11 @@
 export function normalizeWaId(value: string) {
   const digits = value.replace(/\D/g, '');
   if (!digits) return '';
-  return digits.startsWith('55') ? digits : `55${digits}`;
+  if (digits.startsWith('55')) return digits;
+  // Telefones brasileiros locais chegam com 10/11 dígitos. IDs internacionais
+  // já vêm no formato E.164 sem "+" e não podem receber o DDI 55 artificialmente.
+  if (digits.length === 10 || digits.length === 11) return `55${digits}`;
+  return digits;
 }
 
 export function metaTimestamp(value: string | number | undefined) {
