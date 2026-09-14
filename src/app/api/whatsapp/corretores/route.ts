@@ -23,6 +23,51 @@ type SyncChannel = WhatsAppChannelRecord & {
   coexistence_webhooks_error?: string | null;
 };
 
+type MediaSummary = {
+  available: boolean;
+  mimeType: string | null;
+  filename: string | null;
+  historicalPlaceholder: boolean;
+};
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+}
+
+function mediaSummary(typeValue: unknown, payloadValue: unknown): MediaSummary | null {
+  const payload = asRecord(payloadValue);
+  if (!payload) return null;
+
+  const crm = asRecord(payload.crm);
+  if (crm && String(crm.ai_file_id ?? '').trim()) {
+    return {
+      available: true,
+      mimeType: typeof crm.mime_type === 'string' ? crm.mime_type : null,
+      filename: typeof crm.original_name === 'string' ? crm.original_name : null,
+      historicalPlaceholder: false,
+    };
+  }
+
+  const envelope = asRecord(payload.message_echo) ?? asRecord(payload.history_message) ?? payload;
+  const type = String(envelope.type ?? typeValue ?? '').toLowerCase();
+  if (type === 'media_placeholder') {
+    return { available: false, mimeType: null, filename: null, historicalPlaceholder: true };
+  }
+  if (!['image', 'audio', 'video', 'document', 'sticker'].includes(type)) return null;
+  const media = asRecord(envelope[type]);
+  if (!media) {
+    return { available: false, mimeType: null, filename: null, historicalPlaceholder: false };
+  }
+  return {
+    available: Boolean(String(media.id ?? '').trim()),
+    mimeType: typeof media.mime_type === 'string' ? media.mime_type : null,
+    filename: typeof media.filename === 'string' ? media.filename : null,
+    historicalPlaceholder: false,
+  };
+}
+
 async function ensureCoexistenceWebhooks(admin: ReturnType<typeof createAdminClient>, channel: SyncChannel) {
   if (channel.connection_mode !== 'coexistence') return;
   if (channel.coexistence_webhooks_ensured_at || channel.coexistence_webhooks_error) return;
@@ -44,9 +89,6 @@ async function ensureCoexistenceWebhooks(admin: ReturnType<typeof createAdminCli
 async function requestInitialSync(admin: ReturnType<typeof createAdminClient>, channel: SyncChannel) {
   if (channel.connection_mode !== 'coexistence') return;
 
-  // Os callbacks de history/contacts/echoes precisam estar habilitados no app
-  // Meta antes de solicitar o backfill. Esse passo também corrige conexões já
-  // feitas com uma configuração antiga do webhook.
   await ensureCoexistenceWebhooks(admin, channel);
 
   const connectedAt = channel.registered_at ? new Date(channel.registered_at).getTime() : Date.now();
@@ -249,7 +291,7 @@ export async function GET(request: Request) {
     if (selectedConversationId) {
       const { data: selectedMessages, error: selectedMessagesError } = await admin
         .from('whatsapp_messages')
-        .select('id,conversation_id,direction,sender_kind,type,body,status,sent_at,created_at')
+        .select('id,conversation_id,direction,sender_kind,type,body,status,sent_at,created_at,payload')
         .eq('organization_id', membership.organization_id)
         .eq('channel_id', channel.id)
         .eq('conversation_id', selectedConversationId)
@@ -266,6 +308,7 @@ export async function GET(request: Request) {
         status: message.status,
         sentAt: message.sent_at,
         createdAt: message.created_at,
+        media: mediaSummary(message.type, message.payload),
       }));
     }
 
