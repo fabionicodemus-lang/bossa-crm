@@ -1,8 +1,91 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { requestSmbAppDataSync } from '@/lib/whatsapp/coexistenceSync';
+import type { WhatsAppChannelRecord } from '@/lib/whatsapp/channelService';
 
 export const runtime = 'nodejs';
+
+type SyncChannel = WhatsAppChannelRecord & {
+  connection_mode?: string | null;
+  history_sync_requested_at?: string | null;
+  history_sync_request_id?: string | null;
+  history_sync_completed_at?: string | null;
+  history_sync_progress?: number | null;
+  history_sync_phase?: number | null;
+  history_sync_error?: string | null;
+  contacts_sync_requested_at?: string | null;
+  contacts_sync_request_id?: string | null;
+  contacts_sync_completed_at?: string | null;
+  contacts_sync_error?: string | null;
+};
+
+async function requestInitialSync(admin: ReturnType<typeof createAdminClient>, channel: SyncChannel) {
+  if (channel.connection_mode !== 'coexistence') return;
+
+  const connectedAt = channel.registered_at ? new Date(channel.registered_at).getTime() : Date.now();
+  const onboardingAgeHours = (Date.now() - connectedAt) / 3_600_000;
+  if (onboardingAgeHours > 24 && !channel.history_sync_requested_at) {
+    await admin.from('whatsapp_channels').update({
+      history_sync_error: 'A janela de 24h para solicitar o histórico da Coexistência expirou. Reconecte o número para abrir uma nova janela de sincronização.',
+    }).eq('id', channel.id);
+    return;
+  }
+
+  const jobs: Array<Promise<void>> = [];
+
+  if (!channel.contacts_sync_requested_at) {
+    jobs.push((async () => {
+      const now = new Date().toISOString();
+      const { data: claimed, error: claimError } = await admin.from('whatsapp_channels')
+        .update({ contacts_sync_requested_at: now, contacts_sync_error: null })
+        .eq('id', channel.id)
+        .is('contacts_sync_requested_at', null)
+        .select('id')
+        .maybeSingle();
+      if (claimError) throw claimError;
+      if (!claimed) return;
+      try {
+        const result = await requestSmbAppDataSync(channel, 'smb_app_state_sync');
+        await admin.from('whatsapp_channels').update({
+          contacts_sync_request_id: result.requestId,
+          contacts_sync_error: null,
+        }).eq('id', channel.id);
+      } catch (error) {
+        await admin.from('whatsapp_channels').update({
+          contacts_sync_error: (error instanceof Error ? error.message : 'Falha ao solicitar contatos.').slice(0, 2000),
+        }).eq('id', channel.id);
+      }
+    })());
+  }
+
+  if (!channel.history_sync_requested_at) {
+    jobs.push((async () => {
+      const now = new Date().toISOString();
+      const { data: claimed, error: claimError } = await admin.from('whatsapp_channels')
+        .update({ history_sync_requested_at: now, history_sync_error: null, history_sync_progress: 0 })
+        .eq('id', channel.id)
+        .is('history_sync_requested_at', null)
+        .select('id')
+        .maybeSingle();
+      if (claimError) throw claimError;
+      if (!claimed) return;
+      try {
+        const result = await requestSmbAppDataSync(channel, 'history');
+        await admin.from('whatsapp_channels').update({
+          history_sync_request_id: result.requestId,
+          history_sync_error: null,
+        }).eq('id', channel.id);
+      } catch (error) {
+        await admin.from('whatsapp_channels').update({
+          history_sync_error: (error instanceof Error ? error.message : 'Falha ao solicitar histórico.').slice(0, 2000),
+        }).eq('id', channel.id);
+      }
+    })());
+  }
+
+  if (jobs.length) await Promise.allSettled(jobs);
+}
 
 export async function GET(request: Request) {
   try {
@@ -22,9 +105,9 @@ export async function GET(request: Request) {
     }
 
     const admin = createAdminClient();
-    const { data: channel, error: channelError } = await admin
+    const { data: internalChannel, error: channelError } = await admin
       .from('whatsapp_channels')
-      .select('id,label,display_phone_number,verified_name,status,connection_mode')
+      .select('*')
       .eq('organization_id', membership.organization_id)
       .eq('role', 'corretor')
       .eq('status', 'connected')
@@ -33,9 +116,18 @@ export async function GET(request: Request) {
       .maybeSingle();
 
     if (channelError) throw channelError;
-    if (!channel) {
+    if (!internalChannel) {
       return NextResponse.json({ channel: null, conversations: [], selectedConversationId: null, messages: [] });
     }
+
+    await requestInitialSync(admin, internalChannel as SyncChannel);
+
+    const { data: channel, error: refreshedChannelError } = await admin
+      .from('whatsapp_channels')
+      .select('id,label,display_phone_number,verified_name,status,connection_mode,history_sync_requested_at,history_sync_request_id,history_sync_completed_at,history_sync_progress,history_sync_phase,history_sync_error,contacts_sync_requested_at,contacts_sync_completed_at,contacts_sync_error')
+      .eq('id', internalChannel.id)
+      .single();
+    if (refreshedChannelError) throw refreshedChannelError;
 
     const { data: conversationRows, error: conversationsError } = await admin
       .from('whatsapp_conversations')
@@ -43,7 +135,7 @@ export async function GET(request: Request) {
       .eq('organization_id', membership.organization_id)
       .eq('channel_id', channel.id)
       .order('updated_at', { ascending: false })
-      .limit(250);
+      .limit(5000);
 
     if (conversationsError) throw conversationsError;
     const rawConversations = conversationRows ?? [];
@@ -61,26 +153,37 @@ export async function GET(request: Request) {
     const leads = new Map((leadRows ?? []).map((lead) => [lead.id, lead]));
 
     const conversationIds = rawConversations.map((row) => row.id);
-    const { data: latestMessageRows, error: latestMessagesError } = await admin
-      .from('whatsapp_messages')
-      .select('id,conversation_id,direction,sender_kind,type,body,status,sent_at,created_at')
-      .eq('organization_id', membership.organization_id)
-      .eq('channel_id', channel.id)
-      .in('conversation_id', conversationIds)
-      .order('created_at', { ascending: false })
-      .limit(600);
-    if (latestMessagesError) throw latestMessagesError;
-
-    const latestByConversation = new Map<string, (typeof latestMessageRows)[number]>();
-    for (const message of latestMessageRows ?? []) {
-      if (!latestByConversation.has(message.conversation_id)) {
-        latestByConversation.set(message.conversation_id, message);
+    const latestByConversation = new Map<string, Record<string, unknown>>();
+    for (let start = 0; start < conversationIds.length; start += 400) {
+      const ids = conversationIds.slice(start, start + 400);
+      const { data: latestMessageRows, error: latestMessagesError } = await admin
+        .from('whatsapp_messages')
+        .select('id,conversation_id,direction,sender_kind,type,body,status,sent_at,created_at')
+        .eq('organization_id', membership.organization_id)
+        .eq('channel_id', channel.id)
+        .in('conversation_id', ids)
+        .order('created_at', { ascending: false })
+        .limit(Math.max(600, ids.length * 3));
+      if (latestMessagesError) throw latestMessagesError;
+      for (const message of latestMessageRows ?? []) {
+        if (!latestByConversation.has(message.conversation_id)) {
+          latestByConversation.set(message.conversation_id, message);
+        }
       }
     }
 
     const conversations = rawConversations.map((conversation) => {
       const lead = conversation.lead_id ? leads.get(conversation.lead_id) : null;
-      const lastMessage = latestByConversation.get(conversation.id) ?? null;
+      const lastMessage = latestByConversation.get(conversation.id) as {
+        id: string;
+        direction: string;
+        sender_kind: string;
+        type: string;
+        body: string | null;
+        status: string | null;
+        sent_at: string | null;
+        created_at: string;
+      } | undefined;
       return {
         id: conversation.id,
         contactWaId: conversation.contact_wa_id,
@@ -125,7 +228,7 @@ export async function GET(request: Request) {
         .eq('channel_id', channel.id)
         .eq('conversation_id', selectedConversationId)
         .order('created_at', { ascending: false })
-        .limit(400);
+        .limit(1000);
       if (selectedMessagesError) throw selectedMessagesError;
       messages = (selectedMessages ?? []).reverse().map((message) => ({
         id: message.id,
