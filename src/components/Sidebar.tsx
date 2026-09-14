@@ -16,6 +16,7 @@ const links: NavItem[] = [
   { href: '/importar?tipo=cliente', icon: '📥', label: 'Importar XLSX', roles: ['admin', 'comercial'] },
   { section: 'Corretores' },
   { href: '/corretores', icon: '🤝', label: 'Pipeline Corretores' },
+  { href: '/mensagens-corretores', icon: '💬', label: 'WhatsApp Corretores', roles: ['admin'] },
   { href: '/importar?tipo=corretor', icon: '📥', label: 'Importar corretores', roles: ['admin', 'comercial'] },
   { section: 'Comercial' },
   { href: '/tarefas', icon: '✅', label: 'Tarefas' },
