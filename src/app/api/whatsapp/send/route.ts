@@ -68,8 +68,31 @@ export async function POST(request: Request) {
     const lead = leadData as Lead | null;
     if (!lead) return NextResponse.json({ error: 'Contato não encontrado.' }, { status: 404 });
     if (!lead.phone) return NextResponse.json({ error: 'O contato não possui telefone válido.' }, { status: 400 });
-    if (lead.owner_mode === 'ai' && lead.ai_enabled) {
+
+    const isBroker = lead.kind === 'corretor';
+    const takeoverAt = new Date().toISOString();
+    const takeoverMetadata = isBroker ? {
+      ...(lead.metadata || {}),
+      whatsapp_manual_takeover: true,
+      whatsapp_manual_takeover_at: takeoverAt,
+      whatsapp_manual_takeover_by: user.id,
+    } : (lead.metadata || {});
+
+    // Na caixa dos corretores, uma resposta manual significa assumir a conversa.
+    // Para clientes finais, mantemos a passagem explícita já existente.
+    if (lead.owner_mode === 'ai' && lead.ai_enabled && !isBroker) {
       return NextResponse.json({ error: 'Aceite a passagem ou assuma a conversa antes de enviar uma mensagem humana.' }, { status: 409 });
+    }
+    if (isBroker) {
+      const { error: takeoverError } = await admin.from('leads').update({
+        owner_id: lead.owner_id || user.id,
+        owner_mode: 'human',
+        ai_enabled: false,
+        automation_paused: true,
+        metadata: takeoverMetadata,
+        updated_at: takeoverAt,
+      }).eq('id', lead.id);
+      if (takeoverError) throw takeoverError;
     }
 
     const { data: currentConversation, error: conversationReadError } = await admin
@@ -117,7 +140,7 @@ export async function POST(request: Request) {
       const { error: phoneUpdateError } = await admin.from('leads').update({
         phone: destination,
         metadata: {
-          ...(lead.metadata || {}),
+          ...takeoverMetadata,
           whatsapp_canonical_wa_id: destination,
           whatsapp_phone_corrected_at: new Date().toISOString(),
         },
@@ -178,8 +201,11 @@ export async function POST(request: Request) {
       owner_id: lead.owner_id || user.id,
       owner_mode: 'human',
       ai_enabled: false,
-      automation_paused: false,
-      stage: ['agendado', 'pos_reuniao', 'proposta_negociacao'].includes(lead.stage) ? lead.stage : 'humano_ativo',
+      automation_paused: isBroker,
+      stage: isBroker
+        ? lead.stage
+        : (['agendado', 'pos_reuniao', 'proposta_negociacao'].includes(lead.stage) ? lead.stage : 'humano_ativo'),
+      ...(isBroker ? { metadata: takeoverMetadata } : {}),
       last_outbound_at: now,
       last_human_activity_at: now,
       updated_at: now,
@@ -191,28 +217,32 @@ export async function POST(request: Request) {
       lead_id: lead.id,
       user_id: user.id,
       type: 'mensagem_humana',
-      title: 'Consultor respondeu pelo WhatsApp',
+      title: isBroker ? 'Comercial respondeu ao corretor pelo WhatsApp' : 'Consultor respondeu pelo WhatsApp',
       description: text,
-      metadata: { message_id: message.id, whatsapp_channel_id: channel.id, category: 'service' },
+      metadata: { message_id: message.id, whatsapp_channel_id: channel.id, category: 'service', manual_takeover: isBroker },
     });
 
-    after(async () => {
-      try {
-        await analyzeAfterHumanMessage(membership.organization_id, lead.id);
-      } catch (analysisError) {
-        console.error('[silent hybrid analysis]', analysisError);
-        await createAdminClient().from('activities').insert({
-          organization_id: membership.organization_id,
-          lead_id: lead.id,
-          type: 'falha_analise_silenciosa',
-          title: 'A análise silenciosa da IA falhou',
-          description: analysisError instanceof Error ? analysisError.message : 'Erro desconhecido.',
-          metadata: { message_id: message.id },
-        });
-      }
-    });
+    // O Plantão fica pausado depois da resposta manual do comercial. Evitamos que
+    // a análise silenciosa devolva a conversa para a IA logo após o envio.
+    if (!isBroker) {
+      after(async () => {
+        try {
+          await analyzeAfterHumanMessage(membership.organization_id, lead.id);
+        } catch (analysisError) {
+          console.error('[silent hybrid analysis]', analysisError);
+          await createAdminClient().from('activities').insert({
+            organization_id: membership.organization_id,
+            lead_id: lead.id,
+            type: 'falha_analise_silenciosa',
+            title: 'A análise silenciosa da IA falhou',
+            description: analysisError instanceof Error ? analysisError.message : 'Erro desconhecido.',
+            metadata: { message_id: message.id },
+          });
+        }
+      });
+    }
 
-    return NextResponse.json({ message, windowExpiresAt });
+    return NextResponse.json({ message, windowExpiresAt, manualTakeover: isBroker });
   } catch (error) {
     console.error('[whatsapp send]', error);
     return NextResponse.json({ error: error instanceof Error ? error.message : 'Não foi possível enviar a mensagem.' }, { status: 500 });
