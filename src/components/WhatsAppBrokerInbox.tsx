@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image';
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { displayPhone, initials } from '@/lib/format';
 
@@ -12,6 +13,13 @@ type Channel = {
   connection_mode: string;
 };
 
+type InboxMedia = {
+  available: boolean;
+  mimeType: string | null;
+  filename: string | null;
+  historicalPlaceholder: boolean;
+} | null;
+
 type InboxMessage = {
   id: string;
   conversationId: string;
@@ -22,6 +30,7 @@ type InboxMessage = {
   status: string | null;
   sentAt: string | null;
   createdAt: string;
+  media?: InboxMedia;
 };
 
 type Conversation = {
@@ -68,6 +77,12 @@ function messageTime(value: string) {
 function previewText(message: InboxMessage | null) {
   if (!message) return 'Conversa iniciada';
   const prefix = message.direction === 'out' ? 'Você: ' : '';
+  const type = message.type.toLowerCase();
+  if (type === 'image') return `${prefix}📷 ${message.body && message.body !== '[Imagem]' ? message.body : 'Imagem'}`;
+  if (type === 'audio') return `${prefix}🎙️ Áudio`;
+  if (type === 'video') return `${prefix}🎥 ${message.body && message.body !== '[Vídeo]' ? message.body : 'Vídeo'}`;
+  if (type === 'document') return `${prefix}📎 ${message.body || 'Arquivo'}`;
+  if (type === 'media_placeholder') return `${prefix}📎 Mídia do histórico`;
   return `${prefix}${message.body || `[${message.type}]`}`;
 }
 
@@ -76,6 +91,89 @@ function statusMark(status: string | null) {
   if (status === 'delivered') return '✓✓';
   if (status === 'failed') return '!';
   return '✓';
+}
+
+function meaningfulMediaBody(message: InboxMessage) {
+  const body = (message.body || '').trim();
+  if (!body) return '';
+  if (/^\[(Imagem|Áudio|Vídeo|Mídia histórica)\]$/i.test(body)) return '';
+  if (/^\[Documento:.*\]$/i.test(body)) return '';
+  if (body.startsWith('📎 ') && message.media?.filename) return '';
+  return body;
+}
+
+function mediaKind(message: InboxMessage) {
+  const mime = message.media?.mimeType?.toLowerCase() || '';
+  if (mime.startsWith('image/')) return 'image';
+  if (mime.startsWith('audio/')) return 'audio';
+  if (mime.startsWith('video/')) return 'video';
+  const type = message.type.toLowerCase();
+  if (['image', 'audio', 'video', 'document', 'sticker'].includes(type)) return type;
+  return 'document';
+}
+
+function BrokerMessageContent({ message }: { message: InboxMessage }) {
+  const media = message.media;
+  if (media?.historicalPlaceholder) {
+    return <div style={{ fontSize: 12, lineHeight: 1.45, color: '#756d65', display: 'flex', gap: 8, alignItems: 'center' }}>
+      <span style={{ fontSize: 20 }}>📎</span>
+      <span><strong>Mídia do histórico</strong><br />A Meta trouxe o registro da mensagem, mas não disponibilizou o arquivo antigo.</span>
+    </div>;
+  }
+
+  if (!media?.available) {
+    return <div className="broker-message-body">{message.body || `[${message.type}]`}</div>;
+  }
+
+  const src = `/api/messages/${message.id}/media`;
+  const kind = mediaKind(message);
+  const caption = meaningfulMediaBody(message);
+
+  if (kind === 'image' || kind === 'sticker') {
+    return <div style={{ display: 'grid', gap: 7 }}>
+      <a href={src} target="_blank" rel="noreferrer" style={{ display: 'block', lineHeight: 0 }}>
+        <Image
+          src={src}
+          alt={caption || media.filename || 'Imagem do WhatsApp'}
+          width={720}
+          height={540}
+          unoptimized
+          style={{ width: 'min(380px, 100%)', height: 'auto', maxHeight: 460, objectFit: 'contain', borderRadius: 7 }}
+        />
+      </a>
+      {caption && <div style={{ fontSize: 13, lineHeight: 1.42, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{caption}</div>}
+    </div>;
+  }
+
+  if (kind === 'audio') {
+    return <div style={{ display: 'grid', gap: 7, minWidth: 260 }}>
+      <audio controls preload="metadata" src={src} style={{ width: 'min(360px, 100%)', height: 38 }} />
+      {caption && <div style={{ fontSize: 12, whiteSpace: 'pre-wrap' }}>{caption}</div>}
+    </div>;
+  }
+
+  if (kind === 'video') {
+    return <div style={{ display: 'grid', gap: 7 }}>
+      <video controls preload="metadata" src={src} style={{ width: 'min(420px, 100%)', maxHeight: 460, borderRadius: 7, background: '#111' }} />
+      {caption && <div style={{ fontSize: 13, lineHeight: 1.42, whiteSpace: 'pre-wrap' }}>{caption}</div>}
+    </div>;
+  }
+
+  const filename = media.filename || message.body?.replace(/^\[Documento:\s*/i, '').replace(/\]$/, '') || 'Arquivo do WhatsApp';
+  return <div style={{ display: 'grid', gap: 7, minWidth: 230 }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 10px', borderRadius: 8, background: 'rgba(255,255,255,.5)', border: '1px solid rgba(70,60,50,.12)' }}>
+      <span style={{ fontSize: 26 }}>📄</span>
+      <div style={{ minWidth: 0, flex: 1 }}>
+        <strong style={{ display: 'block', fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{filename}</strong>
+        {media.mimeType && <span style={{ display: 'block', marginTop: 2, color: '#817970', fontSize: 9 }}>{media.mimeType}</span>}
+      </div>
+    </div>
+    <div style={{ display: 'flex', gap: 8 }}>
+      <a href={src} target="_blank" rel="noreferrer" style={{ fontSize: 11, fontWeight: 800, color: '#176c52', textDecoration: 'none' }}>Abrir arquivo</a>
+      <a href={`${src}?download=1`} style={{ fontSize: 11, fontWeight: 800, color: '#176c52', textDecoration: 'none' }}>Baixar</a>
+    </div>
+    {caption && <div style={{ fontSize: 12, whiteSpace: 'pre-wrap' }}>{caption}</div>}
+  </div>;
 }
 
 export function WhatsAppBrokerInbox() {
@@ -234,7 +332,7 @@ export function WhatsAppBrokerInbox() {
           {messages.length === 0 && <div className="broker-day-chip">Nenhuma mensagem sincronizada nesta conversa.</div>}
           {messages.map((message) => <div key={message.id} className={`broker-message-row ${message.direction === 'out' ? 'out' : 'in'}`}>
             <div className="broker-message-bubble">
-              <div className="broker-message-body">{message.body || `[${message.type}]`}</div>
+              <BrokerMessageContent message={message} />
               <div className="broker-message-meta">
                 <span>{messageTime(message.createdAt)}</span>
                 {message.direction === 'out' && <span className={message.status === 'read' ? 'read' : ''}>{statusMark(message.status)}</span>}
@@ -273,11 +371,11 @@ export function WhatsAppBrokerInbox() {
       .broker-search-wrap{margin:10px 12px;display:flex;align-items:center;gap:8px;background:#f3f1ee;border-radius:9px;padding:0 11px;color:#8f877f}.broker-search-wrap input{border:0;outline:0;background:transparent;width:100%;height:38px;font-size:13px;color:#302b26}
       .broker-conversations{overflow:auto;flex:1}.broker-conversation{width:100%;display:flex;gap:11px;padding:12px 13px;border:0;border-bottom:1px solid #f0ece7;background:#fff;text-align:left;cursor:pointer}.broker-conversation:hover,.broker-conversation.active{background:#f3f1ed}.broker-avatar{width:42px;height:42px;flex:0 0 42px;border-radius:50%;display:grid;place-items:center;background:#d9ddd5;color:#3d4d41;font-weight:800;font-size:13px}.broker-conversation-main{min-width:0;flex:1}.broker-conversation-title{display:flex;gap:8px;justify-content:space-between;align-items:center}.broker-conversation-title strong{font-size:13px;color:#28231f;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.broker-conversation-title time{font-size:10px;color:#8b837b;white-space:nowrap}.broker-conversation-preview{margin-top:4px;font-size:12px;color:#756d65;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.broker-conversation-preview span{display:block;overflow:hidden;text-overflow:ellipsis}.broker-conversation small{display:block;margin-top:4px;font-size:10px;color:#a09890;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.broker-no-conversations{padding:28px 18px;color:#8b837b;font-size:12px;text-align:center}
       .broker-chat-panel{min-width:0;display:flex;flex-direction:column;background:#efeae2;position:relative}.broker-chat-panel:before{content:'';position:absolute;inset:0;opacity:.18;pointer-events:none;background-image:radial-gradient(#a79e92 1px,transparent 1px);background-size:22px 22px}.broker-chat-head{position:relative;z-index:1;height:68px;background:#f5f3ef;border-bottom:1px solid #dfdad3;display:flex;align-items:center;padding:0 16px;gap:11px}.broker-chat-contact{min-width:0;flex:1;display:flex;flex-direction:column}.broker-chat-contact strong{font-size:14px;color:#2e2924}.broker-chat-contact span{font-size:11px;color:#7b736b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.broker-window-pill{font-size:10px;padding:5px 8px;border-radius:999px;background:#eee2d0;color:#8b5b1d;font-weight:700}.broker-window-pill.open{background:#dff1e3;color:#28753b}
-      .broker-messages{position:relative;z-index:1;flex:1;overflow:auto;padding:22px 6% 16px}.broker-message-row{display:flex;margin:3px 0}.broker-message-row.in{justify-content:flex-start}.broker-message-row.out{justify-content:flex-end}.broker-message-bubble{max-width:min(70%,680px);min-width:90px;padding:8px 9px 5px;border-radius:8px;background:#fff;box-shadow:0 1px 1px rgba(50,40,30,.12);color:#2e2a26}.broker-message-row.out .broker-message-bubble{background:#d9fdd3}.broker-message-body{font-size:13px;line-height:1.42;white-space:pre-wrap;overflow-wrap:anywhere;padding-right:14px}.broker-message-meta{display:flex;justify-content:flex-end;gap:4px;align-items:center;margin-top:2px;font-size:9px;color:#857e76}.broker-message-meta .read{color:#42a5c8}.broker-day-chip{width:max-content;max-width:80%;margin:20px auto;padding:6px 10px;border-radius:7px;background:#fff7e8;color:#7b6e5f;font-size:11px;box-shadow:0 1px 1px rgba(50,40,30,.08)}
+      .broker-messages{position:relative;z-index:1;flex:1;overflow:auto;padding:22px 6% 16px}.broker-message-row{display:flex;margin:3px 0}.broker-message-row.in{justify-content:flex-start}.broker-message-row.out{justify-content:flex-end}.broker-message-bubble{max-width:min(76%,720px);min-width:90px;padding:8px 9px 5px;border-radius:8px;background:#fff;box-shadow:0 1px 1px rgba(50,40,30,.12);color:#2e2a26}.broker-message-row.out .broker-message-bubble{background:#d9fdd3}.broker-message-body{font-size:13px;line-height:1.42;white-space:pre-wrap;overflow-wrap:anywhere;padding-right:14px}.broker-message-meta{display:flex;justify-content:flex-end;gap:4px;align-items:center;margin-top:4px;font-size:9px;color:#857e76}.broker-message-meta .read{color:#42a5c8}.broker-day-chip{width:max-content;max-width:80%;margin:20px auto;padding:6px 10px;border-radius:7px;background:#fff7e8;color:#7b6e5f;font-size:11px;box-shadow:0 1px 1px rgba(50,40,30,.08)}
       .broker-composer{position:relative;z-index:1;display:flex;align-items:flex-end;gap:10px;padding:10px 14px;background:#f3f0eb;border-top:1px solid #ddd7cf}.broker-composer textarea{resize:none;min-height:42px;max-height:110px;flex:1;border:1px solid #e0dbd4;border-radius:10px;background:#fff;padding:11px 13px;outline:0;font:inherit;font-size:13px;line-height:1.35}.broker-composer textarea:focus{border-color:#b6aca0}.broker-composer button{width:42px;height:42px;border-radius:50%;border:0;background:#167c5a;color:#fff;font-size:18px;cursor:pointer}.broker-composer button:disabled{background:#aaa39a;cursor:not-allowed}.broker-window-note{position:relative;z-index:1;padding:7px 14px;background:#fff4df;color:#7e5a24;font-size:10px;text-align:center}.broker-chat-error{position:relative;z-index:2;margin:0 14px 8px;padding:8px 10px;border-radius:7px;background:#fde8e7;color:#9b322c;font-size:11px}
       .broker-chat-placeholder,.broker-inbox-empty,.broker-inbox-loading{display:grid;place-items:center;align-content:center;text-align:center;min-height:520px;padding:28px;color:#746c63}.broker-chat-placeholder{position:relative;z-index:1;flex:1}.broker-chat-placeholder h2,.broker-inbox-empty h3{margin:10px 0 4px;color:#413b35}.broker-chat-placeholder p,.broker-inbox-empty p{max-width:520px;margin:0;font-size:13px}.broker-chat-placeholder small{margin-top:8px;color:#978e84}.broker-placeholder-phone,.broker-empty-icon{font-size:48px;opacity:.55}
-      @media(max-width:980px){.broker-inbox-shell{grid-template-columns:300px minmax(0,1fr)}.broker-window-pill{display:none}.broker-message-bubble{max-width:82%}}
-      @media(max-width:760px){.broker-inbox-shell{display:block;height:auto;min-height:0}.broker-chat-list{height:420px;border-right:0;border-bottom:1px solid #ddd}.broker-chat-panel{height:620px}.broker-message-bubble{max-width:88%}}
+      @media(max-width:980px){.broker-inbox-shell{grid-template-columns:300px minmax(0,1fr)}.broker-window-pill{display:none}.broker-message-bubble{max-width:86%}}
+      @media(max-width:760px){.broker-inbox-shell{display:block;height:auto;min-height:0}.broker-chat-list{height:420px;border-right:0;border-bottom:1px solid #ddd}.broker-chat-panel{height:620px}.broker-message-bubble{max-width:92%}}
     `}</style>
   </div>;
 }
