@@ -86,15 +86,60 @@ export function WhatsAppSettings({ initialConnections }: { initialConnections: C
 
   useEffect(() => {
     function receive(event: MessageEvent) {
-      if (!['https://www.facebook.com', 'https://web.facebook.com'].includes(event.origin)) return;
+      if (!event.origin.endsWith('facebook.com')) return;
+
       let payload: unknown = event.data;
-      try { if (typeof payload === 'string') payload = JSON.parse(payload); } catch { return; }
-      const data = payload as { type?: string; event?: string; data?: { waba_id?: string; phone_number_id?: string; business_id?: string } };
-      if (data.type === 'WA_EMBEDDED_SIGNUP' && data.event === 'FINISH' && data.data?.waba_id && data.data.phone_number_id) {
-        signupRef.current = { wabaId: data.data.waba_id, phoneNumberId: data.data.phone_number_id, businessId: data.data.business_id };
+      try {
+        if (typeof payload === 'string') payload = JSON.parse(payload);
+      } catch {
+        return;
+      }
+
+      const data = payload as {
+        type?: string;
+        event?: string;
+        data?: {
+          waba_id?: string;
+          phone_number_id?: string;
+          business_id?: string;
+          businessId?: string;
+          current_step?: string;
+          error_message?: string;
+        };
+      };
+
+      if (data.type !== 'WA_EMBEDDED_SIGNUP') return;
+
+      const eventName = String(data.event ?? '').toUpperCase();
+      const finishEvents = new Set([
+        'FINISH',
+        'FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING',
+        'FINISH_OBO_MIGRATION',
+      ]);
+
+      if (finishEvents.has(eventName) && data.data?.waba_id && data.data.phone_number_id) {
+        signupRef.current = {
+          wabaId: data.data.waba_id,
+          phoneNumberId: data.data.phone_number_id,
+          businessId: data.data.business_id ?? data.data.businessId,
+        };
         void finishConnection();
+        return;
+      }
+
+      if (eventName === 'ERROR') {
+        setError(data.data?.error_message || 'A Meta informou um erro ao concluir a conexão do WhatsApp.');
+        setLoading(false);
+        return;
+      }
+
+      if (eventName === 'CANCEL') {
+        const step = data.data?.current_step ? ` na etapa ${data.data.current_step}` : '';
+        setError(`A conexão do WhatsApp foi interrompida${step}.`);
+        setLoading(false);
       }
     }
+
     window.addEventListener('message', receive);
     return () => window.removeEventListener('message', receive);
   }, [finishConnection]);
@@ -154,6 +199,9 @@ export function WhatsAppSettings({ initialConnections }: { initialConnections: C
     setSelected(channel);
     setError('');
     setSuccess('');
+    codeRef.current = null;
+    signupRef.current = null;
+
     if (!appId || !configId || !graphVersion) {
       setError('Configure NEXT_PUBLIC_META_APP_ID, NEXT_PUBLIC_META_CONFIG_ID e NEXT_PUBLIC_META_GRAPH_VERSION na Vercel antes de conectar.');
       return;
@@ -162,9 +210,12 @@ export function WhatsAppSettings({ initialConnections }: { initialConnections: C
       setError('O login do Facebook ainda está carregando. Aguarde alguns segundos. Se continuar, libere connect.facebook.net e desative o bloqueador de anúncios para este site.');
       return;
     }
+
+    setLoading(true);
     window.FB.login((response) => {
       const code = response.authResponse?.code;
       if (!code) {
+        setLoading(false);
         setError('A conexão foi cancelada ou a Meta não devolveu o código temporário.');
         return;
       }
