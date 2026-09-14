@@ -7,6 +7,7 @@ import {
 } from '@/lib/whatsapp/channelService';
 import type { WhatsAppChannelRole } from '@/lib/whatsapp/channelProvider';
 import { encryptToken } from '@/lib/whatsapp/crypto';
+import { ensureCoexistenceWebhookFields } from '@/lib/whatsapp/metaAppWebhook';
 import { exchangeEmbeddedSignupCode } from '@/lib/whatsapp/providers/metaCloud';
 
 export const runtime = 'nodejs';
@@ -59,6 +60,19 @@ export async function POST(request: Request) {
     if (!validation.belongsToWaba) {
       throw new Error('O número devolvido pela Meta não pertence à conta do WhatsApp selecionada.');
     }
+
+    let coexistenceWebhooksError: string | null = null;
+    let coexistenceWebhooksEnsuredAt: string | null = null;
+    try {
+      await ensureCoexistenceWebhookFields();
+      coexistenceWebhooksEnsuredAt = new Date().toISOString();
+    } catch (webhookError) {
+      coexistenceWebhooksError = webhookError instanceof Error
+        ? webhookError.message.slice(0, 2000)
+        : 'Não foi possível configurar os webhooks de Coexistência.';
+      console.error('[whatsapp coexistence app webhooks]', webhookError);
+    }
+
     await provider.subscribeWebhook({ wabaId, accessToken });
 
     const admin = createAdminClient();
@@ -113,6 +127,8 @@ export async function POST(request: Request) {
       app_subscribed_at: now,
       last_tested_at: now,
       legacy_connection_id: legacy.id,
+      coexistence_webhooks_ensured_at: coexistenceWebhooksEnsuredAt,
+      coexistence_webhooks_error: coexistenceWebhooksError,
     };
 
     const write = existing
