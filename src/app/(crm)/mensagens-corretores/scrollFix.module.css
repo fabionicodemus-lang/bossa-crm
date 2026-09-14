@@ -1,0 +1,61 @@
+.scrollScope :global(.broker-inbox-shell) {
+  height: calc(100dvh - 150px) !important;
+  min-height: 520px;
+  overflow: hidden !important;
+}
+
+.scrollScope :global(.broker-chat-list),
+.scrollScope :global(.broker-chat-panel) {
+  min-height: 0 !important;
+  overflow: hidden !important;
+}
+
+.scrollScope :global(.broker-conversations),
+.scrollScope :global(.broker-messages) {
+  min-height: 0 !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  scrollbar-width: auto;
+  touch-action: pan-y;
+}
+
+.scrollScope :global(.broker-conversations)::-webkit-scrollbar,
+.scrollScope :global(.broker-messages)::-webkit-scrollbar {
+  width: 10px;
+}
+
+.scrollScope :global(.broker-conversations)::-webkit-scrollbar-track,
+.scrollScope :global(.broker-messages)::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.scrollScope :global(.broker-conversations)::-webkit-scrollbar-thumb,
+.scrollScope :global(.broker-messages)::-webkit-scrollbar-thumb {
+  background: rgba(85, 76, 67, 0.34);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+.scrollScope :global(.broker-conversations)::-webkit-scrollbar-thumb:hover,
+.scrollScope :global(.broker-messages)::-webkit-scrollbar-thumb:hover {
+  background: rgba(85, 76, 67, 0.5);
+  background-clip: padding-box;
+}
+
+@media (max-width: 760px) {
+  .scrollScope :global(.broker-inbox-shell) {
+    height: auto !important;
+    min-height: 0;
+  }
+
+  .scrollScope :global(.broker-chat-list) {
+    height: 420px !important;
+  }
+
+  .scrollScope :global(.broker-chat-panel) {
+    height: 620px !important;
+  }
+}
