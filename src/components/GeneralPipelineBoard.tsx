@@ -43,6 +43,7 @@ export function GeneralPipelineBoard({
   const [overStage, setOverStage] = useState<string | null>(null);
   const [showNew, setShowNew] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [classifyingId, setClassifyingId] = useState<string | null>(null);
   const [error, setError] = useState('');
   const knownLeads = useRef(new Map(initialLeads.map((lead) => [lead.id, lead.updated_at])));
   const latestUpdatedAt = useRef(maxUpdatedAt(initialLeads));
@@ -109,6 +110,29 @@ export function GeneralPipelineBoard({
     }
   }
 
+  async function classify(lead: Lead, kind: 'cliente' | 'corretor') {
+    if (!canEdit || classifyingId) return;
+    const label = kind === 'cliente' ? 'CLIENTE' : 'CORRETOR';
+    if (!window.confirm(`Classificar “${lead.name}” como ${label}?`)) return;
+    setClassifyingId(lead.id);
+    setError('');
+    try {
+      const response = await fetch(`/api/leads/${lead.id}/kind`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ kind }),
+      });
+      const payload = await response.json().catch(() => ({})) as { error?: string };
+      if (!response.ok) throw new Error(payload.error || 'Não foi possível classificar o contato.');
+      setLeads((items) => items.filter((item) => item.id !== lead.id));
+      router.refresh();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Não foi possível classificar o contato.');
+    } finally {
+      setClassifyingId(null);
+    }
+  }
+
   async function createContact(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!canEdit || saving) return;
@@ -164,7 +188,7 @@ export function GeneralPipelineBoard({
     <div className="page-head">
       <div>
         <h2>Pipeline Geral</h2>
-        <p>Contatos do número compartilhado do WhatsApp que ainda não são clientes nem corretores. A IA não atende automaticamente estes cadastros.</p>
+        <p>Números ainda não classificados. O Plantão pergunta primeiro se é corretor; clientes só são classificados manualmente pela equipe.</p>
       </div>
       <div className="page-actions">
         <input className="input" style={{ width: 250 }} placeholder="Buscar nome, número ou empresa…" value={query} onChange={(event) => setQuery(event.target.value)} />
@@ -198,22 +222,27 @@ export function GeneralPipelineBoard({
         >
           <div className="column-head"><span className="stage-dot" style={{ background: stage.color }} /><span className="stage-name">{stage.label}</span><span className="stage-count">{stageLeads.length}</span></div>
           <div className="column-body">
-            {stageLeads.map((lead) => <Link
-              href={`/leads/${lead.id}`}
+            {stageLeads.map((lead) => <div
               key={lead.id}
               className="lead-card"
               draggable={canEdit}
               onDragStart={(event) => { setDragId(lead.id); event.dataTransfer.effectAllowed = 'move'; }}
               onDragEnd={() => { setDragId(null); setOverStage(null); }}
             >
-              <div className="lead-name">{lead.name}</div>
-              <div className="lead-sub">{lead.company || 'Contato geral'}</div>
-              <div className="lead-meta">
-                <span className="chip">{lead.source || 'WhatsApp'}</span>
-                <span className="chip">👤 Sem IA</span>
-              </div>
-              <div className="muted" style={{ fontSize: 10 }}>{displayPhone(lead.phone)}</div>
-            </Link>)}
+              <Link href={`/leads/${lead.id}`} style={{ color: 'inherit', textDecoration: 'none', display: 'block' }}>
+                <div className="lead-name">{lead.name}</div>
+                <div className="lead-sub">{lead.company || 'Contato geral'}</div>
+                <div className="lead-meta">
+                  <span className="chip">{lead.source || 'WhatsApp'}</span>
+                  <span className="chip">👤 Aguardando classificação</span>
+                </div>
+                <div className="muted" style={{ fontSize: 10 }}>{displayPhone(lead.phone)}</div>
+              </Link>
+              {canEdit && <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
+                <button className="btn btn-ghost btn-sm" style={{ flex: 1, fontSize: 10 }} disabled={classifyingId === lead.id} onClick={() => void classify(lead, 'cliente')}>✓ Cliente</button>
+                <button className="btn btn-ghost btn-sm" style={{ flex: 1, fontSize: 10 }} disabled={classifyingId === lead.id} onClick={() => void classify(lead, 'corretor')}>🤝 Corretor</button>
+              </div>}
+            </div>)}
             {stageLeads.length === 0 && <div className="empty-state">Nenhum contato</div>}
           </div>
         </section>;
