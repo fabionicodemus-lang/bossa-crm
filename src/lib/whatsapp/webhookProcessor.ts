@@ -19,6 +19,7 @@ import {
   type WhatsAppChannelRecord,
   type WhatsAppConversationRecord,
 } from '@/lib/whatsapp/channelService';
+import { handleMixedPlantaoConversation } from '@/lib/whatsapp/plantaoMixedRouting';
 import { isCustomerServiceWindowOpen, OUTSIDE_WINDOW_MESSAGE } from '@/lib/whatsapp/window';
 import type {
   MetaWebhookMessage,
@@ -227,10 +228,29 @@ async function processConversation(args: {
     .select('*')
     .eq('id', args.leadId)
     .maybeSingle();
-  const lead = leadData as Lead | null;
-  // Contato Geral é apenas cadastro/caixa de entrada. A IA só atende quando o
-  // número já está classificado como cliente ou corretor.
-  if (!lead || lead.opt_out || lead.kind === 'geral') return;
+  let lead = leadData as Lead | null;
+  if (!lead || lead.opt_out) return;
+
+  // O número do Plantão é compartilhado. Antes de qualquer IA comercial,
+  // aplicamos a regra de identidade: CLIENTE é protegido; GERAL é triado;
+  // somente CORRETOR segue para o Plantão normal.
+  const mixedRouting = await handleMixedPlantaoConversation({
+    admin: args.admin,
+    channel: args.channel,
+    conversation: args.conversation,
+    lead,
+    sourceMessageId: args.sourceMessageId,
+  });
+  if (mixedRouting.handled) return;
+  if (mixedRouting.promotedToBroker) {
+    const { data: promoted } = await args.admin.from('leads').select('*').eq('id', lead.id).maybeSingle();
+    lead = promoted as Lead | null;
+    if (!lead || lead.kind !== 'corretor') return;
+  }
+
+  // Fora do fluxo misto, somente cliente (no canal da Nara) e corretor
+  // (no Plantão) chegam aqui. Geral nunca recebe a IA comercial completa.
+  if (lead.kind === 'geral') return;
 
   const context = await loadAiContext(args.admin, args.channel.organization_id, lead.kind);
   if (context.config?.active === false) return;
@@ -488,23 +508,23 @@ async function findOrCreateLead(args: {
     if (error) throw error;
     leadData = data as Lead | null;
   } else {
-    // O número do Plantão é compartilhado: ele recebe corretores, clientes,
-    // fornecedores e outros contatos. Primeiro reaproveitamos um cadastro já
-    // conhecido; somente um telefone realmente desconhecido entra em Geral.
+    // O número do Plantão é compartilhado. CLIENTE tem prioridade absoluta:
+    // se o telefone já está no pipeline de clientes, jamais será tratado como
+    // corretor só porque escreveu no número do Plantão.
     const { data, error } = await args.admin
       .from('leads')
       .select('*')
       .eq('organization_id', args.channel.organization_id)
       .eq('phone', args.waId)
-      .in('kind', ['corretor', 'cliente', 'geral'])
+      .in('kind', ['cliente', 'corretor', 'geral'])
       .is('archived_at', null)
       .order('updated_at', { ascending: false })
       .limit(20);
     if (error) throw error;
     const matches = (data ?? []) as Lead[];
-    leadData = matches.find((lead) => lead.kind === 'corretor')
-      ?? matches.find((lead) => lead.kind === 'cliente')
-      ?? matches.find((lead) => lead.kind === 'geral')
+    leadData = matches.find((item) => item.kind === 'cliente')
+      ?? matches.find((item) => item.kind === 'corretor')
+      ?? matches.find((item) => item.kind === 'geral')
       ?? null;
   }
 
@@ -514,7 +534,10 @@ async function findOrCreateLead(args: {
     const metadata = {
       ...attribution.metadata,
       whatsapp_channel_id: args.channel.id,
-      ...(kind === 'geral' ? { general_pipeline_reason: 'Contato novo recebido no número compartilhado do Plantão' } : {}),
+      ...(kind === 'geral' ? {
+        general_pipeline_reason: 'Contato novo recebido no número compartilhado do Plantão',
+        plantao_triage_status: 'new',
+      } : {}),
     };
     const { data, error } = await args.admin.from('leads').insert({
       organization_id: args.channel.organization_id,
@@ -563,8 +586,6 @@ async function persistInboundMessage(args: {
   if (!waId) return null;
 
   const createdAt = metaTimestamp(args.message.timestamp);
-  // Lead e conversa são procurados pelo mesmo contato, mas por chaves
-  // diferentes: dá para buscar os dois de uma vez e só depois reconciliar.
   const [lead, existingConversation] = await Promise.all([
     findOrCreateLead({
       admin: args.admin,
@@ -586,8 +607,6 @@ async function persistInboundMessage(args: {
   });
   const body = messageBody(args.message);
 
-  // As duas gravações são independentes e cada uma tem sua própria chave de
-  // deduplicação, então vão juntas para tirar uma ida ao banco do caminho.
   const [transportResult, messageResult] = await Promise.all([
     args.admin
       .from('whatsapp_messages')
@@ -632,7 +651,6 @@ async function persistInboundMessage(args: {
   if (messageResult.error) throw messageResult.error;
 
   const storedMessage = messageResult.data;
-  // Reentrega da Meta: a mensagem já está na conversa e a IA já respondeu.
   if (!storedMessage) return null;
 
   const attribution = mergeMetaAdAttribution(lead.metadata, args.message.referral, createdAt);
@@ -669,8 +687,6 @@ async function claimEvent(admin: AdminClient, eventId: string) {
 
 export async function processWebhookEvent(eventId: string, knownPhoneNumberId?: string) {
   const admin = createAdminClient();
-  // O webhook ao vivo já sabe de qual número veio o evento, então a busca do
-  // canal deixa de esperar a reserva do evento e corre junto com ela.
   const [event, prefetchedChannel] = await Promise.all([
     claimEvent(admin, eventId),
     knownPhoneNumberId
@@ -708,10 +724,6 @@ export async function processWebhookEvent(eventId: string, knownPhoneNumberId?: 
       return { processed: true, reason: 'unknown_channel' };
     }
 
-    // Associação do evento e confirmações de entrega são rastreabilidade: saem
-    // do caminho crítico e correm enquanto as mensagens recebidas são gravadas.
-    // Os status seguem em série entre si porque um mesmo wamid pode chegar como
-    // `sent` e `delivered` no mesmo lote e a ordem da gravação importa.
     let sideEffectError: unknown = null;
     const sideEffects = (async () => {
       const { error: associateError } = await admin.from('whatsapp_webhook_events').update({
@@ -731,9 +743,6 @@ export async function processWebhookEvent(eventId: string, knownPhoneNumberId?: 
     const contactName = String(value.contacts?.[0]?.profile?.name ?? '').trim();
     const contactWaId = String(value.contacts?.[0]?.wa_id ?? '').trim();
 
-    // Primeiro todas as mensagens entram na conversa. Antes, a segunda mensagem
-    // de um mesmo lote só era gravada depois da IA terminar de responder a
-    // primeira — dezenas de segundos de atraso na tela.
     const persisted: PersistedInbound[] = [];
     for (const message of value.messages ?? []) {
       const stored = await persistInboundMessage({
@@ -757,9 +766,6 @@ export async function processWebhookEvent(eventId: string, knownPhoneNumberId?: 
       error: null,
     }).eq('id', event.id);
 
-    // Só agora a IA entra em cena. Uma falha aqui já tem tratamento próprio e
-    // não deve reabrir o evento para reprocessamento pelo worker de recuperação,
-    // que reenviaria a mesma resposta ao cliente.
     const aiErrors: string[] = [];
     for (const inbound of persisted) {
       try {
