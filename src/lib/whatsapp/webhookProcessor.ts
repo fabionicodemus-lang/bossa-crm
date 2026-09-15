@@ -228,7 +228,9 @@ async function processConversation(args: {
     .eq('id', args.leadId)
     .maybeSingle();
   const lead = leadData as Lead | null;
-  if (!lead || lead.opt_out) return;
+  // Contato Geral é apenas cadastro/caixa de entrada. A IA só atende quando o
+  // número já está classificado como cliente ou corretor.
+  if (!lead || lead.opt_out || lead.kind === 'geral') return;
 
   const context = await loadAiContext(args.admin, args.channel.organization_id, lead.kind);
   if (context.config?.active === false) return;
@@ -473,22 +475,47 @@ async function findOrCreateLead(args: {
   receivedAt: string;
   referral?: MetaWebhookMessage['referral'];
 }) {
-  const kind: LeadKind = args.channel.role;
-  const { data: existingLead, error: readError } = await args.admin
-    .from('leads')
-    .select('*')
-    .eq('organization_id', args.channel.organization_id)
-    .eq('kind', kind)
-    .eq('phone', args.waId)
-    .maybeSingle();
-  if (readError) throw readError;
-  let leadData = existingLead;
+  let leadData: Lead | null = null;
 
-  // O canal define o contexto comercial. Um mesmo telefone pode existir como
-  // cliente e corretor, mas uma mensagem recebida no canal da Nara nunca deve
-  // reaproveitar o cadastro de corretor (e vice-versa).
+  if (args.channel.role === 'cliente') {
+    const { data, error } = await args.admin
+      .from('leads')
+      .select('*')
+      .eq('organization_id', args.channel.organization_id)
+      .eq('kind', 'cliente')
+      .eq('phone', args.waId)
+      .maybeSingle();
+    if (error) throw error;
+    leadData = data as Lead | null;
+  } else {
+    // O número do Plantão é compartilhado: ele recebe corretores, clientes,
+    // fornecedores e outros contatos. Primeiro reaproveitamos um cadastro já
+    // conhecido; somente um telefone realmente desconhecido entra em Geral.
+    const { data, error } = await args.admin
+      .from('leads')
+      .select('*')
+      .eq('organization_id', args.channel.organization_id)
+      .eq('phone', args.waId)
+      .in('kind', ['corretor', 'cliente', 'geral'])
+      .is('archived_at', null)
+      .order('updated_at', { ascending: false })
+      .limit(20);
+    if (error) throw error;
+    const matches = (data ?? []) as Lead[];
+    leadData = matches.find((lead) => lead.kind === 'corretor')
+      ?? matches.find((lead) => lead.kind === 'cliente')
+      ?? matches.find((lead) => lead.kind === 'geral')
+      ?? null;
+  }
+
   if (!leadData) {
+    const kind: LeadKind = args.channel.role === 'cliente' ? 'cliente' : 'geral';
     const attribution = mergeMetaAdAttribution({}, args.referral, args.receivedAt);
+    const metadata = {
+      ...attribution.metadata,
+      whatsapp_channel_id: args.channel.id,
+      ...(kind === 'geral' ? { general_pipeline_reason: 'Contato novo recebido no número compartilhado do Plantão' } : {}),
+    };
     const { data, error } = await args.admin.from('leads').insert({
       organization_id: args.channel.organization_id,
       kind,
@@ -496,19 +523,20 @@ async function findOrCreateLead(args: {
       phone: args.waId,
       stage: 'novo_triagem',
       source: attribution.sourceLabel || 'WhatsApp',
-      company: kind === 'corretor' ? 'Não informada' : null,
+      company: null,
       temperature: 0,
-      ai_enabled: true,
-      owner_mode: 'ai',
+      ai_enabled: kind !== 'geral',
+      automation_paused: kind === 'geral',
+      owner_mode: kind === 'geral' ? 'human' : 'ai',
       priority_class: null,
       last_inbound_at: args.receivedAt,
-      metadata: attribution.metadata,
+      metadata,
     }).select('*').single();
     if (error) throw error;
-    leadData = data;
+    leadData = data as Lead;
   }
 
-  return leadData as Lead;
+  return leadData;
 }
 
 type PersistedInbound = {
