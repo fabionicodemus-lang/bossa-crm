@@ -244,7 +244,7 @@ export function WhatsAppBrokerInbox() {
 
     if (!options.silent && isCurrent && !cached && !isOlder) setLoadingMessages(true);
 
-    const controller = options.prefetch ? new AbortController() : new AbortController();
+    const controller = new AbortController();
     if (isCurrent && !options.prefetch && !isOlder) {
       messageAbort.current?.abort();
       messageAbort.current = controller;
@@ -263,13 +263,11 @@ export function WhatsAppBrokerInbox() {
       const previous = messageCache.current.get(conversationId);
       let nextMessages = payload.messages || [];
       let nextHasMore = Boolean(payload.hasMore);
-      let nextOldest = payload.oldestAt ?? nextMessages[0]?.createdAt ?? null;
+      let nextOldest: string | null = payload.oldestAt ?? nextMessages[0]?.createdAt ?? null;
 
       if (isOlder && previous) {
         nextMessages = mergeMessages(nextMessages, previous.messages);
       } else if (previous && previous.messages.length > nextMessages.length) {
-        // Um refresh das últimas mensagens não deve apagar páginas antigas que o
-        // usuário já carregou ao rolar para cima.
         nextMessages = mergeMessages(previous.messages, nextMessages);
         nextHasMore = previous.hasMore;
         nextOldest = previous.oldestAt;
