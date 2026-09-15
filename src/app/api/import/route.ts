@@ -35,6 +35,7 @@ const LEGACY_STAGE_MAP: Record<LeadKind, Record<string, string>> = {
     n4: 'proposta_negociacao',
     n5: 'nutricao_ativa',
   },
+  geral: {},
 };
 
 function normalizeImportedStage(kind: LeadKind, stage: string): string {
