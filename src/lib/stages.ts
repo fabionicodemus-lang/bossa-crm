@@ -27,8 +27,16 @@ export const BROKER_STAGES = [
   { id: 'encerrado', label: 'Encerrado', color: '#66727A' },
 ] as const;
 
+export const GENERAL_STAGES = [
+  { id: 'novo_triagem', label: 'Não classificado', color: '#7A8CA3' },
+  { id: 'humano_ativo', label: 'Em atendimento', color: '#1F5F6B' },
+  { id: 'encerrado', label: 'Resolvido / Encerrado', color: '#66727A' },
+] as const;
+
 export function stagesFor(kind: LeadKind) {
-  return kind === 'cliente' ? CLIENT_STAGES : BROKER_STAGES;
+  if (kind === 'cliente') return CLIENT_STAGES;
+  if (kind === 'corretor') return BROKER_STAGES;
+  return GENERAL_STAGES;
 }
 
 export function stageLabel(kind: LeadKind, stage: string): string {
