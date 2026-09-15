@@ -67,7 +67,7 @@ export async function POST(request: Request) {
 
   const { data: leads, error: readError } = await supabase
     .from('leads')
-    .select('id,kind,name,owner_id,metadata')
+    .select('id,kind,name,owner_id,company,metadata')
     .eq('organization_id', membership.organization_id)
     .in('id', ids)
     .is('archived_at', null);
@@ -96,10 +96,9 @@ export async function POST(request: Request) {
       contact_kind_routed_to: target,
       bulk_pipeline_transfer: true,
     };
-    const update = {
+    const update: Record<string, unknown> = {
       kind: target,
       ...targetState(target, lead.owner_id, user.id),
-      company: target === 'corretor' ? undefined : undefined,
       ai_classification: null,
       ai_summary: null,
       ai_next_action: null,
@@ -111,12 +110,8 @@ export async function POST(request: Request) {
       handoff_requested_at: null,
       metadata,
       updated_at: now,
-    } as Record<string, unknown>;
-
-    if (target === 'corretor') {
-      const { data: current } = await supabase.from('leads').select('company').eq('id', lead.id).maybeSingle();
-      update.company = current?.company || 'Não informada';
-    }
+    };
+    if (target === 'corretor') update.company = lead.company || 'Não informada';
 
     const { error: updateError } = await supabase
       .from('leads')
