@@ -28,7 +28,7 @@ async function analyzeAfterHumanMessage(organizationId: string, leadId: string) 
   const admin = createAdminClient();
   const { data: leadData } = await admin.from('leads').select('*').eq('id', leadId).maybeSingle();
   const lead = leadData as Lead | null;
-  if (!lead || lead.opt_out) return;
+  if (!lead || lead.opt_out || lead.kind === 'geral') return;
   const context = await loadAiContext(admin, organizationId, lead.kind);
   if (context.config?.active === false) return;
   const { data: rows } = await admin.from('messages').select('direction,body')
@@ -70,20 +70,22 @@ export async function POST(request: Request) {
     if (!lead.phone) return NextResponse.json({ error: 'O contato não possui telefone válido.' }, { status: 400 });
 
     const isBroker = lead.kind === 'corretor';
+    const isGeneral = lead.kind === 'geral';
+    const sharedPlantaoContact = isBroker || isGeneral;
     const takeoverAt = new Date().toISOString();
-    const takeoverMetadata = isBroker ? {
+    const takeoverMetadata = sharedPlantaoContact ? {
       ...(lead.metadata || {}),
       whatsapp_manual_takeover: true,
       whatsapp_manual_takeover_at: takeoverAt,
       whatsapp_manual_takeover_by: user.id,
     } : (lead.metadata || {});
 
-    // Na caixa dos corretores, uma resposta manual significa assumir a conversa.
-    // Para clientes finais, mantemos a passagem explícita já existente.
-    if (lead.owner_mode === 'ai' && lead.ai_enabled && !isBroker) {
+    // No número compartilhado do Plantão, uma resposta manual assume a conversa.
+    // Para clientes do canal da Nara, mantemos a passagem explícita existente.
+    if (lead.owner_mode === 'ai' && lead.ai_enabled && !sharedPlantaoContact) {
       return NextResponse.json({ error: 'Aceite a passagem ou assuma a conversa antes de enviar uma mensagem humana.' }, { status: 409 });
     }
-    if (isBroker) {
+    if (sharedPlantaoContact) {
       const { error: takeoverError } = await admin.from('leads').update({
         owner_id: lead.owner_id || user.id,
         owner_mode: 'human',
@@ -197,15 +199,19 @@ export async function POST(request: Request) {
     }).select('*').single();
     if (error) throw error;
 
+    const nextStage = isBroker
+      ? lead.stage
+      : isGeneral
+        ? (lead.stage === 'encerrado' ? 'encerrado' : 'humano_ativo')
+        : (['agendado', 'pos_reuniao', 'proposta_negociacao'].includes(lead.stage) ? lead.stage : 'humano_ativo');
+
     await admin.from('leads').update({
       owner_id: lead.owner_id || user.id,
       owner_mode: 'human',
       ai_enabled: false,
-      automation_paused: isBroker,
-      stage: isBroker
-        ? lead.stage
-        : (['agendado', 'pos_reuniao', 'proposta_negociacao'].includes(lead.stage) ? lead.stage : 'humano_ativo'),
-      ...(isBroker ? { metadata: takeoverMetadata } : {}),
+      automation_paused: sharedPlantaoContact,
+      stage: nextStage,
+      ...(sharedPlantaoContact ? { metadata: takeoverMetadata } : {}),
       last_outbound_at: now,
       last_human_activity_at: now,
       updated_at: now,
@@ -217,14 +223,18 @@ export async function POST(request: Request) {
       lead_id: lead.id,
       user_id: user.id,
       type: 'mensagem_humana',
-      title: isBroker ? 'Comercial respondeu ao corretor pelo WhatsApp' : 'Consultor respondeu pelo WhatsApp',
+      title: isBroker
+        ? 'Comercial respondeu ao corretor pelo WhatsApp'
+        : isGeneral
+          ? 'Comercial respondeu ao contato geral pelo WhatsApp'
+          : 'Consultor respondeu pelo WhatsApp',
       description: text,
-      metadata: { message_id: message.id, whatsapp_channel_id: channel.id, category: 'service', manual_takeover: isBroker },
+      metadata: { message_id: message.id, whatsapp_channel_id: channel.id, category: 'service', manual_takeover: sharedPlantaoContact },
     });
 
-    // O Plantão fica pausado depois da resposta manual do comercial. Evitamos que
-    // a análise silenciosa devolva a conversa para a IA logo após o envio.
-    if (!isBroker) {
+    // A análise silenciosa só pertence ao funil de clientes. Contatos gerais não
+    // disparam IA e o Plantão permanece pausado depois da resposta manual.
+    if (lead.kind === 'cliente') {
       after(async () => {
         try {
           await analyzeAfterHumanMessage(membership.organization_id, lead.id);
@@ -242,7 +252,7 @@ export async function POST(request: Request) {
       });
     }
 
-    return NextResponse.json({ message, windowExpiresAt, manualTakeover: isBroker });
+    return NextResponse.json({ message, windowExpiresAt, manualTakeover: sharedPlantaoContact });
   } catch (error) {
     console.error('[whatsapp send]', error);
     return NextResponse.json({ error: error instanceof Error ? error.message : 'Não foi possível enviar a mensagem.' }, { status: 500 });
