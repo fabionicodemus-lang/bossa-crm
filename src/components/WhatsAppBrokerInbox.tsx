@@ -54,8 +54,21 @@ type InboxPayload = {
   conversations: Conversation[];
   selectedConversationId: string | null;
   messages: InboxMessage[];
+  hasMore?: boolean;
+  oldestAt?: string | null;
   error?: string;
 };
+
+type CachedMessages = {
+  messages: InboxMessage[];
+  hasMore: boolean;
+  oldestAt: string | null;
+  loadedAt: number;
+};
+
+const MESSAGE_CACHE_LIMIT = 30;
+const MESSAGE_REFRESH_MS = 4_000;
+const CONVERSATION_REFRESH_MS = 30_000;
 
 function compactTime(value: string | null | undefined) {
   if (!value) return '';
@@ -176,44 +189,182 @@ function BrokerMessageContent({ message }: { message: InboxMessage }) {
   </div>;
 }
 
+function mergeMessages(first: InboxMessage[], second: InboxMessage[]) {
+  const map = new Map<string, InboxMessage>();
+  for (const message of first) map.set(message.id, message);
+  for (const message of second) map.set(message.id, message);
+  return [...map.values()].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+}
+
 export function WhatsAppBrokerInbox() {
   const [channel, setChannel] = useState<Channel | null>(null);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [messages, setMessages] = useState<InboxMessage[]>([]);
+  const [hasMoreMessages, setHasMoreMessages] = useState(false);
+  const [oldestAt, setOldestAt] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [text, setText] = useState('');
   const [loading, setLoading] = useState(true);
+  const [loadingMessages, setLoadingMessages] = useState(false);
+  const [loadingOlder, setLoadingOlder] = useState(false);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
   const messagesRef = useRef<HTMLDivElement | null>(null);
   const previousSelected = useRef<string | null>(null);
+  const selectedIdRef = useRef<string | null>(null);
+  const messageAbort = useRef<AbortController | null>(null);
+  const messageCache = useRef(new Map<string, CachedMessages>());
 
-  const load = useCallback(async (silent = false) => {
+  const putCache = useCallback((conversationId: string, value: CachedMessages) => {
+    const cache = messageCache.current;
+    cache.delete(conversationId);
+    cache.set(conversationId, value);
+    while (cache.size > MESSAGE_CACHE_LIMIT) {
+      const oldestKey = cache.keys().next().value as string | undefined;
+      if (!oldestKey) break;
+      cache.delete(oldestKey);
+    }
+  }, []);
+
+  const applyCachedToScreen = useCallback((conversationId: string, cached: CachedMessages) => {
+    if (selectedIdRef.current !== conversationId) return;
+    setMessages(cached.messages);
+    setHasMoreMessages(cached.hasMore);
+    setOldestAt(cached.oldestAt);
+  }, []);
+
+  const fetchMessages = useCallback(async (
+    conversationId: string,
+    options: { silent?: boolean; before?: string | null; prefetch?: boolean } = {},
+  ) => {
+    const cached = messageCache.current.get(conversationId);
+    const isCurrent = selectedIdRef.current === conversationId;
+    const isOlder = Boolean(options.before);
+
+    if (!options.silent && isCurrent && !cached && !isOlder) setLoadingMessages(true);
+
+    const controller = options.prefetch ? new AbortController() : new AbortController();
+    if (isCurrent && !options.prefetch && !isOlder) {
+      messageAbort.current?.abort();
+      messageAbort.current = controller;
+    }
+
+    try {
+      const params = new URLSearchParams({ view: 'messages', conversationId });
+      if (options.before) params.set('before', options.before);
+      const response = await fetch(`/api/whatsapp/corretores?${params.toString()}`, {
+        cache: 'no-store',
+        signal: controller.signal,
+      });
+      const payload = await response.json() as InboxPayload;
+      if (!response.ok) throw new Error(payload.error || 'Não foi possível carregar as mensagens.');
+
+      const previous = messageCache.current.get(conversationId);
+      let nextMessages = payload.messages || [];
+      let nextHasMore = Boolean(payload.hasMore);
+      let nextOldest = payload.oldestAt ?? nextMessages[0]?.createdAt ?? null;
+
+      if (isOlder && previous) {
+        nextMessages = mergeMessages(nextMessages, previous.messages);
+      } else if (previous && previous.messages.length > nextMessages.length) {
+        // Um refresh das últimas mensagens não deve apagar páginas antigas que o
+        // usuário já carregou ao rolar para cima.
+        nextMessages = mergeMessages(previous.messages, nextMessages);
+        nextHasMore = previous.hasMore;
+        nextOldest = previous.oldestAt;
+      }
+
+      const nextCache: CachedMessages = {
+        messages: nextMessages,
+        hasMore: nextHasMore,
+        oldestAt: nextOldest,
+        loadedAt: Date.now(),
+      };
+      putCache(conversationId, nextCache);
+      applyCachedToScreen(conversationId, nextCache);
+      if (isCurrent) setError('');
+    } catch (cause) {
+      if (cause instanceof DOMException && cause.name === 'AbortError') return;
+      if (isCurrent) setError(cause instanceof Error ? cause.message : 'Não foi possível carregar as mensagens.');
+    } finally {
+      if (isCurrent && !options.prefetch && !isOlder) setLoadingMessages(false);
+    }
+  }, [applyCachedToScreen, putCache]);
+
+  const loadConversations = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
     try {
-      const params = selectedId ? `?conversationId=${encodeURIComponent(selectedId)}` : '';
-      const response = await fetch(`/api/whatsapp/corretores${params}`, { cache: 'no-store' });
+      const response = await fetch('/api/whatsapp/corretores?view=conversations', { cache: 'no-store' });
       const payload = await response.json() as InboxPayload;
       if (!response.ok) throw new Error(payload.error || 'Não foi possível carregar as conversas.');
       setChannel(payload.channel);
-      setConversations(payload.conversations || []);
-      const nextSelected = payload.selectedConversationId;
-      if (nextSelected && nextSelected !== selectedId) setSelectedId(nextSelected);
-      setMessages(payload.messages || []);
+      const nextConversations = payload.conversations || [];
+      setConversations(nextConversations);
+
+      const current = selectedIdRef.current;
+      const stillExists = current && nextConversations.some((item) => item.id === current);
+      if (!stillExists) {
+        const nextSelected = payload.selectedConversationId || nextConversations[0]?.id || null;
+        selectedIdRef.current = nextSelected;
+        setSelectedId(nextSelected);
+        if (!nextSelected) {
+          setMessages([]);
+          setHasMoreMessages(false);
+          setOldestAt(null);
+        }
+      }
       setError('');
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Não foi possível carregar as conversas.');
     } finally {
       if (!silent) setLoading(false);
     }
-  }, [selectedId]);
+  }, []);
+
+  const selectConversation = useCallback((conversationId: string) => {
+    if (selectedIdRef.current === conversationId) return;
+    selectedIdRef.current = conversationId;
+    setSelectedId(conversationId);
+    setText('');
+    setError('');
+
+    const cached = messageCache.current.get(conversationId);
+    if (cached) {
+      setMessages(cached.messages);
+      setHasMoreMessages(cached.hasMore);
+      setOldestAt(cached.oldestAt);
+      setLoadingMessages(false);
+    } else {
+      setMessages([]);
+      setHasMoreMessages(false);
+      setOldestAt(null);
+      setLoadingMessages(true);
+    }
+  }, []);
 
   useEffect(() => {
-    void load(false);
-    const timer = window.setInterval(() => void load(true), 5000);
+    void loadConversations(false);
+    const timer = window.setInterval(() => void loadConversations(true), CONVERSATION_REFRESH_MS);
     return () => window.clearInterval(timer);
-  }, [load]);
+  }, [loadConversations]);
+
+  useEffect(() => {
+    if (!selectedId) return;
+    selectedIdRef.current = selectedId;
+    const cached = messageCache.current.get(selectedId);
+    if (cached) applyCachedToScreen(selectedId, cached);
+    void fetchMessages(selectedId, { silent: Boolean(cached) });
+
+    const timer = window.setInterval(() => {
+      void fetchMessages(selectedId, { silent: true });
+    }, MESSAGE_REFRESH_MS);
+
+    return () => {
+      window.clearInterval(timer);
+      messageAbort.current?.abort();
+    };
+  }, [selectedId, applyCachedToScreen, fetchMessages]);
 
   useEffect(() => {
     const node = messagesRef.current;
@@ -241,21 +392,62 @@ export function WhatsAppBrokerInbox() {
 
   const windowOpen = Boolean(selected?.windowExpiresAt && new Date(selected.windowExpiresAt).getTime() > Date.now());
 
+  const prefetchConversation = useCallback((conversationId: string) => {
+    if (messageCache.current.has(conversationId) || conversationId === selectedIdRef.current) return;
+    void fetchMessages(conversationId, { silent: true, prefetch: true });
+  }, [fetchMessages]);
+
+  async function loadOlderMessages() {
+    if (!selectedId || !oldestAt || !hasMoreMessages || loadingOlder) return;
+    const node = messagesRef.current;
+    const previousHeight = node?.scrollHeight ?? 0;
+    const previousTop = node?.scrollTop ?? 0;
+    setLoadingOlder(true);
+    try {
+      await fetchMessages(selectedId, { silent: true, before: oldestAt });
+      requestAnimationFrame(() => {
+        if (!node) return;
+        node.scrollTop = previousTop + Math.max(0, node.scrollHeight - previousHeight);
+      });
+    } finally {
+      setLoadingOlder(false);
+    }
+  }
+
   async function send(event: FormEvent) {
     event.preventDefault();
     if (!selected?.leadId || !text.trim() || sending) return;
+    const body = text.trim();
     setSending(true);
     setError('');
     try {
       const response = await fetch('/api/whatsapp/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ leadId: selected.leadId, body: text.trim() }),
+        body: JSON.stringify({ leadId: selected.leadId, body }),
       });
       const payload = await response.json().catch(() => ({})) as { error?: string };
       if (!response.ok) throw new Error(payload.error || 'Não foi possível enviar a mensagem.');
       setText('');
-      await load(true);
+
+      const now = new Date().toISOString();
+      setConversations((current) => current.map((conversation) => conversation.id === selected.id ? {
+        ...conversation,
+        updatedAt: now,
+        lastMessage: {
+          id: `optimistic-${now}`,
+          conversationId: conversation.id,
+          direction: 'out',
+          senderKind: 'humano',
+          type: 'text',
+          body,
+          status: 'sent',
+          sentAt: now,
+          createdAt: now,
+        },
+      } : conversation).sort((a, b) => new Date(b.lastMessage?.createdAt || b.updatedAt).getTime() - new Date(a.lastMessage?.createdAt || a.updatedAt).getTime()));
+
+      await fetchMessages(selected.id, { silent: true });
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Não foi possível enviar a mensagem.');
     } finally {
@@ -282,7 +474,7 @@ export function WhatsAppBrokerInbox() {
           <strong>WhatsApp Corretores</strong>
           <span><i /> {displayPhone(channel.display_phone_number)}</span>
         </div>
-        <button className="broker-refresh" onClick={() => void load(false)} title="Atualizar">↻</button>
+        <button className="broker-refresh" onClick={() => void loadConversations(false)} title="Atualizar">↻</button>
       </div>
       <div className="broker-search-wrap">
         <span>⌕</span>
@@ -295,7 +487,9 @@ export function WhatsAppBrokerInbox() {
         {filtered.map((conversation) => <button
           key={conversation.id}
           className={`broker-conversation ${conversation.id === selectedId ? 'active' : ''}`}
-          onClick={() => setSelectedId(conversation.id)}
+          onClick={() => selectConversation(conversation.id)}
+          onMouseEnter={() => prefetchConversation(conversation.id)}
+          onFocus={() => prefetchConversation(conversation.id)}
         >
           <div className="broker-avatar">{initials(conversation.name)}</div>
           <div className="broker-conversation-main">
@@ -317,7 +511,7 @@ export function WhatsAppBrokerInbox() {
         <div className="broker-placeholder-phone">💬</div>
         <h2>Mensagens dos corretores</h2>
         <p>As conversas recebidas e enviadas pelo WhatsApp Business aparecerão aqui.</p>
-        <small>Sincronização automática a cada poucos segundos.</small>
+        <small>Sincronização automática em segundo plano.</small>
       </div> : <>
         <header className="broker-chat-head">
           <div className="broker-avatar">{initials(selected.name)}</div>
@@ -329,7 +523,9 @@ export function WhatsAppBrokerInbox() {
         </header>
 
         <div className="broker-messages" ref={messagesRef}>
-          {messages.length === 0 && <div className="broker-day-chip">Nenhuma mensagem sincronizada nesta conversa.</div>}
+          {hasMoreMessages && <div className="broker-load-older-wrap"><button type="button" className="broker-load-older" disabled={loadingOlder} onClick={() => void loadOlderMessages()}>{loadingOlder ? 'Carregando…' : 'Carregar mensagens anteriores'}</button></div>}
+          {loadingMessages && messages.length === 0 && <div className="broker-day-chip broker-loading-chip">Carregando conversa…</div>}
+          {!loadingMessages && messages.length === 0 && <div className="broker-day-chip">Nenhuma mensagem sincronizada nesta conversa.</div>}
           {messages.map((message) => <div key={message.id} className={`broker-message-row ${message.direction === 'out' ? 'out' : 'in'}`}>
             <div className="broker-message-bubble">
               <BrokerMessageContent message={message} />
@@ -369,9 +565,9 @@ export function WhatsAppBrokerInbox() {
       .broker-list-head>div{display:flex;flex-direction:column;gap:4px}.broker-list-head strong{font-size:16px;color:#27231f}.broker-list-head span{font-size:11px;color:#70685f;display:flex;align-items:center;gap:5px}.broker-list-head i{width:7px;height:7px;border-radius:50%;background:#28a745;display:inline-block}
       .broker-refresh{border:0;background:transparent;font-size:22px;color:#6d665e;cursor:pointer;width:36px;height:36px;border-radius:50%}.broker-refresh:hover{background:#eae6e0}
       .broker-search-wrap{margin:10px 12px;display:flex;align-items:center;gap:8px;background:#f3f1ee;border-radius:9px;padding:0 11px;color:#8f877f}.broker-search-wrap input{border:0;outline:0;background:transparent;width:100%;height:38px;font-size:13px;color:#302b26}
-      .broker-conversations{overflow:auto;flex:1}.broker-conversation{width:100%;display:flex;gap:11px;padding:12px 13px;border:0;border-bottom:1px solid #f0ece7;background:#fff;text-align:left;cursor:pointer}.broker-conversation:hover,.broker-conversation.active{background:#f3f1ed}.broker-avatar{width:42px;height:42px;flex:0 0 42px;border-radius:50%;display:grid;place-items:center;background:#d9ddd5;color:#3d4d41;font-weight:800;font-size:13px}.broker-conversation-main{min-width:0;flex:1}.broker-conversation-title{display:flex;gap:8px;justify-content:space-between;align-items:center}.broker-conversation-title strong{font-size:13px;color:#28231f;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.broker-conversation-title time{font-size:10px;color:#8b837b;white-space:nowrap}.broker-conversation-preview{margin-top:4px;font-size:12px;color:#756d65;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.broker-conversation-preview span{display:block;overflow:hidden;text-overflow:ellipsis}.broker-conversation small{display:block;margin-top:4px;font-size:10px;color:#a09890;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.broker-no-conversations{padding:28px 18px;color:#8b837b;font-size:12px;text-align:center}
+      .broker-conversations{overflow:auto;flex:1;overscroll-behavior:contain}.broker-conversation{width:100%;display:flex;gap:11px;padding:12px 13px;border:0;border-bottom:1px solid #f0ece7;background:#fff;text-align:left;cursor:pointer;content-visibility:auto;contain-intrinsic-size:66px}.broker-conversation:hover,.broker-conversation.active{background:#f3f1ed}.broker-avatar{width:42px;height:42px;flex:0 0 42px;border-radius:50%;display:grid;place-items:center;background:#d9ddd5;color:#3d4d41;font-weight:800;font-size:13px}.broker-conversation-main{min-width:0;flex:1}.broker-conversation-title{display:flex;gap:8px;justify-content:space-between;align-items:center}.broker-conversation-title strong{font-size:13px;color:#28231f;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.broker-conversation-title time{font-size:10px;color:#8b837b;white-space:nowrap}.broker-conversation-preview{margin-top:4px;font-size:12px;color:#756d65;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.broker-conversation-preview span{display:block;overflow:hidden;text-overflow:ellipsis}.broker-conversation small{display:block;margin-top:4px;font-size:10px;color:#a09890;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.broker-no-conversations{padding:28px 18px;color:#8b837b;font-size:12px;text-align:center}
       .broker-chat-panel{min-width:0;display:flex;flex-direction:column;background:#efeae2;position:relative}.broker-chat-panel:before{content:'';position:absolute;inset:0;opacity:.18;pointer-events:none;background-image:radial-gradient(#a79e92 1px,transparent 1px);background-size:22px 22px}.broker-chat-head{position:relative;z-index:1;height:68px;background:#f5f3ef;border-bottom:1px solid #dfdad3;display:flex;align-items:center;padding:0 16px;gap:11px}.broker-chat-contact{min-width:0;flex:1;display:flex;flex-direction:column}.broker-chat-contact strong{font-size:14px;color:#2e2924}.broker-chat-contact span{font-size:11px;color:#7b736b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.broker-window-pill{font-size:10px;padding:5px 8px;border-radius:999px;background:#eee2d0;color:#8b5b1d;font-weight:700}.broker-window-pill.open{background:#dff1e3;color:#28753b}
-      .broker-messages{position:relative;z-index:1;flex:1;overflow:auto;padding:22px 6% 16px}.broker-message-row{display:flex;margin:3px 0}.broker-message-row.in{justify-content:flex-start}.broker-message-row.out{justify-content:flex-end}.broker-message-bubble{max-width:min(76%,720px);min-width:90px;padding:8px 9px 5px;border-radius:8px;background:#fff;box-shadow:0 1px 1px rgba(50,40,30,.12);color:#2e2a26}.broker-message-row.out .broker-message-bubble{background:#d9fdd3}.broker-message-body{font-size:13px;line-height:1.42;white-space:pre-wrap;overflow-wrap:anywhere;padding-right:14px}.broker-message-meta{display:flex;justify-content:flex-end;gap:4px;align-items:center;margin-top:4px;font-size:9px;color:#857e76}.broker-message-meta .read{color:#42a5c8}.broker-day-chip{width:max-content;max-width:80%;margin:20px auto;padding:6px 10px;border-radius:7px;background:#fff7e8;color:#7b6e5f;font-size:11px;box-shadow:0 1px 1px rgba(50,40,30,.08)}
+      .broker-messages{position:relative;z-index:1;flex:1;overflow:auto;padding:22px 6% 16px;overscroll-behavior:contain}.broker-message-row{display:flex;margin:3px 0}.broker-message-row.in{justify-content:flex-start}.broker-message-row.out{justify-content:flex-end}.broker-message-bubble{max-width:min(76%,720px);min-width:90px;padding:8px 9px 5px;border-radius:8px;background:#fff;box-shadow:0 1px 1px rgba(50,40,30,.12);color:#2e2a26}.broker-message-row.out .broker-message-bubble{background:#d9fdd3}.broker-message-body{font-size:13px;line-height:1.42;white-space:pre-wrap;overflow-wrap:anywhere;padding-right:14px}.broker-message-meta{display:flex;justify-content:flex-end;gap:4px;align-items:center;margin-top:4px;font-size:9px;color:#857e76}.broker-message-meta .read{color:#42a5c8}.broker-day-chip{width:max-content;max-width:80%;margin:20px auto;padding:6px 10px;border-radius:7px;background:#fff7e8;color:#7b6e5f;font-size:11px;box-shadow:0 1px 1px rgba(50,40,30,.08)}.broker-loading-chip{background:#fff;color:#777}.broker-load-older-wrap{display:flex;justify-content:center;margin:0 0 14px}.broker-load-older{border:0;border-radius:999px;padding:7px 12px;background:#fff;color:#6b635a;font-size:10px;font-weight:700;box-shadow:0 1px 3px rgba(50,40,30,.12);cursor:pointer}.broker-load-older:disabled{opacity:.6;cursor:wait}
       .broker-composer{position:relative;z-index:1;display:flex;align-items:flex-end;gap:10px;padding:10px 14px;background:#f3f0eb;border-top:1px solid #ddd7cf}.broker-composer textarea{resize:none;min-height:42px;max-height:110px;flex:1;border:1px solid #e0dbd4;border-radius:10px;background:#fff;padding:11px 13px;outline:0;font:inherit;font-size:13px;line-height:1.35}.broker-composer textarea:focus{border-color:#b6aca0}.broker-composer button{width:42px;height:42px;border-radius:50%;border:0;background:#167c5a;color:#fff;font-size:18px;cursor:pointer}.broker-composer button:disabled{background:#aaa39a;cursor:not-allowed}.broker-window-note{position:relative;z-index:1;padding:7px 14px;background:#fff4df;color:#7e5a24;font-size:10px;text-align:center}.broker-chat-error{position:relative;z-index:2;margin:0 14px 8px;padding:8px 10px;border-radius:7px;background:#fde8e7;color:#9b322c;font-size:11px}
       .broker-chat-placeholder,.broker-inbox-empty,.broker-inbox-loading{display:grid;place-items:center;align-content:center;text-align:center;min-height:520px;padding:28px;color:#746c63}.broker-chat-placeholder{position:relative;z-index:1;flex:1}.broker-chat-placeholder h2,.broker-inbox-empty h3{margin:10px 0 4px;color:#413b35}.broker-chat-placeholder p,.broker-inbox-empty p{max-width:520px;margin:0;font-size:13px}.broker-chat-placeholder small{margin-top:8px;color:#978e84}.broker-placeholder-phone,.broker-empty-icon{font-size:48px;opacity:.55}
       @media(max-width:980px){.broker-inbox-shell{grid-template-columns:300px minmax(0,1fr)}.broker-window-pill{display:none}.broker-message-bubble{max-width:86%}}
