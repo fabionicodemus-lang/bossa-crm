@@ -1,5 +1,5 @@
 export type AppRole = 'admin' | 'comercial' | 'viewer';
-export type LeadKind = 'cliente' | 'corretor';
+export type LeadKind = 'cliente' | 'corretor' | 'geral';
 export type SenderKind = 'lead' | 'ia' | 'humano' | 'sistema';
 export type MessageDirection = 'in' | 'out' | 'system';
 export type OwnerMode = 'ai' | 'human' | 'none';
