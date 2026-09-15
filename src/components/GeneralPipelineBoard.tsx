@@ -44,7 +44,12 @@ export function GeneralPipelineBoard({
   const [showNew, setShowNew] = useState(false);
   const [saving, setSaving] = useState(false);
   const [classifyingId, setClassifyingId] = useState<string | null>(null);
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [pipelineTarget, setPipelineTarget] = useState<'cliente' | 'corretor'>('cliente');
+  const [pipelineSaving, setPipelineSaving] = useState(false);
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
   const knownLeads = useRef(new Map(initialLeads.map((lead) => [lead.id, lead.updated_at])));
   const latestUpdatedAt = useRef(maxUpdatedAt(initialLeads));
 
@@ -62,6 +67,11 @@ export function GeneralPipelineBoard({
       }
       return [...map.values()];
     });
+    setSelectedIds((current) => {
+      const valid = new Set(current);
+      for (const lead of rows) if (lead.archived_at || lead.kind !== 'geral') valid.delete(lead.id);
+      return valid;
+    });
   }, []);
 
   usePipelineLeadsFeed({
@@ -78,8 +88,59 @@ export function GeneralPipelineBoard({
       .some((value) => String(value || '').toLowerCase().includes(needle)));
   }, [leads, query]);
 
+  function toggleSelectMode() {
+    setSelectMode((value) => {
+      if (value) setSelectedIds(new Set());
+      return !value;
+    });
+    setError('');
+    setNotice('');
+  }
+
+  function toggleSelection(id: string) {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function selectVisible() {
+    setSelectedIds(new Set(filtered.slice(0, 300).map((lead) => lead.id)));
+  }
+
+  async function transferSelected() {
+    if (!canEdit || pipelineSaving || selectedIds.size === 0) return;
+    const ids = [...selectedIds];
+    const destination = pipelineTarget === 'cliente' ? 'Clientes' : 'Corretores';
+    if (!window.confirm(`Transferir ${ids.length} ${ids.length === 1 ? 'contato' : 'contatos'} para o pipeline de ${destination}?`)) return;
+    setPipelineSaving(true);
+    setError('');
+    setNotice('');
+    try {
+      const response = await fetch('/api/leads/bulk-kind', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids, kind: pipelineTarget }),
+      });
+      const payload = await response.json().catch(() => ({})) as { error?: string; message?: string; updated?: number; errors?: string[] };
+      if (!response.ok) throw new Error(payload.error || 'Não foi possível transferir os contatos.');
+      setLeads((items) => items.filter((lead) => !selectedIds.has(lead.id)));
+      setSelectedIds(new Set());
+      setSelectMode(false);
+      setNotice(payload.message || `${payload.updated || ids.length} contatos transferidos.`);
+      if (payload.errors?.length) setError(`Alguns contatos não foram movidos: ${payload.errors.join(' | ')}`);
+      router.refresh();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Não foi possível transferir os contatos.');
+    } finally {
+      setPipelineSaving(false);
+    }
+  }
+
   async function moveLead(stage: string) {
-    if (!canEdit || !dragId) return;
+    if (!canEdit || !dragId || selectMode) return;
     const id = dragId;
     setDragId(null);
     setOverStage(null);
@@ -111,7 +172,7 @@ export function GeneralPipelineBoard({
   }
 
   async function classify(lead: Lead, kind: 'cliente' | 'corretor') {
-    if (!canEdit || classifyingId) return;
+    if (!canEdit || classifyingId || selectMode) return;
     const label = kind === 'cliente' ? 'CLIENTE' : 'CORRETOR';
     if (!window.confirm(`Classificar “${lead.name}” como ${label}?`)) return;
     setClassifyingId(lead.id);
@@ -193,11 +254,30 @@ export function GeneralPipelineBoard({
       <div className="page-actions">
         <input className="input" style={{ width: 250 }} placeholder="Buscar nome, número ou empresa…" value={query} onChange={(event) => setQuery(event.target.value)} />
         <button className="btn btn-ghost btn-sm" onClick={() => void exportXlsx()}>⬇ Exportar XLSX</button>
-        {canEdit && <button className="btn btn-primary btn-sm" onClick={() => setShowNew((value) => !value)}>+ Novo contato</button>}
+        {canEdit && <>
+          <button className={`btn btn-sm ${selectMode ? 'btn-primary' : 'btn-ghost'}`} onClick={toggleSelectMode}>{selectMode ? '✓ Selecionando' : '☑ Selecionar vários'}</button>
+          <button className="btn btn-primary btn-sm" onClick={() => setShowNew((value) => !value)}>+ Novo contato</button>
+        </>}
       </div>
     </div>
 
     {error && <div className="error-box">{error}</div>}
+    {notice && <div className="success-box">{notice}</div>}
+
+    {canEdit && selectMode && <section className="card" style={{ marginBottom: 15 }}>
+      <div className="card-body" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+        <strong>{selectedIds.size} {selectedIds.size === 1 ? 'selecionado' : 'selecionados'}</strong>
+        <button className="btn btn-ghost btn-sm" onClick={selectVisible}>Selecionar visíveis ({Math.min(filtered.length, 300)})</button>
+        <button className="btn btn-ghost btn-sm" disabled={selectedIds.size === 0} onClick={() => setSelectedIds(new Set())}>Limpar</button>
+        <span style={{ flex: 1 }} />
+        <label style={{ fontSize: 12, fontWeight: 700 }}>Transferir para:</label>
+        <select className="select" style={{ width: 180 }} value={pipelineTarget} onChange={(event) => setPipelineTarget(event.target.value as 'cliente' | 'corretor')}>
+          <option value="cliente">Pipeline Clientes</option>
+          <option value="corretor">Pipeline Corretores</option>
+        </select>
+        <button className="btn btn-primary btn-sm" disabled={pipelineSaving || selectedIds.size === 0} onClick={() => void transferSelected()}>{pipelineSaving ? 'Transferindo…' : `Transferir ${selectedIds.size}`}</button>
+      </div>
+    </section>}
 
     {canEdit && showNew && <section className="card" style={{ marginBottom: 15 }}>
       <div className="card-head"><h3>Novo contato geral</h3><button className="btn btn-ghost btn-sm" onClick={() => setShowNew(false)}>Fechar</button></div>
@@ -216,33 +296,42 @@ export function GeneralPipelineBoard({
         return <section
           key={stage.id}
           className={`pipeline-column ${overStage === stage.id ? 'dragover' : ''}`}
-          onDragOver={(event) => { if (!canEdit) return; event.preventDefault(); setOverStage(stage.id); }}
+          onDragOver={(event) => { if (!canEdit || selectMode) return; event.preventDefault(); setOverStage(stage.id); }}
           onDragLeave={() => setOverStage(null)}
-          onDrop={(event) => { if (!canEdit) return; event.preventDefault(); void moveLead(stage.id); }}
+          onDrop={(event) => { if (!canEdit || selectMode) return; event.preventDefault(); void moveLead(stage.id); }}
         >
           <div className="column-head"><span className="stage-dot" style={{ background: stage.color }} /><span className="stage-name">{stage.label}</span><span className="stage-count">{stageLeads.length}</span></div>
           <div className="column-body">
-            {stageLeads.map((lead) => <div
-              key={lead.id}
-              className="lead-card"
-              draggable={canEdit}
-              onDragStart={(event) => { setDragId(lead.id); event.dataTransfer.effectAllowed = 'move'; }}
-              onDragEnd={() => { setDragId(null); setOverStage(null); }}
-            >
-              <Link href={`/leads/${lead.id}`} style={{ color: 'inherit', textDecoration: 'none', display: 'block' }}>
-                <div className="lead-name">{lead.name}</div>
-                <div className="lead-sub">{lead.company || 'Contato geral'}</div>
-                <div className="lead-meta">
-                  <span className="chip">{lead.source || 'WhatsApp'}</span>
-                  <span className="chip">👤 Aguardando classificação</span>
+            {stageLeads.map((lead) => {
+              const selected = selectedIds.has(lead.id);
+              return <div key={lead.id} style={{ position: 'relative' }}>
+                {selectMode && <label style={{ position: 'absolute', top: 10, right: 10, zIndex: 3, width: 24, height: 24, borderRadius: 7, background: '#fff', border: '1px solid #cfc8bf', display: 'grid', placeItems: 'center', cursor: 'pointer' }}>
+                  <input type="checkbox" checked={selected} onChange={() => toggleSelection(lead.id)} style={{ width: 15, height: 15 }} />
+                </label>}
+                <div
+                  className="lead-card"
+                  style={selected ? { outline: '2px solid #1f6b52', background: '#f2f8f5' } : undefined}
+                  draggable={canEdit && !selectMode}
+                  onClick={() => { if (selectMode) toggleSelection(lead.id); }}
+                  onDragStart={(event) => { if (selectMode) return; setDragId(lead.id); event.dataTransfer.effectAllowed = 'move'; }}
+                  onDragEnd={() => { setDragId(null); setOverStage(null); }}
+                >
+                  <Link href={`/leads/${lead.id}`} onClick={(event) => { if (selectMode) event.preventDefault(); }} style={{ color: 'inherit', textDecoration: 'none', display: 'block', paddingRight: selectMode ? 30 : 0 }}>
+                    <div className="lead-name">{lead.name}</div>
+                    <div className="lead-sub">{lead.company || 'Contato geral'}</div>
+                    <div className="lead-meta">
+                      <span className="chip">{lead.source || 'WhatsApp'}</span>
+                      <span className="chip">👤 Aguardando classificação</span>
+                    </div>
+                    <div className="muted" style={{ fontSize: 10 }}>{displayPhone(lead.phone)}</div>
+                  </Link>
+                  {canEdit && !selectMode && <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
+                    <button className="btn btn-ghost btn-sm" style={{ flex: 1, fontSize: 10 }} disabled={classifyingId === lead.id} onClick={() => void classify(lead, 'cliente')}>✓ Cliente</button>
+                    <button className="btn btn-ghost btn-sm" style={{ flex: 1, fontSize: 10 }} disabled={classifyingId === lead.id} onClick={() => void classify(lead, 'corretor')}>🤝 Corretor</button>
+                  </div>}
                 </div>
-                <div className="muted" style={{ fontSize: 10 }}>{displayPhone(lead.phone)}</div>
-              </Link>
-              {canEdit && <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
-                <button className="btn btn-ghost btn-sm" style={{ flex: 1, fontSize: 10 }} disabled={classifyingId === lead.id} onClick={() => void classify(lead, 'cliente')}>✓ Cliente</button>
-                <button className="btn btn-ghost btn-sm" style={{ flex: 1, fontSize: 10 }} disabled={classifyingId === lead.id} onClick={() => void classify(lead, 'corretor')}>🤝 Corretor</button>
-              </div>}
-            </div>)}
+              </div>;
+            })}
             {stageLeads.length === 0 && <div className="empty-state">Nenhum contato</div>}
           </div>
         </section>;
