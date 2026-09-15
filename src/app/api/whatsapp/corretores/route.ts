@@ -211,19 +211,27 @@ export async function GET(request: Request) {
       return NextResponse.json({ channel, conversations: [], selectedConversationId: null, messages: [] });
     }
 
+    // O histórico de 180 dias pode trazer centenas de corretores. Um único
+    // `.in(...)` com todos os UUIDs ultrapassa o tamanho aceito da URL do
+    // PostgREST e volta apenas como HTTP 400 "Bad Request". Consultamos em
+    // lotes pequenos para manter a caixa de entrada estável mesmo com milhares
+    // de conversas importadas.
     const leadIds = [...new Set(rawConversations.map((row) => row.lead_id).filter(Boolean))] as string[];
-    const { data: leadRows, error: leadsError } = leadIds.length
-      ? await admin.from('leads')
+    const leadRows: Array<Record<string, any>> = [];
+    for (let start = 0; start < leadIds.length; start += 100) {
+      const ids = leadIds.slice(start, start + 100);
+      const { data, error } = await admin.from('leads')
         .select('id,name,phone,company,creci,stage,metadata,updated_at')
-        .in('id', leadIds)
-      : { data: [], error: null };
-    if (leadsError) throw leadsError;
-    const leads = new Map((leadRows ?? []).map((lead) => [lead.id, lead]));
+        .in('id', ids);
+      if (error) throw error;
+      leadRows.push(...(data ?? []));
+    }
+    const leads = new Map(leadRows.map((lead) => [lead.id, lead]));
 
     const conversationIds = rawConversations.map((row) => row.id);
     const latestByConversation = new Map<string, Record<string, unknown>>();
-    for (let start = 0; start < conversationIds.length; start += 400) {
-      const ids = conversationIds.slice(start, start + 400);
+    for (let start = 0; start < conversationIds.length; start += 100) {
+      const ids = conversationIds.slice(start, start + 100);
       const { data: latestMessageRows, error: latestMessagesError } = await admin
         .from('whatsapp_messages')
         .select('id,conversation_id,direction,sender_kind,type,body,status,sent_at,created_at')
@@ -231,7 +239,7 @@ export async function GET(request: Request) {
         .eq('channel_id', channel.id)
         .in('conversation_id', ids)
         .order('created_at', { ascending: false })
-        .limit(Math.max(600, ids.length * 3));
+        .limit(Math.max(300, ids.length * 3));
       if (latestMessagesError) throw latestMessagesError;
       for (const message of latestMessageRows ?? []) {
         if (!latestByConversation.has(message.conversation_id)) {
