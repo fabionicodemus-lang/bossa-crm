@@ -19,6 +19,8 @@ const links: NavItem[] = [
   { href: '/mensagens-corretores', icon: '💬', label: 'WhatsApp Corretores', roles: ['admin'] },
   { href: '/plantao-corretores', icon: '🌙', label: 'Plantão IA', roles: ['admin'] },
   { href: '/importar?tipo=corretor', icon: '📥', label: 'Importar corretores', roles: ['admin', 'comercial'] },
+  { section: 'Outros contatos' },
+  { href: '/geral', icon: '📇', label: 'Pipeline Geral' },
   { section: 'Comercial' },
   { href: '/tarefas', icon: '✅', label: 'Tarefas' },
   { href: '/empreendimentos', icon: '🏢', label: 'Empreendimentos' },
