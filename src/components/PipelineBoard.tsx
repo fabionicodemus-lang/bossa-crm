@@ -63,12 +63,13 @@ export function PipelineBoard({ initialLeads, kind, organizationId, canEdit }: {
   const [bulkToStage, setBulkToStage] = useState('futuro');
   const [saving, setSaving] = useState(false);
   const [bulkSaving, setBulkSaving] = useState(false);
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [pipelineTarget, setPipelineTarget] = useState<LeadKind>(kind === 'corretor' ? 'cliente' : 'geral');
+  const [pipelineSaving, setPipelineSaving] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
 
-  // Sincronização incremental do quadro: novo lead (inclusive o criado pelo
-  // webhook quando o cliente manda a primeira mensagem), troca de etapa e
-  // arquivamento passam a aparecer sem recarregar a página.
   const knownLeads = useRef(new Map(initialLeads.map((lead) => [lead.id, lead.updated_at])));
   const latestUpdatedAt = useRef(maxUpdatedAt(initialLeads));
 
@@ -85,15 +86,17 @@ export function PipelineBoard({ initialLeads, kind, organizationId, canEdit }: {
     setLeads((current) => {
       const map = new Map(current.map((lead) => [lead.id, lead]));
       for (const lead of changed) {
-        // Arquivado por outra pessoa sai do quadro; qualquer outra mudança
-        // atualiza o card no lugar, preservando a posição e sem interromper
-        // um arraste em andamento de outro card.
-        if (lead.archived_at) map.delete(lead.id);
+        if (lead.archived_at || lead.kind !== kind) map.delete(lead.id);
         else map.set(lead.id, lead);
       }
       return [...map.values()];
     });
-  }, []);
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      for (const lead of rows) if (lead.archived_at || lead.kind !== kind) next.delete(lead.id);
+      return next;
+    });
+  }, [kind]);
 
   usePipelineLeadsFeed({
     organizationId,
@@ -112,9 +115,66 @@ export function PipelineBoard({ initialLeads, kind, organizationId, canEdit }: {
   const bulkCount = leads.filter((lead) => lead.stage === bulkFromStage).length;
   const fromLabel = stages.find((stage) => stage.id === bulkFromStage)?.label ?? bulkFromStage;
   const toLabel = stages.find((stage) => stage.id === bulkToStage)?.label ?? bulkToStage;
+  const transferTargets = kind === 'corretor'
+    ? [{ id: 'cliente' as LeadKind, label: 'Pipeline Clientes' }, { id: 'geral' as LeadKind, label: 'Pipeline Geral' }]
+    : [];
+
+  function toggleSelectMode() {
+    const next = !selectMode;
+    setSelectMode(next);
+    if (!next) setSelectedIds(new Set());
+    setError('');
+    setNotice('');
+  }
+
+  function toggleSelection(id: string) {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function selectVisible() {
+    setSelectedIds(new Set(filtered.slice(0, 300).map((lead) => lead.id)));
+  }
+
+  async function transferSelected() {
+    if (!canEdit || pipelineSaving || selectedIds.size === 0) return;
+    if (kind === 'cliente') {
+      setError('Clientes são protegidos: seguindo a regra do CRM, um cliente que já comprou não sai do pipeline de Clientes em massa.');
+      return;
+    }
+    const ids = [...selectedIds];
+    const targetLabel = transferTargets.find((item) => item.id === pipelineTarget)?.label || pipelineTarget;
+    if (!window.confirm(`Transferir ${ids.length} ${ids.length === 1 ? 'contato' : 'contatos'} para ${targetLabel}?`)) return;
+    setPipelineSaving(true);
+    setError('');
+    setNotice('');
+    try {
+      const response = await fetch('/api/leads/bulk-kind', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids, kind: pipelineTarget }),
+      });
+      const payload = await response.json().catch(() => ({})) as { error?: string; message?: string; updated?: number; errors?: string[] };
+      if (!response.ok) throw new Error(payload.error || 'Não foi possível transferir os contatos.');
+      setLeads((items) => items.filter((lead) => !selectedIds.has(lead.id)));
+      setSelectedIds(new Set());
+      setSelectMode(false);
+      setNotice(payload.message || `${payload.updated || ids.length} contatos transferidos.`);
+      if (payload.errors?.length) setError(`Alguns contatos não foram movidos: ${payload.errors.join(' | ')}`);
+      router.refresh();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Não foi possível transferir os contatos.');
+    } finally {
+      setPipelineSaving(false);
+    }
+  }
 
   async function moveLead(stage: string) {
-    if (!canEdit) return;
+    if (!canEdit || selectMode) return;
     const id = dragId;
     setDragId(null);
     setOverStage(null);
@@ -259,6 +319,7 @@ export function PipelineBoard({ initialLeads, kind, organizationId, canEdit }: {
           <input className="input" style={{ width: 230 }} placeholder="Buscar nome, ação, prioridade…" value={query} onChange={(e) => setQuery(e.target.value)} />
           <button className="btn btn-ghost btn-sm" onClick={() => void exportXlsx()}>⬇ Exportar XLSX</button>
           {canEdit && <>
+            <button className={`btn btn-sm ${selectMode ? 'btn-primary' : 'btn-ghost'}`} onClick={toggleSelectMode}>{selectMode ? '✓ Selecionando' : '☑ Selecionar vários'}</button>
             <button className="btn btn-ghost btn-sm" onClick={() => setShowBulk((value) => !value)}>⇄ Mover em massa</button>
             <Link className="btn btn-ghost btn-sm" href={`/importar?tipo=${kind}`}>📥 Importar XLSX</Link>
             <button className="btn btn-primary btn-sm" onClick={() => setShowNew((value) => !value)}>+ {kind === 'cliente' ? 'Novo lead' : 'Novo corretor'}</button>
@@ -267,6 +328,22 @@ export function PipelineBoard({ initialLeads, kind, organizationId, canEdit }: {
       </div>
       {error && <div className="error-box">{error}</div>}
       {notice && <div className="success-box">{notice}</div>}
+
+      {canEdit && selectMode && <section className="card" style={{ marginBottom: 15 }}>
+        <div className="card-body" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <strong>{selectedIds.size} {selectedIds.size === 1 ? 'selecionado' : 'selecionados'}</strong>
+          <button className="btn btn-ghost btn-sm" onClick={selectVisible}>Selecionar visíveis ({Math.min(filtered.length, 300)})</button>
+          <button className="btn btn-ghost btn-sm" disabled={selectedIds.size === 0} onClick={() => setSelectedIds(new Set())}>Limpar</button>
+          <span style={{ flex: 1 }} />
+          {kind === 'corretor' ? <>
+            <label style={{ fontSize: 12, fontWeight: 700 }}>Transferir para:</label>
+            <select className="select" style={{ width: 180 }} value={pipelineTarget} onChange={(event) => setPipelineTarget(event.target.value as LeadKind)}>
+              {transferTargets.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
+            </select>
+            <button className="btn btn-primary btn-sm" disabled={pipelineSaving || selectedIds.size === 0} onClick={() => void transferSelected()}>{pipelineSaving ? 'Transferindo…' : `Transferir ${selectedIds.size}`}</button>
+          </> : <div className="info-box" style={{ margin: 0, flexBasis: '100%' }}>Clientes já compradores permanecem protegidos e não saem deste pipeline em massa. A seleção múltipla fica disponível aqui sem quebrar essa regra.</div>}
+        </div>
+      </section>}
 
       {canEdit && showBulk && <section className="card" style={{ marginBottom: 15 }}>
         <div className="card-head"><h3>Movimentação em massa</h3><button className="btn btn-ghost btn-sm" onClick={() => setShowBulk(false)}>Fechar</button></div>
@@ -298,33 +375,41 @@ export function PipelineBoard({ initialLeads, kind, organizationId, canEdit }: {
         {stages.map((stage) => {
           const stageLeads = filtered.filter((lead) => lead.stage === stage.id);
           return <section key={stage.id} className={`pipeline-column ${overStage === stage.id ? 'dragover' : ''}`}
-            onDragOver={(event) => { if (!canEdit) return; event.preventDefault(); setOverStage(stage.id); }}
+            onDragOver={(event) => { if (!canEdit || selectMode) return; event.preventDefault(); setOverStage(stage.id); }}
             onDragLeave={() => setOverStage(null)}
-            onDrop={(event) => { if (!canEdit) return; event.preventDefault(); void moveLead(stage.id); }}>
+            onDrop={(event) => { if (!canEdit || selectMode) return; event.preventDefault(); void moveLead(stage.id); }}>
             <div className="column-head"><span className="stage-dot" style={{ background: stage.color }} /><span className="stage-name">{stage.label}</span><span className="stage-count">{stageLeads.length}</span></div>
             <div className="column-body">
               {stageLeads.map((lead) => {
                 const due = dueLabel(lead.next_action_due_at);
                 const overdue = Boolean(due?.startsWith('⚠️'));
                 const readableSource = kind === 'cliente' ? metaAdSourceLabel(lead.metadata) || lead.source : lead.group_name;
-                return <Link href={`/leads/${lead.id}`} key={lead.id} className="lead-card" draggable={canEdit}
-                  onDragStart={(event) => { setDragId(lead.id); event.dataTransfer.effectAllowed = 'move'; }}
-                  onDragEnd={() => { setDragId(null); setOverStage(null); }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
-                    <div className="lead-name">{lead.name}</div>
-                    {lead.priority_class && <span className={`chip ${lead.priority_class === 'A1' ? 'chip-orange' : ''}`}>{lead.priority_class}</span>}
-                  </div>
-                  <div className="lead-sub">{kind === 'cliente' ? lead.enterprise || 'Empreendimento não informado' : lead.company || 'Autônomo'}</div>
-                  <div className="lead-meta">
-                    <span className="chip">{readableSource || (kind === 'cliente' ? 'Sem origem' : 'Sem grupo')}</span>
-                    <span className={`chip ${lead.owner_mode === 'human' ? '' : 'chip-orange'}`}>{lead.owner_mode === 'human' ? '👤 Humano' : lead.owner_mode === 'none' ? 'Encerrado' : `🤖 ${kind === 'cliente' ? 'Nara' : 'Plantão'}`}</span>
-                    {lead.ai_classification && <span className="chip">{lead.ai_classification}</span>}
-                  </div>
-                  {lead.next_action && <div className="muted" style={{ fontSize: 10, marginBottom: 5 }}><strong>Próxima:</strong> {lead.next_action}</div>}
-                  {due && <div style={{ fontSize: 10, marginBottom: 7, fontWeight: 700, color: overdue ? 'var(--red)' : 'var(--ink-soft)' }}>{due}</div>}
-                  <div className="muted" style={{ fontSize: 10, marginBottom: 7 }}>{displayPhone(lead.phone)}</div>
-                  <div className="temp-row"><div className="temp-track"><div className="temp-fill" style={{ width: `${lead.temperature}%`, background: temperatureColor(lead.temperature) }} /></div><span className="temp-label" style={{ color: temperatureColor(lead.temperature) }}>{lead.ai_classification?.toUpperCase() || temperatureName(lead.temperature)} {lead.temperature}/100</span></div>
-                </Link>;
+                const selected = selectedIds.has(lead.id);
+                return <div key={lead.id} style={{ position: 'relative' }}>
+                  {selectMode && <label style={{ position: 'absolute', top: 10, right: 10, zIndex: 3, width: 24, height: 24, borderRadius: 7, background: '#fff', border: '1px solid #cfc8bf', display: 'grid', placeItems: 'center', cursor: 'pointer' }}>
+                    <input type="checkbox" checked={selected} onChange={() => toggleSelection(lead.id)} style={{ width: 15, height: 15 }} />
+                  </label>}
+                  <Link href={`/leads/${lead.id}`} className="lead-card" draggable={canEdit && !selectMode}
+                    style={selected ? { outline: '2px solid #1f6b52', background: '#f2f8f5', paddingRight: selectMode ? 42 : undefined } : selectMode ? { paddingRight: 42 } : undefined}
+                    onClick={(event) => { if (selectMode) { event.preventDefault(); toggleSelection(lead.id); } }}
+                    onDragStart={(event) => { if (selectMode) return; setDragId(lead.id); event.dataTransfer.effectAllowed = 'move'; }}
+                    onDragEnd={() => { setDragId(null); setOverStage(null); }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                      <div className="lead-name">{lead.name}</div>
+                      {lead.priority_class && <span className={`chip ${lead.priority_class === 'A1' ? 'chip-orange' : ''}`}>{lead.priority_class}</span>}
+                    </div>
+                    <div className="lead-sub">{kind === 'cliente' ? lead.enterprise || 'Empreendimento não informado' : lead.company || 'Autônomo'}</div>
+                    <div className="lead-meta">
+                      <span className="chip">{readableSource || (kind === 'cliente' ? 'Sem origem' : 'Sem grupo')}</span>
+                      <span className={`chip ${lead.owner_mode === 'human' ? '' : 'chip-orange'}`}>{lead.owner_mode === 'human' ? '👤 Humano' : lead.owner_mode === 'none' ? 'Encerrado' : `🤖 ${kind === 'cliente' ? 'Nara' : 'Plantão'}`}</span>
+                      {lead.ai_classification && <span className="chip">{lead.ai_classification}</span>}
+                    </div>
+                    {lead.next_action && <div className="muted" style={{ fontSize: 10, marginBottom: 5 }}><strong>Próxima:</strong> {lead.next_action}</div>}
+                    {due && <div style={{ fontSize: 10, marginBottom: 7, fontWeight: 700, color: overdue ? 'var(--red)' : 'var(--ink-soft)' }}>{due}</div>}
+                    <div className="muted" style={{ fontSize: 10, marginBottom: 7 }}>{displayPhone(lead.phone)}</div>
+                    <div className="temp-row"><div className="temp-track"><div className="temp-fill" style={{ width: `${lead.temperature}%`, background: temperatureColor(lead.temperature) }} /></div><span className="temp-label" style={{ color: temperatureColor(lead.temperature) }}>{lead.ai_classification?.toUpperCase() || temperatureName(lead.temperature)} {lead.temperature}/100</span></div>
+                  </Link>
+                </div>;
               })}
               {stageLeads.length === 0 && <div className="empty-state">Nenhum registro</div>}
             </div>
