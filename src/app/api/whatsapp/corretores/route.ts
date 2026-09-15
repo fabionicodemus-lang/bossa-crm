@@ -7,6 +7,8 @@ import type { WhatsAppChannelRecord } from '@/lib/whatsapp/channelService';
 
 export const runtime = 'nodejs';
 
+const MESSAGE_PAGE_SIZE = 180;
+
 type SyncChannel = WhatsAppChannelRecord & {
   connection_mode?: string | null;
   history_sync_requested_at?: string | null;
@@ -29,6 +31,8 @@ type MediaSummary = {
   filename: string | null;
   historicalPlaceholder: boolean;
 };
+
+type AdminClient = ReturnType<typeof createAdminClient>;
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object' && !Array.isArray(value)
@@ -68,7 +72,18 @@ function mediaSummary(typeValue: unknown, payloadValue: unknown): MediaSummary |
   };
 }
 
-async function ensureCoexistenceWebhooks(admin: ReturnType<typeof createAdminClient>, channel: SyncChannel) {
+function publicChannel(channel: SyncChannel) {
+  return {
+    id: channel.id,
+    label: channel.label,
+    display_phone_number: channel.display_phone_number,
+    verified_name: channel.verified_name,
+    status: channel.status,
+    connection_mode: channel.connection_mode ?? null,
+  };
+}
+
+async function ensureCoexistenceWebhooks(admin: AdminClient, channel: SyncChannel) {
   if (channel.connection_mode !== 'coexistence') return;
   if (channel.coexistence_webhooks_ensured_at || channel.coexistence_webhooks_error) return;
 
@@ -86,7 +101,7 @@ async function ensureCoexistenceWebhooks(admin: ReturnType<typeof createAdminCli
   }
 }
 
-async function requestInitialSync(admin: ReturnType<typeof createAdminClient>, channel: SyncChannel) {
+async function requestInitialSync(admin: AdminClient, channel: SyncChannel) {
   if (channel.connection_mode !== 'coexistence') return;
 
   await ensureCoexistenceWebhooks(admin, channel);
@@ -155,6 +170,73 @@ async function requestInitialSync(admin: ReturnType<typeof createAdminClient>, c
   if (jobs.length) await Promise.allSettled(jobs);
 }
 
+async function loadMessages(args: {
+  admin: AdminClient;
+  organizationId: string;
+  channelId: string;
+  conversationId: string;
+  before?: string | null;
+}) {
+  const { data: conversation, error: conversationError } = await args.admin
+    .from('whatsapp_conversations')
+    .select('id')
+    .eq('id', args.conversationId)
+    .eq('organization_id', args.organizationId)
+    .eq('channel_id', args.channelId)
+    .maybeSingle();
+  if (conversationError) throw conversationError;
+  if (!conversation) throw new Error('Conversa não encontrada.');
+
+  let query = args.admin
+    .from('whatsapp_messages')
+    .select('id,conversation_id,direction,sender_kind,type,body,status,sent_at,created_at,payload')
+    .eq('organization_id', args.organizationId)
+    .eq('channel_id', args.channelId)
+    .eq('conversation_id', args.conversationId);
+
+  if (args.before) query = query.lt('created_at', args.before);
+
+  const { data, error } = await query
+    .order('created_at', { ascending: false })
+    .limit(MESSAGE_PAGE_SIZE + 1);
+  if (error) throw error;
+
+  const rows = data ?? [];
+  const hasMore = rows.length > MESSAGE_PAGE_SIZE;
+  const page = rows.slice(0, MESSAGE_PAGE_SIZE).reverse();
+  const messages = page.map((message) => ({
+    id: message.id,
+    conversationId: message.conversation_id,
+    direction: message.direction,
+    senderKind: message.sender_kind,
+    type: message.type,
+    body: message.body,
+    status: message.status,
+    sentAt: message.sent_at,
+    createdAt: message.created_at,
+    media: mediaSummary(message.type, message.payload),
+  }));
+
+  return {
+    messages,
+    hasMore,
+    oldestAt: messages[0]?.createdAt ?? null,
+  };
+}
+
+async function loadLeads(admin: AdminClient, leadIds: string[]) {
+  const rows: Array<Record<string, unknown>> = [];
+  for (let start = 0; start < leadIds.length; start += 100) {
+    const ids = leadIds.slice(start, start + 100);
+    const { data, error } = await admin.from('leads')
+      .select('id,name,phone,company,creci,stage,metadata,updated_at')
+      .in('id', ids);
+    if (error) throw error;
+    rows.push(...(data ?? []));
+  }
+  return new Map(rows.map((lead) => [String(lead.id), lead]));
+}
+
 export async function GET(request: Request) {
   try {
     const supabase = await createClient();
@@ -188,139 +270,104 @@ export async function GET(request: Request) {
       return NextResponse.json({ channel: null, conversations: [], selectedConversationId: null, messages: [] });
     }
 
-    await requestInitialSync(admin, internalChannel as SyncChannel);
+    const channel = internalChannel as SyncChannel;
+    const url = new URL(request.url);
+    const view = url.searchParams.get('view') ?? 'conversations';
 
-    const { data: channel, error: refreshedChannelError } = await admin
+    // Trocar de conversa é o caminho crítico. Ele não deve reconsultar contatos,
+    // histórico ou a lista de 800+ conversas: busca somente as últimas mensagens
+    // daquela conversa por um índice dedicado.
+    if (view === 'messages') {
+      const conversationId = url.searchParams.get('conversationId')?.trim();
+      if (!conversationId) {
+        return NextResponse.json({ error: 'conversationId é obrigatório.' }, { status: 400 });
+      }
+      const result = await loadMessages({
+        admin,
+        organizationId: membership.organization_id,
+        channelId: channel.id,
+        conversationId,
+        before: url.searchParams.get('before'),
+      });
+      return NextResponse.json({
+        channel: publicChannel(channel),
+        selectedConversationId: conversationId,
+        conversations: [],
+        ...result,
+      }, { headers: { 'Cache-Control': 'private, no-store' } });
+    }
+
+    // O sync inicial só precisa ser verificado no refresh da lista, nunca em cada
+    // clique de conversa.
+    await requestInitialSync(admin, channel);
+
+    const { data: refreshedChannel, error: refreshedChannelError } = await admin
       .from('whatsapp_channels')
       .select('id,label,display_phone_number,verified_name,status,connection_mode,history_sync_requested_at,history_sync_request_id,history_sync_completed_at,history_sync_progress,history_sync_phase,history_sync_error,contacts_sync_requested_at,contacts_sync_completed_at,contacts_sync_error,coexistence_webhooks_ensured_at,coexistence_webhooks_error')
-      .eq('id', internalChannel.id)
+      .eq('id', channel.id)
       .single();
     if (refreshedChannelError) throw refreshedChannelError;
 
     const { data: conversationRows, error: conversationsError } = await admin
       .from('whatsapp_conversations')
-      .select('id,contact_wa_id,lead_id,last_inbound_at,window_expires_at,created_at,updated_at')
+      .select('id,contact_wa_id,lead_id,last_inbound_at,window_expires_at,created_at,updated_at,last_message_id,last_message_body,last_message_type,last_message_direction,last_message_status,last_message_at')
       .eq('organization_id', membership.organization_id)
       .eq('channel_id', channel.id)
+      .order('last_message_at', { ascending: false, nullsFirst: false })
       .order('updated_at', { ascending: false })
       .limit(5000);
 
     if (conversationsError) throw conversationsError;
     const rawConversations = conversationRows ?? [];
     if (!rawConversations.length) {
-      return NextResponse.json({ channel, conversations: [], selectedConversationId: null, messages: [] });
+      return NextResponse.json({ channel: refreshedChannel, conversations: [], selectedConversationId: null, messages: [] });
     }
 
-    // O histórico de 180 dias pode trazer centenas de corretores. Um único
-    // `.in(...)` com todos os UUIDs ultrapassa o tamanho aceito da URL do
-    // PostgREST e volta apenas como HTTP 400 "Bad Request". Consultamos em
-    // lotes pequenos para manter a caixa de entrada estável mesmo com milhares
-    // de conversas importadas.
     const leadIds = [...new Set(rawConversations.map((row) => row.lead_id).filter(Boolean))] as string[];
-    const leadRows: Array<Record<string, any>> = [];
-    for (let start = 0; start < leadIds.length; start += 100) {
-      const ids = leadIds.slice(start, start + 100);
-      const { data, error } = await admin.from('leads')
-        .select('id,name,phone,company,creci,stage,metadata,updated_at')
-        .in('id', ids);
-      if (error) throw error;
-      leadRows.push(...(data ?? []));
-    }
-    const leads = new Map(leadRows.map((lead) => [lead.id, lead]));
-
-    const conversationIds = rawConversations.map((row) => row.id);
-    const latestByConversation = new Map<string, Record<string, unknown>>();
-    for (let start = 0; start < conversationIds.length; start += 100) {
-      const ids = conversationIds.slice(start, start + 100);
-      const { data: latestMessageRows, error: latestMessagesError } = await admin
-        .from('whatsapp_messages')
-        .select('id,conversation_id,direction,sender_kind,type,body,status,sent_at,created_at')
-        .eq('organization_id', membership.organization_id)
-        .eq('channel_id', channel.id)
-        .in('conversation_id', ids)
-        .order('created_at', { ascending: false })
-        .limit(Math.max(300, ids.length * 3));
-      if (latestMessagesError) throw latestMessagesError;
-      for (const message of latestMessageRows ?? []) {
-        if (!latestByConversation.has(message.conversation_id)) {
-          latestByConversation.set(message.conversation_id, message);
-        }
-      }
-    }
+    const leads = await loadLeads(admin, leadIds);
 
     const conversations = rawConversations.map((conversation) => {
-      const lead = conversation.lead_id ? leads.get(conversation.lead_id) : null;
-      const lastMessage = latestByConversation.get(conversation.id) as {
-        id: string;
-        direction: string;
-        sender_kind: string;
-        type: string;
-        body: string | null;
-        status: string | null;
-        sent_at: string | null;
-        created_at: string;
-      } | undefined;
+      const lead = conversation.lead_id ? leads.get(String(conversation.lead_id)) : null;
+      const leadName = lead && typeof lead.name === 'string' ? lead.name : null;
+      const leadPhone = lead && typeof lead.phone === 'string' ? lead.phone : null;
+      const leadCompany = lead && typeof lead.company === 'string' ? lead.company : null;
+      const leadCreci = lead && typeof lead.creci === 'string' ? lead.creci : null;
+      const leadStage = lead && typeof lead.stage === 'string' ? lead.stage : null;
+      const lastAt = conversation.last_message_at ?? conversation.updated_at;
+      const lastMessage = conversation.last_message_id ? {
+        id: conversation.last_message_id,
+        direction: conversation.last_message_direction ?? 'in',
+        senderKind: '',
+        type: conversation.last_message_type ?? 'text',
+        body: conversation.last_message_body,
+        status: conversation.last_message_status,
+        sentAt: conversation.last_message_at,
+        createdAt: lastAt,
+      } : null;
+
       return {
         id: conversation.id,
         contactWaId: conversation.contact_wa_id,
         leadId: conversation.lead_id,
-        name: lead?.name || conversation.contact_wa_id,
-        phone: lead?.phone || conversation.contact_wa_id,
-        company: lead?.company || null,
-        creci: lead?.creci || null,
-        stage: lead?.stage || null,
+        name: leadName || conversation.contact_wa_id,
+        phone: leadPhone || conversation.contact_wa_id,
+        company: leadCompany,
+        creci: leadCreci,
+        stage: leadStage,
         lastInboundAt: conversation.last_inbound_at,
         windowExpiresAt: conversation.window_expires_at,
         createdAt: conversation.created_at,
         updatedAt: conversation.updated_at,
-        lastMessage: lastMessage ? {
-          id: lastMessage.id,
-          direction: lastMessage.direction,
-          senderKind: lastMessage.sender_kind,
-          type: lastMessage.type,
-          body: lastMessage.body,
-          status: lastMessage.status,
-          sentAt: lastMessage.sent_at,
-          createdAt: lastMessage.created_at,
-        } : null,
+        lastMessage,
       };
-    }).sort((a, b) => {
-      const aTime = new Date(a.lastMessage?.createdAt || a.updatedAt).getTime();
-      const bTime = new Date(b.lastMessage?.createdAt || b.updatedAt).getTime();
-      return bTime - aTime;
     });
 
-    const requested = new URL(request.url).searchParams.get('conversationId');
-    const selectedConversationId = requested && conversations.some((item) => item.id === requested)
-      ? requested
-      : conversations[0]?.id ?? null;
-
-    let messages: Array<Record<string, unknown>> = [];
-    if (selectedConversationId) {
-      const { data: selectedMessages, error: selectedMessagesError } = await admin
-        .from('whatsapp_messages')
-        .select('id,conversation_id,direction,sender_kind,type,body,status,sent_at,created_at,payload')
-        .eq('organization_id', membership.organization_id)
-        .eq('channel_id', channel.id)
-        .eq('conversation_id', selectedConversationId)
-        .order('created_at', { ascending: false })
-        .limit(1000);
-      if (selectedMessagesError) throw selectedMessagesError;
-      messages = (selectedMessages ?? []).reverse().map((message) => ({
-        id: message.id,
-        conversationId: message.conversation_id,
-        direction: message.direction,
-        senderKind: message.sender_kind,
-        type: message.type,
-        body: message.body,
-        status: message.status,
-        sentAt: message.sent_at,
-        createdAt: message.created_at,
-        media: mediaSummary(message.type, message.payload),
-      }));
-    }
-
-    return NextResponse.json({ channel, conversations, selectedConversationId, messages });
+    return NextResponse.json({
+      channel: refreshedChannel,
+      conversations,
+      selectedConversationId: conversations[0]?.id ?? null,
+      messages: [],
+    }, { headers: { 'Cache-Control': 'private, no-store' } });
   } catch (error) {
     console.error('[whatsapp corretores inbox]', error);
     return NextResponse.json({
