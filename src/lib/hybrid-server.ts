@@ -23,12 +23,12 @@ function brokerRoutingDecision(base: HybridDecision, turn: AiTurn): HybridDecisi
     nextActionType: 'qualificar_corretor',
     nextActionDueAt: null,
     reactivationAt: null,
-    noteTitle: 'Nara direcionou o contato ao pipeline de corretores',
+    noteTitle: 'Contato geral direcionado ao pipeline de corretores',
     noteDescription: turn.summary
       ? `${turn.summary} O contato se identificou como corretor e foi transferido automaticamente para o Plantão.`
       : 'O contato se identificou como corretor e foi transferido automaticamente para o Plantão.',
     taskTitle: 'Continuar qualificação do corretor no Plantão',
-    taskDescription: 'O contato veio pelo atendimento de clientes e se identificou como corretor. O Plantão deve continuar a qualificação.',
+    taskDescription: 'O contato geral se identificou como corretor. O Plantão deve continuar a qualificação.',
     taskPriority: 'normal',
     taskDueAt: null,
     taskDedupeKey: 'ai:corretor:qualificacao',
@@ -74,11 +74,15 @@ export async function applyHybridDecision(args: {
     turn: args.turn,
     lastUserMessage: args.lastUserMessage,
   });
+
+  // Regra de proteção: CLIENTE é uma classificação humana/persistente.
+  // A IA nunca converte cliente em corretor. Somente um contato GERAL ainda
+  // não classificado pode ser promovido automaticamente para CORRETOR.
   const routedToAssistedSale = args.lead.kind === 'cliente'
     && isAssistedSaleSignal(args.lastUserMessage);
-  const routedToBroker = args.lead.kind === 'cliente'
-    && !routedToAssistedSale
+  const routedToBroker = args.lead.kind === 'geral'
     && isBrokerRoutingSignal(args.lastUserMessage);
+
   const decision = routedToAssistedSale
     ? assistedSaleDecision(baseDecision, args.turn)
     : routedToBroker
@@ -89,7 +93,7 @@ export async function applyHybridDecision(args: {
   const metadata = {
     ...(args.lead.metadata || {}),
     ...(routedToBroker ? {
-      contact_kind_routed_from: 'cliente',
+      contact_kind_routed_from: 'geral',
       contact_kind_routed_to: 'corretor',
       contact_kind_routed_at: now,
       contact_kind_routed_reason: args.lastUserMessage,
