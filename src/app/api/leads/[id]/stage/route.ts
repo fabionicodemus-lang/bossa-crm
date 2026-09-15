@@ -41,7 +41,18 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const previousStage = lead.stage;
   const update: Record<string, unknown> = { stage, updated_at: now };
 
-  if (isAiStage(stage)) {
+  if (kind === 'geral') {
+    update.owner_mode = stage === 'encerrado' ? 'none' : 'human';
+    update.ai_enabled = false;
+    update.automation_paused = true;
+    if (stage !== 'encerrado') update.owner_id = lead.owner_id || user.id;
+    if (stage === 'humano_ativo') update.last_human_activity_at = now;
+    if (stage === 'encerrado') {
+      update.next_action = null;
+      update.next_action_type = null;
+      update.next_action_due_at = null;
+    }
+  } else if (isAiStage(stage)) {
     update.owner_mode = 'ai';
     update.ai_enabled = !lead.opt_out && !lead.automation_paused;
     if (stage !== 'passagem_pendente') update.owner_id = null;
@@ -56,12 +67,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     update.next_action_due_at = null;
   }
 
-  if (stage === 'passagem_pendente') {
+  if (kind !== 'geral' && stage === 'passagem_pendente') {
     update.handoff_requested_at = now;
     update.next_action = 'Um consultor deve aceitar a passagem e assumir o atendimento.';
     update.next_action_type = 'aceitar_passagem';
     update.next_action_due_at = dueFromNow(30);
-  } else if (stage === 'humano_ativo') {
+  } else if (kind !== 'geral' && stage === 'humano_ativo') {
     update.handoff_accepted_at = lead.handoff_accepted_at || now;
     update.next_action = lead.next_action || 'Realizar o primeiro contato humano e registrar o resultado.';
     update.next_action_type = 'contato_humano';
@@ -75,13 +86,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     organization_id: membership.organization_id,
     lead_id: id,
     user_id: user.id,
-    type: 'mudanca_estado_hibrido',
+    type: kind === 'geral' ? 'mudanca_etapa_geral' : 'mudanca_estado_hibrido',
     title: `Etapa alterada para ${stageLabel(kind, stage)}`,
     description: String(body.reason ?? '').trim() || `Movido de ${stageLabel(kind, previousStage)} para ${stageLabel(kind, stage)}.`,
     metadata: { previous_stage: previousStage, next_stage: stage, manual: true },
   });
 
-  if (stage === 'passagem_pendente') {
+  if (kind !== 'geral' && stage === 'passagem_pendente') {
     const { data: existing } = await supabase
       .from('lead_handoffs')
       .select('id')
