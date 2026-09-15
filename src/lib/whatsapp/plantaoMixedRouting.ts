@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Lead } from '@/lib/types';
 import { isBrokerRoutingSignal, normalizeNaraRoutingText } from '@/lib/nara-contact-routing';
 import { channelAccess, type WhatsAppChannelRecord, type WhatsAppConversationRecord } from '@/lib/whatsapp/channelService';
+import { plantaoCanReplyNow } from '@/lib/whatsapp/plantaoSchedule';
 import { normalizeWaId } from '@/lib/whatsapp/utils';
 
 type AdminClient = SupabaseClient;
@@ -267,7 +268,6 @@ async function handleGeneral(args: {
     return { handled: true };
   }
 
-  // Primeiro contato (ou resposta ambígua): a única pergunta automática é se é corretor.
   await args.admin.from('leads').update({
     ai_enabled: false,
     automation_paused: true,
@@ -294,7 +294,8 @@ async function handleGeneral(args: {
  * Trata exclusivamente o número compartilhado do Plantão (role=corretor):
  * - CLIENTE sempre tem prioridade e jamais é reclassificado automaticamente;
  * - CORRETOR segue para o atendimento normal do Plantão;
- * - GERAL recebe a pergunta de identificação; somente GERAL pode virar CORRETOR.
+ * - GERAL recebe a pergunta de identificação; somente GERAL pode virar CORRETOR;
+ * - fora dos horários configurados, nenhuma resposta automática do Plantão sai.
  */
 export async function handleMixedPlantaoConversation(args: {
   admin: AdminClient;
@@ -304,6 +305,8 @@ export async function handleMixedPlantaoConversation(args: {
   sourceMessageId: string;
 }): Promise<RoutingResult> {
   if (args.channel.role !== 'corretor') return { handled: false };
+  const activeNow = await plantaoCanReplyNow(args.admin, args.channel.organization_id);
+  if (!activeNow) return { handled: true };
   if (args.lead.kind === 'cliente') return handleKnownCustomer(args);
   if (args.lead.kind === 'geral') return handleGeneral(args);
   return { handled: false };
