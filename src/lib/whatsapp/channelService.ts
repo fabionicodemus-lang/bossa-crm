@@ -1,4 +1,5 @@
 import { createAdminClient } from '@/lib/supabase/admin';
+import type { LeadKind } from '@/lib/types';
 import type {
   ChannelProvider,
   WhatsAppChannelRole,
@@ -59,8 +60,8 @@ export function channelAccess(channel: WhatsAppChannelRecord) {
   };
 }
 
-export function roleForLeadKind(kind: 'cliente' | 'corretor'): WhatsAppChannelRole {
-  return kind;
+export function roleForLeadKind(kind: LeadKind): WhatsAppChannelRole {
+  return kind === 'cliente' ? 'cliente' : 'corretor';
 }
 
 export function legacyChannelForRole(role: WhatsAppChannelRole) {
