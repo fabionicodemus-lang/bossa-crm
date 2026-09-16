@@ -15,7 +15,7 @@
     "incremental": true,
     "plugins": [{ "name": "next" }],
     "paths": {
-      "@/lib/ai": ["./src/lib/ai-v121.ts"],
+      "@/lib/ai": ["./src/lib/ai-v122.ts"],
       "@/lib/hybrid-server": ["./src/lib/hybrid-server-v121.ts"],
       "@/*": ["./src/*"]
     }
