@@ -8,7 +8,6 @@ type Args = Parameters<typeof applyOriginalDecision>[0];
 type ControlledTurn = Args['turn'] & {
   __bossaAiSkipped?: boolean;
   __bossaAiClaim?: { conversationId: string; sourceId: string };
-  __bossaLastUserMessage?: string;
 };
 
 function silentDecision(args: Args): HybridDecision {
@@ -27,18 +26,23 @@ function silentDecision(args: Args): HybridDecision {
 export async function applyHybridDecision(args: Args): Promise<HybridDecision> {
   const turn = args.turn as ControlledTurn;
   if (turn.__bossaAiSkipped) return silentDecision(args);
-  if (turn.__bossaAiClaim) {
-    const allowed = await whatsappCanStillReply({
-      admin: args.admin,
-      leadId: args.lead.id,
-      conversationId: turn.__bossaAiClaim.conversationId,
-      sourceId: turn.__bossaAiClaim.sourceId,
-    });
-    if (!allowed) return silentDecision(args);
-  }
+  if (!turn.__bossaAiClaim) return applyOriginalDecision(args);
+
+  const claim = turn.__bossaAiClaim;
+  const allowed = await whatsappCanStillReply({
+    admin: args.admin,
+    leadId: args.lead.id,
+    conversationId: claim.conversationId,
+    sourceId: claim.sourceId,
+  });
+  if (!allowed) return silentDecision(args);
+
+  const { data: source, error } = await args.admin.from('messages').select('body')
+    .eq('id', claim.sourceId).maybeSingle();
+  if (error || !source) return silentDecision(args);
   return applyOriginalDecision({
     ...args,
-    lastUserMessage: turn.__bossaLastUserMessage || args.lastUserMessage,
-    sourceMessageId: turn.__bossaAiClaim?.sourceId || args.sourceMessageId,
+    lastUserMessage: String(source.body || ''),
+    sourceMessageId: claim.sourceId,
   });
 }
