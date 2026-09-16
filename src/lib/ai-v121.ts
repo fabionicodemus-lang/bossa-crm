@@ -1,16 +1,30 @@
 import { generateAiTurn as generatePreviousTurn } from './ai-v120';
 import type { AiTrainingContext, AiTurn } from './ai';
+import { rankAiFilesForConversation } from './ai-file-ranking';
 import { aiCanReply } from './hybrid';
 import { createAdminClient } from './supabase/admin';
 import type { Lead } from './types';
+import { understandInboundMedia } from './whatsapp/aiMediaUnderstanding';
 
 export * from './ai-v120';
 
 type ChatMessage = { role: 'user' | 'assistant'; content: string };
-type MessageRow = { id: string; direction: string; sender_kind: string; body: string; created_at: string; whatsapp_conversation_id: string | null };
+type MessageRow = {
+  id: string;
+  direction: string;
+  sender_kind: string;
+  body: string;
+  created_at: string;
+  whatsapp_conversation_id: string | null;
+  whatsapp_channel_id: string | null;
+  whatsapp_message_id: string | null;
+  raw_payload: Record<string, unknown> | null;
+};
 type GuardedTurn = AiTurn & { __bossaAiClaim?: { conversationId: string; sourceId: string }; __bossaAiSkipped?: boolean };
 export const SKIP_REASON = '__bossa_ai_turn_skipped__';
 const DEBOUNCE_MS = 6500;
+const MEDIA_BURST_MS = 45_000;
+const MAX_MEDIA_PER_TURN = 4;
 
 function normalize(text: string) {
   return text.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase().replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
@@ -46,7 +60,6 @@ function guardedReply(turn: GuardedTurn, history: ChatMessage[]): GuardedTurn {
   const reply = turn.reply.trim();
   if (!reply) return turn;
 
-  // Uma confirmação curta sem novo pedido não precisa de mais uma pergunta.
   if (/^(?:obrigad[oa]|obg|valeu|ok|okay|blz|beleza|👍|🙏)[.!\s]*$/iu.test(lastUser)) {
     turn.reply = '';
     if (!turn.handoff && !turn.attachment_ids.length) {
@@ -56,8 +69,6 @@ function guardedReply(turn: GuardedTurn, history: ChatMessage[]): GuardedTurn {
     return turn;
   }
 
-  // A API não disponibiliza neste fluxo ação confirmada de agenda/convite/e-mail.
-  // Uma instrução ao modelo nunca conta como evidência de execução.
   const appointmentClaim = /\b(?:agendei|agendamos|marquei|marcamos|convite (?:foi )?enviado|enviei (?:o )?convite|link (?:foi )?enviado|reuni[aã]o (?:est[aá] )?confirmada|chamada (?:est[aá] )?confirmada|confirmei (?:a )?(?:reuni[aã]o|videochamada)|acion(?:ei|amos) (?:o )?time)\b/iu.test(reply);
   const materialClaim = /\b(?:enviei|enviamos|encaminhei|encaminhamos|arquivo enviado|material enviado|pdf enviado|documento enviado)\b/iu.test(reply);
   if (appointmentClaim) {
@@ -75,7 +86,6 @@ function guardedReply(turn: GuardedTurn, history: ChatMessage[]): GuardedTurn {
     return turn;
   }
 
-  // Bloqueio determinístico de mensagens repetidas, inclusive com outras palavras.
   if (previousReplies.some((previous) => normalize(previous) === normalize(reply) ||
       (normalize(reply).length > 35 && similarity(previous, reply) >= 0.88))) {
     turn.reply = '';
@@ -116,9 +126,45 @@ function memoryFacts(rows: MessageRow[], previous: Record<string, unknown>) {
   };
 }
 
+function rankedContext(context: AiTrainingContext, history: ChatMessage[], lead: Lead): AiTrainingContext {
+  return {
+    ...context,
+    files: rankAiFilesForConversation(context.files ?? [], history, lead, 24),
+  };
+}
+
+function looksLikeUnderstandableMedia(row: MessageRow) {
+  const raw = row.raw_payload;
+  if (!raw || row.direction !== 'in') return false;
+  const source = (raw.message_echo && typeof raw.message_echo === 'object' ? raw.message_echo : raw.history_message && typeof raw.history_message === 'object' ? raw.history_message : raw) as Record<string, unknown>;
+  return source.type === 'audio' || source.type === 'image';
+}
+
+async function enrichRecentMedia(
+  admin: ReturnType<typeof createAdminClient>,
+  organizationId: string,
+  rows: MessageRow[],
+  latestAt: string,
+) {
+  const latestMs = new Date(latestAt).getTime();
+  if (!Number.isFinite(latestMs)) return new Map<string, string>();
+  const candidates = rows.filter((row) => {
+    const rowMs = new Date(row.created_at).getTime();
+    return looksLikeUnderstandableMedia(row)
+      && Number.isFinite(rowMs)
+      && latestMs - rowMs >= 0
+      && latestMs - rowMs <= MEDIA_BURST_MS;
+  }).slice(-MAX_MEDIA_PER_TURN);
+
+  const results = await Promise.all(candidates.map(async (row) => {
+    const understanding = await understandInboundMedia({ admin, organizationId, row });
+    return [row.id, understanding] as const;
+  }));
+  return new Map(results.filter((entry): entry is readonly [string, string] => Boolean(entry[1])));
+}
+
 /** O webhook pode chamar esta função uma vez por mensagem; somente a última
- * mensagem da conversa, depois de 6,5 s de silêncio, consegue o claim atômico.
- * Testes e chamadas fora de um webhook não dependem de Supabase nem da espera. */
+ * mensagem da conversa, depois de 6,5 s de silêncio, consegue o claim atômico. */
 export async function generateAiTurn(lead: Lead, history: ChatMessage[], context: AiTrainingContext = {}): Promise<AiTurn | null> {
   const conversationId = typeof lead.metadata?.whatsapp_conversation_id === 'string'
     ? lead.metadata.whatsapp_conversation_id : '';
@@ -128,7 +174,8 @@ export async function generateAiTurn(lead: Lead, history: ChatMessage[], context
     && history.at(-1)?.role === 'user' && aiCanReply(lead));
 
   if (!live) {
-    const turn = await generatePreviousTurn(lead, history, context);
+    const contextual = rankedContext(context, history, lead);
+    const turn = await generatePreviousTurn(lead, history, contextual);
     return turn ? guardedReply(turn as GuardedTurn, history) : null;
   }
 
@@ -136,7 +183,7 @@ export async function generateAiTurn(lead: Lead, history: ChatMessage[], context
   const admin = createAdminClient();
   const [{ data: freshData, error: leadError }, { data: recentRows, error: historyError }, { data: memory, error: memoryError }] = await Promise.all([
     admin.from('leads').select('*').eq('id', lead.id).maybeSingle(),
-    admin.from('messages').select('id,direction,sender_kind,body,created_at,whatsapp_conversation_id')
+    admin.from('messages').select('id,direction,sender_kind,body,created_at,whatsapp_conversation_id,whatsapp_channel_id,whatsapp_message_id,raw_payload')
       .eq('lead_id', lead.id).neq('direction', 'system')
       .order('created_at', { ascending: false }).limit(100),
     admin.from('whatsapp_ai_conversation_memory').select('facts,last_summary').eq('lead_id', lead.id).maybeSingle(),
@@ -148,15 +195,11 @@ export async function generateAiTurn(lead: Lead, history: ChatMessage[], context
   const freshLead = freshData as Lead;
   if (!aiCanReply(freshLead)) return skip(freshLead);
   const rows = ([...recentRows].reverse() as MessageRow[]);
-  const recentHistory: ChatMessage[] = rows.map((row) => ({
-    role: row.direction === 'in' ? 'user' : 'assistant', content: row.body,
-  }));
   const { data: latest, error: latestError } = await admin.from('messages')
     .select('id,created_at').eq('whatsapp_conversation_id', conversationId).eq('direction', 'in')
     .order('created_at', { ascending: false }).order('id', { ascending: false }).limit(1).maybeSingle();
   if (latestError || !latest) return skip(freshLead);
 
-  // Nunca retomar a IA se um humano respondeu depois do contato.
   const { data: humanReply } = await admin.from('messages').select('id').eq('whatsapp_conversation_id', conversationId)
     .eq('direction', 'out').eq('sender_kind', 'humano').gt('created_at', latest.created_at).limit(1).maybeSingle();
   if (humanReply) return skip(freshLead);
@@ -168,14 +211,26 @@ export async function generateAiTurn(lead: Lead, history: ChatMessage[], context
     return skip(freshLead);
   }
 
+  // Áudio e imagem da rajada atual são interpretados antes da resposta. Falha na
+  // mídia é não-bloqueante: o texto/placeholder original continua disponível.
+  const mediaUnderstanding = await enrichRecentMedia(admin, freshLead.organization_id, rows, latest.created_at);
+  const recentHistory: ChatMessage[] = rows.map((row) => ({
+    role: row.direction === 'in' ? 'user' : 'assistant',
+    content: mediaUnderstanding.get(row.id) || row.body,
+  }));
+
   const existingFacts = memory?.facts && typeof memory.facts === 'object' && !Array.isArray(memory.facts)
     ? memory.facts as Record<string, unknown> : {};
-  const facts = memoryFacts(rows, existingFacts);
+  const facts = memoryFacts(rows.map((row) => ({
+    ...row,
+    body: mediaUnderstanding.get(row.id) || row.body,
+  })), existingFacts);
   const memoryLead = { ...freshLead, metadata: {
     ...(freshLead.metadata || {}),
     memoria_da_conversa: { ...facts, resumo_anterior: memory?.last_summary || '' },
   } } as Lead;
-  const turn = await generatePreviousTurn(memoryLead, recentHistory, context);
+  const contextual = rankedContext(context, recentHistory, memoryLead);
+  const turn = await generatePreviousTurn(memoryLead, recentHistory, contextual);
   if (!turn) return skip(freshLead);
   const guarded = guardedReply(turn as GuardedTurn, recentHistory);
   guarded.__bossaAiClaim = { conversationId, sourceId: latest.id };
