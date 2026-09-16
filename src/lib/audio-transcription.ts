@@ -26,7 +26,9 @@ export async function transcribeAudio(input: {
   mimeType: string;
   language?: string;
 }) {
-  const model = process.env.OPENAI_TRANSCRIPTION_MODEL?.trim() || 'gpt-4o-mini-transcribe';
+  // Modelo especializado somente para transformar fala em texto. A resposta ao
+  // contato continua sendo produzida exclusivamente pelo gpt-5.6-luna.
+  const model = process.env.OPENAI_TRANSCRIPTION_MODEL?.trim() || 'gpt-transcribe';
   const mimeType = input.mimeType || 'audio/ogg';
   const blob = new Blob([input.bytes], { type: mimeType });
   const form = new FormData();
