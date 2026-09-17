@@ -8,6 +8,10 @@
     {
       "path": "/api/automation/microsoft-calendar",
       "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/automation/broker-human-review",
+      "schedule": "*/5 * * * *"
     }
   ]
 }
