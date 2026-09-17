@@ -1,3 +1,4 @@
+import { microsoftBusyConflicts } from '@/lib/microsoft-calendar';
 import { createAdminClient } from '@/lib/supabase/admin';
 
 export type AgendaEventType = 'reuniao_cliente' | 'apresentacao' | 'visita' | 'ligacao' | 'tarefa' | 'outro';
@@ -31,6 +32,7 @@ export async function findAgendaConflicts(input: {
   startsAt: string;
   endsAt: string;
   excludeEventId?: string | null;
+  excludeMicrosoftId?: string | null;
 }) {
   const admin = createAdminClient();
   let query = admin
@@ -45,7 +47,10 @@ export async function findAgendaConflicts(input: {
   if (input.excludeEventId) query = query.neq('id', input.excludeEventId);
   const { data, error } = await query;
   if (error) throw error;
-  return data ?? [];
+  // Consulta diretamente a Microsoft para incluir inclusive eventos ainda não importados.
+  // Se a Microsoft falhar com uma conta conectada, não declaramos disponibilidade.
+  const remote = await microsoftBusyConflicts(input.organizationId, input.assignedTo, input.startsAt, input.endsAt, input.excludeMicrosoftId);
+  return [...(data ?? []), ...remote.map((event) => ({ ...event, assigned_to: input.assignedTo, event_type: 'outro', meeting_mode: 'presencial' }))];
 }
 
 export async function createAgendaEventFromAi(input: {
@@ -62,34 +67,16 @@ export async function createAgendaEventFromAi(input: {
   location?: string | null;
   metadata?: Record<string, unknown>;
 }) {
-  const conflicts = await findAgendaConflicts({
-    organizationId: input.organizationId,
-    assignedTo: input.assignedTo,
-    startsAt: input.startsAt,
-    endsAt: input.endsAt,
-  });
+  const conflicts = await findAgendaConflicts({ organizationId: input.organizationId, assignedTo: input.assignedTo,
+    startsAt: input.startsAt, endsAt: input.endsAt });
   if (conflicts.length) return { created: false as const, conflicts };
-
   const admin = createAdminClient();
-  const { data, error } = await admin
-    .from('agenda_events')
-    .insert({
-      organization_id: input.organizationId,
-      lead_id: input.leadId,
-      assigned_to: input.assignedTo,
-      created_by_kind: 'ai',
-      agent: input.agent,
-      title: input.title,
-      description: input.description ?? null,
-      event_type: input.eventType,
-      meeting_mode: input.meetingMode,
-      location: input.location ?? null,
-      starts_at: input.startsAt,
-      ends_at: input.endsAt,
-      metadata: input.metadata ?? {},
-    })
-    .select('*')
-    .single();
+  const { data, error } = await admin.from('agenda_events').insert({
+    organization_id: input.organizationId, lead_id: input.leadId, assigned_to: input.assignedTo,
+    created_by_kind: 'ai', agent: input.agent, title: input.title, description: input.description ?? null,
+    event_type: input.eventType, meeting_mode: input.meetingMode, location: input.location ?? null,
+    starts_at: input.startsAt, ends_at: input.endsAt, metadata: input.metadata ?? {},
+  }).select('*').single();
   if (error) throw error;
   return { created: true as const, event: data as AgendaEvent, conflicts: [] };
 }
