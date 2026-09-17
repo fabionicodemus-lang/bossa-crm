@@ -22,6 +22,7 @@ const links: NavItem[] = [
   { section: 'Outros contatos' },
   { href: '/geral', icon: '📇', label: 'Pipeline Geral' },
   { section: 'Comercial' },
+  { href: '/agenda', icon: '📅', label: 'Agenda' },
   { href: '/tarefas', icon: '✅', label: 'Tarefas' },
   { href: '/empreendimentos', icon: '🏢', label: 'Empreendimentos' },
   { href: '/configuracoes/arquivos-ia', icon: '🗂️', label: 'Arquivos da IA', roles: ['admin', 'comercial'] },
