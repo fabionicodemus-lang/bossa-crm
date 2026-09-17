@@ -86,7 +86,7 @@ export function BroadcastsWorkspace({
         ? <div className="page-content"><div className="info-box">Sincronizando modelos com a Meta…</div></div>
         : <>
             {templateSyncError && <div className="page-content" style={{ paddingBottom: 0 }}><div className="error-box">Não foi possível atualizar automaticamente: {templateSyncError}. Você ainda pode usar “Sincronizar Meta” manualmente.</div></div>}
-            <TemplatesPreviewGallery templates={templates} connections={connections} onRefresh={() => void syncTemplates()} />
+            <TemplatesPreviewGallery templates={templates} connections={connections} canEdit={canEdit} onRefresh={() => void syncTemplates()} />
             <MetaTemplatesManager
               key={syncVersion} initialTemplates={templates} connections={connections} canEdit={canEdit}
             />
