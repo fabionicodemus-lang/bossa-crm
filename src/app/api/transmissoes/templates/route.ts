@@ -57,6 +57,7 @@ export async function POST(request: Request) {
       const quality = typeof template.quality_score === 'string'
         ? template.quality_score
         : String(template.quality_score?.score ?? '');
+      const reason = String(template.rejected_reason ?? '').trim();
       return {
         organization_id: membership.organization_id,
         whatsapp_connection_id: channel.legacy_connection_id ?? channel.id,
@@ -68,7 +69,7 @@ export async function POST(request: Request) {
         category: template.category,
         status: template.status,
         quality_score: quality || null,
-        rejected_reason: template.rejected_reason || null,
+        rejected_reason: String(template.status).toUpperCase() === 'APPROVED' || reason.toUpperCase() === 'NONE' ? null : reason || null,
         header_format: String(header?.format ?? 'NONE').toUpperCase(),
         body_text: bodyText,
         footer_text: footer?.text ? String(footer.text) : null,
