@@ -13,7 +13,7 @@ import { createClient } from '@/lib/supabase/server';
 import { normalizeWaId } from '@/lib/whatsapp';
 
 type StageCountRow = {
-  kind: 'cliente' | 'corretor';
+  kind: 'cliente' | 'corretor' | 'geral';
   stage: string;
   phone: string | null;
   opt_out: boolean | null;
@@ -39,6 +39,7 @@ async function fetchAllLeadRows(supabase: SupabaseClient, organizationId: string
       .from('leads')
       .select('kind,stage,phone,opt_out,automation_paused')
       .eq('organization_id', organizationId)
+      .in('kind', ['cliente', 'corretor'])
       .is('archived_at', null)
       .order('id', { ascending: true })
       .range(from, from + PAGE_SIZE - 1);
@@ -82,6 +83,10 @@ export default async function BroadcastsPage({
   const seenByStage = new Map<string, Set<string>>();
 
   for (const lead of leadsResult.data) {
+    // Transmissões segmenta somente clientes e corretores. Contatos ainda
+    // não classificados (Pipeline Geral) não são uma audiência de disparo.
+    if (lead.kind !== 'cliente' && lead.kind !== 'corretor') continue;
+
     const key = `${lead.kind}:${lead.stage}`;
     const current = stageCounts[key] ?? { ...emptyDiagnostics() };
     const overall = audienceDiagnostics[lead.kind];
