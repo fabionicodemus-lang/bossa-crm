@@ -4,6 +4,10 @@
     {
       "path": "/api/automation/followup",
       "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/automation/microsoft-calendar",
+      "schedule": "*/15 * * * *"
     }
   ]
 }
