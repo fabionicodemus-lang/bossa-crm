@@ -250,7 +250,7 @@ async function upsertMessages(args: {
     crmRows.push({
       organization_id: args.channel.organization_id,
       lead_id: args.leadId,
-      whatsapp_connection_id: args.channel.legacy_connection_id ?? args.channel.id,
+      whatsapp_connection_id: args.channel.legacy_connection_id ?? null,
       whatsapp_channel_id: args.channel.id,
       whatsapp_conversation_id: args.conversationId,
       direction,

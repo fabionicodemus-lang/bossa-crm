@@ -113,7 +113,7 @@ async function recordOutbound(args: {
   const { data: legacyMessage, error: legacyError } = await args.admin.from('messages').insert({
     organization_id: args.channel.organization_id,
     lead_id: args.lead.id,
-    whatsapp_connection_id: args.channel.legacy_connection_id ?? args.channel.id,
+    whatsapp_connection_id: args.channel.legacy_connection_id ?? null,
     whatsapp_channel_id: args.channel.id,
     whatsapp_conversation_id: args.conversation.id,
     direction: 'out',
@@ -640,7 +640,7 @@ async function persistInboundMessage(args: {
       .upsert({
         organization_id: args.channel.organization_id,
         lead_id: lead.id,
-        whatsapp_connection_id: args.channel.legacy_connection_id ?? args.channel.id,
+        whatsapp_connection_id: args.channel.legacy_connection_id ?? null,
         whatsapp_channel_id: args.channel.id,
         whatsapp_conversation_id: conversation.id,
         direction: 'in',

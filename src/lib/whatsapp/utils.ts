@@ -12,5 +12,15 @@ export function metaTimestamp(value: string | number | undefined) {
   if (value === undefined || value === null || value === '') return new Date().toISOString();
   const timestamp = Number(value);
   if (!Number.isFinite(timestamp)) return new Date().toISOString();
-  return new Date(timestamp * 1000).toISOString();
+
+  // A Meta usa segundos em mensagens e milissegundos em partes do
+  // smb_app_state_sync. Aceitamos ambos (e microssegundos defensivamente).
+  const absolute = Math.abs(timestamp);
+  const milliseconds = absolute < 100_000_000_000
+    ? timestamp * 1000
+    : absolute > 100_000_000_000_000
+      ? timestamp / 1000
+      : timestamp;
+  const date = new Date(milliseconds);
+  return Number.isFinite(date.getTime()) ? date.toISOString() : new Date().toISOString();
 }
