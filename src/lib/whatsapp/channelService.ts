@@ -14,6 +14,7 @@ export type WhatsAppChannelRecord = {
   organization_id: string;
   label: string;
   role: WhatsAppChannelRole;
+  routing_mode: 'direct_role' | 'mixed_plantao' | string;
   provider: WhatsAppProviderName | string;
   business_id: string | null;
   waba_id: string;
@@ -80,9 +81,14 @@ export async function findChannelByRole(
     .eq('organization_id', organizationId)
     .eq('role', role);
   if (requireConnected) query = query.eq('status', 'connected');
-  const { data, error } = await query.maybeSingle();
+  const { data, error } = await query
+    .order('created_at', { ascending: true })
+    .limit(20);
   if (error) throw error;
-  return data as WhatsAppChannelRecord | null;
+  const channels = (data ?? []) as WhatsAppChannelRecord[];
+  return channels.find((channel) => Boolean(channel.legacy_connection_id))
+    ?? channels[0]
+    ?? null;
 }
 
 export async function findChannelById(

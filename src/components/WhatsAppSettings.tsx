@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
-type Channel = 'clientes' | 'corretores';
+type Channel = 'clientes' | 'corretores' | 'corretores_extra';
 export interface Connection {
   id: string;
   channel: Channel;
@@ -61,10 +61,16 @@ export function WhatsAppSettings({ initialConnections }: { initialConnections: C
     setError('');
     setSuccess('');
     try {
+      const currentConnection = connections.find((item) => item.channel === channelRef.current);
       const response = await fetch('/api/meta/whatsapp/complete', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ channel: channelRef.current, code: codeRef.current, ...signupRef.current }),
+        body: JSON.stringify({
+          channel: channelRef.current,
+          channelId: currentConnection?.id ?? null,
+          code: codeRef.current,
+          ...signupRef.current,
+        }),
       });
       const payload = await response.json().catch(() => ({})) as { error?: string; connection?: Connection };
       if (!response.ok || !payload.connection) {
@@ -82,7 +88,7 @@ export function WhatsAppSettings({ initialConnections }: { initialConnections: C
       connectingRef.current = false;
       setLoading(false);
     }
-  }, [router]);
+  }, [connections, router]);
 
   useEffect(() => {
     function receive(event: MessageEvent) {
@@ -242,15 +248,23 @@ export function WhatsAppSettings({ initialConnections }: { initialConnections: C
       <strong>Modo de coexistência.</strong> Os números continuarão funcionando normalmente no aplicativo WhatsApp Business do celular enquanto o CRM recebe mensagens e executa as automações pela API oficial.
     </div>
     <div className="grid grid-2">
-      {(['clientes', 'corretores'] as Channel[]).map((channel) => {
+      {(['clientes', 'corretores', 'corretores_extra'] as Channel[]).map((channel) => {
         const item = connection(channel);
         return <section className="card" key={channel}>
           <div className="card-head">
-            <h3>{channel === 'clientes' ? 'Canal 1 · Clientes finais' : 'Canal 2 · Corretores'}</h3>
+            <h3>{channel === 'clientes'
+              ? 'Canal 1 · Clientes finais'
+              : channel === 'corretores'
+                ? 'Canal 2 · Corretores'
+                : 'Canal 3 · Comercial / Corretores'}</h3>
             <span className={`connection-pill ${item ? '' : 'off'}`}>{item ? 'Coexistência ativa' : 'Não conectado'}</span>
           </div>
           <div className="card-body">
-            <p className="muted">{channel === 'clientes' ? 'Número usado nos anúncios e no atendimento da Nara.' : 'Número dedicado ao relacionamento e plantão dos corretores.'}</p>
+            <p className="muted">{channel === 'clientes'
+              ? 'Número usado nos anúncios e no atendimento da Nara.'
+              : channel === 'corretores'
+                ? 'Número principal do Plantão, com triagem para não misturar clientes e corretores.'
+                : 'Segundo número comercial. Novos contatos entram diretamente no pipeline de corretores e ficam com o histórico salvo no CRM.'}</p>
             {item
               ? <div className="info-list">
                 <div className="info-row"><span>Número</span><strong>{item.display_phone_number || '—'}</strong></div>

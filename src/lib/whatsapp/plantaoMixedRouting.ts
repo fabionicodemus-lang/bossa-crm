@@ -304,7 +304,9 @@ export async function handleMixedPlantaoConversation(args: {
   lead: Lead;
   sourceMessageId: string;
 }): Promise<RoutingResult> {
-  if (args.channel.role !== 'corretor') return { handled: false };
+  if (args.channel.role !== 'corretor' || args.channel.routing_mode === 'direct_role') {
+    return { handled: false };
+  }
   const activeNow = await plantaoCanReplyNow(args.admin, args.channel.organization_id);
   if (!activeNow) return { handled: true };
   if (args.lead.kind === 'cliente') return handleKnownCustomer(args);

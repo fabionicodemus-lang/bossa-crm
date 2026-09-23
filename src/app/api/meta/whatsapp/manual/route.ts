@@ -40,6 +40,7 @@ function publicChannel(channel: WhatsAppChannelRecord) {
     id: channel.id,
     label: channel.label,
     role: channel.role,
+    routing_mode: channel.routing_mode,
     provider: channel.provider,
     business_id: channel.business_id,
     waba_id: channel.waba_id,
@@ -49,6 +50,7 @@ function publicChannel(channel: WhatsAppChannelRecord) {
     quality_rating: channel.quality_rating,
     status: channel.status,
     messaging_limit: channel.messaging_limit,
+    legacy_connection_id: channel.legacy_connection_id,
     registered_at: channel.registered_at,
     app_subscribed_at: channel.app_subscribed_at,
     last_tested_at: channel.last_tested_at,
@@ -203,7 +205,7 @@ export async function POST(request: Request) {
       .from('whatsapp_channels')
       .select('id')
       .eq('organization_id', membership.organization_id)
-      .eq('role', role)
+      .eq('id', legacy.id)
       .maybeSingle();
     if (existingError) throw existingError;
 
@@ -211,6 +213,7 @@ export async function POST(request: Request) {
       organization_id: membership.organization_id,
       label,
       role,
+      routing_mode: role === 'corretor' ? 'mixed_plantao' : 'direct_role',
       provider: 'meta_cloud',
       business_id: businessId,
       waba_id: wabaId,
