@@ -18,12 +18,12 @@ export const BROKER_STAGES = [
   { id: 'novo_triagem', label: 'Novo / Triagem', color: '#7A8CA3' },
   { id: 'qualificacao_ia', label: 'Plantão qualificando', color: '#D4622F' },
   { id: 'nutricao_ativa', label: 'Relacionamento ativo', color: '#9B6A45' },
+  { id: 'futuro', label: 'Relacionamento leve', color: '#7A6F5D' },
   { id: 'passagem_pendente', label: 'Passagem ao comercial', color: '#C0392B' },
   { id: 'humano_ativo', label: 'Comercial ativo', color: '#1F5F6B' },
   { id: 'agendado', label: 'Reunião / Visita', color: '#8A6A1F' },
   { id: 'pos_reuniao', label: 'Pós-reunião', color: '#6D5A8A' },
   { id: 'proposta_negociacao', label: 'Cliente / Proposta', color: '#174A52' },
-  { id: 'futuro', label: 'Relacionamento leve', color: '#7A6F5D' },
   { id: 'encerrado', label: 'Encerrado', color: '#66727A' },
 ] as const;
 

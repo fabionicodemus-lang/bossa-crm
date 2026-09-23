@@ -57,8 +57,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Você não possui permissão para enviar mensagens.' }, { status: 403 });
     }
 
-    const body = await request.json().catch(() => ({})) as { leadId?: unknown; body?: unknown };
+    const body = await request.json().catch(() => ({})) as { leadId?: unknown; body?: unknown; conversationId?: unknown };
     const leadId = String(body.leadId ?? '');
+    const requestedConversationId = String(body.conversationId ?? '').trim();
     const text = String(body.body ?? '').trim().slice(0, 4096);
     if (!leadId || !text) return NextResponse.json({ error: 'Mensagem inválida.' }, { status: 400 });
 
@@ -97,19 +98,41 @@ export async function POST(request: Request) {
       if (takeoverError) throw takeoverError;
     }
 
-    const { data: currentConversation, error: conversationReadError } = await admin
-      .from('whatsapp_conversations')
-      .select('*')
-      .eq('lead_id', lead.id)
-      .order('last_inbound_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    if (conversationReadError) throw conversationReadError;
+    let selectedConversation: WhatsAppConversationRecord | null = null;
 
-    const latestConversation = currentConversation as WhatsAppConversationRecord | null;
-    let channel = latestConversation
-      ? await findChannelById(admin, membership.organization_id, latestConversation.channel_id)
+    if (requestedConversationId) {
+      const { data: requestedConversation, error: requestedConversationError } = await admin
+        .from('whatsapp_conversations')
+        .select('*')
+        .eq('id', requestedConversationId)
+        .eq('lead_id', lead.id)
+        .eq('organization_id', membership.organization_id)
+        .maybeSingle();
+      if (requestedConversationError) throw requestedConversationError;
+      if (!requestedConversation) {
+        return NextResponse.json({ error: 'A conversa selecionada não pertence a este contato.' }, { status: 404 });
+      }
+      selectedConversation = requestedConversation as WhatsAppConversationRecord;
+    } else {
+      const { data: currentConversation, error: conversationReadError } = await admin
+        .from('whatsapp_conversations')
+        .select('*')
+        .eq('lead_id', lead.id)
+        .order('last_inbound_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (conversationReadError) throw conversationReadError;
+      selectedConversation = currentConversation as WhatsAppConversationRecord | null;
+    }
+
+    let channel = selectedConversation
+      ? await findChannelById(admin, membership.organization_id, selectedConversation.channel_id)
       : null;
+
+    if (requestedConversationId && channel?.status !== 'connected') {
+      return NextResponse.json({ error: 'O canal desta conversa não está conectado no momento.' }, { status: 409 });
+    }
+
     if (channel?.status !== 'connected') channel = null;
     channel ??= await findChannelByRole(
       admin,
@@ -118,8 +141,8 @@ export async function POST(request: Request) {
     );
     if (!channel) return NextResponse.json({ error: 'O canal do WhatsApp ainda não está conectado.' }, { status: 409 });
 
-    const storedConversation = latestConversation?.channel_id === channel.id
-      ? latestConversation
+    const storedConversation = selectedConversation?.channel_id === channel.id
+      ? selectedConversation
       : null;
     const destination = normalizeWaId(storedConversation?.contact_wa_id ?? lead.phone);
     if (!destination) return NextResponse.json({ error: 'O telefone do contato não possui dígitos válidos.' }, { status: 400 });

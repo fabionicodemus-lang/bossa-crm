@@ -72,10 +72,11 @@ function mediaSummary(typeValue: unknown, payloadValue: unknown): MediaSummary |
   };
 }
 
-function publicChannel(channel: SyncChannel) {
+function publicChannel(channel: SyncChannel, slotLabel?: string) {
   return {
     id: channel.id,
     label: channel.label,
+    slotLabel: slotLabel ?? null,
     display_phone_number: channel.display_phone_number,
     verified_name: channel.verified_name,
     status: channel.status,
@@ -255,24 +256,34 @@ export async function GET(request: Request) {
     }
 
     const admin = createAdminClient();
-    const { data: internalChannel, error: channelError } = await admin
+    const url = new URL(request.url);
+    const view = url.searchParams.get('view') ?? 'conversations';
+    const channelFilter = url.searchParams.get('channel')?.trim() || 'all';
+
+    const { data: internalChannels, error: channelError } = await admin
       .from('whatsapp_channels')
       .select('*')
       .eq('organization_id', membership.organization_id)
       .eq('role', 'corretor')
       .eq('status', 'connected')
-      .order('updated_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
+      .order('created_at', { ascending: true });
 
     if (channelError) throw channelError;
-    if (!internalChannel) {
-      return NextResponse.json({ channel: null, conversations: [], selectedConversationId: null, messages: [] });
+    const channels = (internalChannels ?? []) as SyncChannel[];
+    if (!channels.length) {
+      return NextResponse.json({ channels: [], channel: null, conversations: [], selectedConversationId: null, messages: [] });
     }
 
-    const channel = internalChannel as SyncChannel;
-    const url = new URL(request.url);
-    const view = url.searchParams.get('view') ?? 'conversations';
+    const publicChannels = channels.map((item, index) => publicChannel(item, `Canal ${index + 2}`));
+    const channelById = new Map(channels.map((item) => [item.id, item]));
+    const publicChannelById = new Map(publicChannels.map((item) => [item.id, item]));
+    const selectedChannels = channelFilter === 'all'
+      ? channels
+      : channels.filter((item) => item.id === channelFilter);
+
+    if (!selectedChannels.length) {
+      return NextResponse.json({ error: 'Canal de corretores inválido.' }, { status: 400 });
+    }
 
     // Trocar de conversa é o caminho crítico. Ele não deve reconsultar contatos,
     // histórico ou a lista de 800+ conversas: busca somente as últimas mensagens
@@ -282,15 +293,30 @@ export async function GET(request: Request) {
       if (!conversationId) {
         return NextResponse.json({ error: 'conversationId é obrigatório.' }, { status: 400 });
       }
+      const { data: targetConversation, error: targetConversationError } = await admin
+        .from('whatsapp_conversations')
+        .select('id,channel_id')
+        .eq('id', conversationId)
+        .eq('organization_id', membership.organization_id)
+        .maybeSingle();
+      if (targetConversationError) throw targetConversationError;
+      if (!targetConversation) {
+        return NextResponse.json({ error: 'Conversa não encontrada.' }, { status: 404 });
+      }
+      const messageChannel = channelById.get(String(targetConversation.channel_id));
+      if (!messageChannel) {
+        return NextResponse.json({ error: 'O canal desta conversa não está conectado.' }, { status: 409 });
+      }
       const result = await loadMessages({
         admin,
         organizationId: membership.organization_id,
-        channelId: channel.id,
+        channelId: messageChannel.id,
         conversationId,
         before: url.searchParams.get('before'),
       });
       return NextResponse.json({
-        channel: publicChannel(channel),
+        channels: publicChannels,
+        channel: publicChannelById.get(messageChannel.id) ?? publicChannel(messageChannel),
         selectedConversationId: conversationId,
         conversations: [],
         ...result,
@@ -298,21 +324,14 @@ export async function GET(request: Request) {
     }
 
     // O sync inicial só precisa ser verificado no refresh da lista, nunca em cada
-    // clique de conversa.
-    await requestInitialSync(admin, channel);
-
-    const { data: refreshedChannel, error: refreshedChannelError } = await admin
-      .from('whatsapp_channels')
-      .select('id,label,display_phone_number,verified_name,status,connection_mode,history_sync_requested_at,history_sync_request_id,history_sync_completed_at,history_sync_progress,history_sync_phase,history_sync_error,contacts_sync_requested_at,contacts_sync_completed_at,contacts_sync_error,coexistence_webhooks_ensured_at,coexistence_webhooks_error')
-      .eq('id', channel.id)
-      .single();
-    if (refreshedChannelError) throw refreshedChannelError;
+    // clique de conversa. Com múltiplos canais, cada um é verificado de forma independente.
+    await Promise.allSettled(selectedChannels.map((item) => requestInitialSync(admin, item)));
 
     const { data: conversationRows, error: conversationsError } = await admin
       .from('whatsapp_conversations')
-      .select('id,contact_wa_id,lead_id,last_inbound_at,window_expires_at,created_at,updated_at,last_message_id,last_message_body,last_message_type,last_message_direction,last_message_status,last_message_at')
+      .select('id,channel_id,contact_wa_id,lead_id,last_inbound_at,window_expires_at,created_at,updated_at,last_message_id,last_message_body,last_message_type,last_message_direction,last_message_status,last_message_at')
       .eq('organization_id', membership.organization_id)
-      .eq('channel_id', channel.id)
+      .in('channel_id', selectedChannels.map((item) => item.id))
       .order('last_message_at', { ascending: false, nullsFirst: false })
       .order('updated_at', { ascending: false })
       .limit(5000);
@@ -320,7 +339,13 @@ export async function GET(request: Request) {
     if (conversationsError) throw conversationsError;
     const rawConversations = conversationRows ?? [];
     if (!rawConversations.length) {
-      return NextResponse.json({ channel: refreshedChannel, conversations: [], selectedConversationId: null, messages: [] });
+      return NextResponse.json({
+        channels: publicChannels,
+        channel: selectedChannels.length === 1 ? publicChannelById.get(selectedChannels[0].id) ?? publicChannel(selectedChannels[0]) : null,
+        conversations: [],
+        selectedConversationId: null,
+        messages: [],
+      });
     }
 
     const leadIds = [...new Set(rawConversations.map((row) => row.lead_id).filter(Boolean))] as string[];
@@ -345,8 +370,14 @@ export async function GET(request: Request) {
         createdAt: lastAt,
       } : null;
 
+      const conversationChannel = publicChannelById.get(String(conversation.channel_id));
+
       return {
         id: conversation.id,
+        channelId: conversation.channel_id,
+        channelLabel: conversationChannel?.label ?? 'WhatsApp Corretores',
+        channelDisplayPhone: conversationChannel?.display_phone_number ?? null,
+        channelSlotLabel: conversationChannel?.slotLabel ?? null,
         contactWaId: conversation.contact_wa_id,
         leadId: conversation.lead_id,
         name: leadName || conversation.contact_wa_id,
@@ -363,7 +394,8 @@ export async function GET(request: Request) {
     });
 
     return NextResponse.json({
-      channel: refreshedChannel,
+      channels: publicChannels,
+      channel: selectedChannels.length === 1 ? publicChannelById.get(selectedChannels[0].id) ?? publicChannel(selectedChannels[0]) : null,
       conversations,
       selectedConversationId: conversations[0]?.id ?? null,
       messages: [],

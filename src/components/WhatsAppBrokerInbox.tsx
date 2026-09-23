@@ -7,6 +7,7 @@ import { displayPhone, initials } from '@/lib/format';
 type Channel = {
   id: string;
   label: string;
+  slotLabel: string | null;
   display_phone_number: string | null;
   verified_name: string | null;
   status: string;
@@ -35,6 +36,10 @@ type InboxMessage = {
 
 type Conversation = {
   id: string;
+  channelId: string;
+  channelLabel: string;
+  channelDisplayPhone: string | null;
+  channelSlotLabel: string | null;
   contactWaId: string;
   leadId: string | null;
   name: string;
@@ -50,6 +55,7 @@ type Conversation = {
 };
 
 type InboxPayload = {
+  channels?: Channel[];
   channel: Channel | null;
   conversations: Conversation[];
   selectedConversationId: string | null;
@@ -197,7 +203,8 @@ function mergeMessages(first: InboxMessage[], second: InboxMessage[]) {
 }
 
 export function WhatsAppBrokerInbox() {
-  const [channel, setChannel] = useState<Channel | null>(null);
+  const [channels, setChannels] = useState<Channel[]>([]);
+  const [channelFilter, setChannelFilter] = useState('all');
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [messages, setMessages] = useState<InboxMessage[]>([]);
@@ -293,10 +300,11 @@ export function WhatsAppBrokerInbox() {
   const loadConversations = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
     try {
-      const response = await fetch('/api/whatsapp/corretores?view=conversations', { cache: 'no-store' });
+      const params = new URLSearchParams({ view: 'conversations', channel: channelFilter });
+      const response = await fetch(`/api/whatsapp/corretores?${params.toString()}`, { cache: 'no-store' });
       const payload = await response.json() as InboxPayload;
       if (!response.ok) throw new Error(payload.error || 'Não foi possível carregar as conversas.');
-      setChannel(payload.channel);
+      setChannels(payload.channels ?? (payload.channel ? [payload.channel] : []));
       const nextConversations = payload.conversations || [];
       setConversations(nextConversations);
 
@@ -318,7 +326,7 @@ export function WhatsAppBrokerInbox() {
     } finally {
       if (!silent) setLoading(false);
     }
-  }, []);
+  }, [channelFilter]);
 
   const selectConversation = useCallback((conversationId: string) => {
     if (selectedIdRef.current === conversationId) return;
@@ -422,7 +430,7 @@ export function WhatsAppBrokerInbox() {
       const response = await fetch('/api/whatsapp/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ leadId: selected.leadId, body }),
+        body: JSON.stringify({ leadId: selected.leadId, conversationId: selected.id, body }),
       });
       const payload = await response.json().catch(() => ({})) as { error?: string };
       if (!response.ok) throw new Error(payload.error || 'Não foi possível enviar a mensagem.');
@@ -453,11 +461,11 @@ export function WhatsAppBrokerInbox() {
     }
   }
 
-  if (loading && !channel) {
+  if (loading && channels.length === 0) {
     return <div className="broker-inbox-loading">Carregando WhatsApp dos corretores…</div>;
   }
 
-  if (!channel) {
+  if (channels.length === 0) {
     return <div className="broker-inbox-empty">
       <div className="broker-empty-icon">💬</div>
       <h3>Canal de corretores não conectado</h3>
@@ -465,14 +473,46 @@ export function WhatsAppBrokerInbox() {
     </div>;
   }
 
+  const selectedChannel = channelFilter === 'all'
+    ? null
+    : channels.find((item) => item.id === channelFilter) ?? null;
+  const channelSubtitle = selectedChannel
+    ? `${selectedChannel.slotLabel ?? 'Canal'} · ${displayPhone(selectedChannel.display_phone_number)}`
+    : `${channels.length} canais conectados`;
+
+  function chooseChannel(nextChannel: string) {
+    if (nextChannel === channelFilter) return;
+    selectedIdRef.current = null;
+    setSelectedId(null);
+    setMessages([]);
+    setHasMoreMessages(false);
+    setOldestAt(null);
+    setConversations([]);
+    setSearch('');
+    messageCache.current.clear();
+    setChannelFilter(nextChannel);
+  }
+
   return <div className="broker-inbox-shell">
     <aside className="broker-chat-list">
       <div className="broker-list-head">
         <div>
           <strong>WhatsApp Corretores</strong>
-          <span><i /> {displayPhone(channel.display_phone_number)}</span>
+          <span><i /> {channelSubtitle}</span>
         </div>
         <button className="broker-refresh" onClick={() => void loadConversations(false)} title="Atualizar">↻</button>
+      </div>
+      <div className="broker-channel-filter" role="group" aria-label="Filtrar canal do WhatsApp">
+        <button type="button" className={channelFilter === 'all' ? 'active' : ''} onClick={() => chooseChannel('all')}>Todos</button>
+        {channels.map((item) => <button
+          key={item.id}
+          type="button"
+          className={channelFilter === item.id ? 'active' : ''}
+          onClick={() => chooseChannel(item.id)}
+          title={`${item.label} · ${displayPhone(item.display_phone_number)}`}
+        >
+          {item.slotLabel ?? item.label}
+        </button>)}
       </div>
       <div className="broker-search-wrap">
         <span>⌕</span>
@@ -493,6 +533,7 @@ export function WhatsAppBrokerInbox() {
           <div className="broker-conversation-main">
             <div className="broker-conversation-title">
               <strong>{conversation.name}</strong>
+              {channelFilter === 'all' && conversation.channelSlotLabel && <span className="broker-channel-badge">{conversation.channelSlotLabel.replace('Canal ', 'C')}</span>}
               <time>{compactTime(conversation.lastMessage?.createdAt || conversation.updatedAt)}</time>
             </div>
             <div className="broker-conversation-preview">
@@ -516,6 +557,7 @@ export function WhatsAppBrokerInbox() {
           <div className="broker-chat-contact">
             <strong>{selected.name}</strong>
             <span>{displayPhone(selected.phone)}{selected.company ? ` · ${selected.company}` : ''}{selected.creci ? ` · ${selected.creci}` : ''}</span>
+            <small>{selected.channelSlotLabel ?? selected.channelLabel} · {displayPhone(selected.channelDisplayPhone)}</small>
           </div>
           <div className={`broker-window-pill ${windowOpen ? 'open' : ''}`}>{windowOpen ? 'Janela 24h aberta' : 'Janela 24h fechada'}</div>
         </header>
@@ -561,10 +603,11 @@ export function WhatsAppBrokerInbox() {
       .broker-chat-list{display:flex;flex-direction:column;min-width:0;background:#fff;border-right:1px solid #e4dfd7}
       .broker-list-head{height:68px;padding:0 16px;display:flex;align-items:center;justify-content:space-between;background:#f5f3ef;border-bottom:1px solid #e8e4de}
       .broker-list-head>div{display:flex;flex-direction:column;gap:4px}.broker-list-head strong{font-size:16px;color:#27231f}.broker-list-head span{font-size:11px;color:#70685f;display:flex;align-items:center;gap:5px}.broker-list-head i{width:7px;height:7px;border-radius:50%;background:#28a745;display:inline-block}
+      .broker-channel-filter{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;padding:10px 12px 0;background:#fff}.broker-channel-filter button{border:1px solid #ded9d1;background:#fff;color:#6e665e;border-radius:8px;height:32px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.broker-channel-filter button:hover{background:#f5f2ee}.broker-channel-filter button.active{background:#174A52;color:#fff;border-color:#174A52}
       .broker-refresh{border:0;background:transparent;font-size:22px;color:#6d665e;cursor:pointer;width:36px;height:36px;border-radius:50%}.broker-refresh:hover{background:#eae6e0}
       .broker-search-wrap{margin:10px 12px;display:flex;align-items:center;gap:8px;background:#f3f1ee;border-radius:9px;padding:0 11px;color:#8f877f}.broker-search-wrap input{border:0;outline:0;background:transparent;width:100%;height:38px;font-size:13px;color:#302b26}
-      .broker-conversations{overflow:auto;flex:1;overscroll-behavior:contain}.broker-conversation{width:100%;display:flex;gap:11px;padding:12px 13px;border:0;border-bottom:1px solid #f0ece7;background:#fff;text-align:left;cursor:pointer;content-visibility:auto;contain-intrinsic-size:66px}.broker-conversation:hover,.broker-conversation.active{background:#f3f1ed}.broker-avatar{width:42px;height:42px;flex:0 0 42px;border-radius:50%;display:grid;place-items:center;background:#d9ddd5;color:#3d4d41;font-weight:800;font-size:13px}.broker-conversation-main{min-width:0;flex:1}.broker-conversation-title{display:flex;gap:8px;justify-content:space-between;align-items:center}.broker-conversation-title strong{font-size:13px;color:#28231f;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.broker-conversation-title time{font-size:10px;color:#8b837b;white-space:nowrap}.broker-conversation-preview{margin-top:4px;font-size:12px;color:#756d65;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.broker-conversation-preview span{display:block;overflow:hidden;text-overflow:ellipsis}.broker-conversation small{display:block;margin-top:4px;font-size:10px;color:#a09890;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.broker-no-conversations{padding:28px 18px;color:#8b837b;font-size:12px;text-align:center}
-      .broker-chat-panel{min-width:0;display:flex;flex-direction:column;background:#efeae2;position:relative}.broker-chat-panel:before{content:'';position:absolute;inset:0;opacity:.18;pointer-events:none;background-image:radial-gradient(#a79e92 1px,transparent 1px);background-size:22px 22px}.broker-chat-head{position:relative;z-index:1;height:68px;background:#f5f3ef;border-bottom:1px solid #dfdad3;display:flex;align-items:center;padding:0 16px;gap:11px}.broker-chat-contact{min-width:0;flex:1;display:flex;flex-direction:column}.broker-chat-contact strong{font-size:14px;color:#2e2924}.broker-chat-contact span{font-size:11px;color:#7b736b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.broker-window-pill{font-size:10px;padding:5px 8px;border-radius:999px;background:#eee2d0;color:#8b5b1d;font-weight:700}.broker-window-pill.open{background:#dff1e3;color:#28753b}
+      .broker-conversations{overflow:auto;flex:1;overscroll-behavior:contain}.broker-conversation{width:100%;display:flex;gap:11px;padding:12px 13px;border:0;border-bottom:1px solid #f0ece7;background:#fff;text-align:left;cursor:pointer;content-visibility:auto;contain-intrinsic-size:66px}.broker-conversation:hover,.broker-conversation.active{background:#f3f1ed}.broker-avatar{width:42px;height:42px;flex:0 0 42px;border-radius:50%;display:grid;place-items:center;background:#d9ddd5;color:#3d4d41;font-weight:800;font-size:13px}.broker-conversation-main{min-width:0;flex:1}.broker-conversation-title{display:flex;gap:8px;justify-content:space-between;align-items:center}.broker-conversation-title strong{font-size:13px;color:#28231f;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1}.broker-channel-badge{font-size:9px;font-weight:800;padding:2px 5px;border-radius:999px;background:#e6ecec;color:#174A52;white-space:nowrap}.broker-conversation-title time{font-size:10px;color:#8b837b;white-space:nowrap}.broker-conversation-preview{margin-top:4px;font-size:12px;color:#756d65;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.broker-conversation-preview span{display:block;overflow:hidden;text-overflow:ellipsis}.broker-conversation small{display:block;margin-top:4px;font-size:10px;color:#a09890;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.broker-no-conversations{padding:28px 18px;color:#8b837b;font-size:12px;text-align:center}
+      .broker-chat-panel{min-width:0;display:flex;flex-direction:column;background:#efeae2;position:relative}.broker-chat-panel:before{content:'';position:absolute;inset:0;opacity:.18;pointer-events:none;background-image:radial-gradient(#a79e92 1px,transparent 1px);background-size:22px 22px}.broker-chat-head{position:relative;z-index:1;height:68px;background:#f5f3ef;border-bottom:1px solid #dfdad3;display:flex;align-items:center;padding:0 16px;gap:11px}.broker-chat-contact{min-width:0;flex:1;display:flex;flex-direction:column}.broker-chat-contact strong{font-size:14px;color:#2e2924}.broker-chat-contact span{font-size:11px;color:#7b736b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.broker-chat-contact small{font-size:9px;color:#8b837b;margin-top:2px}.broker-window-pill{font-size:10px;padding:5px 8px;border-radius:999px;background:#eee2d0;color:#8b5b1d;font-weight:700}.broker-window-pill.open{background:#dff1e3;color:#28753b}
       .broker-messages{position:relative;z-index:1;flex:1;overflow:auto;padding:22px 6% 16px;overscroll-behavior:contain}.broker-message-row{display:flex;margin:3px 0}.broker-message-row.in{justify-content:flex-start}.broker-message-row.out{justify-content:flex-end}.broker-message-bubble{max-width:min(76%,720px);min-width:90px;padding:8px 9px 5px;border-radius:8px;background:#fff;box-shadow:0 1px 1px rgba(50,40,30,.12);color:#2e2a26}.broker-message-row.out .broker-message-bubble{background:#d9fdd3}.broker-message-body{font-size:13px;line-height:1.42;white-space:pre-wrap;overflow-wrap:anywhere;padding-right:14px}.broker-message-meta{display:flex;justify-content:flex-end;gap:4px;align-items:center;margin-top:4px;font-size:9px;color:#857e76}.broker-message-meta .read{color:#42a5c8}.broker-day-chip{width:max-content;max-width:80%;margin:20px auto;padding:6px 10px;border-radius:7px;background:#fff7e8;color:#7b6e5f;font-size:11px;box-shadow:0 1px 1px rgba(50,40,30,.08)}.broker-loading-chip{background:#fff;color:#777}.broker-load-older-wrap{display:flex;justify-content:center;margin:0 0 14px}.broker-load-older{border:0;border-radius:999px;padding:7px 12px;background:#fff;color:#6b635a;font-size:10px;font-weight:700;box-shadow:0 1px 3px rgba(50,40,30,.12);cursor:pointer}.broker-load-older:disabled{opacity:.6;cursor:wait}
       .broker-composer{position:relative;z-index:1;display:flex;align-items:flex-end;gap:10px;padding:10px 14px;background:#f3f0eb;border-top:1px solid #ddd7cf}.broker-composer textarea{resize:none;min-height:42px;max-height:110px;flex:1;border:1px solid #e0dbd4;border-radius:10px;background:#fff;padding:11px 13px;outline:0;font:inherit;font-size:13px;line-height:1.35}.broker-composer textarea:focus{border-color:#b6aca0}.broker-composer button{width:42px;height:42px;border-radius:50%;border:0;background:#167c5a;color:#fff;font-size:18px;cursor:pointer}.broker-composer button:disabled{background:#aaa39a;cursor:not-allowed}.broker-window-note{position:relative;z-index:1;padding:7px 14px;background:#fff4df;color:#7e5a24;font-size:10px;text-align:center}.broker-chat-error{position:relative;z-index:2;margin:0 14px 8px;padding:8px 10px;border-radius:7px;background:#fde8e7;color:#9b322c;font-size:11px}
       .broker-chat-placeholder,.broker-inbox-empty,.broker-inbox-loading{display:grid;place-items:center;align-content:center;text-align:center;min-height:520px;padding:28px;color:#746c63}.broker-chat-placeholder{position:relative;z-index:1;flex:1}.broker-chat-placeholder h2,.broker-inbox-empty h3{margin:10px 0 4px;color:#413b35}.broker-chat-placeholder p,.broker-inbox-empty p{max-width:520px;margin:0;font-size:13px}.broker-chat-placeholder small{margin-top:8px;color:#978e84}.broker-placeholder-phone,.broker-empty-icon{font-size:48px;opacity:.55}
