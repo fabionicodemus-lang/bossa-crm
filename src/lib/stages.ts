@@ -17,8 +17,8 @@ export const CLIENT_STAGES = [
 export const BROKER_STAGES = [
   { id: 'novo_triagem', label: 'Novo / Triagem', color: '#7A8CA3' },
   { id: 'qualificacao_ia', label: 'Plantão qualificando', color: '#D4622F' },
-  { id: 'nutricao_ativa', label: 'Relacionamento ativo', color: '#9B6A45' },
   { id: 'futuro', label: 'Relacionamento leve', color: '#7A6F5D' },
+  { id: 'nutricao_ativa', label: 'Relacionamento ativo', color: '#9B6A45' },
   { id: 'passagem_pendente', label: 'Passagem ao comercial', color: '#C0392B' },
   { id: 'humano_ativo', label: 'Comercial ativo', color: '#1F5F6B' },
   { id: 'agendado', label: 'Reunião / Visita', color: '#8A6A1F' },
