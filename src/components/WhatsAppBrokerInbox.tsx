@@ -232,7 +232,7 @@ export function WhatsAppBrokerInbox() {
       if (!oldestKey) break;
       cache.delete(oldestKey);
     }
-  }, [channelFilter]);
+  }, []);
 
   const applyCachedToScreen = useCallback((conversationId: string, cached: CachedMessages) => {
     if (selectedIdRef.current !== conversationId) return;
@@ -326,7 +326,7 @@ export function WhatsAppBrokerInbox() {
     } finally {
       if (!silent) setLoading(false);
     }
-  }, []);
+  }, [channelFilter]);
 
   const selectConversation = useCallback((conversationId: string) => {
     if (selectedIdRef.current === conversationId) return;
