@@ -23,7 +23,7 @@ export const BROKER_STAGES = [
   { id: 'agendado', label: 'Reunião / Visita', color: '#8A6A1F' },
   { id: 'pos_reuniao', label: 'Pós-reunião', color: '#6D5A8A' },
   { id: 'proposta_negociacao', label: 'Cliente / Proposta', color: '#174A52' },
-  { id: 'futuro', label: 'Relacionamento futuro', color: '#7A6F5D' },
+  { id: 'futuro', label: 'Relacionamento leve', color: '#7A6F5D' },
   { id: 'encerrado', label: 'Encerrado', color: '#66727A' },
 ] as const;
 
