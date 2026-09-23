@@ -23,9 +23,14 @@ function isMigrationMissing(error: { code?: string; message?: string } | null) {
 }
 
 function channelToConnection(channel: WhatsAppChannelSummary): Connection {
+  const slot = channel.role === 'cliente'
+    ? 'clientes'
+    : channel.routing_mode === 'direct_role' && !channel.legacy_connection_id
+      ? 'corretores_extra'
+      : 'corretores';
   return {
     id: channel.id,
-    channel: channel.role === 'cliente' ? 'clientes' : 'corretores',
+    channel: slot,
     display_phone_number: channel.display_phone_number,
     verified_name: channel.verified_name,
     quality_rating: channel.quality_rating,
@@ -41,7 +46,7 @@ export default async function WhatsAppPage() {
 
   const { data: channelRows, error: channelError } = await admin
     .from('whatsapp_channels')
-    .select('id,label,role,provider,business_id,waba_id,phone_number_id,display_phone_number,verified_name,quality_rating,status,messaging_limit,registered_at,app_subscribed_at,last_tested_at,created_at,updated_at')
+    .select('id,label,role,routing_mode,provider,business_id,waba_id,phone_number_id,display_phone_number,verified_name,quality_rating,status,messaging_limit,legacy_connection_id,registered_at,app_subscribed_at,last_tested_at,created_at,updated_at')
     .eq('organization_id', organizationId)
     .order('created_at');
 
@@ -63,6 +68,7 @@ export default async function WhatsAppPage() {
         id: item.id,
         label: item.channel === 'clientes' ? 'Clientes finais · Nara' : 'Corretores · Plantão',
         role: item.channel === 'clientes' ? 'cliente' : 'corretor',
+        routing_mode: item.channel === 'clientes' ? 'direct_role' : 'mixed_plantao',
         provider: 'meta_cloud',
         business_id: null,
         waba_id: '',
@@ -72,6 +78,7 @@ export default async function WhatsAppPage() {
         quality_rating: item.quality_rating,
         status: item.status,
         messaging_limit: null,
+        legacy_connection_id: item.id,
         registered_at: item.connected_at,
         app_subscribed_at: item.connected_at,
         last_tested_at: item.connected_at,
