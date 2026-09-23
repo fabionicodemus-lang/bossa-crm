@@ -183,7 +183,7 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
           admin.from('messages').insert({
             organization_id: membership.organization_id,
             lead_id: recipient.lead_id,
-            whatsapp_connection_id: channel.legacy_connection_id ?? channel.id,
+            whatsapp_connection_id: channel.legacy_connection_id ?? null,
             whatsapp_channel_id: channel.id,
             whatsapp_conversation_id: conversation.id,
             direction: 'out',
