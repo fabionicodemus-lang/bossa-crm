@@ -247,7 +247,7 @@ async function processEcho(args: {
   const { error: messageError } = await args.admin.from('messages').upsert({
     organization_id: args.channel.organization_id,
     lead_id: lead.id,
-    whatsapp_connection_id: args.channel.legacy_connection_id ?? args.channel.id,
+    whatsapp_connection_id: args.channel.legacy_connection_id ?? null,
     whatsapp_channel_id: args.channel.id,
     whatsapp_conversation_id: conversation.id,
     direction: 'out',
