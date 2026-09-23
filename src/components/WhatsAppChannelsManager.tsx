@@ -9,6 +9,7 @@ export type WhatsAppChannelSummary = {
   role: 'cliente' | 'corretor';
   routing_mode: 'direct_role' | 'mixed_plantao' | string;
   provider: string;
+  connection_mode?: string | null;
   business_id: string | null;
   waba_id: string;
   phone_number_id: string;
