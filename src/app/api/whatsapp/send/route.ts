@@ -186,7 +186,7 @@ export async function POST(request: Request) {
     const { data: message, error } = await admin.from('messages').insert({
       organization_id: membership.organization_id,
       lead_id: lead.id,
-      whatsapp_connection_id: channel.legacy_connection_id ?? channel.id,
+      whatsapp_connection_id: channel.legacy_connection_id ?? null,
       whatsapp_channel_id: channel.id,
       whatsapp_conversation_id: conversation.id,
       direction: 'out',
