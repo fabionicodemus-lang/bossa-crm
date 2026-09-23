@@ -7,6 +7,7 @@ export type WhatsAppChannelSummary = {
   id: string;
   label: string;
   role: 'cliente' | 'corretor';
+  routing_mode: 'direct_role' | 'mixed_plantao' | string;
   provider: string;
   business_id: string | null;
   waba_id: string;
@@ -16,6 +17,7 @@ export type WhatsAppChannelSummary = {
   quality_rating: string | null;
   status: string;
   messaging_limit: string | null;
+  legacy_connection_id: string | null;
   registered_at: string | null;
   app_subscribed_at: string | null;
   last_tested_at: string | null;
@@ -130,9 +132,9 @@ export function WhatsAppChannelsManager({
 
   function replaceChannel(channel: WhatsAppChannelSummary) {
     setChannels((current) => [
-      ...current.filter((item) => item.role !== channel.role),
+      ...current.filter((item) => item.id !== channel.id),
       channel,
-    ]);
+    ].sort((a, b) => a.created_at.localeCompare(b.created_at)));
   }
 
   async function submit(action: 'test' | 'save') {
