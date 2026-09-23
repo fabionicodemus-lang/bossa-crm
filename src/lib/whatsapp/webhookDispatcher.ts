@@ -108,15 +108,18 @@ async function findOrCreateLead(args: {
   sentAt: string;
 }) {
   const kind: LeadKind = args.channel.role;
-  const { data: existing, error: readError } = await args.admin
+  const { data: matches, error: readError } = await args.admin
     .from('leads')
     .select('*')
     .eq('organization_id', args.channel.organization_id)
     .eq('kind', kind)
     .eq('phone', args.contactWaId)
-    .maybeSingle();
+    .is('archived_at', null)
+    .order('updated_at', { ascending: false })
+    .limit(1);
   if (readError) throw readError;
-  if (existing) return existing as Lead;
+  const existing = (matches?.[0] ?? null) as Lead | null;
+  if (existing) return existing;
 
   const { data, error } = await args.admin.from('leads').insert({
     organization_id: args.channel.organization_id,
