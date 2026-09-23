@@ -510,9 +510,11 @@ async function findOrCreateLead(args: {
       .eq('organization_id', args.channel.organization_id)
       .eq('kind', expectedKind)
       .eq('phone', args.waId)
-      .maybeSingle();
+      .is('archived_at', null)
+      .order('updated_at', { ascending: false })
+      .limit(1);
     if (error) throw error;
-    leadData = data as Lead | null;
+    leadData = ((data?.[0] ?? null) as Lead | null);
   } else {
     // O número principal do Plantão continua compartilhado. CLIENTE tem
     // prioridade absoluta; contatos novos passam pela triagem geral antes de
