@@ -132,7 +132,16 @@ export default async function WhatsAppPage() {
 
       {coexistenceEnabled
         ? <WhatsAppSettings key={connectionVersion} initialConnections={connections} />
-        : <div className="error-box">A Coexistência está desativada pela variável FEATURE_EMBEDDED_SIGNUP.</div>}
+        : <>
+          <div className="info-box" style={{ marginBottom: 14 }}>
+            A Coexistência geral permanece desativada para os canais existentes. O Canal 3 comercial pode ser conectado separadamente sem alterar os Canais 1 e 2.
+          </div>
+          <WhatsAppSettings
+            key={`${connectionVersion}:extra`}
+            initialConnections={connections}
+            visibleChannels={['corretores_extra']}
+          />
+        </>}
 
       <WhatsAppUsageSummary counts={monthlyCounts} />
 

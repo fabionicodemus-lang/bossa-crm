@@ -17,12 +17,6 @@ function channelSlot(value: unknown): ChannelSlot | null {
 }
 
 export async function POST(request: Request) {
-  if (process.env.FEATURE_EMBEDDED_SIGNUP === 'false') {
-    return NextResponse.json({
-      error: 'A Coexistência do WhatsApp está desativada no servidor.',
-    }, { status: 404 });
-  }
-
   try {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();

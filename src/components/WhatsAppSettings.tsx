@@ -27,7 +27,13 @@ declare global {
   }
 }
 
-export function WhatsAppSettings({ initialConnections }: { initialConnections: Connection[] }) {
+export function WhatsAppSettings({
+  initialConnections,
+  visibleChannels = ['clientes', 'corretores', 'corretores_extra'],
+}: {
+  initialConnections: Connection[];
+  visibleChannels?: Channel[];
+}) {
   const router = useRouter();
   const [connections, setConnections] = useState(initialConnections);
   const [selected, setSelected] = useState<Channel>('clientes');
@@ -248,7 +254,7 @@ export function WhatsAppSettings({ initialConnections }: { initialConnections: C
       <strong>Modo de coexistência.</strong> Os números continuarão funcionando normalmente no aplicativo WhatsApp Business do celular enquanto o CRM recebe mensagens e executa as automações pela API oficial.
     </div>
     <div className="grid grid-2">
-      {(['clientes', 'corretores', 'corretores_extra'] as Channel[]).map((channel) => {
+      {visibleChannels.map((channel) => {
         const item = connection(channel);
         return <section className="card" key={channel}>
           <div className="card-head">
