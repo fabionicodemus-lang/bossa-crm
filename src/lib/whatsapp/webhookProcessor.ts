@@ -496,21 +496,27 @@ async function findOrCreateLead(args: {
   referral?: MetaWebhookMessage['referral'];
 }) {
   let leadData: Lead | null = null;
+  const directRoleRouting = args.channel.routing_mode === 'direct_role';
+  const expectedKind: LeadKind = args.channel.role === 'cliente'
+    ? 'cliente'
+    : directRoleRouting
+      ? 'corretor'
+      : 'geral';
 
-  if (args.channel.role === 'cliente') {
+  if (args.channel.role === 'cliente' || directRoleRouting) {
     const { data, error } = await args.admin
       .from('leads')
       .select('*')
       .eq('organization_id', args.channel.organization_id)
-      .eq('kind', 'cliente')
+      .eq('kind', expectedKind)
       .eq('phone', args.waId)
       .maybeSingle();
     if (error) throw error;
     leadData = data as Lead | null;
   } else {
-    // O número do Plantão é compartilhado. CLIENTE tem prioridade absoluta:
-    // se o telefone já está no pipeline de clientes, jamais será tratado como
-    // corretor só porque escreveu no número do Plantão.
+    // O número principal do Plantão continua compartilhado. CLIENTE tem
+    // prioridade absoluta; contatos novos passam pela triagem geral antes de
+    // serem promovidos para o pipeline de corretores.
     const { data, error } = await args.admin
       .from('leads')
       .select('*')
@@ -529,11 +535,12 @@ async function findOrCreateLead(args: {
   }
 
   if (!leadData) {
-    const kind: LeadKind = args.channel.role === 'cliente' ? 'cliente' : 'geral';
+    const kind = expectedKind;
     const attribution = mergeMetaAdAttribution({}, args.referral, args.receivedAt);
     const metadata = {
       ...attribution.metadata,
       whatsapp_channel_id: args.channel.id,
+      whatsapp_routing_mode: args.channel.routing_mode,
       ...(kind === 'geral' ? {
         general_pipeline_reason: 'Contato novo recebido no número compartilhado do Plantão',
         plantao_triage_status: 'new',
@@ -546,7 +553,7 @@ async function findOrCreateLead(args: {
       phone: args.waId,
       stage: 'novo_triagem',
       source: attribution.sourceLabel || 'WhatsApp',
-      company: null,
+      company: kind === 'corretor' ? 'Não informada' : null,
       temperature: 0,
       ai_enabled: kind !== 'geral',
       automation_paused: kind === 'geral',
