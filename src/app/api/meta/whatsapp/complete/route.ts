@@ -151,13 +151,17 @@ export async function POST(request: Request) {
       coexistence_webhooks_error: coexistenceWebhooksError,
     };
 
-    const write = canonicalChannelId
+    const write = legacyChannel && canonicalChannelId
       ? admin
         .from('whatsapp_channels')
-        .update(channelValues)
-        .eq('id', canonicalChannelId)
-        .eq('organization_id', membership.organization_id)
-      : admin.from('whatsapp_channels').insert(channelValues);
+        .upsert({ id: canonicalChannelId, ...channelValues }, { onConflict: 'id' })
+      : canonicalChannelId
+        ? admin
+          .from('whatsapp_channels')
+          .update(channelValues)
+          .eq('id', canonicalChannelId)
+          .eq('organization_id', membership.organization_id)
+        : admin.from('whatsapp_channels').insert(channelValues);
 
     const { data: saved, error: channelError } = await write
       .select('id,display_phone_number,verified_name,quality_rating,status,registered_at,created_at')
