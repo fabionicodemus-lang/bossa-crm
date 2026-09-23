@@ -31,6 +31,7 @@ function channelToConnection(channel: WhatsAppChannelSummary): Connection {
   return {
     id: channel.id,
     channel: slot,
+    connection_mode: channel.connection_mode ?? null,
     display_phone_number: channel.display_phone_number,
     verified_name: channel.verified_name,
     quality_rating: channel.quality_rating,
@@ -46,7 +47,7 @@ export default async function WhatsAppPage() {
 
   const { data: channelRows, error: channelError } = await admin
     .from('whatsapp_channels')
-    .select('id,label,role,routing_mode,provider,business_id,waba_id,phone_number_id,display_phone_number,verified_name,quality_rating,status,messaging_limit,legacy_connection_id,registered_at,app_subscribed_at,last_tested_at,created_at,updated_at')
+    .select('id,label,role,routing_mode,provider,connection_mode,business_id,waba_id,phone_number_id,display_phone_number,verified_name,quality_rating,status,messaging_limit,legacy_connection_id,registered_at,app_subscribed_at,last_tested_at,created_at,updated_at')
     .eq('organization_id', organizationId)
     .order('created_at');
 
@@ -70,6 +71,7 @@ export default async function WhatsAppPage() {
         role: item.channel === 'clientes' ? 'cliente' : 'corretor',
         routing_mode: item.channel === 'clientes' ? 'direct_role' : 'mixed_plantao',
         provider: 'meta_cloud',
+        connection_mode: null,
         business_id: null,
         waba_id: '',
         phone_number_id: '',
@@ -134,12 +136,12 @@ export default async function WhatsAppPage() {
         ? <WhatsAppSettings key={connectionVersion} initialConnections={connections} />
         : <>
           <div className="info-box" style={{ marginBottom: 14 }}>
-            A Coexistência geral permanece desativada para os canais existentes. O Canal 3 comercial pode ser conectado separadamente sem alterar os Canais 1 e 2.
+            A Coexistência geral permanece desativada para reconexões automáticas. O Canal 1 da Nara pode ser migrado explicitamente para coexistência, e o Canal 3 comercial continua disponível separadamente.
           </div>
           <WhatsAppSettings
-            key={`${connectionVersion}:extra`}
+            key={`${connectionVersion}:migration`}
             initialConnections={connections}
-            visibleChannels={['corretores_extra']}
+            visibleChannels={['clientes', 'corretores_extra']}
           />
         </>}
 

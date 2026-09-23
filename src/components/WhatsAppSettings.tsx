@@ -7,6 +7,7 @@ type Channel = 'clientes' | 'corretores' | 'corretores_extra';
 export interface Connection {
   id: string;
   channel: Channel;
+  connection_mode?: string | null;
   display_phone_number: string | null;
   verified_name: string | null;
   quality_rating: string | null;
@@ -263,7 +264,7 @@ export function WhatsAppSettings({
               : channel === 'corretores'
                 ? 'Canal 2 · Corretores'
                 : 'Canal 3 · Comercial / Corretores'}</h3>
-            <span className={`connection-pill ${item ? '' : 'off'}`}>{item ? 'Coexistência ativa' : 'Não conectado'}</span>
+            <span className={`connection-pill ${item ? '' : 'off'}`}>{item ? (item.connection_mode === 'coexistence' ? 'Coexistência ativa' : 'API-only') : 'Não conectado'}</span>
           </div>
           <div className="card-body">
             <p className="muted">{channel === 'clientes'
@@ -276,8 +277,10 @@ export function WhatsAppSettings({
                 <div className="info-row"><span>Número</span><strong>{item.display_phone_number || '—'}</strong></div>
                 <div className="info-row"><span>Nome verificado</span><strong>{item.verified_name || '—'}</strong></div>
                 <div className="info-row"><span>Qualidade</span><strong>{item.quality_rating || '—'}</strong></div>
-                <div className="info-row"><span>Status</span><strong>WhatsApp Business + CRM</strong></div>
-                <button className="btn btn-ghost btn-sm" onClick={() => connect(channel)}>Trocar ou reconectar número</button>
+                <div className="info-row"><span>Status</span><strong>{item.connection_mode === 'coexistence' ? 'WhatsApp Business + CRM' : 'Somente Cloud API / CRM'}</strong></div>
+                <button className="btn btn-ghost btn-sm" onClick={() => connect(channel)}>
+                  {item.connection_mode === 'coexistence' ? 'Trocar ou reconectar número' : 'Migrar para coexistência'}
+                </button>
               </div>
               : <button className="btn btn-primary" onClick={() => connect(channel)} disabled={loading || !sdkReady}>
                 <span style={{ fontWeight: 900 }}>f</span> {loading && selected === channel ? 'Conectando…' : sdkReady ? 'Conectar sem sair do WhatsApp Business' : 'Carregando Facebook…'}
