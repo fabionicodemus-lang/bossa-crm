@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { buildAiInstructions, generateAiTurn, type AiFileOption, type AiTrainingContext } from '@/lib/ai';
+import { buildAiInstructions, generateAiTurn, type AiFileOption, type AiTrainingContext } from '@/lib/ai-v120';
 import { loadNaraDynamicTurnContext, loadNaraRuntimeVariables, saveNaraRuntimeVariables } from '@/lib/nara-dynamic-context';
 import { loadNaraForeignContext } from '@/lib/nara-exterior';
 import { loadNaraOperationalContext } from '@/lib/nara-operations';
