@@ -35,15 +35,15 @@ import { metaTimestamp, normalizeWaId } from '@/lib/whatsapp/utils';
 type AdminClient = ReturnType<typeof createAdminClient>;
 
 function declaredName(text: string): string {
-  const match = text.match(/\b(?:sou|me chamo|meu nome (?:é|e)|aqui é|aqui e)\s+(?:a\s+|o\s+)?([A-ZÁÀÂÃÉÊÍÓÔÕÚÇ][\p{L}'’-]+(?:\s+[A-ZÁÀÂÃÉÊÍÓÔÕÚÇ][\p{L}'’-]+){0,2})/u);
+  const match = text.match(/\b(?:sou|me chamo|meu nome (?:é|e)|aqui é|aqui e|soy|me llamo|mi nombre (?:es|e))\s+(?:a\s+|o\s+)?([\p{L}'’-]{2,})(?:\s+[\p{L}'’-]+){0,2}/iu);
   return match?.[1]?.trim() ?? '';
 }
 
 function paymentMethodFromText(text: string): string {
   const value = text.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLocaleLowerCase('pt-BR');
-  if (/\ba vista\b|\bavista\b/.test(value)) return 'à vista';
-  if (/\bfinanciamento\b|\bfinanciar\b|\bcaixa\b/.test(value)) return 'financiamento bancário';
-  if (/\bparcelad|\bparcela|\bentrada\b|\bbalao|\breforco\b/.test(value)) return 'parcelado';
+  if (/\ba vista\b|\bavista\b|\bal contado\b/.test(value)) return 'à vista';
+  if (/\bfinanciamento\b|\bfinanciar\b|\bcaixa\b|\bfinanciamiento\b/.test(value)) return 'financiamento bancário';
+  if (/\bparcelad|\bparcela|\bentrada\b|\bbalao|\breforco\b|\bcuotas?\b|\bmensualidades?\b/.test(value)) return 'parcelado';
   if (/\bdolar|\busd\b|\beuro|\beur\b|\bmoeda local\b/.test(value)) return 'pagamento do exterior / moeda estrangeira';
   return '';
 }
@@ -91,6 +91,7 @@ async function handleNaraReset(args: {
   if (lead) {
     await Promise.all([
       args.admin.from('whatsapp_ai_conversation_memory').delete().eq('lead_id', lead.id),
+      args.admin.from('nara_offer_logs').delete().eq('lead_id', lead.id),
       args.admin.from('lead_handoffs').update({
         status: 'cancelled',
         updated_at: now,
@@ -101,6 +102,12 @@ async function handleNaraReset(args: {
       }).eq('lead_id', lead.id).eq('status', 'pending'),
       args.admin.from('leads').update({
         name: args.waId,
+        email: null,
+        enterprise: null,
+        company: null,
+        group_name: null,
+        creci: null,
+        source: 'WhatsApp',
         stage: 'novo_triagem',
         owner_mode: 'ai',
         owner_id: null,
@@ -119,8 +126,10 @@ async function handleNaraReset(args: {
         reactivation_at: null,
         handoff_requested_at: null,
         handoff_accepted_at: null,
+        loss_reason: null,
+        opt_out: false,
         metadata: {
-          ...(lead.metadata || {}),
+          whatsapp_channel_id: args.channel.id,
           nara_reset_at: now,
           nara_reset_by_phone: args.waId,
         },
@@ -248,14 +257,16 @@ async function sendSelectedFiles(args: {
   lead: Lead;
   files: AiFileOption[];
   attachmentIds: string[];
-}) {
+}): Promise<{ sentIds: string[]; failedTitles: string[] }> {
   const selected = args.attachmentIds
     .map((id) => args.files.find((file) => file.id === id))
     .filter((file): file is AiFileOption => Boolean(file))
     .slice(0, 3);
   const { provider, accessToken, phoneNumberId } = channelAccess(args.channel);
   const destination = normalizeWaId(args.lead.phone ?? '');
-  if (!destination) return;
+  const sentIds: string[] = [];
+  const failedTitles: string[] = [];
+  if (!destination) return { sentIds, failedTitles: selected.map((file) => file.title) };
 
   for (const file of selected) {
     try {
@@ -266,17 +277,34 @@ async function sendSelectedFiles(args: {
         throw signedError ?? new Error('Não foi possível gerar o link temporário do arquivo.');
       }
 
-      const type = whatsappMediaType(file);
-      const result = await provider.sendMedia({
-        phoneNumberId,
-        accessToken,
-        to: destination,
-        type,
-        link: signed.signedUrl,
-        caption: type === 'audio' ? undefined : file.title,
-        filename: type === 'document' ? file.original_name : undefined,
-      });
+      const preferredType = whatsappMediaType(file);
+      let sentType: WhatsAppMediaType = preferredType;
+      let result: Awaited<ReturnType<typeof provider.sendMedia>>;
+      try {
+        result = await provider.sendMedia({
+          phoneNumberId,
+          accessToken,
+          to: destination,
+          type: preferredType,
+          link: signed.signedUrl,
+          caption: preferredType === 'audio' ? undefined : file.title,
+          filename: preferredType === 'document' ? file.original_name : undefined,
+        });
+      } catch (preferredError) {
+        if (preferredType === 'document') throw preferredError;
+        sentType = 'document';
+        result = await provider.sendMedia({
+          phoneNumberId,
+          accessToken,
+          to: destination,
+          type: 'document',
+          link: signed.signedUrl,
+          caption: file.title,
+          filename: file.original_name,
+        });
+      }
 
+      sentIds.push(file.id);
       await recordOutbound({
         admin: args.admin,
         channel: args.channel,
@@ -284,7 +312,7 @@ async function sendSelectedFiles(args: {
         lead: args.lead,
         senderKind: 'ia',
         body: `📎 ${file.title}`,
-        type,
+        type: sentType,
         category: 'service',
         wamid: result.messageId,
         providerPayload: result.raw,
@@ -293,6 +321,7 @@ async function sendSelectedFiles(args: {
           category: file.category,
           original_name: file.original_name,
           mime_type: file.mime_type,
+          sent_as: sentType,
         },
       });
 
@@ -301,10 +330,11 @@ async function sendSelectedFiles(args: {
         lead_id: args.lead.id,
         type: 'arquivo_ia_enviado',
         title: `IA enviou o arquivo “${file.title}”`,
-        description: `${file.original_name} enviado automaticamente pelo WhatsApp.`,
-        metadata: { ai_file_id: file.id, category: file.category, mime_type: file.mime_type },
+        description: `${file.original_name} enviado automaticamente pelo WhatsApp como ${sentType}.`,
+        metadata: { ai_file_id: file.id, category: file.category, mime_type: file.mime_type, sent_as: sentType },
       });
     } catch (error) {
+      failedTitles.push(file.title);
       console.error('[whatsapp ai file]', file.id, error);
       await args.admin.from('activities').insert({
         organization_id: args.channel.organization_id,
@@ -316,6 +346,34 @@ async function sendSelectedFiles(args: {
       });
     }
   }
+
+  return { sentIds, failedTitles };
+}
+
+function replyAfterAttachmentDelivery(
+  originalReply: string,
+  requestedCount: number,
+  sentCount: number,
+): string {
+  if (!requestedCount || sentCount === requestedCount) return originalReply;
+  const normalized = originalReply
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '')
+    .toLocaleLowerCase('pt-BR');
+  const spanish = /\b(hola|soy nara|quiero|puedes|precio|te envio|te mando)\b/.test(normalized);
+  const identity = originalReply.match(/^.{0,140}\bNara\b.{0,80}\bBossa\b[^.!?]*[.!?]/i)?.[0]?.trim() ?? '';
+
+  if (sentCount === 0) {
+    const failure = spanish
+      ? 'No pude completar el envío del archivo ahora, así que todavía no lo considero enviado. El equipo comercial puede complementarlo sin que tengas que repetir el pedido.'
+      : 'Não consegui concluir o envio do arquivo agora, então ainda não considero esse material enviado. O comercial pode complementar sem você precisar repetir o pedido.';
+    return `${identity ? `${identity} ` : ''}${failure}`.trim();
+  }
+
+  const partial = spanish
+    ? 'Te envié los archivos que sí se completaron; uno de los anexos no terminó de salir y el equipo comercial puede complementarlo.'
+    : 'Enviei os arquivos que concluíram normalmente; um dos anexos não terminou de sair e o comercial pode complementar.';
+  return `${identity ? `${identity} ` : ''}${partial}`.trim();
 }
 
 async function handleAiFailure(args: {
@@ -481,8 +539,24 @@ async function processConversation(args: {
   }
 
   const destination = normalizeWaId(lead.phone ?? '');
-  const reply = turn.reply.trim();
+  let reply = turn.reply.trim();
   if (!destination || !reply) return;
+
+  if (turn.attachment_ids.length) {
+    const delivery = await sendSelectedFiles({
+      admin: args.admin,
+      channel: args.channel,
+      conversation: args.conversation,
+      lead,
+      files: context.files ?? [],
+      attachmentIds: turn.attachment_ids,
+    });
+    reply = replyAfterAttachmentDelivery(
+      reply,
+      turn.attachment_ids.length,
+      delivery.sentIds.length,
+    );
+  }
 
   let offerAuditIds: string[] = [];
   if (lead.kind === 'cliente') {
@@ -568,16 +642,6 @@ async function processConversation(args: {
     succeededAt: now,
   });
 
-  if (turn.attachment_ids.length) {
-    await sendSelectedFiles({
-      admin: args.admin,
-      channel: args.channel,
-      conversation: args.conversation,
-      lead,
-      files: context.files ?? [],
-      attachmentIds: turn.attachment_ids,
-    });
-  }
 }
 
 async function processStatus(
