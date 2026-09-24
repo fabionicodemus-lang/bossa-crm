@@ -289,6 +289,8 @@ async function processConversation(args: {
         args.admin,
         args.channel.organization_id,
         lead.id,
+        new Date(),
+        history,
       ),
     ]);
     context.commercial = commercial;
