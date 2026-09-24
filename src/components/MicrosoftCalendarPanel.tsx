@@ -16,7 +16,11 @@ const messages: Record<string, string> = {
 export function MicrosoftCalendarPanel({ canEdit }: { canEdit: boolean }) {
   const [status, setStatus] = useState<Status | null>(null);
   const [busy, setBusy] = useState(false);
-  const [notice, setNotice] = useState('');
+  const [notice, setNotice] = useState(() => {
+    if (typeof window === 'undefined') return '';
+    const value = new URLSearchParams(window.location.search).get('microsoft');
+    return value ? messages[value] ?? '' : '';
+  });
   const [error, setError] = useState('');
   const load = useCallback(async () => {
     try {
@@ -27,9 +31,8 @@ export function MicrosoftCalendarPanel({ canEdit }: { canEdit: boolean }) {
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Erro ao consultar Microsoft.'); }
   }, []);
   useEffect(() => {
-    const value = new URLSearchParams(window.location.search).get('microsoft');
-    if (value && messages[value]) setNotice(messages[value]);
-    void load();
+    const initialLoad = window.setTimeout(() => { void load(); }, 0);
+    return () => window.clearTimeout(initialLoad);
   }, [load]);
 
   async function sync() {
