@@ -1,6 +1,8 @@
 import { extractNaraPrompt } from './nara-prompt-config';
 import { isAssistedSaleSignal, isBrokerRoutingSignal, isCurrentCustomerSignal } from './nara-contact-routing';
 import type { NaraDynamicTurnContext } from './nara-dynamic-context';
+import type { NaraForeignContext } from './nara-exterior';
+import type { NaraOperationalContext } from './nara-operations';
 import { asksProtectedCommercialDetail, isGeneralPriceRangeReply } from './nara-price-levels';
 import type { NaraCommercialTurnContext } from './nara-unit-queries';
 import type { Lead } from './types';
@@ -34,6 +36,8 @@ export interface AiTrainingContext {
   files?: AiFileOption[];
   commercial?: NaraCommercialTurnContext | null;
   dynamic?: NaraDynamicTurnContext | null;
+  foreign?: NaraForeignContext | null;
+  operational?: NaraOperationalContext | null;
 }
 
 export interface AiUsageRecord {
@@ -312,7 +316,10 @@ function triageInstructions(context: AiTrainingContext): string {
     .map(([key, value]) => `${key.replace('triagem_', '').replaceAll('_', ' ')}: ${value}`)
     .join('\n');
 
-  return `\n\nPROTEÇÕES DE TRIAGEM E ROTEAMENTO\n${configured}\n\nREGRAS OPERACIONAIS:\n- Na primeira resposta da conversa, cumprimente e apresente-se como Nara, da Bossa. Não diga espontaneamente que é IA.\n- Leia o histórico inteiro e avance a conversa. Nunca repita uma pergunta que o contato já respondeu nem envie a mesma mensagem duas vezes.\n- Faça a leitura do tipo de contato de forma silenciosa ao longo da conversa. Não transforme a triagem em uma etapa visível ou em um checklist obrigatório.\n- Quando a mensagem for compatível com interesse imobiliário, deixe o Prompt final conduzir a conversa naturalmente, sem criar um pedágio antes de entregar valor.\n- Um pedido isolado de preço, valor, tabela, menor apartamento, planta ou disponibilidade não confirma sozinho que o contato é comprador.\n- Quando houver retorno de faixa_empreendimento nas consultas comerciais deste turno, você pode informar somente a faixa geral mesmo sem intenção confirmada. Isso não libera qualificação, arquivos, tabela, unidade, disponibilidade ou condição específica.\n- Unidade, andar, disponibilidade, entrada, parcela e condição específica só podem ser informados quando a intenção de compra estiver confirmada e houver retorno correspondente da consulta comercial no mesmo turno.\n- Se a consulta comercial estiver vazia ou indisponível, não use valores lembrados: diga que o comercial confirmará a condição vigente.\n- Se a consulta comercial estiver bloqueada por perfil de corretor ou cliente atual, não informe nenhum preço: transfira para o Plantão ou pós-venda conforme indicado.\n- Quando houver ambiguidade real entre possível comprador e outro tipo de atendimento, use a pergunta configurada uma única vez e aguarde, sem iniciar uma sequência fixa de perguntas.\n- Corretor, cliente atual, fornecedor, currículo, pós-venda, financeiro, assistência, reclamação ou assunto institucional não entra na qualificação da Nara. Nesses casos, acolha, resuma o pedido, use handoff=true, mantenha stage=ia e indique o setor ou canal correto em next_action.\n- Para spam ou contato sem relação com a Bossa, use sem_interesse e handoff=true.\n- Nunca use preços lembrados pelo modelo. Um valor só pode ser informado quando estiver explicitamente nas mensagens do contato, na base de conhecimento, ou no retorno das consultas comerciais do sistema no mesmo turno.\n- A resposta não deve mencionar internamente as palavras “triagem”, “classificação” ou “handoff” para o contato.`;
+  return `\n\nPROTEÇÕES DE TRIAGEM E ROTEAMENTO\n${configured}\n\nREGRAS OPERACIONAIS:\n- Na primeira resposta da conversa, cumprimente e apresente-se como Nara, da Bossa. Não diga espontaneamente que é IA.\n- Leia o histórico inteiro e avance a conversa. Nunca repita uma pergunta que o contato já respondeu nem envie a mesma mensagem duas vezes.
+- Se o contato disser que viu anúncio, demonstrou interesse, citou Flow/Alma/Soul, perguntou preço, pagamento, planta, entrega, aluguel, investimento ou já estiver numa conversa de compra, considere o assunto COMPRA confirmado. Não pergunte “comprar ou outro assunto?”.
+- Se, dentro de uma conversa de compra, ele pedir “uma pessoa”, “um corretor” ou “atendimento humano”, faça a passagem imediatamente. Não pergunte novamente qual é o assunto.
+- Ao passar para humano, você pode fazer UMA pergunta curta do dado comercial mais importante ainda ausente (forma de pagamento, prazo ou melhor horário), sem atrasar a passagem.\n- Faça a leitura do tipo de contato de forma silenciosa ao longo da conversa. Não transforme a triagem em uma etapa visível ou em um checklist obrigatório.\n- Quando a mensagem for compatível com interesse imobiliário, deixe o Prompt final conduzir a conversa naturalmente, sem criar um pedágio antes de entregar valor.\n- Um pedido isolado de preço, valor, tabela, menor apartamento, planta ou disponibilidade não confirma sozinho que o contato é comprador.\n- Quando houver retorno de faixa_empreendimento nas consultas comerciais deste turno, você pode informar somente a faixa geral mesmo sem intenção confirmada. Isso não libera qualificação, arquivos, tabela, unidade, disponibilidade ou condição específica.\n- Unidade, andar, disponibilidade, entrada, parcela e condição específica só podem ser informados quando a intenção de compra estiver confirmada e houver retorno correspondente da consulta comercial no mesmo turno.\n- Se a consulta comercial estiver vazia ou indisponível, não use valores lembrados: diga que o comercial confirmará a condição vigente.\n- Se a consulta comercial estiver bloqueada por perfil de corretor ou cliente atual, não informe nenhum preço: transfira para o Plantão ou pós-venda conforme indicado.\n- Quando houver ambiguidade real entre possível comprador e outro tipo de atendimento, use a pergunta configurada uma única vez e aguarde, sem iniciar uma sequência fixa de perguntas.\n- Corretor, cliente atual, fornecedor, currículo, pós-venda, financeiro, assistência, reclamação ou assunto institucional não entra na qualificação da Nara. Nesses casos, acolha, resuma o pedido, use handoff=true, mantenha stage=ia e indique o setor ou canal correto em next_action.\n- Para spam ou contato sem relação com a Bossa, use sem_interesse e handoff=true.\n- Nunca use preços lembrados pelo modelo. Um valor só pode ser informado quando estiver explicitamente nas mensagens do contato, na base de conhecimento, ou no retorno das consultas comerciais do sistema no mesmo turno.\n- A resposta não deve mencionar internamente as palavras “triagem”, “classificação” ou “handoff” para o contato.`;
 }
 
 function fileInstructions(files: AiFileOption[]): string {
@@ -352,7 +359,9 @@ export function buildAiInstructions(lead: Lead, context: AiTrainingContext): str
 function dynamicLeadContext(lead: Lead, context: AiTrainingContext): string {
   const commercial = context.commercial?.source_text?.trim();
   const runtime = context.dynamic?.source_text?.trim();
-  return `DADOS DINÂMICOS DESTA CONVERSA:\nContato: ${lead.name}.\nEtapa atual: ${lead.stage}.\nDados atuais: ${JSON.stringify(lead.metadata || {})}.${runtime ? `\n\n${runtime}` : ''}${commercial ? `\n\nCONSULTAS COMERCIAIS DESTE TURNO — FONTE ATUAL DO SISTEMA:\n${commercial}\n\nUse somente esses retornos para preço e disponibilidade neste turno. Nunca mencione nomes internos de função ou banco. Resultado vazio significa que não há unidade disponível comprovada para informar, sem explicar o motivo.` : ''}`;
+  const foreign = context.foreign?.source_text?.trim();
+  const operational = context.operational?.source_text?.trim();
+  return `DADOS DINÂMICOS DESTA CONVERSA:\nContato: ${lead.name}.\nEtapa atual: ${lead.stage}.\nDados atuais: ${JSON.stringify(lead.metadata || {})}.${runtime ? `\n\n${runtime}` : ''}${operational ? `\n\n${operational}` : ''}${foreign ? `\n\n${foreign}` : ''}${commercial ? `\n\nCONSULTAS COMERCIAIS DESTE TURNO — FONTE ATUAL DO SISTEMA:\n${commercial}\n\nUse somente esses retornos para preço e disponibilidade neste turno. Nunca mencione nomes internos de função ou banco. Resultado vazio significa que não há apartamento disponível comprovado para informar, sem explicar o motivo.` : ''}`;
 }
 
 function inputMessage(role: InputMessage['role'], text: string, cacheBreakpoint = false): InputMessage {
@@ -622,8 +631,8 @@ function hasUngroundedMoney(reply: string, history: ChatMessage[], context: AiTr
   if (!tokens.length) return false;
   const corpus = [
     ...history.filter((item) => item.role === 'user').map((item) => item.content),
-    recordText(context.config?.knowledge),
     context.commercial?.source_text ?? '',
+    context.foreign?.source_text ?? '',
   ].join('\n');
   const sourceKeys = new Set(moneyTokens(corpus).map(moneyKey).filter(Boolean));
   return tokens.some((token) => {

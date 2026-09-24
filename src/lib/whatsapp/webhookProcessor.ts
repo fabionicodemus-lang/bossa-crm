@@ -2,6 +2,9 @@ import { generateAiTurn, type AiFileOption } from '@/lib/ai';
 import { loadAiContext } from '@/lib/ai-context';
 import { recordAiUsage } from '@/lib/ai-usage';
 import { loadNaraDynamicTurnContext } from '@/lib/nara-dynamic-context';
+import { loadNaraForeignContext } from '@/lib/nara-exterior';
+import { loadNaraOperationalContext } from '@/lib/nara-operations';
+import { extractContactTimePreference } from '@/lib/nara-timezone';
 import { loadNaraCommercialTurnContext } from '@/lib/nara-unit-queries';
 import { markNaraOfferAuditFailed, markNaraOfferAuditSent, prepareNaraOfferAudit } from '@/lib/nara-offer-log';
 import { aiCanReply } from '@/lib/hybrid';
@@ -20,6 +23,7 @@ import {
   type WhatsAppConversationRecord,
 } from '@/lib/whatsapp/channelService';
 import { handleMixedPlantaoConversation } from '@/lib/whatsapp/plantaoMixedRouting';
+import { sendNaraResetConfirmation } from '@/lib/whatsapp/naraReset';
 import { isCustomerServiceWindowOpen, OUTSIDE_WINDOW_MESSAGE } from '@/lib/whatsapp/window';
 import type {
   MetaWebhookMessage,
@@ -29,6 +33,114 @@ import type {
 import { metaTimestamp, normalizeWaId } from '@/lib/whatsapp/utils';
 
 type AdminClient = ReturnType<typeof createAdminClient>;
+
+function declaredName(text: string): string {
+  const match = text.match(/\b(?:sou|me chamo|meu nome (?:é|e)|aqui é|aqui e)\s+(?:a\s+|o\s+)?([A-ZÁÀÂÃÉÊÍÓÔÕÚÇ][\p{L}'’-]+(?:\s+[A-ZÁÀÂÃÉÊÍÓÔÕÚÇ][\p{L}'’-]+){0,2})/u);
+  return match?.[1]?.trim() ?? '';
+}
+
+function paymentMethodFromText(text: string): string {
+  const value = text.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLocaleLowerCase('pt-BR');
+  if (/\ba vista\b|\bavista\b/.test(value)) return 'à vista';
+  if (/\bfinanciamento\b|\bfinanciar\b|\bcaixa\b/.test(value)) return 'financiamento bancário';
+  if (/\bparcelad|\bparcela|\bentrada\b|\bbalao|\breforco\b/.test(value)) return 'parcelado';
+  if (/\bdolar|\busd\b|\beuro|\beur\b|\bmoeda local\b/.test(value)) return 'pagamento do exterior / moeda estrangeira';
+  return '';
+}
+
+async function isAuthorizedNaraReset(
+  admin: AdminClient,
+  organizationId: string,
+  waId: string,
+) {
+  const { data, error } = await admin.from('nara_internal_numbers')
+    .select('phone,can_reset')
+    .eq('organization_id', organizationId)
+    .eq('phone', waId)
+    .eq('can_reset', true)
+    .maybeSingle();
+  if (error && error.code !== '42P01' && error.code !== 'PGRST205') throw error;
+  return Boolean(data);
+}
+
+async function handleNaraReset(args: {
+  admin: AdminClient;
+  channel: WhatsAppChannelRecord;
+  waId: string;
+  inboundWamid: string;
+}) {
+  const authorized = await isAuthorizedNaraReset(
+    args.admin,
+    args.channel.organization_id,
+    args.waId,
+  );
+  if (!authorized) return false;
+
+  const { data: leads, error: leadsError } = await args.admin.from('leads')
+    .select('*')
+    .eq('organization_id', args.channel.organization_id)
+    .eq('phone', args.waId)
+    .eq('kind', 'cliente')
+    .is('archived_at', null)
+    .order('updated_at', { ascending: false })
+    .limit(5);
+  if (leadsError) throw leadsError;
+  const lead = leads?.[0] as Lead | undefined;
+  const now = new Date().toISOString();
+
+  if (lead) {
+    await Promise.all([
+      args.admin.from('whatsapp_ai_conversation_memory').delete().eq('lead_id', lead.id),
+      args.admin.from('lead_handoffs').update({
+        status: 'cancelled',
+        updated_at: now,
+      }).eq('lead_id', lead.id).eq('status', 'pending'),
+      args.admin.from('lead_tasks').update({
+        status: 'cancelled',
+        completed_at: now,
+      }).eq('lead_id', lead.id).eq('status', 'pending'),
+      args.admin.from('leads').update({
+        name: args.waId,
+        stage: 'novo_triagem',
+        owner_mode: 'ai',
+        owner_id: null,
+        backup_owner_id: null,
+        ai_enabled: true,
+        automation_paused: false,
+        priority_class: null,
+        temperature: 0,
+        ai_classification: null,
+        ai_summary: null,
+        ai_next_action: null,
+        ai_last_classified_at: null,
+        next_action: null,
+        next_action_type: null,
+        next_action_due_at: null,
+        reactivation_at: null,
+        handoff_requested_at: null,
+        handoff_accepted_at: null,
+        metadata: {
+          ...(lead.metadata || {}),
+          nara_reset_at: now,
+          nara_reset_by_phone: args.waId,
+        },
+        updated_at: now,
+      }).eq('id', lead.id),
+      args.admin.from('activities').insert({
+        organization_id: args.channel.organization_id,
+        lead_id: lead.id,
+        type: 'nara_reset',
+        title: 'Conversa de teste da Nara zerada',
+        description: 'O histórico anterior foi preservado apenas para auditoria e deixou de compor o contexto da Nara.',
+        metadata: { reset_at: now, reset_by_phone: args.waId },
+      }),
+    ]);
+  }
+
+  await sendNaraResetConfirmation(args.channel, args.waId);
+
+  return true;
+}
 
 function messageBody(message: MetaWebhookMessage) {
   if (message.type === 'text') return String(message.text?.body ?? '');
@@ -255,10 +367,15 @@ async function processConversation(args: {
   const context = await loadAiContext(args.admin, args.channel.organization_id, lead.kind);
   if (context.config?.active === false) return;
 
-  const { data: historyRows } = await args.admin.from('messages')
-    .select('direction,sender_kind,body')
+  let historyQuery = args.admin.from('messages')
+    .select('direction,sender_kind,body,created_at')
     .eq('lead_id', lead.id)
-    .neq('direction', 'system')
+    .neq('direction', 'system');
+  const resetAt = typeof lead.metadata?.nara_reset_at === 'string'
+    ? String(lead.metadata.nara_reset_at)
+    : '';
+  if (resetAt) historyQuery = historyQuery.gte('created_at', resetAt);
+  const { data: historyRows } = await historyQuery
     .order('created_at', { ascending: true })
     .limit(100);
   const history = (historyRows ?? []).map((row) => ({
@@ -291,8 +408,21 @@ async function processConversation(args: {
         lead.id,
       ),
     ]);
+    const [operational, foreign] = await Promise.all([
+      loadNaraOperationalContext(
+        args.admin,
+        args.channel.organization_id,
+      ),
+      loadNaraForeignContext(
+        args.admin,
+        history,
+        commercial,
+      ),
+    ]);
     context.commercial = commercial;
     context.dynamic = dynamic;
+    context.foreign = foreign;
+    context.operational = operational;
   }
 
   let turn;
@@ -663,14 +793,29 @@ async function persistInboundMessage(args: {
   if (!storedMessage) return null;
 
   const attribution = mergeMetaAdAttribution(lead.metadata, args.message.referral, createdAt);
+  const selfDeclaredName = declaredName(body);
+  const contactTime = extractContactTimePreference(body, new Date(createdAt));
+  const paymentMethod = paymentMethodFromText(body);
   const metadata = {
     ...attribution.metadata,
     whatsapp_channel_id: args.channel.id,
     whatsapp_conversation_id: conversation.id,
     whatsapp_window_expires_at: conversation.window_expires_at,
+    ...(contactTime ? {
+      contact_time_preference_original: contactTime.original,
+      contact_time_preference_city: contactTime.city,
+      contact_time_preference_timezone: contactTime.source_timezone,
+      contact_time_preference_brasilia: contactTime.brasilia_time,
+    } : {}),
+    ...(paymentMethod ? { payment_method: paymentMethod } : {}),
   };
+  const currentNameLooksGeneric = !lead.name
+    || lead.name === lead.phone
+    || /^lead\b/i.test(String(lead.name))
+    || /^\d{10,15}$/.test(String(lead.name));
   await args.admin.from('leads').update({
-    name: lead.name === lead.phone && args.contactName ? args.contactName : lead.name,
+    name: selfDeclaredName
+      || (currentNameLooksGeneric && args.contactName ? args.contactName : lead.name),
     source: attribution.firstAttribution && attribution.sourceLabel ? attribution.sourceLabel : lead.source,
     last_inbound_at: createdAt,
     metadata,
@@ -770,6 +915,16 @@ export async function processWebhookEvent(eventId: string, knownPhoneNumberId?: 
     const persisted: PersistedInbound[] = [];
     for (const message of value.messages ?? []) {
       const senderWaId = normalizeWaId(String(message.from ?? contactWaId));
+      const body = messageBody(message).trim();
+      if (body.toLowerCase() === '#reset' && senderWaId) {
+        const reset = await handleNaraReset({
+          admin,
+          channel,
+          waId: senderWaId,
+          inboundWamid: String(message.id ?? ''),
+        });
+        if (reset) continue;
+      }
       if (senderWaId && internalBusinessNumbers.has(senderWaId)) {
         continue;
       }

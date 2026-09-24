@@ -23,6 +23,111 @@ function lastUserText(history: ChatMessage[]): string {
   return [...history].reverse().find((item) => item.role === 'user')?.content ?? '';
 }
 
+function userText(history: ChatMessage[]): string {
+  return history.filter((item) => item.role === 'user').map((item) => item.content).join(' ');
+}
+
+function declaredFirstName(text: string): string {
+  const match = text.match(/\b(?:sou|me chamo|meu nome (?:é|e)|aqui é|aqui e)\s+(?:a\s+|o\s+)?([A-ZÁÀÂÃÉÊÍÓÔÕÚÇ][\p{L}'’-]+)(?:\s+[A-ZÁÀÂÃÉÊÍÓÔÕÚÇ][\p{L}'’-]+){0,2}/u);
+  return match?.[1]?.trim() ?? '';
+}
+
+function buyerContextIsClear(history: ChatMessage[]): boolean {
+  const value = normalizeText(userText(history));
+  return /\b(vi (?:um |o |a )?anuncio|me interessei|tenho interesse|flow|alma|soul|apartamento|imovel|comprar|compra|morar|veranear|investir|investimento|preco|valor|quanto custa|pagamento|parcela|entrada|planta|obra|entrega|aluguel)\b/.test(value);
+}
+
+function asksHuman(text: string): boolean {
+  const value = normalizeText(text);
+  return /\b(falar com (?:uma pessoa|alguem|um corretor|corretor|atendente)|quero um corretor|quero falar com gente|atendimento humano|me liga|pode me ligar)\b/.test(value);
+}
+
+function handoffQuestion(history: ChatMessage[]): string {
+  const value = normalizeText(userText(history));
+  if (!/\b(a vista|avista|parcelad|financi|entrada|sinal|mensal)\b/.test(value)) {
+    return 'Enquanto isso: você pensa em pagar à vista ou parcelado?';
+  }
+  if (!/\b(agora|este mes|esse mes|\d+ meses|ano que vem|202\d|sem pressa|prazo)\b/.test(value)) {
+    return 'Enquanto isso: você pensa em comprar em qual prazo?';
+  }
+  if (!/\b(melhor horario|depois das|apos as|a partir das|manha|tarde|noite)\b/.test(value)) {
+    return 'Enquanto isso: qual é o melhor horário para a Taís te chamar?';
+  }
+  return '';
+}
+
+function topicFromQuestion(text: string): string {
+  const value = normalizeText(text);
+  if (/\baluguel|locacao|administracao\b/.test(value)) return 'a administração do aluguel';
+  if (/\bdolar|euro|moeda|cambio\b/.test(value)) return 'o pagamento e a conversão de moeda';
+  if (/\bassinar|assinatura|contrato\b/.test(value)) return 'a assinatura do contrato';
+  if (/\bfinanciamento|caixa\b/.test(value)) return 'o financiamento';
+  if (/\bpagamento|parcela|entrada\b/.test(value)) return 'a forma de pagamento';
+  const compact = text.replace(/\s+/g, ' ').trim().replace(/[?!.]+$/g, '');
+  return compact ? `a sua dúvida sobre “${compact.slice(0, 90)}”` : 'essa dúvida';
+}
+
+function looksLikeBadMaterialFallback(text: string): boolean {
+  const value = normalizeText(text);
+  return /nao tenho confirmacao do envio desse material|comercial podera verificar o pedido|confirmacao do envio|pedido de material/.test(value);
+}
+
+function formatBrl(value: number): string {
+  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 }).format(value);
+}
+
+function formatForeign(value: number, currency: 'USD' | 'EUR'): string {
+  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency, maximumFractionDigits: 0 }).format(value);
+}
+
+function foreignCurrencyReply(context: AiTrainingContext): string {
+  const foreign = context.foreign;
+  if (!foreign?.requested_currency || !foreign.fx || !foreign.conversions.length) return '';
+  const first = foreign.conversions[0];
+  return `Hoje parte de ${formatBrl(first.brl)}, cerca de ${formatForeign(first.foreign, foreign.requested_currency)} pela PTAX. É uma referência cambial; a tabela oficial e o contrato ficam em reais.`;
+}
+
+function foreignPurchaseReply(name: string): string {
+  const prefix = name ? `${name}, ` : '';
+  return `${prefix}dá sim. Você compra morando fora, assina eletronicamente com validade jurídica e paga do exterior em reais, dólar ou moeda local. Já temos clientes nos EUA, Dinamarca, Portugal e Chile que compraram assim. É para morar, veranear ou investir?`;
+}
+
+function slaReply(context: AiTrainingContext): string {
+  const op = context.operational;
+  if (!op) return 'Já passei para a Taís do comercial. Ela assume seu atendimento agora.';
+  return op.business_open_now
+    ? `A Taís do comercial te chama em até ${op.hot_lead_sla_minutes} minutos.`
+    : `Nosso time volta ${op.next_business_label} e você será o primeiro a ser atendido.`;
+}
+
+function choosePromisedFile(history: ChatMessage[], context: AiTrainingContext): string[] {
+  const latest = normalizeText(lastUserText(history));
+  if (!/^(sim|s|pode|pode mandar|manda|me manda|quero|legal|ok|ta|tá|beleza)\b/.test(latest)) return [];
+  const previousAssistant = [...history].reverse().find((item) => item.role === 'assistant')?.content ?? '';
+  const offered = normalizeText(previousAssistant);
+  const terms = offered.includes('planta') ? ['planta']
+    : offered.includes('folder') || offered.includes('book') ? ['folder','book']
+      : offered.includes('foto') || offered.includes('imagem') ? ['foto','imagem','render']
+        : offered.includes('video') ? ['video','obra']
+          : [];
+  if (!terms.length) return [];
+  return (context.files ?? [])
+    .filter((file) => {
+      const haystack = normalizeText([file.category,file.title,file.description ?? '',...(file.trigger_keywords ?? [])].join(' '));
+      return terms.some((term) => haystack.includes(term));
+    })
+    .slice(0, 1)
+    .map((file) => file.id);
+}
+
+function ensureDeclaredNameInFirstReply(reply: string, history: ChatMessage[]): string {
+  if (assistantMessages(history).length > 0) return reply;
+  const name = declaredFirstName(lastUserText(history));
+  if (!name || normalizeText(reply).includes(normalizeText(name))) return reply;
+  if (/^oi\b/i.test(reply.trim())) return reply.trim().replace(/^oi[!,.]?\s*/i, `Oi, ${name}! `);
+  return `Oi, ${name}! ${reply.trim()}`;
+}
+
 function looksLikeTriageQuestion(text: string): boolean {
   const value = normalizeText(text);
   return (/buscando.*imovel.*comprar/.test(value) && /outro assunto|outro atendimento/.test(value))
@@ -72,10 +177,75 @@ function applyConversationDecision(
   return turn;
 }
 
-export function postProcessNaraTurn(turn: AiTurn, history: ChatMessage[]): AiTurn {
+export function postProcessNaraTurn(
+  turn: AiTurn,
+  history: ChatMessage[],
+  context: AiTrainingContext = {},
+): AiTurn {
   const latest = normalizeText(lastUserText(history));
   const priorMessages = assistantMessages(history);
   const priorReplies = priorMessages.map(normalizeText);
+  const name = declaredFirstName(lastUserText(history));
+  const clearBuyerContext = buyerContextIsClear(history);
+  const latestRaw = lastUserText(history);
+  const latestNormalized = normalizeText(latestRaw);
+
+  const asksForeignPurchase = /\b(moro|morando|resido|vivo)\b.{0,35}\b(orlando|miami|estados unidos|eua|usa|fora do brasil|exterior|portugal|dinamarca)\b/.test(latestNormalized)
+    && /\b(compr\w*|assin\w*|contrato|pag\w*)\b/.test(latestNormalized);
+  if (asksForeignPurchase) {
+    turn.reply = foreignPurchaseReply(name);
+    turn.classification = turn.classification === 'frio' ? 'morno' : turn.classification;
+    turn.score = Math.max(turn.score, 35);
+    turn.summary = `Lead mora no exterior${context.foreign?.location ? ` (${context.foreign.location})` : ''} e confirmou interesse em compra à distância.`;
+    turn.next_action = 'Continuar qualificação de uso, prazo e forma de pagamento; não exigir presença física para assinatura.';
+    return turn;
+  }
+
+  if (/\b(quanto|valor|fica|cust).{0,25}\b(dolar|usd|euro|eur)\b|\b(dolar|usd|euro|eur).{0,25}\b(quanto|valor|fica|cust)\b/.test(latestNormalized)) {
+    const converted = foreignCurrencyReply(context);
+    if (converted) {
+      turn.reply = converted;
+      turn.summary = 'Lead no exterior pediu conversão de preço; valor calculado com cotação PTAX do dia e tabela viva em reais.';
+      turn.next_action = 'Seguir qualificação sem substituir a tabela oficial em reais pela referência cambial.';
+      return turn;
+    }
+  }
+
+  if (/\b(demora muito|quanto tempo|em quanto tempo|quando (?:ele|ela|o corretor|a corretora|o comercial) (?:me )?(?:chama|responde|liga))\b/.test(latestNormalized)) {
+    turn.reply = slaReply(context);
+    turn.handoff = true;
+    turn.classification = 'quente';
+    turn.score = Math.max(turn.score, 80);
+    turn.summary = turn.summary || 'Lead perguntou o prazo para retorno do comercial.';
+    turn.next_action = 'Taís deve assumir o atendimento dentro do SLA informado.';
+    return turn;
+  }
+
+  if (asksHuman(latestRaw) && clearBuyerContext) {
+    const extra = handoffQuestion(history);
+    turn.reply = `Já estou chamando a Taís do comercial.${extra ? ` ${extra}` : ''}`;
+    turn.handoff = true;
+    turn.classification = 'quente';
+    turn.score = Math.max(turn.score, 80);
+    turn.summary = turn.summary || 'Lead de compra pediu atendimento humano.';
+    turn.next_action = 'Taís deve assumir imediatamente usando o histórico e os dados já coletados.';
+    return turn;
+  }
+
+  if (looksLikeBadMaterialFallback(turn.reply)) {
+    const topic = topicFromQuestion(latestRaw);
+    turn.reply = `Sobre ${topic}, isso não está confirmado na minha base. Vou deixar essa dúvida no resumo para a Taís te responder sem você repetir.`;
+    turn.handoff = true;
+    turn.summary = `Dúvida fora da base: ${latestRaw.slice(0, 300)}`;
+    turn.next_action = 'Taís deve responder exatamente à dúvida registrada no resumo.';
+  }
+
+  const promisedFiles = choosePromisedFile(history, context);
+  if (promisedFiles.length && !turn.attachment_ids.length) {
+    turn.attachment_ids = promisedFiles;
+  }
+
+  turn.reply = ensureDeclaredNameInFirstReply(turn.reply, history);
 
   const asksIfRobot = /\b(voce e|vc e|e uma|eh uma)\s*(?:um |uma )?(?:robo|robot|ia|inteligencia artificial)|\bassistente digital\b/.test(latest);
   if (asksIfRobot) {
@@ -98,7 +268,7 @@ export function postProcessNaraTurn(turn: AiTurn, history: ChatMessage[]): AiTur
   }
 
   const asksOtherService = /\b(atendimento bossa|outro atendimento|outro assunto|preciso de atendimento|preciso falar com a bossa|quero falar com a bossa|falar com atendente|falar com uma pessoa|atendimento humano)\b/.test(latest);
-  if (asksOtherService) {
+  if (asksOtherService && !clearBuyerContext) {
     return applyConversationDecision(turn, {
       reply: 'Claro. Qual assunto você precisa tratar com a Bossa: compra de imóvel, cliente atual, financeiro, obra ou outro?',
       handoff: true,
@@ -137,11 +307,16 @@ export function postProcessNaraTurn(turn: AiTurn, history: ChatMessage[]): AiTur
   const repeated = Boolean(normalizedReply) && priorReplies.slice(-8).includes(normalizedReply);
   const repeatedTriage = hasPriorTriage(history) && looksLikeTriageQuestion(turn.reply);
   if (repeated || repeatedTriage) {
-    return applyConversationDecision(turn, {
-      reply: 'Entendi. Para eu responder ao que você precisa agora: você quer informações sobre os empreendimentos, valores, atendimento a clientes, obra ou outro assunto?',
-      summary: 'A última resposta seria repetitiva; a Nara mudou a abordagem para entender o assunto atual.',
-      nextAction: 'Responder à última mensagem e avançar sem repetir a triagem.',
-    });
+    const topic = topicFromQuestion(latestRaw);
+    turn.reply = clearBuyerContext
+      ? `Essa dúvida sobre ${topic} já ficou registrada para a Taís; você não precisa repetir. Ela continua daqui.`
+      : `Vou focar em ${topic} agora, sem repetir a mensagem anterior.`;
+    if (clearBuyerContext) turn.handoff = true;
+    turn.summary = `Resposta anterior seria repetida. Dúvida atual: ${latestRaw.slice(0, 280)}`;
+    turn.next_action = clearBuyerContext
+      ? 'Taís deve continuar a partir da dúvida registrada, sem pedir o assunto novamente.'
+      : 'Responder especificamente à última mensagem e avançar.';
+    return turn;
   }
 
   return turn;
@@ -166,6 +341,6 @@ export async function generateAiTurn(
 
   const turn = await generateCoreAiTurn(effectiveLead, history, context);
   if (!turn || lead.kind !== 'cliente') return turn;
-  const processed = postProcessNaraTurn(turn, history);
+  const processed = postProcessNaraTurn(turn, history, context);
   return enforceNaraReplyGuardrails(processed, effectiveLead, history, context);
 }

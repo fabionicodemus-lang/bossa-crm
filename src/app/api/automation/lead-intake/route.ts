@@ -21,6 +21,33 @@ type TemplateSpec = {
   examples: string[];
 };
 
+type LeadIntakeJob = {
+  id: string;
+  organization_id: string;
+  lead_id: string;
+  lead_name?: string | null;
+  source_label?: string | null;
+  lead_phone?: string | null;
+  created_at: string;
+  alert_attempts?: number | null;
+  nara_attempts?: number | null;
+};
+
+type LeadIntakeSettings = {
+  alert_enabled?: boolean | null;
+  alert_phone?: string | null;
+  alert_name?: string | null;
+  nara_enabled?: boolean | null;
+  nara_delay_seconds?: number | null;
+};
+
+type TemplateRow = {
+  status?: string | null;
+  name: string;
+  language: string;
+  body_text?: string | null;
+};
+
 const NARA_TEMPLATE: TemplateSpec = {
   name: 'nara_novo_lead_formulario',
   language: 'pt_BR',
@@ -166,7 +193,7 @@ async function syncTemplate(
   return data;
 }
 
-async function processAlert(admin: AdminClient, job: Record<string, any>, settings: Record<string, any>, channel: WhatsAppChannelRecord, template: Record<string, any>) {
+async function processAlert(admin: AdminClient, job: LeadIntakeJob, settings: LeadIntakeSettings, channel: WhatsAppChannelRecord, template: TemplateRow) {
   if (!settings.alert_enabled || !settings.alert_phone) {
     await admin.from('lead_intake_jobs').update({
       alert_status: 'skipped', alert_error: 'Alerta desativado ou sem telefone configurado.', updated_at: new Date().toISOString(),
@@ -214,7 +241,7 @@ async function processAlert(admin: AdminClient, job: Record<string, any>, settin
   return 'sent';
 }
 
-async function processNara(admin: AdminClient, job: Record<string, any>, settings: Record<string, any>, channel: WhatsAppChannelRecord, template: Record<string, any>) {
+async function processNara(admin: AdminClient, job: LeadIntakeJob, settings: LeadIntakeSettings, channel: WhatsAppChannelRecord, template: TemplateRow) {
   if (!settings.nara_enabled) {
     await admin.from('lead_intake_jobs').update({
       nara_status: 'skipped', nara_error: 'Primeiro contato automático desativado.', updated_at: new Date().toISOString(),

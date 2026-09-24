@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { buildAiInstructions, generateAiTurn, type AiFileOption, type AiTrainingContext } from '@/lib/ai';
 import { loadNaraDynamicTurnContext, loadNaraRuntimeVariables, saveNaraRuntimeVariables } from '@/lib/nara-dynamic-context';
+import { loadNaraForeignContext } from '@/lib/nara-exterior';
+import { loadNaraOperationalContext } from '@/lib/nara-operations';
 import { deriveHybridDecision } from '@/lib/hybrid';
 import { loadNaraCommercialTurnContext } from '@/lib/nara-unit-queries';
 import { countReplyWords, naraCommercialDiagnostics } from '@/lib/nara-simulator-diagnostics';
@@ -10,6 +12,7 @@ import {
   naraKnowledgeForEditor,
   normalizeNaraKnowledge,
 } from '@/lib/nara-prompt-config';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { createClient } from '@/lib/supabase/server';
 import type { Lead } from '@/lib/types';
 
@@ -459,7 +462,8 @@ export async function POST(request: Request) {
     const lead = syntheticLead(body.agent, context.organizationId, String(body.scenario ?? ''));
     const aiContext = makeAiContext(config, examples, files);
     if (body.agent === 'nara') {
-      const [commercial, dynamic] = await Promise.all([
+      const admin = createAdminClient();
+      const [commercial, dynamic, operational] = await Promise.all([
         loadNaraCommercialTurnContext(
           context.supabase,
           context.organizationId,
@@ -471,9 +475,20 @@ export async function POST(request: Request) {
           context.organizationId,
           null,
         ),
+        loadNaraOperationalContext(
+          admin,
+          context.organizationId,
+        ),
       ]);
+      const foreign = await loadNaraForeignContext(
+        admin,
+        messages,
+        commercial,
+      );
       aiContext.commercial = commercial;
       aiContext.dynamic = dynamic;
+      aiContext.foreign = foreign;
+      aiContext.operational = operational;
     }
     const turn = await generateAiTurn(lead, messages, aiContext);
     if (!turn) {
