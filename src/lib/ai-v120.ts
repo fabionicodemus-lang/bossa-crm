@@ -308,13 +308,15 @@ export function postProcessNaraTurn(
   const repeatedTriage = hasPriorTriage(history) && looksLikeTriageQuestion(turn.reply);
   if (repeated || repeatedTriage) {
     const topic = topicFromQuestion(latestRaw);
-    return applyConversationDecision(turn, {
-      reply: clearBuyerContext
-        ? `Sobre ${topic}, vou responder pelo que você perguntou agora, sem voltar na triagem.`
-        : `Sobre ${topic}, vou focar exatamente nisso agora.`,
-      summary: 'A última resposta seria repetitiva; a Nara foi obrigada a responder à mensagem atual sem repetir triagem ou texto pronto.',
-      nextAction: 'Responder especificamente à última mensagem e avançar.',
-    });
+    turn.reply = clearBuyerContext
+      ? `Essa dúvida sobre ${topic} já ficou registrada para a Taís; você não precisa repetir. Ela continua daqui.`
+      : `Vou focar em ${topic} agora, sem repetir a mensagem anterior.`;
+    if (clearBuyerContext) turn.handoff = true;
+    turn.summary = `Resposta anterior seria repetida. Dúvida atual: ${latestRaw.slice(0, 280)}`;
+    turn.next_action = clearBuyerContext
+      ? 'Taís deve continuar a partir da dúvida registrada, sem pedir o assunto novamente.'
+      : 'Responder especificamente à última mensagem e avançar.';
+    return turn;
   }
 
   return turn;
