@@ -725,7 +725,7 @@ function offeredMaterialMessage(history: ChatMessage[]) {
   for (let index = lastUserIndex - 1; index >= 0 && index >= lastUserIndex - 4; index -= 1) {
     const item = history[index];
     if (item?.role !== 'assistant') continue;
-    if (/\b(te mando|posso te mandar|quer que eu mande|quer ver|te envio|vou te mandar)\b/.test(normalizeText(item.content))
+    if (/\b(te mando|posso te mandar|quer que eu (?:te )?mande|quer ver|te envio|vou te mandar)\b/.test(normalizeText(item.content))
       && isMaterialTopic(item.content)) {
       return item.content;
     }
