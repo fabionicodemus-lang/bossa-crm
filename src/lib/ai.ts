@@ -631,8 +631,8 @@ function hasUngroundedMoney(reply: string, history: ChatMessage[], context: AiTr
   if (!tokens.length) return false;
   const corpus = [
     ...history.filter((item) => item.role === 'user').map((item) => item.content),
-    recordText(context.config?.knowledge),
     context.commercial?.source_text ?? '',
+    context.foreign?.source_text ?? '',
   ].join('\n');
   const sourceKeys = new Set(moneyTokens(corpus).map(moneyKey).filter(Boolean));
   return tokens.some((token) => {
