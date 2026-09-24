@@ -881,7 +881,7 @@ function enrichOperationalExtraction(turn: AiTurn, history: ChatMessage[], conte
   return turn;
 }
 
-function enforceNaraOperationalRules(
+export function enforceNaraOperationalRules(
   turn: AiTurn,
   history: ChatMessage[],
   context: AiTrainingContext,
