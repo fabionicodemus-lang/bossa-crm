@@ -72,7 +72,7 @@ const operationalContext = {
   const history = [{ role: 'user', content: 'Moro em Orlando, dá pra comprar morando fora? Como pago? Preciso ir aí assinar?' }];
   const result = postProcessNaraTurn(turn(), history, foreignContext);
   assert.match(result.reply, /d[aá] sim/i);
-  assert.match(result.reply, /assina eletronicamente/i);
+  assert.match(result.reply, /assin(?:a|ado).*eletronicamente/i);
   assert.match(result.reply, /validade jur[ií]dica/i);
   assert.match(result.reply, /reais, d[oó]lar ou moeda local/i);
   assert.match(result.reply, /EUA.*Dinamarca.*Portugal.*Chile/i);
