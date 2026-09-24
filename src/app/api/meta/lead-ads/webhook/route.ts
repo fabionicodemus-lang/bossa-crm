@@ -55,6 +55,17 @@ async function resolveOrganizationId(admin: AdminClient) {
 }
 
 async function resolveLeadAdsAccessToken(admin: AdminClient, organizationId: string) {
+  const { data: leadAdsConnection, error: leadAdsError } = await admin
+    .from('meta_lead_ads_connections')
+    .select('token_encrypted,status')
+    .eq('organization_id', organizationId)
+    .eq('status', 'connected')
+    .maybeSingle();
+  if (leadAdsError && leadAdsError.code !== '42P01' && leadAdsError.code !== 'PGRST205') throw leadAdsError;
+  if (leadAdsConnection?.token_encrypted) {
+    return decryptToken(String(leadAdsConnection.token_encrypted));
+  }
+
   const dedicated = process.env.META_LEAD_ADS_ACCESS_TOKEN?.trim();
   if (dedicated) return dedicated;
 
@@ -69,7 +80,7 @@ async function resolveLeadAdsAccessToken(admin: AdminClient, organizationId: str
     .maybeSingle();
   if (error) throw error;
   if (!data?.token_encrypted) {
-    throw new Error('Nenhum token Meta disponível. Configure META_LEAD_ADS_ACCESS_TOKEN.');
+    throw new Error('Nenhum token Meta disponível para Lead Ads. Conecte a Página da Bossa nas configurações do CRM.');
   }
   return decryptToken(String(data.token_encrypted));
 }
