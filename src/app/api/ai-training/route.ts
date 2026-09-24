@@ -10,6 +10,7 @@ import {
   naraKnowledgeForEditor,
   normalizeNaraKnowledge,
 } from '@/lib/nara-prompt-config';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { createClient } from '@/lib/supabase/server';
 import type { Lead } from '@/lib/types';
 
@@ -459,6 +460,7 @@ export async function POST(request: Request) {
     const lead = syntheticLead(body.agent, context.organizationId, String(body.scenario ?? ''));
     const aiContext = makeAiContext(config, examples, files);
     if (body.agent === 'nara') {
+      const admin = createAdminClient();
       const [commercial, dynamic, operational] = await Promise.all([
         loadNaraCommercialTurnContext(
           context.supabase,
@@ -472,12 +474,12 @@ export async function POST(request: Request) {
           null,
         ),
         loadNaraOperationalContext(
-          context.supabase,
+          admin,
           context.organizationId,
         ),
       ]);
       const foreign = await loadNaraForeignContext(
-        context.supabase,
+        admin,
         messages,
         commercial,
       );
