@@ -544,27 +544,46 @@ function hasExplicitBuyerIntent(lead: Lead, history: ChatMessage[], context: AiT
   if (contextualBuyerReply(history, context)) return true;
 
   const value = normalizeText(userText(history));
-  const strongIntent = /\b(para morar|quero morar|pretendo morar|moradia|para investir|quero investir|pretendo investir|investimento|renda com aluguel|para revenda|quero comprar|pretendo comprar|busco (?:um |uma )?(?:apartamento|imovel)|procuro (?:um |uma )?(?:apartamento|imovel)|tenho interesse(?: no| na| em)?|quero conhecer (?:o |a )?(?:flow|alma)|vi (?:um )?anuncio.*(?:flow|alma|apartamento|imovel|empreendimento)|vi (?:um )?anuncio(?: de voces| da bossa)?|quero saber mais.*empreendimento)\b/.test(value);
+  const projectConversation = /\b(flow|alma)\b/.test(value)
+    && /\b(vi|anuncio|interesse|foto|fotos|imagem|video|planta|tabela|preco|valor|pagamento|localizacao|obra|entrega|me interesa|vi el|vi la|fotos|imagenes|video|plano|tabla|precio|valor|pago|ubicacion|obra|entrega)\b/.test(value);
+  if (projectConversation) return true;
+
+  const strongIntent = /\b(para morar|quero morar|pretendo morar|moradia|para investir|quero investir|pretendo investir|investimento|renda com aluguel|para revenda|quero comprar|pretendo comprar|busco (?:um |uma )?(?:apartamento|imovel)|procuro (?:um |uma )?(?:apartamento|imovel)|tenho interesse(?: no| na| em)?|quero conhecer (?:o |a )?(?:flow|alma)|vi (?:um )?anuncio.*(?:flow|alma|apartamento|imovel|empreendimento)|vi (?:um )?anuncio(?: de voces| da bossa)?|quero saber mais.*empreendimento|quiero comprar|busco (?:un )?(?:departamento|apartamento|inmueble)|me interesa|quiero conocer (?:el )?(?:flow|alma)|vi (?:un )?anuncio|para vivir|para invertir|inversion)\b/.test(value);
   if (!strongIntent) return false;
   const onlyCommercialQuestion = asksCommercialValue(value)
-    && !/\b(morar|investir|investimento|comprar|tenho interesse|quero conhecer|vi (?:um )?anuncio)\b/.test(value);
+    && !/\b(morar|investir|investimento|comprar|tenho interesse|quero conhecer|vi (?:um )?anuncio|vivir|invertir|inversion|quiero comprar|me interesa|quiero conocer|vi (?:un )?anuncio)\b/.test(value);
   return !onlyCommercialQuestion;
 }
 
-function firstContactOpening(context: AiTrainingContext): string {
+function isSpanishConversation(history: ChatMessage[]): boolean {
+  const value = normalizeText(userText(history));
+  const matches = value.match(/\b(hola|soy|me llamo|mi nombre|vivo en|quiero|quisiera|precio|cuanto cuesta|departamento|ustedes|puedo|chile|santiago)\b/g) ?? [];
+  return matches.length >= 2 || /\b(hola|soy|me llamo|mi nombre)\b/.test(value);
+}
+
+function declaredContactFirstName(text: string): string {
+  const match = text.match(/\b(?:sou|me chamo|meu nome (?:é|e)|aqui é|aqui e|soy|me llamo|mi nombre (?:es|e))\s+(?:a\s+|o\s+)?([\p{L}'’-]{2,})/iu);
+  return match?.[1]?.trim() ?? '';
+}
+
+function firstContactOpening(context: AiTrainingContext, history: ChatMessage[]): string {
   const configuredName = context.config?.persona && typeof context.config.persona.name === 'string'
     ? context.config.persona.name.trim()
     : '';
-  return `Olá! Aqui é a ${configuredName || 'Nara'}, da Bossa 😊`;
+  const agentName = configuredName || 'Nara';
+  const name = declaredContactFirstName(lastUserText(history));
+  return isSpanishConversation(history)
+    ? `¡Hola${name ? `, ${name}` : ''}! Soy ${agentName}, de Bossa 😊`
+    : `Oi${name ? `, ${name}` : ''}! Aqui é a ${agentName}, da Bossa 😊`;
 }
 
 function ensureFirstTurnIntroduction(reply: string, history: ChatMessage[], context: AiTrainingContext): string {
   if (assistantMessages(history).length > 0) return reply.trim();
   const value = normalizeText(reply);
-  const hasGreeting = /^(ola|oi|bom dia|boa tarde|boa noite)\b/.test(value);
+  const hasGreeting = /^(ola|oi|bom dia|boa tarde|boa noite|hola|buenos dias|buenas tardes|buenas noches)\b/.test(value);
   const hasIdentity = /\bnara\b/.test(value) && /\bbossa\b/.test(value);
   if (hasGreeting && hasIdentity) return reply.trim();
-  return `${firstContactOpening(context)} ${reply.trim()}`.trim();
+  return `${firstContactOpening(context, history)} ${reply.trim()}`.trim();
 }
 
 function repeatedReply(reply: string, history: ChatMessage[]): boolean {
@@ -578,20 +597,21 @@ function moneyTokens(value: string): string[] {
 
 function nextQualificationQuestion(history: ChatMessage[]): string {
   const value = normalizeText(userText(history));
-  const hasPurpose = /\b(morar|moradia|investir|investimento|revenda|aluguel)\b/.test(value);
+  const spanish = isSpanishConversation(history);
+  const hasPurpose = /\b(morar|moradia|investir|investimento|revenda|aluguel|vivir|invertir|inversion|reventa|alquiler)\b/.test(value);
   const hasEnterprise = /\b(flow|alma)\b/.test(value);
-  const hasTypology = /\b\d+\s*(?:quartos?|suites?)\b|\b(?:dois|tres|quatro)\s*(?:quartos?|suites?)\b/.test(value);
+  const hasTypology = /\b\d+\s*(?:quartos?|suites?|habitaciones?)\b|\b(?:dois|tres|quatro|dos|tres|cuatro)\s*(?:quartos?|suites?|habitaciones?)\b/.test(value);
   const hasBudget = moneyTokens(userText(history)).length > 0;
-  const hasDeadline = /\b(agora|essa semana|este mes|proximo mes|ainda este ano|em \d+ meses|sem pressa|prazo)\b/.test(value);
-  const hasDecision = /\b(esposa|marido|companheira|companheiro|familia|filhos|decido sozinho|so eu|socio|socia)\b/.test(value);
+  const hasDeadline = /\b(agora|essa semana|este mes|proximo mes|ainda este ano|em \d+ meses|sem pressa|prazo|ahora|esta semana|proximo mes|este ano|sin apuro|plazo)\b/.test(value);
+  const hasDecision = /\b(esposa|marido|companheira|companheiro|familia|filhos|decido sozinho|so eu|socio|socia|esposa|esposo|pareja|familia|hijos|decido solo|socio|socia)\b/.test(value);
 
-  if (!hasPurpose) return 'Perfeito, eu te ajudo! Você está buscando um imóvel para morar ou para investir?';
-  if (!hasEnterprise) return 'Legal! Você chegou pelo anúncio do Flow Aptos ou do Alma Seahouses?';
-  if (!hasTypology) return 'Entendi. Você procura quantos quartos ou suítes?';
-  if (!hasBudget) return 'Para eu separar as opções mais adequadas, em qual faixa de investimento você pretende ficar?';
-  if (!hasDeadline) return 'Você pensa em comprar em qual prazo?';
-  if (!hasDecision) return 'Mais alguém participa dessa decisão com você?';
-  return 'Ótimo, já entendi o seu perfil. Prefere conversar por ligação, videochamada ou agendar uma visita?';
+  if (!hasPurpose) return spanish ? 'Perfecto, te ayudo. ¿Lo buscas para vivir o para invertir?' : 'Perfeito, eu te ajudo! Você está buscando um imóvel para morar ou para investir?';
+  if (!hasEnterprise) return spanish ? '¿Llegaste por un anuncio de Flow Aptos o de Alma Seahouses?' : 'Legal! Você chegou pelo anúncio do Flow Aptos ou do Alma Seahouses?';
+  if (!hasTypology) return spanish ? '¿Cuántas habitaciones o suites buscas?' : 'Entendi. Você procura quantos quartos ou suítes?';
+  if (!hasBudget) return spanish ? '¿En qué rango de inversión quieres mantenerte?' : 'Para eu separar as opções mais adequadas, em qual faixa de investimento você pretende ficar?';
+  if (!hasDeadline) return spanish ? '¿En qué plazo piensas comprar?' : 'Você pensa em comprar em qual prazo?';
+  if (!hasDecision) return spanish ? '¿Alguien más participa de la decisión contigo?' : 'Mais alguém participa dessa decisão com você?';
+  return spanish ? 'Ya entendí tu perfil. ¿Prefieres una llamada, videollamada o agendar una visita?' : 'Ótimo, já entendi o seu perfil. Prefere conversar por ligação, videochamada ou agendar uma visita?';
 }
 
 function exactManagerCorrection(history: ChatMessage[], context: AiTrainingContext): string {
@@ -686,7 +706,7 @@ export async function enforceNaraReplyGuardrails(
     const result = await runWithRetryAndFallback((model, fallbackUsed) => ({
       model,
       input: [
-        inputMessage('system', `Reescreva uma resposta de WhatsApp da Nara, da Bossa. Entregue somente o texto final, sem aspas e sem explicações. O texto completo deve ter no máximo ${NARA_REPLY_WORD_LIMIT} palavras; não corte no meio. Preserve apenas fatos e valores já presentes no rascunho. Não acrescente preço, unidade ou condição. Nunca diga que algo acabou de ser vendido, reservado ou bloqueado; diga apenas que não está disponível e ofereça verificar alternativas. Se houver valor sem fonte, remova-o. Mantenha no máximo uma pergunta.`),
+        inputMessage('system', `Reescreva uma resposta de WhatsApp da Nara, da Bossa. Entregue somente o texto final, sem aspas e sem explicações. O texto completo deve ter no máximo ${NARA_REPLY_WORD_LIMIT} palavras; não corte no meio. Preserve apenas fatos e valores já presentes no rascunho. Não acrescente preço, unidade ou condição. Nunca diga que algo acabou de ser vendido, reservado ou bloqueado; diga apenas que não está disponível e ofereça verificar alternativas. Se houver valor sem fonte, remova-o. Mantenha exatamente o idioma predominante da última mensagem do contato, sem misturar português e espanhol. Mantenha no máximo uma pergunta.`),
         inputMessage('system', `Última mensagem do contato: ${lastUserText(history) || 'não informada'}\nConsulta comercial válida deste turno: ${context.commercial?.source_text || 'nenhuma'}`),
         inputMessage('user', `Motivos da revisão: ${violations.join(', ')}\nRascunho: ${currentDraft}`),
       ],
