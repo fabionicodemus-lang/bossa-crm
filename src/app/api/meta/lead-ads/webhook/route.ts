@@ -101,6 +101,46 @@ async function fetchLeadDetails(leadgenId: string, accessToken: string) {
   return response.json() as Promise<MetaLeadDetails>;
 }
 
+async function fetchGraphObject<T>(id: string | null, fields: string, accessToken: string): Promise<T | null> {
+  if (!id) return null;
+  const version = process.env.META_GRAPH_VERSION?.trim();
+  if (!version) return null;
+  try {
+    const url = new URL(`https://graph.facebook.com/${version}/${encodeURIComponent(id)}`);
+    url.searchParams.set('fields', fields);
+    url.searchParams.set('access_token', accessToken);
+    const response = await fetch(url, { method: 'GET', cache: 'no-store' });
+    if (!response.ok) return null;
+    return await response.json() as T;
+  } catch {
+    return null;
+  }
+}
+
+async function resolveLeadOrigin(event: StoredEvent, details: MetaLeadDetails, accessToken: string) {
+  const [form, ad] = await Promise.all([
+    fetchGraphObject<{ id?: string; name?: string }>(event.meta_form_id, 'id,name', accessToken),
+    fetchGraphObject<{ id?: string; name?: string; campaign?: { id?: string; name?: string } }>(
+      String(details.ad_id ?? event.meta_ad_id ?? '').trim() || null,
+      'id,name,campaign{id,name}',
+      accessToken,
+    ),
+  ]);
+
+  const formName = String(form?.name ?? '').trim() || null;
+  const adName = String(ad?.name ?? '').trim() || null;
+  const campaignName = String(ad?.campaign?.name ?? '').trim() || null;
+  const sourceLabel = campaignName
+    ? `Meta · ${campaignName}`
+    : adName
+      ? `Meta · ${adName}`
+      : formName
+        ? `Meta · ${formName}`
+        : 'Meta Lead Ads';
+
+  return { formName, adName, campaignName, sourceLabel };
+}
+
 function metadataObject(value: unknown) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
   return value as Record<string, unknown>;
@@ -159,6 +199,7 @@ async function processStoredEvent(eventId: string) {
     const accessToken = await resolveLeadAdsAccessToken(admin, event.organization_id);
     const details = await fetchLeadDetails(event.meta_leadgen_id, accessToken);
     const parsed = parseMetaLeadFieldData(details.field_data);
+    const origin = await resolveLeadOrigin(event, details, accessToken);
     const now = new Date().toISOString();
     const leadName = parsed.name || parsed.email || parsed.phone || `Lead Meta ${event.meta_leadgen_id}`;
     const existing = await findExistingLead(
@@ -173,6 +214,10 @@ async function processStoredEvent(eventId: string) {
       form_id: event.meta_form_id,
       ad_id: details.ad_id ?? event.meta_ad_id,
       page_id: event.meta_page_id,
+      form_name: origin.formName,
+      ad_name: origin.adName,
+      campaign_name: origin.campaignName,
+      source_label: origin.sourceLabel,
       created_time: details.created_time ?? event.raw_payload.created_time ?? null,
       received_at: now,
       answers: parsed.answers,
@@ -191,6 +236,9 @@ async function processStoredEvent(eventId: string) {
       if (!existing.phone && parsed.phone) patch.phone = parsed.phone;
       if (!existing.email && parsed.email) patch.email = parsed.email;
       if (!existing.enterprise && parsed.enterprise) patch.enterprise = parsed.enterprise;
+      if (!existing.source || String(existing.source).startsWith('Meta Lead Ads') || String(existing.source).startsWith('Meta ·')) {
+        patch.source = origin.sourceLabel;
+      }
       if ((!existing.name || String(existing.name).startsWith('Lead Meta ')) && parsed.name) {
         patch.name = parsed.name;
       }
@@ -205,7 +253,7 @@ async function processStoredEvent(eventId: string) {
         phone: parsed.phone,
         email: parsed.email,
         stage: 'novo_triagem',
-        source: 'Meta Lead Ads',
+        source: origin.sourceLabel,
         enterprise: parsed.enterprise,
         temperature: 0,
         ai_enabled: true,
@@ -223,9 +271,28 @@ async function processStoredEvent(eventId: string) {
       lead_id: leadId,
       type: 'meta_lead_ads',
       title: created ? 'Novo lead captado pelo Meta' : 'Novo cadastro Meta vinculado ao lead',
-      description: event.meta_form_id ? `Formulário Meta ${event.meta_form_id}` : 'Lead Ads',
+      description: origin.sourceLabel,
       metadata: metaSnapshot,
     });
+
+    const { data: intakeSettings } = await admin.from('lead_intake_settings')
+      .select('nara_delay_seconds')
+      .eq('organization_id', event.organization_id)
+      .maybeSingle();
+    const delaySeconds = Math.max(60, Math.min(3600, Number(intakeSettings?.nara_delay_seconds ?? 180)));
+    await admin.from('lead_intake_jobs').upsert({
+      organization_id: event.organization_id,
+      lead_id: leadId,
+      meta_leadgen_id: event.meta_leadgen_id,
+      source_label: origin.sourceLabel,
+      lead_name: parsed.name || leadName,
+      lead_phone: parsed.phone,
+      alert_due_at: now,
+      nara_due_at: new Date(new Date(now).getTime() + delaySeconds * 1000).toISOString(),
+      alert_status: 'queued',
+      nara_status: 'queued',
+      updated_at: now,
+    }, { onConflict: 'meta_leadgen_id', ignoreDuplicates: true });
 
     const { error: finishError } = await admin.from('meta_lead_ads_events').update({
       lead_id: leadId,
