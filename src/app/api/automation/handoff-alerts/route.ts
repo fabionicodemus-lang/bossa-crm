@@ -79,11 +79,20 @@ function detailsFromBriefing(briefing: Record<string, unknown>) {
   const budget = clean(briefing.budget, '');
   const deadline = clean(briefing.deadline, '');
   const decisionMaker = clean(briefing.decision_maker, '');
+  const location = clean(briefing.location, '');
+  const paymentMethod = clean(briefing.payment_method, '');
+  const bestOriginal = clean(briefing.best_contact_time_original, '');
+  const bestBrasilia = clean(briefing.best_contact_time_brasilia, '');
+  if (location) parts.push(`Cidade/país: ${location}`);
   if (purpose) parts.push(`Objetivo: ${purpose}`);
   if (typology) parts.push(`Tipologia: ${typology}`);
   if (budget) parts.push(`Faixa: ${budget}`);
   if (deadline) parts.push(`Prazo: ${deadline}`);
+  if (paymentMethod) parts.push(`Pagamento: ${paymentMethod}`);
   if (decisionMaker) parts.push(`Decisão: ${decisionMaker}`);
+  if (bestOriginal || bestBrasilia) {
+    parts.push(`Melhor contato: ${bestOriginal || 'não informado'}${bestBrasilia ? ` → ${bestBrasilia} Brasília` : ''}`);
+  }
   return parts.join(' | ').slice(0, 950);
 }
 
