@@ -37,6 +37,10 @@ create table if not exists public.nara_operational_settings (
 
 alter table public.nara_operational_settings enable row level security;
 
+grant select, insert, update, delete on public.nara_fx_daily to service_role;
+grant select, insert, update, delete on public.nara_internal_numbers to service_role;
+grant select, insert, update, delete on public.nara_operational_settings to service_role;
+
 insert into public.nara_operational_settings (
   organization_id,business_timezone,business_days,business_open,business_close,hot_lead_sla_minutes,next_business_open
 ) values (
