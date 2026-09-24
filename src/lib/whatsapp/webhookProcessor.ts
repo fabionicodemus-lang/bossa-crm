@@ -752,8 +752,27 @@ export async function processWebhookEvent(eventId: string, knownPhoneNumberId?: 
     const contactName = String(value.contacts?.[0]?.profile?.name ?? '').trim();
     const contactWaId = String(value.contacts?.[0]?.wa_id ?? '').trim();
 
+    // Alertas internos podem sair de um número da Bossa para outro número da
+    // própria Bossa. O WhatsApp entrega isso normalmente ao destinatário, mas
+    // o webhook do canal receptor não pode transformar a empresa em lead nem
+    // deixar Nara/Plantão responderem um ao outro.
+    const { data: siblingChannels } = await admin
+      .from('whatsapp_channels')
+      .select('id,display_phone_number')
+      .eq('organization_id', channel.organization_id)
+      .neq('id', channel.id);
+    const internalBusinessNumbers = new Set(
+      (siblingChannels ?? [])
+        .map((item) => normalizeWaId(String(item.display_phone_number ?? '')))
+        .filter(Boolean),
+    );
+
     const persisted: PersistedInbound[] = [];
     for (const message of value.messages ?? []) {
+      const senderWaId = normalizeWaId(String(message.from ?? contactWaId));
+      if (senderWaId && internalBusinessNumbers.has(senderWaId)) {
+        continue;
+      }
       const stored = await persistInboundMessage({
         admin,
         channel,
