@@ -5,6 +5,7 @@ import { getCurrentContext } from '@/lib/auth';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { formatDateTime } from '@/lib/format';
+import { fetchMetaAdSpend } from '@/lib/meta-ads';
 
 type ActivityLead = { id: string; name: string; kind: string };
 type DashboardActivity = { id: string; title: string; description: string | null; created_at: string; leads: ActivityLead | null };
@@ -21,6 +22,19 @@ type PeriodLead = {
   stage: string;
 };
 type OutboundMessage = { lead_id: string; sender_kind: string; created_at: string };
+type MarketingLead = { id: string; created_at: string; stage: string; source: string | null };
+type FunnelMilestone = {
+  lead_id: string;
+  qualified_at: string | null;
+  meeting_at: string | null;
+  proposal_at: string | null;
+  won_at: string | null;
+};
+type DashboardSearchParams = {
+  marketing_period?: string;
+  marketing_start?: string;
+  marketing_end?: string;
+};
 
 const DAY_MS = 86_400_000;
 
@@ -57,7 +71,74 @@ function minutesLabel(value: number | null) {
   return `${hours.toFixed(hours >= 10 ? 0 : 1)} h`;
 }
 
-export default async function DashboardPage() {
+function dateInput(value: Date) {
+  return value.toISOString().slice(0, 10);
+}
+
+function parseBrazilDate(value: string | undefined) {
+  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+  const [year, month, day] = value.split('-').map(Number);
+  const result = new Date(Date.UTC(year, month - 1, day, 3, 0, 0, 0));
+  return Number.isNaN(result.getTime()) ? null : result;
+}
+
+function marketingRange(params: DashboardSearchParams, today: Date) {
+  const period = ['week', 'month', '6m', 'custom'].includes(String(params.marketing_period))
+    ? String(params.marketing_period)
+    : 'month';
+  const endDay = new Date(today);
+  const endExclusive = new Date(endDay.getTime() + DAY_MS);
+  let start = new Date(endDay.getTime() - 29 * DAY_MS);
+  let key = period;
+
+  if (period === 'week') start = new Date(endDay.getTime() - 6 * DAY_MS);
+  if (period === '6m') {
+    start = new Date(endDay);
+    start.setUTCMonth(start.getUTCMonth() - 6);
+  }
+  if (period === 'custom') {
+    const customStart = parseBrazilDate(params.marketing_start);
+    const customEnd = parseBrazilDate(params.marketing_end);
+    if (customStart && customEnd && customStart.getTime() <= customEnd.getTime()) {
+      start = customStart;
+      endExclusive.setTime(customEnd.getTime() + DAY_MS);
+    } else {
+      key = 'month';
+      start = new Date(endDay.getTime() - 29 * DAY_MS);
+    }
+  }
+
+  const untilInclusive = new Date(endExclusive.getTime() - DAY_MS);
+  return {
+    key,
+    start,
+    endExclusive,
+    since: dateInput(start),
+    until: dateInput(untilInclusive),
+  };
+}
+
+function money(value: number | null) {
+  if (value == null || !Number.isFinite(value)) return '—';
+  return new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+    minimumFractionDigits: 0,
+    maximumFractionDigits: value < 100 ? 2 : 0,
+  }).format(value);
+}
+
+function divideCost(spend: number | null, count: number) {
+  if (spend == null || !Number.isFinite(spend) || count <= 0) return null;
+  return spend / count;
+}
+
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<DashboardSearchParams>;
+}) {
+  const params = await searchParams;
   const context = await getCurrentContext();
   const supabase = await createClient();
   const admin = createAdminClient();
@@ -65,6 +146,7 @@ export default async function DashboardPage() {
   const now = new Date().toISOString();
   const isAdmin = context!.role === 'admin';
   const starts = periodStarts();
+  const marketing = marketingRange(params, starts.today);
   const periodStart = new Date(Math.min(starts.week.getTime(), starts.month.getTime())).toISOString();
   const todayStart = starts.today.toISOString();
   const monthStart = starts.month.toISOString();
@@ -89,6 +171,8 @@ export default async function DashboardPage() {
     activeServiceLeadsResult,
     outboundMonthResult,
     { count: pendingIntake },
+    marketingLeadsResult,
+    metaSpend,
   ] = await Promise.all([
     supabase.from('leads').select('id', { count: 'exact', head: true }).eq('organization_id', orgId).eq('kind', 'cliente').is('archived_at', null),
     supabase.from('leads').select('id', { count: 'exact', head: true }).eq('organization_id', orgId).eq('owner_mode', 'ai').eq('ai_enabled', true).is('archived_at', null),
@@ -123,6 +207,16 @@ export default async function DashboardPage() {
       .select('id', { count: 'exact', head: true })
       .eq('organization_id', orgId)
       .eq('nara_status', 'queued'),
+    admin.from('leads')
+      .select('id,created_at,stage,source')
+      .eq('organization_id', orgId)
+      .eq('kind', 'cliente')
+      .ilike('source', 'Meta%')
+      .gte('created_at', marketing.start.toISOString())
+      .lt('created_at', marketing.endExclusive.toISOString())
+      .order('created_at', { ascending: false })
+      .limit(10000),
+    fetchMetaAdSpend(admin, orgId, marketing.since, marketing.until),
   ]);
 
   const activities: DashboardActivity[] = (activitiesResult.data ?? []).map((item) => {
@@ -183,6 +277,36 @@ export default async function DashboardPage() {
     message.sender_kind === 'humano' && new Date(message.created_at).getTime() >= starts.today.getTime()
   ).length;
 
+  const marketingLeads = (marketingLeadsResult.data ?? []) as MarketingLead[];
+  const marketingLeadIds = marketingLeads.map((lead) => lead.id);
+  let funnelMilestones: FunnelMilestone[] = [];
+  if (marketingLeadIds.length) {
+    const { data: milestoneRows } = await admin.from('lead_funnel_milestones')
+      .select('lead_id,qualified_at,meeting_at,proposal_at,won_at')
+      .in('lead_id', marketingLeadIds);
+    funnelMilestones = (milestoneRows ?? []) as FunnelMilestone[];
+  }
+  const milestoneByLead = new Map(funnelMilestones.map((item) => [item.lead_id, item]));
+  const qualifiedCount = marketingLeads.filter((lead) => Boolean(milestoneByLead.get(lead.id)?.qualified_at)).length;
+  const meetingCount = marketingLeads.filter((lead) => Boolean(milestoneByLead.get(lead.id)?.meeting_at)).length;
+  const proposalCount = marketingLeads.filter((lead) => Boolean(milestoneByLead.get(lead.id)?.proposal_at)).length;
+  const wonCount = marketingLeads.filter((lead) => Boolean(milestoneByLead.get(lead.id)?.won_at)).length;
+  const marketingSpend = metaSpend.status === 'ok' ? metaSpend.spend : null;
+  const marketingCosts = {
+    cpl: divideCost(marketingSpend, marketingLeads.length),
+    qualified: divideCost(marketingSpend, qualifiedCount),
+    meeting: divideCost(marketingSpend, meetingCount),
+    proposal: divideCost(marketingSpend, proposalCount),
+    won: divideCost(marketingSpend, wonCount),
+  };
+  const marketingPeriodLabel = marketing.key === 'week'
+    ? 'Últimos 7 dias'
+    : marketing.key === 'month'
+      ? 'Últimos 30 dias'
+      : marketing.key === '6m'
+        ? 'Últimos 6 meses'
+        : `${new Intl.DateTimeFormat('pt-BR').format(marketing.start)} a ${new Intl.DateTimeFormat('pt-BR').format(new Date(marketing.endExclusive.getTime() - DAY_MS))}`;
+
   const overdueTasksHref = isAdmin
     ? '/tarefas?status=vencidas'
     : '/tarefas?status=vencidas&responsavel=minhas';
@@ -205,6 +329,82 @@ export default async function DashboardPage() {
         <Link href={overdueTasksHref} className="kpi" style={{ display: 'block' }}><div className="kpi-label">Tarefas vencidas</div><div className="kpi-value" style={{ color: (overdueTasks ?? 0) > 0 ? 'var(--red)' : undefined }}>{overdueTasks ?? 0}</div><div className="kpi-note">clique para ver e agir</div></Link>
         <div className="kpi"><div className="kpi-label">Corretores</div><div className="kpi-value">{brokerCount ?? 0}</div><div className="kpi-note">pipeline de parceiros</div></div>
       </div>
+      <section className="card" style={{ marginBottom: 14 }}>
+        <div className="card-head" style={{ alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
+          <div>
+            <h3>Performance de Marketing</h3>
+            <div className="muted" style={{ marginTop: 4 }}>Cohort de leads Meta que entraram no período · {marketingPeriodLabel}</div>
+          </div>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            <Link href="/dashboard?marketing_period=week" className={`btn btn-sm ${marketing.key === 'week' ? 'btn-primary' : 'btn-ghost'}`}>1 semana</Link>
+            <Link href="/dashboard?marketing_period=month" className={`btn btn-sm ${marketing.key === 'month' ? 'btn-primary' : 'btn-ghost'}`}>Último mês</Link>
+            <Link href="/dashboard?marketing_period=6m" className={`btn btn-sm ${marketing.key === '6m' ? 'btn-primary' : 'btn-ghost'}`}>6 meses</Link>
+          </div>
+        </div>
+        <div className="card-body">
+          <form method="GET" action="/dashboard" style={{ display: 'flex', gap: 8, alignItems: 'end', flexWrap: 'wrap', marginBottom: 14 }}>
+            <input type="hidden" name="marketing_period" value="custom" />
+            <label style={{ display: 'grid', gap: 5 }}>
+              <span className="muted">De</span>
+              <input className="input" type="date" name="marketing_start" defaultValue={marketing.since} />
+            </label>
+            <label style={{ display: 'grid', gap: 5 }}>
+              <span className="muted">Até</span>
+              <input className="input" type="date" name="marketing_end" defaultValue={marketing.until} />
+            </label>
+            <button className="btn btn-ghost btn-sm" type="submit">Aplicar data personalizada</button>
+          </form>
+
+          {metaSpend.status === 'permission_required' && <div className="info-box" style={{ marginBottom: 14 }}>
+            Para calcular os custos com o investimento real da Meta, falta liberar a permissão de leitura da conta de anúncios.
+            {' '}<Link href="/configuracoes/whatsapp"><strong>Reconectar Meta Lead Ads</strong></Link> uma vez libera o CPL e os custos abaixo.
+          </div>}
+          {metaSpend.status === 'not_configured' && <div className="info-box" style={{ marginBottom: 14 }}>
+            A conta de anúncios ainda não está vinculada à conexão Meta do CRM.
+          </div>}
+          {metaSpend.status === 'error' && <div className="error-box" style={{ marginBottom: 14 }}>
+            Não foi possível consultar o investimento da Meta neste momento{metaSpend.error ? `: ${metaSpend.error}` : '.'}
+          </div>}
+
+          <div className="kpis">
+            <div className="kpi">
+              <div className="kpi-label">Investimento Meta</div>
+              <div className="kpi-value">{money(marketingSpend)}</div>
+              <div className="kpi-note">conta de anúncios · período selecionado</div>
+            </div>
+            <div className="kpi">
+              <div className="kpi-label">CPL</div>
+              <div className="kpi-value">{money(marketingCosts.cpl)}</div>
+              <div className="kpi-note">{marketingLeads.length} leads Meta</div>
+            </div>
+            <div className="kpi">
+              <div className="kpi-label">Custo / lead qualificado</div>
+              <div className="kpi-value">{money(marketingCosts.qualified)}</div>
+              <div className="kpi-note">{qualifiedCount} chegaram à passagem/comercial</div>
+            </div>
+            <div className="kpi">
+              <div className="kpi-label">Custo / reunião ou visita</div>
+              <div className="kpi-value">{money(marketingCosts.meeting)}</div>
+              <div className="kpi-note">{meetingCount} chegaram a reunião/visita</div>
+            </div>
+            <div className="kpi">
+              <div className="kpi-label">Custo / proposta</div>
+              <div className="kpi-value">{money(marketingCosts.proposal)}</div>
+              <div className="kpi-note">{proposalCount} chegaram à negociação</div>
+            </div>
+            <div className="kpi">
+              <div className="kpi-label">Custo / venda</div>
+              <div className="kpi-value">{money(marketingCosts.won)}</div>
+              <div className="kpi-note">{wonCount} vendas ganhas</div>
+            </div>
+          </div>
+
+          <div className="muted" style={{ marginTop: 12 }}>
+            O custo usa o investimento da conta Meta no período e acompanha a evolução dos leads que entraram nesse mesmo intervalo. Os marcos do funil ficam gravados na primeira vez em que cada lead atinge a etapa.
+          </div>
+        </div>
+      </section>
+
       <section className="card" style={{ marginBottom: 14 }}>
         <div className="card-head"><h3>Entradas no CRM</h3></div>
         <div className="card-body">
