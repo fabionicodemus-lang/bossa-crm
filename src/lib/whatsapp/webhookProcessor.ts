@@ -23,6 +23,7 @@ import {
   type WhatsAppConversationRecord,
 } from '@/lib/whatsapp/channelService';
 import { handleMixedPlantaoConversation } from '@/lib/whatsapp/plantaoMixedRouting';
+import { sendNaraResetConfirmation } from '@/lib/whatsapp/naraReset';
 import { isCustomerServiceWindowOpen, OUTSIDE_WINDOW_MESSAGE } from '@/lib/whatsapp/window';
 import type {
   MetaWebhookMessage,
@@ -136,13 +137,7 @@ async function handleNaraReset(args: {
     ]);
   }
 
-  const { provider, accessToken, phoneNumberId } = channelAccess(args.channel);
-  await provider.sendText({
-    phoneNumberId,
-    accessToken,
-    to: args.waId,
-    body: 'Conversa da Nara zerada. O próximo teste começa do zero.',
-  });
+  await sendNaraResetConfirmation(args.channel, args.waId);
 
   return true;
 }
