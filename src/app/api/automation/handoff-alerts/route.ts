@@ -79,12 +79,20 @@ function detailsFromBriefing(briefing: Record<string, unknown>) {
   const budget = clean(briefing.budget, '');
   const deadline = clean(briefing.deadline, '');
   const decisionMaker = clean(briefing.decision_maker, '');
+  const cityCountry = clean(briefing.city_country, '');
+  const paymentMethod = clean(briefing.payment_method, '');
+  const preferredLocal = clean(briefing.preferred_contact_time_local, '');
+  const preferredBrasilia = clean(briefing.preferred_contact_time_brasilia, '');
+  if (cityCountry) parts.push(`Cidade/país: ${cityCountry}`);
   if (purpose) parts.push(`Objetivo: ${purpose}`);
   if (typology) parts.push(`Tipologia: ${typology}`);
   if (budget) parts.push(`Faixa: ${budget}`);
   if (deadline) parts.push(`Prazo: ${deadline}`);
+  if (paymentMethod) parts.push(`Pagamento: ${paymentMethod}`);
   if (decisionMaker) parts.push(`Decisão: ${decisionMaker}`);
-  return parts.join(' | ').slice(0, 950);
+  if (preferredLocal) parts.push(`Melhor horário local: ${preferredLocal}`);
+  if (preferredBrasilia) parts.push(`Melhor horário Brasília: ${preferredBrasilia}`);
+  return parts.join(' | ').slice(0, 1400);
 }
 
 function renderTemplate(values: string[]) {
