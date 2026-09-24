@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Lead } from './types';
+import { detectRequestedCurrency, fxSourceLine, loadDailyFxQuote } from './nara-fx';
 import { isAssistedSaleSignal, isBrokerRoutingSignal, isCurrentCustomerSignal } from './nara-contact-routing';
 
 type ChatMessage = { role: 'user' | 'assistant'; content: string };
@@ -363,6 +364,23 @@ function sourceText(calls: NaraCommercialCall[]): string {
   return lines.join('\n');
 }
 
+function lowestBrlValue(calls: NaraCommercialCall[]): number | null {
+  const values = calls.flatMap((call) => {
+    const result = call.result;
+    if (!result) return [];
+    if (Array.isArray(result)) {
+      return (result as NaraUnitOffer[]).map((item) => item.valor).filter((value) => value > 0);
+    }
+    if (call.name === 'faixa_empreendimento') {
+      const range = result as NaraDevelopmentRange;
+      return range.valor_minimo > 0 ? [range.valor_minimo] : [];
+    }
+    const offer = result as NaraUnitOffer;
+    return offer.valor > 0 ? [offer.valor] : [];
+  });
+  return values.length ? Math.min(...values) : null;
+}
+
 function lastUserMessage(history: ChatMessage[]): string {
   return [...history].reverse().find((item) => item.role === 'user')?.content ?? '';
 }
@@ -435,7 +453,7 @@ function filtersFromMessage(enterprise: string, message: string): NaraApartmentF
 }
 
 function hasCommercialSignal(message: string): boolean {
-  return /\b(precos?|valor(?:es)?|quanto custa|faixa|a partir de|tabela|disponibilidade|disponive(?:l|is)|unidade|apto|apartamento|entrada|parcela|andar|suites?|quartos?|duplex)\b/.test(normalizeText(message));
+  return /\b(precos?|valor(?:es)?|quanto (?:custa|fica)|faixa|a partir de|tabela|disponibilidade|disponive(?:l|is)|unidade|apto|apartamento|entrada|parcela|andar|suites?|quartos?|duplex|dolar(?:es)?|usd|euro(?:s)?|eur|coroa dinamarquesa|dkk|peso chileno|clp)\b/.test(normalizeText(message));
 }
 
 function asksForSpecificOptions(message: string): boolean {
@@ -549,11 +567,34 @@ export async function loadNaraCommercialTurnContext(
       }
     }
 
+    let currentSourceText = sourceText(calls);
+    const requestedCurrency = detectRequestedCurrency(`${latest} ${allUserText(history)}`);
+    const minimumBrl = lowestBrlValue(calls);
+    if (requestedCurrency && minimumBrl) {
+      try {
+        const quote = await loadDailyFxQuote(client, organizationId, requestedCurrency);
+        if (quote) {
+          currentSourceText = [currentSourceText, fxSourceLine(quote, minimumBrl)]
+            .filter(Boolean)
+            .join('\n');
+        } else {
+          currentSourceText = [currentSourceText, '[cambio_ptax] cotação indisponível; não estime conversão de moeda neste turno']
+            .filter(Boolean)
+            .join('\n');
+        }
+      } catch (fxError) {
+        console.error('[nara fx query]', fxError);
+        currentSourceText = [currentSourceText, '[cambio_ptax] cotação indisponível; não estime conversão de moeda neste turno']
+          .filter(Boolean)
+          .join('\n');
+      }
+    }
+
     return {
       consulted_at: consultedAt,
       source_table: 'development_units',
       calls,
-      source_text: sourceText(calls),
+      source_text: currentSourceText,
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

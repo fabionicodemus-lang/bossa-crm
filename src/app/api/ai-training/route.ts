@@ -470,6 +470,8 @@ export async function POST(request: Request) {
           context.supabase,
           context.organizationId,
           null,
+          new Date(),
+          messages,
         ),
       ]);
       aiContext.commercial = commercial;

@@ -21,6 +21,42 @@ type TemplateSpec = {
   examples: string[];
 };
 
+type IntakeJob = {
+  id: string;
+  organization_id: string;
+  lead_id: string;
+  lead_name: string | null;
+  lead_phone: string | null;
+  source_label: string | null;
+  alert_attempts: number;
+  nara_attempts: number;
+  alert_status: string;
+  nara_status: string;
+  alert_due_at: string;
+  nara_due_at: string;
+  created_at: string;
+};
+
+type IntakeSettings = {
+  organization_id: string;
+  alert_enabled: boolean;
+  alert_phone: string | null;
+  alert_name: string | null;
+  alert_channel_id: string | null;
+  alert_template_name: string | null;
+  nara_enabled: boolean;
+  nara_channel_id: string | null;
+  nara_delay_seconds: number;
+  nara_template_name: string | null;
+};
+
+type TemplateRow = {
+  status: string;
+  name: string;
+  language: string;
+  body_text?: string | null;
+};
+
 const NARA_TEMPLATE: TemplateSpec = {
   name: 'nara_novo_lead_formulario',
   language: 'pt_BR',
@@ -166,7 +202,7 @@ async function syncTemplate(
   return data;
 }
 
-async function processAlert(admin: AdminClient, job: Record<string, any>, settings: Record<string, any>, channel: WhatsAppChannelRecord, template: Record<string, any>) {
+async function processAlert(admin: AdminClient, job: IntakeJob, settings: IntakeSettings, channel: WhatsAppChannelRecord, template: TemplateRow) {
   if (!settings.alert_enabled || !settings.alert_phone) {
     await admin.from('lead_intake_jobs').update({
       alert_status: 'skipped', alert_error: 'Alerta desativado ou sem telefone configurado.', updated_at: new Date().toISOString(),
@@ -214,7 +250,7 @@ async function processAlert(admin: AdminClient, job: Record<string, any>, settin
   return 'sent';
 }
 
-async function processNara(admin: AdminClient, job: Record<string, any>, settings: Record<string, any>, channel: WhatsAppChannelRecord, template: Record<string, any>) {
+async function processNara(admin: AdminClient, job: IntakeJob, settings: IntakeSettings, channel: WhatsAppChannelRecord, template: TemplateRow) {
   if (!settings.nara_enabled) {
     await admin.from('lead_intake_jobs').update({
       nara_status: 'skipped', nara_error: 'Primeiro contato automático desativado.', updated_at: new Date().toISOString(),
@@ -371,7 +407,7 @@ async function runWorker() {
     templates_pending: 0,
   };
 
-  for (const settings of settingsRows ?? []) {
+  for (const settings of (settingsRows ?? []) as IntakeSettings[]) {
     summary.organizations += 1;
     const alertChannel = settings.alert_channel_id
       ? await findChannelById(admin, settings.organization_id, settings.alert_channel_id)
@@ -384,8 +420,8 @@ async function runWorker() {
       continue;
     }
 
-    let alertTemplate;
-    let naraTemplate;
+    let alertTemplate: TemplateRow;
+    let naraTemplate: TemplateRow;
     try {
       [alertTemplate, naraTemplate] = await Promise.all([
         syncTemplate(admin, alertChannel, { ...ALERT_TEMPLATE, name: settings.alert_template_name || ALERT_TEMPLATE.name }),
@@ -412,7 +448,7 @@ async function runWorker() {
       continue;
     }
 
-    for (const job of jobs ?? []) {
+    for (const job of (jobs ?? []) as IntakeJob[]) {
       if (job.alert_status === 'queued' && new Date(job.alert_due_at).getTime() <= Date.now()) {
         try {
           const result = await processAlert(admin, job, settings, alertChannel, alertTemplate);

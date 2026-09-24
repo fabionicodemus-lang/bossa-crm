@@ -73,6 +73,9 @@ export interface AiTurn {
     creci: string;
     region: string;
     client_status: string;
+    payment_method: string;
+    preferred_contact_time_local: string;
+    preferred_contact_time_brasilia: string;
   };
   usage_records?: AiUsageRecord[];
   model_used?: string;
@@ -240,8 +243,11 @@ function outputSchema(lead: Lead) {
           creci: { type: 'string' },
           region: { type: 'string' },
           client_status: { type: 'string' },
+          payment_method: { type: 'string' },
+          preferred_contact_time_local: { type: 'string' },
+          preferred_contact_time_brasilia: { type: 'string' },
         },
-        required: ['enterprise', 'purpose', 'typology', 'budget', 'deadline', 'decision_maker', 'company', 'creci', 'region', 'client_status'],
+        required: ['enterprise', 'purpose', 'typology', 'budget', 'deadline', 'decision_maker', 'company', 'creci', 'region', 'client_status', 'payment_method', 'preferred_contact_time_local', 'preferred_contact_time_brasilia'],
       },
     },
     required: ['reply', 'classification', 'score', 'stage', 'summary', 'next_action', 'handoff', 'attachment_ids', 'extracted'],
@@ -337,13 +343,13 @@ function fileInstructions(files: AiFileOption[]): string {
  * do breakpoint de cache por buildRequestInput().
  */
 export function buildAiInstructions(lead: Lead, context: AiTrainingContext): string {
-  const shared = 'Você atende pelo WhatsApp da Bossa Empreendimentos. Responda sempre em português brasileiro, de forma humana, natural, calorosa e objetiva. Siga o formato e o limite de tamanho definidos na configuração do agente e faça no máximo uma pergunta por mensagem. Nunca invente preço, disponibilidade, metragem, condição de pagamento, prazo de entrega ou informação que não esteja em uma fonte válida para o turno. Leia o histórico inteiro, reconheça o que já foi respondido e faça a conversa avançar; nunca repita a mesma pergunta ou resposta. Quando faltar uma informação comercial específica, diga que o time da Bossa vai confirmar. Analise toda a conversa, produza a resposta, classifique o contato e selecione arquivos somente quando fizer sentido.';
+  const shared = 'Você atende pelo WhatsApp da Bossa Empreendimentos. Responda sempre em português brasileiro, de forma humana, natural, calorosa e objetiva. Siga o formato e o limite de tamanho definidos na configuração do agente e faça no máximo uma pergunta por mensagem. Nunca invente preço, disponibilidade, metragem, condição de pagamento, prazo de entrega, fato institucional ou andamento de obra que não esteja em uma fonte válida para o turno. Leia o histórico inteiro, reconheça o que já foi respondido e faça a conversa avançar; nunca repita a mesma pergunta ou resposta. Se não souber uma resposta, cite especificamente a dúvida do contato e diga que o comercial vai confirmar; nunca use fallback genérico sobre material, arquivo ou envio se a última mensagem não tratar disso. Analise toda a conversa, produza a resposta, classifique o contato e selecione arquivos somente quando fizer sentido.';
   const training = trainingInstructions(context);
   const files = fileInstructions(context.files ?? []);
 
   if (lead.kind === 'cliente') {
     const triage = triageInstructions(context);
-    return `${shared}\n\nVocê é Nara, atendente digital dos clientes finais da Bossa. Apresente-se como Nara, da Bossa, na primeira resposta e depois converse naturalmente, sem repetir a apresentação. Os produtos são Flow Aptos e Alma Seahouses. O Prompt final define o ritmo, o tom, a ordem da conversa e o tamanho das mensagens. As regras fixas abaixo existem somente para segurança, roteamento, classificação, arquivos e passagem para humanos; não recrie uma sequência rígida de etapas.${training}${triage}\n\nQUALIFICAÇÃO E CONDUÇÃO COMERCIAL\nUse o contexto e o Prompt final para descobrir naturalmente as informações úteis ao comercial, sem checklist e sem ordem obrigatória. Aproveite tudo o que o contato já informou e escolha a próxima ação que realmente faça a conversa avançar. Pode enviar book, planta, imagem, vídeo de obra ou material institucional quando o comprador pedir ou quando isso ajudar diretamente. Evite despejar vários arquivos sem necessidade.\n\nClassificação e etapas permitidas para clientes:\n- ia: conversa inicial ou ainda coletando informações.\n- qualificado: interesse real e dados suficientes para o comercial agir, especialmente finalidade, faixa de investimento ou capacidade financeira e prazo; também quando pede proposta, disponibilidade ou demonstra intenção concreta.\n- agendado: visita, ligação ou videochamada com data ou compromisso claramente combinado.\n- negociacao e fechado nunca devem ser definidos automaticamente; nesses casos mantenha a etapa atual e sinalize handoff.\nUse somente as classificações frio, morno, quente, agendamento ou sem_interesse. Marque handoff=true quando houver pedido de proposta, negociação, reclamação, questão sensível, contato fora do perfil comprador ou quando o comercial humano deva assumir. Ao qualificar ou agendar, a automação será pausada após esta resposta.${files}`;
+    return `${shared}\n\nVocê é Nara, atendente digital dos clientes finais da Bossa. Apresente-se como Nara, da Bossa, na primeira resposta e depois converse naturalmente, sem repetir a apresentação. Os produtos são Flow Aptos e Alma Seahouses. O Prompt final define o ritmo, o tom, a ordem da conversa e o tamanho das mensagens. As regras fixas abaixo existem somente para segurança, roteamento, classificação, arquivos e passagem para humanos; não recrie uma sequência rígida de etapas.${training}${triage}\n\nCLIENTE QUE MORA NO EXTERIOR\nSe o lead disser que mora fora do Brasil ou perguntar se pode comprar morando fora, responda com segurança que sim. O contrato pode ser assinado eletronicamente, sem necessidade de vir ao Brasil para assinar. O pagamento pode ser feito do exterior em reais, dólar ou na moeda local do cliente. A Bossa já atende clientes que moram nos Estados Unidos, Dinamarca, Portugal e Chile e essas compras foram feitas à distância. Para valores, use SEMPRE o “a partir de” em reais retornado pela consulta comercial deste turno e, quando houver [cambio_ptax], também a conversão aproximada na moeda solicitada. Informe que a conversão é referência pela cotação indicada e que a tabela oficial é em reais. Nunca calcule câmbio por conta própria e nunca diga “vou verificar com o comercial” para assinatura remota ou possibilidade de compra morando fora. Depois de responder, continue a qualificação normal.\n\nPASSAGEM PARA HUMANO\nSe um possível comprador pedir pessoa, humano, consultor ou corretor durante uma conversa de compra, marque handoff=true imediatamente e não pergunte de novo qual é o assunto. Confirme que o histórico será repassado e use o SLA COMERCIAL do bloco dinâmico. Na mesma mensagem, você pode fazer somente uma pergunta curta de qualificação ainda faltante, sem condicionar a passagem à resposta.\n\nPREÇO E FATOS\nPreço, entrada, parcela e disponibilidade vêm somente da CONSULTA COMERCIAL DESTE TURNO. Valores antigos no histórico, Prompt, exemplos ou memória nunca são fonte vigente. Fatos sobre Bossa, obras, entrega, estágio construtivo e histórico da empresa só podem ser afirmados quando estiverem explicitamente marcados como confirmados na base válida; não complete lacunas por inferência.\n\nQUALIFICAÇÃO E CONDUÇÃO COMERCIAL\nUse o contexto e o Prompt final para descobrir naturalmente as informações úteis ao comercial, sem checklist e sem ordem obrigatória. Aproveite tudo o que o contato já informou e escolha a próxima ação que realmente faça a conversa avançar. Pode enviar book, planta, imagem, vídeo de obra ou material institucional quando o comprador pedir ou quando isso ajudar diretamente. Se você ofereceu um material e a pessoa demonstrou aceitação (“sim”, “pode”, “manda”, “ok”, “quero”, “legal”), cumpra a oferta no turno seguinte em vez de perguntar novamente. Evite despejar vários arquivos sem necessidade.\n\nClassificação e etapas permitidas para clientes:\n- ia: conversa inicial ou ainda coletando informações.\n- qualificado: interesse real e dados suficientes para o comercial agir, especialmente finalidade, faixa de investimento ou capacidade financeira e prazo; também quando pede proposta, disponibilidade ou demonstra intenção concreta.\n- agendado: visita, ligação ou videochamada com data ou compromisso claramente combinado.\n- negociacao e fechado nunca devem ser definidos automaticamente; nesses casos mantenha a etapa atual e sinalize handoff.\nUse somente as classificações frio, morno, quente, agendamento ou sem_interesse. Marque handoff=true quando houver pedido de proposta, negociação, reclamação, questão sensível, contato fora do perfil comprador ou quando o comercial humano deva assumir. Ao qualificar ou agendar, a automação será pausada após esta resposta.${files}`;
   }
 
   return `${shared}\n\nUse no máximo duas frases curtas e uma pergunta por mensagem. Você é o Plantão institucional dos corretores parceiros da Bossa. Nunca use nome próprio. Seja prático, direto e de igual para igual, como colega de mercado. Identifique imobiliária, CRECI, região, se o corretor tem cliente ativo, qual empreendimento interessa e qual ajuda precisa. O plantão pode enviar materiais públicos disponíveis na biblioteca, como tabela, book, plantas, imagens, vídeos e andamento de obra. Nunca negocie comissão, nunca confirme disponibilidade de apartamento, nunca reserve apartamento e nunca aceite proposta.\n\nClassificação e etapas permitidas para corretores:\n- n1 / cadastrado: contato novo, perfil ainda incompleto ou sem interação comercial.\n- n2 / curioso: pediu material, tabela ou informações, mas ainda não informou cliente ativo.\n- n3 / ativo: possui cliente ativo, apresenta os produtos ou demonstra atuação comercial concreta.\n- n4 / negociando: existe cliente em visita, proposta, reserva, escolha de apartamento ou negociação; marque handoff=true.\n- n5 / parceiro: relacionamento recorrente, histórico de vendas ou parceria consolidada; use somente quando houver evidência clara e marque handoff=true.\nUse classificação cadastrado, curioso, ativo, negociando ou parceiro. Ao chegar em n4 ou n5, o atendimento automático será pausado para o time comercial continuar.${training}${files}`;
@@ -384,6 +390,32 @@ function buildRequestInput(
 
 function normalizeText(value: string): string {
   return value.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLocaleLowerCase('pt-BR').replace(/\s+/g, ' ').trim();
+}
+
+export function extractSelfReportedName(value: string): string {
+  const text = String(value ?? '').trim();
+  const patterns = [
+    /\bme\s+chamo\s+([\p{L}][\p{L}'’-]{1,30}(?:\s+[\p{L}][\p{L}'’-]{1,30}){0,2})/iu,
+    /\bmeu\s+nome\s+[ée]\s+([\p{L}][\p{L}'’-]{1,30}(?:\s+[\p{L}][\p{L}'’-]{1,30}){0,2})/iu,
+    /\bsou\s+(?:a|o)\s+([\p{L}][\p{L}'’-]{1,30}(?:\s+[\p{L}][\p{L}'’-]{1,30}){0,1})(?=[,.!?;]|\s+(?:e|mas|sou|moro|vi|estou|to|tô)\b|$)/iu,
+  ];
+  for (const pattern of patterns) {
+    const raw = text.match(pattern)?.[1]?.trim();
+    if (!raw) continue;
+    const cleaned = raw
+      .replace(/\s+(?:sou|moro|vi|estou|to|tô|e|mas)$/iu, '')
+      .trim();
+    if (cleaned && !/^(de|do|da|em)$/iu.test(cleaned)) return cleaned.slice(0, 80);
+  }
+  return '';
+}
+
+function selfReportedName(history: ChatMessage[]) {
+  for (const item of history.filter((row) => row.role === 'user')) {
+    const name = extractSelfReportedName(item.content);
+    if (name) return name;
+  }
+  return '';
 }
 
 function userText(history: ChatMessage[]): string {
@@ -535,27 +567,35 @@ function hasExplicitBuyerIntent(lead: Lead, history: ChatMessage[], context: AiT
   if (contextualBuyerReply(history, context)) return true;
 
   const value = normalizeText(userText(history));
-  const strongIntent = /\b(para morar|quero morar|pretendo morar|moradia|para investir|quero investir|pretendo investir|investimento|renda com aluguel|para revenda|quero comprar|pretendo comprar|busco (?:um |uma )?(?:apartamento|imovel)|procuro (?:um |uma )?(?:apartamento|imovel)|tenho interesse(?: no| na| em)?|quero conhecer (?:o |a )?(?:flow|alma)|vi (?:um )?anuncio.*(?:flow|alma|apartamento|imovel|empreendimento)|vi (?:um )?anuncio(?: de voces| da bossa)?|quero saber mais.*empreendimento)\b/.test(value);
+  const strongIntent = /\b(para morar|quero morar|pretendo morar|moradia|para investir|quero investir|pretendo investir|investimento|renda com aluguel|para revenda|quero comprar|pretendo comprar|busco (?:um |uma )?(?:apartamento|imovel)|procuro (?:um |uma )?(?:apartamento|imovel)|tenho interesse(?: no| na| em)?|me interessei|interessad[oa]|quero conhecer (?:o |a )?(?:flow|alma)|vi (?:um |o |esse |essa )?anuncio|vim pelo anuncio|anuncio.*(?:flow|alma|apartamento|imovel|empreendimento)|quero saber mais.*empreendimento)\b/.test(value);
   if (!strongIntent) return false;
   const onlyCommercialQuestion = asksCommercialValue(value)
-    && !/\b(morar|investir|investimento|comprar|tenho interesse|quero conhecer|vi (?:um )?anuncio)\b/.test(value);
+    && !/\b(morar|investir|investimento|comprar|tenho interesse|me interessei|interessad[oa]|quero conhecer|vi (?:um |o |esse |essa )?anuncio|vim pelo anuncio)\b/.test(value);
   return !onlyCommercialQuestion;
 }
 
-function firstContactOpening(context: AiTrainingContext): string {
+function firstContactOpening(context: AiTrainingContext, name = ''): string {
   const configuredName = context.config?.persona && typeof context.config.persona.name === 'string'
     ? context.config.persona.name.trim()
     : '';
-  return `Olá! Aqui é a ${configuredName || 'Nara'}, da Bossa 😊`;
+  return name
+    ? `Oi, ${name}! Aqui é a ${configuredName || 'Nara'}, da Bossa 😊`
+    : `Olá! Aqui é a ${configuredName || 'Nara'}, da Bossa 😊`;
 }
 
 function ensureFirstTurnIntroduction(reply: string, history: ChatMessage[], context: AiTrainingContext): string {
   if (assistantMessages(history).length > 0) return reply.trim();
+  const name = selfReportedName(history);
   const value = normalizeText(reply);
   const hasGreeting = /^(ola|oi|bom dia|boa tarde|boa noite)\b/.test(value);
   const hasIdentity = /\bnara\b/.test(value) && /\bbossa\b/.test(value);
-  if (hasGreeting && hasIdentity) return reply.trim();
-  return `${firstContactOpening(context)} ${reply.trim()}`.trim();
+  if (hasGreeting && hasIdentity) {
+    if (!name || normalizeText(reply).includes(normalizeText(name))) return reply.trim();
+    return reply
+      .trim()
+      .replace(/^(ol[áa]|oi|bom dia|boa tarde|boa noite)(?:\s*,?\s*[\p{L}'’-]{1,40})?[!,.]?\s*/iu, `Oi, ${name}! `);
+  }
+  return `${firstContactOpening(context, name)} ${reply.trim()}`.trim();
 }
 
 function repeatedReply(reply: string, history: ChatMessage[]): boolean {
@@ -564,7 +604,7 @@ function repeatedReply(reply: string, history: ChatMessage[]): boolean {
 }
 
 function moneyTokens(value: string): string[] {
-  return value.match(/R\$\s*\d[\d.\s]*(?:,\d{1,2})?\s*(?:milh(?:ao|ão|oes|ões)|mil)?|\b\d+(?:[.,]\d+)?\s*(?:milh(?:ao|ão|oes|ões)|mil)\b/giu) ?? [];
+  return value.match(/(?:R\$|US\$|USD|EUR|€|DKK|CLP|\$)\s*\d[\d.\s]*(?:,\d{1,2})?\s*(?:milh(?:ao|ão|oes|ões)|mil)?|\b\d+(?:[.,]\d+)?\s*(?:milh(?:ao|ão|oes|ões)|mil)\b/giu) ?? [];
 }
 
 function nextQualificationQuestion(history: ChatMessage[]): string {
@@ -607,14 +647,26 @@ function managerRejectedSameReply(turn: AiTurn, history: ChatMessage[], context:
 }
 
 function moneyKey(value: string): string {
-  const normalized = normalizeText(value).replace(/r\$\s*/, '').trim();
-  const multiplier = /milhao|milhoes/.test(normalized) ? 1_000_000 : /\bmil\b/.test(normalized) ? 1_000 : 1;
-  const numericPart = normalized.match(/\d+(?:[.,]\d+)?(?:\.\d{3})*/)?.[0] ?? '';
+  const normalized = normalizeText(value);
+  const currency = /(?:us\$|usd|\$)/.test(normalized)
+    ? 'USD'
+    : /(?:eur|€)/.test(normalized)
+      ? 'EUR'
+      : /dkk/.test(normalized)
+        ? 'DKK'
+        : /clp/.test(normalized)
+          ? 'CLP'
+          : /r\$/.test(normalized)
+            ? 'BRL'
+            : 'GEN';
+  const stripped = normalized.replace(/(?:r\$|us\$|usd|eur|€|dkk|clp|\$)\s*/g, '').trim();
+  const multiplier = /milhao|milhoes/.test(stripped) ? 1_000_000 : /\bmil\b/.test(stripped) ? 1_000 : 1;
+  const numericPart = stripped.match(/\d+(?:[.,]\d+)?(?:\.\d{3})*/)?.[0] ?? '';
   if (!numericPart) return '';
   const parsed = multiplier === 1 && numericPart.includes('.')
     ? Number(numericPart.replace(/\./g, '').replace(',', '.'))
     : Number(numericPart.replace(',', '.'));
-  return Number.isFinite(parsed) ? String(Math.round(parsed * multiplier)) : '';
+  return Number.isFinite(parsed) ? `${currency}:${Math.round(parsed * multiplier)}` : '';
 }
 
 function hasUngroundedMoney(reply: string, history: ChatMessage[], context: AiTrainingContext): boolean {
@@ -622,7 +674,6 @@ function hasUngroundedMoney(reply: string, history: ChatMessage[], context: AiTr
   if (!tokens.length) return false;
   const corpus = [
     ...history.filter((item) => item.role === 'user').map((item) => item.content),
-    recordText(context.config?.knowledge),
     context.commercial?.source_text ?? '',
   ].join('\n');
   const sourceKeys = new Set(moneyTokens(corpus).map(moneyKey).filter(Boolean));
@@ -632,6 +683,300 @@ function hasUngroundedMoney(reply: string, history: ChatMessage[], context: AiTr
   });
 }
 
+
+function asksForHuman(text: string) {
+  return /\b(pessoa de verdade|falar com (?:uma pessoa|alguem|um corretor|uma corretora|um consultor|uma consultora)|quero (?:um|uma) corretor|atendimento humano|me liga|pode me ligar|videochamada)\b/.test(normalizeText(text));
+}
+
+function asksWaitTime(text: string) {
+  return /\b(demora muito|quanto tempo|em quanto tempo|quando (?:o|a) (?:corretor|corretora|consultor|consultora)|vai demorar|me chama quando)\b/.test(normalizeText(text));
+}
+
+function isAbroadContext(history: ChatMessage[]) {
+  const value = normalizeText(userText(history));
+  return /\b(moro (?:fora|em (?:orlando|estados unidos|eua|usa|portugal|dinamarca|chile))|morando fora|moro no exterior|fora do brasil|brasileir[oa].*moro em|orlando|estados unidos|eua|usa|portugal|dinamarca|chile)\b/.test(value);
+}
+
+function asksRemotePurchase(text: string) {
+  const value = normalizeText(text);
+  return /\b(comprar.*(?:morando|estando).*fora|da pra comprar.*fora|posso comprar.*fora|preciso ir.*brasil|assinar.*(?:contrato|distancia|online|eletronic)|pagamento.*(?:dolar|exterior)|dinheiro.*dolar)\b/.test(value);
+}
+
+function asksCurrencyValue(text: string) {
+  return /\b(quanto (?:fica|ficaria|da|daria).*(?:dolar|usd|euro|eur|dkk|clp)|valor.*(?:dolar|usd|euro|eur|dkk|clp)|(?:dolar|usd|euro|eur|dkk|clp).*(?:quanto|valor))\b/.test(normalizeText(text));
+}
+
+function asksRentalManagement(text: string) {
+  return /\b(cuidam do aluguel|gestao do aluguel|administram.*aluguel|alugar pra mim|locacao.*administr|quem cuida.*aluguel)\b/.test(normalizeText(text));
+}
+
+function isMaterialTopic(text: string) {
+  return /\b(material|arquivo|folder|book|pdf|foto|fotos|imagem|imagens|planta|video|vídeo|tabela)\b/.test(normalizeText(text));
+}
+
+function acceptsPreviousOffer(text: string) {
+  const value = normalizeText(text);
+  return /^(sim|s|pode|pode sim|manda|manda sim|quero|ok|okay|blz|beleza|legal|otimo|ótimo|por favor|pfv|claro)(?:[!. ]*)$/.test(value)
+    || /\b(pode mandar|me manda|manda pra mim|quero ver|pode enviar)\b/.test(value);
+}
+
+function offeredMaterialMessage(history: ChatMessage[]) {
+  const lastUserIndex = history.map((item) => item.role).lastIndexOf('user');
+  for (let index = lastUserIndex - 1; index >= 0 && index >= lastUserIndex - 4; index -= 1) {
+    const item = history[index];
+    if (item?.role !== 'assistant') continue;
+    if (/\b(te mando|posso te mandar|quer que eu (?:te )?mande|quer ver|te envio|vou te mandar)\b/.test(normalizeText(item.content))
+      && isMaterialTopic(item.content)) {
+      return item.content;
+    }
+  }
+  return '';
+}
+
+function materialFileScore(file: AiFileOption, offer: string, transcript: string) {
+  const haystack = normalizeText([
+    file.category,
+    file.title,
+    file.description ?? '',
+    ...(file.trigger_keywords ?? []),
+    file.original_name,
+  ].join(' '));
+  const offerText = normalizeText(offer);
+  const all = normalizeText(transcript);
+  let score = 0;
+  for (const enterprise of ['flow', 'alma', 'soul']) {
+    if ((offerText.includes(enterprise) || all.includes(enterprise)) && haystack.includes(enterprise)) score += 20;
+  }
+  if (/\b(folder|book|pdf)\b/.test(offerText) && /\b(book|folder|pdf)\b/.test(haystack)) score += 12;
+  if (/\b(planta|plantas)\b/.test(offerText) && /\bplanta\b/.test(haystack)) score += 12;
+  if (/\b(video|vídeo)\b/.test(offerText) && /\bvideo\b/.test(haystack)) score += 12;
+  if (/\b(foto|fotos|imagem|imagens)\b/.test(offerText) && /\b(imagem|foto|fachada|render)\b/.test(haystack)) score += 8;
+  return score;
+}
+
+function acceptedOfferedMaterials(history: ChatMessage[], context: AiTrainingContext) {
+  const latest = lastUserText(history);
+  if (!acceptsPreviousOffer(latest)) return [] as string[];
+  const offer = offeredMaterialMessage(history);
+  if (!offer) return [] as string[];
+  const transcript = userText(history);
+  const files = [...(context.files ?? [])]
+    .map((file) => ({ file, score: materialFileScore(file, offer, transcript) }))
+    .filter((item) => item.score > 0)
+    .sort((a, b) => b.score - a.score);
+
+  const offerText = normalizeText(offer);
+  if (offerText.includes('flow') && offerText.includes('alma')) {
+    const flow = files.find((item) => normalizeText([item.file.title, ...(item.file.trigger_keywords ?? [])].join(' ')).includes('flow'))?.file.id;
+    const alma = files.find((item) => normalizeText([item.file.title, ...(item.file.trigger_keywords ?? [])].join(' ')).includes('alma'))?.file.id;
+    return [flow, alma].filter((id): id is string => Boolean(id)).slice(0, 2);
+  }
+  return files.slice(0, 1).map((item) => item.file.id);
+}
+
+function parseFxLine(context: AiTrainingContext) {
+  const source = context.commercial?.source_text ?? '';
+  const line = source.split('\n').find((item) => item.includes('[cambio_ptax]'));
+  if (!line || /indisponível/i.test(line)) return null;
+  const field = (name: string) => line.match(new RegExp(`${name}=([^;]+)`, 'i'))?.[1]?.trim() ?? '';
+  const brl = Number(field('valor_brl'));
+  const approx = field('valor_aproximado');
+  const quoteDate = field('data_cotacao');
+  if (!Number.isFinite(brl) || !approx) return null;
+  return { brl, approx, quoteDate };
+}
+
+function formatBrlCurrent(value: number) {
+  return new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+    minimumFractionDigits: 2,
+  }).format(value);
+}
+
+function qualificationGapQuestion(history: ChatMessage[], turn: AiTurn) {
+  const transcript = normalizeText(userText(history));
+  const extracted = turn.extracted;
+  if (!extracted.payment_method?.trim() && !/\b(a vista|parcelad|financ|entrada|dolar|usd|euro)\b/.test(transcript)) {
+    return 'Enquanto isso: você pensa em pagar à vista ou parcelado?';
+  }
+  if (!extracted.deadline?.trim() && !/\b(202\d|prazo|quando|este ano|ano que vem|sem pressa|pode esperar)\b/.test(transcript)) {
+    return 'Enquanto isso: você pensa em comprar em qual prazo?';
+  }
+  if (!extracted.purpose?.trim() && !/\b(morar|veranear|investir|investimento|alugar|renda)\b/.test(transcript)) {
+    return 'Enquanto isso: é mais para usar ou para investir?';
+  }
+  return '';
+}
+
+function slaReply(context: AiTrainingContext, leadName = '') {
+  const sla = context.dynamic?.commercial_sla;
+  const owner = sla?.owner_name || 'o comercial';
+  const prefix = leadName ? `${leadName}, ` : '';
+  if (sla?.is_open === true) {
+    return `${prefix}${owner} te chama em até ${sla.response_minutes} minutos. Seu histórico já vai junto, então você não precisa repetir nada.`;
+  }
+  if (sla?.is_open === false && sla.next_open_label) {
+    return `${prefix}nosso comercial volta ${sla.next_open_label}, e seu atendimento já fica na fila para ser retomado primeiro. Seu histórico vai junto.`;
+  }
+  return `${prefix}seu histórico já foi encaminhado ao comercial. O horário de retorno não está confirmado no sistema agora, então prefiro não inventar um prazo.`;
+}
+
+function humanHandoffReply(history: ChatMessage[], context: AiTrainingContext, turn: AiTurn) {
+  const name = selfReportedName(history);
+  const sla = context.dynamic?.commercial_sla;
+  const owner = sla?.owner_name || 'o comercial';
+  const start = sla?.is_open === true
+    ? `Já estou chamando ${owner}${name ? `, ${name}` : ''}. ${owner} te chama em até ${sla.response_minutes} minutos e recebe todo o histórico.`
+    : sla?.is_open === false && sla.next_open_label
+      ? `Já deixei sua conversa com ${owner}${name ? `, ${name}` : ''}. Nosso comercial volta ${sla.next_open_label} e recebe todo o histórico.`
+      : `Já encaminhei sua conversa para ${owner}${name ? `, ${name}` : ''}, com todo o histórico.`;
+  const gap = qualificationGapQuestion(history, turn);
+  return gap ? `${start} ${gap}` : start;
+}
+
+function topicalFallback(lastUser: string, context: AiTrainingContext) {
+  const value = normalizeText(lastUser);
+  const owner = context.dynamic?.commercial_sla?.owner_name || 'o comercial';
+  const topic = asksRentalManagement(lastUser)
+    ? 'gestão do aluguel'
+    : /\b(financiamento|caixa|banco)\b/.test(value)
+      ? 'financiamento'
+      : /\b(contrato|clausula|distrato)\b/.test(value)
+        ? 'essa questão contratual'
+        : /\b(obra|engenharia|estrutura|fundacao)\b/.test(value)
+          ? 'essa questão técnica da obra'
+          : /\b(pagamento|dolar|euro|transferencia)\b/.test(value)
+            ? 'essa forma de pagamento'
+            : 'essa dúvida';
+  return `Sobre ${topic}, não tenho essa informação confirmada na base. Já deixei a pergunta registrada para ${owner} te responder com precisão.`;
+}
+
+function hasClearPurchaseTopic(history: ChatMessage[]) {
+  const value = normalizeText(userText(history));
+  return /\b(comprar|compra|apartamento|imovel|empreendimento|flow|alma|soul|preco|valor|tabela|entrada|parcela|vi (?:um |o |esse |essa )?anuncio|vim pelo anuncio|me interessei|interessad[oa])\b/.test(value);
+}
+
+function looksLikeGenericBuyerTriage(reply: string) {
+  const value = normalizeText(reply);
+  return /\b(comprar|compra de imovel|buscando um imovel).*\b(outro assunto|cliente atual|financeiro|obra|outro atendimento)\b/.test(value)
+    || /\bqual assunto.*\b(compra|cliente atual|financeiro|obra|outro)\b/.test(value)
+    || value.includes(normalizeText(configuredTriageQuestion({} as AiTrainingContext)));
+}
+
+function buyerInterestOpening(history: ChatMessage[], context: AiTrainingContext) {
+  const name = selfReportedName(history);
+  const opening = firstContactOpening(context, name);
+  return `${opening} Vi seu interesse no anúncio. Você lembra qual apareceu pra você: Flow ou Alma?`;
+}
+
+function responseLooksLikeUnrelatedFallback(reply: string, lastUser: string) {
+  const response = normalizeText(reply);
+  const user = normalizeText(lastUser);
+  const uncertain = /\b(não tenho confirmação|nao tenho confirmacao|vou verificar|preciso confirmar|comercial.*(?:verificar|confirmar)|não consigo confirmar|nao consigo confirmar)\b/.test(response);
+  const materialMismatch = /\b(material|arquivo|envio|enviado)\b/.test(response)
+    && !isMaterialTopic(user)
+    && !acceptsPreviousOffer(user);
+  return materialMismatch || uncertain;
+}
+
+function enrichOperationalExtraction(turn: AiTurn, history: ChatMessage[], context: AiTrainingContext) {
+  const transcript = userText(history);
+  const normalized = normalizeText(transcript);
+  if (!turn.extracted.payment_method?.trim()) {
+    if (/\b(a vista)\b/.test(normalized)) turn.extracted.payment_method = 'À vista';
+    else if (/\b(parcelad|parcelar|parcela)\b/.test(normalized)) turn.extracted.payment_method = 'Parcelado';
+    else if (/\b(financiamento|financiar)\b/.test(normalized)) turn.extracted.payment_method = 'Financiamento';
+    else if (/\b(dolar|usd|euro|eur|dinheiro.*exterior)\b/.test(normalized)) turn.extracted.payment_method = 'Recursos no exterior';
+  }
+  const preferred = context.dynamic?.preferred_contact;
+  if (preferred) {
+    turn.extracted.region = turn.extracted.region?.trim()
+      || [preferred.city, preferred.country].filter(Boolean).join(', ');
+    turn.extracted.preferred_contact_time_local = preferred.local_preference;
+    turn.extracted.preferred_contact_time_brasilia = preferred.brasilia_preference;
+  }
+  return turn;
+}
+
+export function enforceNaraOperationalRules(
+  turn: AiTurn,
+  history: ChatMessage[],
+  context: AiTrainingContext,
+): AiTurn {
+  const latest = lastUserText(history);
+  const name = selfReportedName(history);
+
+  enrichOperationalExtraction(turn, history, context);
+
+  const acceptedFiles = acceptedOfferedMaterials(history, context);
+  if (acceptedFiles.length) {
+    turn.attachment_ids = acceptedFiles;
+    turn.reply = name && assistantMessages(history).length === 0
+      ? `Oi, ${name}! Aqui é a Nara, da Bossa. Te mando agora.`
+      : 'Te mando agora.';
+    return turn;
+  }
+
+  if (
+    hasClearPurchaseTopic(history)
+    && looksLikeGenericBuyerTriage(turn.reply)
+  ) {
+    turn.reply = buyerInterestOpening(history, context);
+    turn.stage = 'ia';
+    turn.handoff = false;
+  }
+
+  if (asksForHuman(latest) && hasClearPurchaseTopic(history)) {
+    turn.handoff = true;
+    turn.stage = 'qualificado';
+    turn.classification = turn.classification === 'sem_interesse' ? 'quente' : turn.classification;
+    turn.score = Math.max(80, turn.score);
+    turn.reply = humanHandoffReply(history, context, turn);
+    turn.next_action = 'Passar imediatamente ao comercial com todo o histórico e os dados já coletados.';
+    return turn;
+  }
+
+  if (asksWaitTime(latest)) {
+    turn.reply = slaReply(context, name);
+    turn.handoff = true;
+    turn.stage = 'qualificado';
+    turn.score = Math.max(80, turn.score);
+    return turn;
+  }
+
+  if (isAbroadContext(history) && asksCurrencyValue(latest)) {
+    const fx = parseFxLine(context);
+    if (fx) {
+      const rental = asksRentalManagement(latest)
+        ? ` Sobre gestão do aluguel, essa parte ${context.dynamic?.commercial_sla?.owner_name || 'o comercial'} confirma com você.`
+        : '';
+      turn.reply = `Hoje o menor disponível parte de ${formatBrlCurrent(fx.brl)}, cerca de ${fx.approx} pela PTAX de ${fx.quoteDate.split('-').reverse().join('/')}. É uma referência cambial; a tabela oficial é em reais.${rental}`;
+      return turn;
+    }
+    turn.reply = `O valor oficial continua em reais, pela tabela atual. A cotação de câmbio não respondeu neste turno, então não vou estimar a conversão; ${context.dynamic?.commercial_sla?.owner_name || 'o comercial'} confirma esse equivalente com você.`;
+    return turn;
+  }
+
+  if (isAbroadContext(history) && (asksRemotePurchase(latest) || /\b(dá pra comprar morando|da pra comprar morando|comprar morando aqui fora)\b/.test(normalizeText(latest)))) {
+    turn.reply = `${name ? `${name}, sim.` : 'Sim.'} Dá para comprar morando fora e assinar eletronicamente; não precisa vir ao Brasil. O pagamento pode ser feito do exterior em reais, dólar ou moeda local. A Bossa já atende clientes nos EUA, Dinamarca, Portugal e Chile.`;
+    return turn;
+  }
+
+  if (responseLooksLikeUnrelatedFallback(turn.reply, latest)) {
+    turn.reply = topicalFallback(latest, context);
+    turn.handoff = true;
+    return turn;
+  }
+
+  if (repeatedReply(turn.reply, history)) {
+    turn.reply = /\?/.test(latest)
+      ? topicalFallback(latest, context)
+      : nextQualificationQuestion(history);
+  }
+
+  return turn;
+}
 
 export function naraReplyWordCount(value: string): number {
   return value.match(/[\p{L}\p{N}]+(?:['’.-][\p{L}\p{N}]+)*/gu)?.length ?? 0;
@@ -792,11 +1137,14 @@ export function enforceNaraTriage(turn: AiTurn, lead: Lead, history: ChatMessage
   if (learnedCorrection) turn.reply = learnedCorrection;
 
   if (managerRejectedSameReply(turn, history, context) || repeatedReply(turn.reply, history)) {
-    turn.reply = nextQualificationQuestion(history);
+    const latest = lastUserText(history);
+    turn.reply = /\?/.test(latest)
+      ? topicalFallback(latest, context)
+      : nextQualificationQuestion(history);
     turn.stage = 'ia';
     turn.attachment_ids = [];
-    turn.summary = 'Possível comprador identificado; a conversa avançou para a próxima pergunta ainda não respondida.';
-    turn.next_action = 'Continuar a qualificação sem repetir perguntas.';
+    turn.summary = 'Possível comprador identificado; a conversa precisa avançar sem repetir respostas.';
+    turn.next_action = 'Responder a última necessidade do contato e continuar a qualificação sem repetição.';
   }
 
   if (hasUngroundedMoney(turn.reply, history, context)) {
@@ -1075,9 +1423,12 @@ export async function generateAiTurn(
     parsed.attachment_ids = [...new Set(parsed.attachment_ids ?? [])]
       .filter((id) => allowedIds.has(id))
       .slice(0, 3);
-    const finalTurn = lead.kind === 'cliente'
+    const triagedTurn = lead.kind === 'cliente'
       ? enforceNaraTriage(parsed, lead, effectiveHistory, context)
       : parsed;
+    const finalTurn = lead.kind === 'cliente'
+      ? enforceNaraOperationalRules(triagedTurn, effectiveHistory, context)
+      : triagedTurn;
     finalTurn.usage_records = usageRecords;
     finalTurn.model_used = result.usage.model;
     finalTurn.compacted = compacted;
