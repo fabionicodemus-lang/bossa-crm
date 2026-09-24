@@ -219,7 +219,18 @@ function ensureFirstReplyIdentity(reply: string, history: ChatMessage[]): string
   const name = declaredFirstName(lastUserText(history));
   const normalized = normalizeText(reply);
   const alreadyIdentified = normalized.includes('nara') && normalized.includes('bossa');
-  if (alreadyIdentified) return reply;
+
+  if (alreadyIdentified) {
+    if (!name || normalized.includes(normalizeText(name))) return reply.trim();
+    if (spanish && /^¡?hola[!,.]?\s*/i.test(reply.trim())) {
+      return reply.trim().replace(/^¡?hola[!,.]?\s*/i, `¡Hola, ${name}! `);
+    }
+    if (!spanish && /^oi[!,.]?\s*/i.test(reply.trim())) {
+      return reply.trim().replace(/^oi[!,.]?\s*/i, `Oi, ${name}! `);
+    }
+    return `${spanish ? `¡Hola, ${name}!` : `Oi, ${name}!`} ${reply.trim()}`;
+  }
+
   const intro = spanish
     ? `¡Hola${name ? `, ${name}` : ''}! Soy Nara, de Bossa.`
     : `Oi${name ? `, ${name}` : ''}! Aqui é a Nara, da Bossa.`;
