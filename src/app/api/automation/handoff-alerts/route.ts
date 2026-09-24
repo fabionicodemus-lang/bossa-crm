@@ -92,7 +92,7 @@ function detailsFromBriefing(briefing: Record<string, unknown>) {
   if (decisionMaker) parts.push(`Decisão: ${decisionMaker}`);
   if (preferredLocal) parts.push(`Melhor horário local: ${preferredLocal}`);
   if (preferredBrasilia) parts.push(`Melhor horário Brasília: ${preferredBrasilia}`);
-  return parts.join(' | ').slice(0, 1400);
+  return parts.join(' | ').slice(0, 950);
 }
 
 function renderTemplate(values: string[]) {
