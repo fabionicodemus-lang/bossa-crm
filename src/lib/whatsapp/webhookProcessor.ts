@@ -1,4 +1,4 @@
-import { generateAiTurn, type AiFileOption } from '@/lib/ai';
+import { generateAiTurn, type AiFileOption } from '@/lib/ai-v120';
 import { loadAiContext } from '@/lib/ai-context';
 import { recordAiUsage } from '@/lib/ai-usage';
 import { loadNaraDynamicTurnContext } from '@/lib/nara-dynamic-context';
