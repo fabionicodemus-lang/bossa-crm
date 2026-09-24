@@ -286,6 +286,54 @@ const operationalContext = {
   assert.equal(result.handoff, false);
 }
 
+// Rodada 2: resposta de suítes não envia planta ambígua; tipo exato envia uma só
+{
+  const files = [
+    {
+      id: 'alma-tipo-01',
+      category: 'planta',
+      title: 'Planta Tipo 01',
+      description: null,
+      trigger_keywords: ['Alma', 'plantas', 'tipo', '3 suítes'],
+      storage_bucket: 'ai-files',
+      storage_path: 'alma/tipo01.jpg',
+      original_name: 'Tipo 01.jpg',
+      mime_type: 'image/jpeg',
+    },
+    {
+      id: 'alma-tipo-02',
+      category: 'planta',
+      title: 'Plantas Tipo 02',
+      description: null,
+      trigger_keywords: ['Alma', 'plantas', 'tipo', '3 suítes'],
+      storage_bucket: 'ai-files',
+      storage_path: 'alma/tipo02.jpg',
+      original_name: 'Tipo 02.jpg',
+      mime_type: 'image/jpeg',
+    },
+  ];
+
+  const suiteHistory = [
+    { role: 'user', content: 'Vi o Alma e quero ver as plantas.' },
+    { role: 'assistant', content: 'Tenho as plantas. Para te enviar a correta, quantas suítes você procura?' },
+    { role: 'user', content: '3 suítes' },
+  ];
+  const suiteResult = postProcessNaraTurn(turn({ attachment_ids: ['alma-tipo-01'] }), suiteHistory, { files });
+  assert.deepEqual(suiteResult.attachment_ids, []);
+  assert.match(suiteResult.reply, /Tipo 01.*Tipo 02/i);
+  assert.equal((suiteResult.reply.match(/\?/g) ?? []).length, 1);
+
+  const typeHistory = [
+    ...suiteHistory,
+    { role: 'assistant', content: suiteResult.reply },
+    { role: 'user', content: 'Tipo 01' },
+  ];
+  const typeResult = postProcessNaraTurn(turn(), typeHistory, { files });
+  assert.deepEqual(typeResult.attachment_ids, ['alma-tipo-01']);
+  assert.doesNotMatch(typeResult.reply, /Tipo 02/i);
+  assert.equal(typeResult.handoff, false);
+}
+
 // Rodada 2: localização do Alma traz Maps e material de localização sem handoff
 {
   const history = [{
