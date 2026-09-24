@@ -21,7 +21,7 @@
     "test:nara-dynamic-context": "node --experimental-strip-types --experimental-loader ./scripts/ts-extension-loader.mjs scripts/check-nara-dynamic-context.mjs",
     "test:nara-phase8": "node --experimental-strip-types --experimental-loader ./scripts/ts-extension-loader.mjs scripts/check-nara-phase8.mjs",
     "test:nara-phase9": "node --experimental-strip-types --experimental-loader ./scripts/ts-extension-loader.mjs scripts/check-nara-phase9.mjs",
-    "test:nara-phase10": "node --experimental-strip-types --experimental-loader ./scripts/ts-extension-loader.mjs scripts/check-nara-phase10.mjs",
+    "test:nara-phase10": "node --experimental-strip-types --experimental-loader ./scripts/ts-extension-loader.mjs scripts/check-nara-phase10.mjs && npm run test:nara-2409",
     "test:nara-2409": "node --experimental-strip-types --experimental-loader ./scripts/ts-extension-loader.mjs scripts/check-nara-2409.mjs"
   },
   "dependencies": {
