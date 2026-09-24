@@ -852,6 +852,19 @@ function topicalFallback(lastUser: string, context: AiTrainingContext) {
   return `Sobre ${topic}, não tenho essa informação confirmada na base. Já deixei a pergunta registrada para ${owner} te responder com precisão.`;
 }
 
+function looksLikeGenericBuyerTriage(reply: string) {
+  const value = normalizeText(reply);
+  return /\b(comprar|compra de imovel|buscando um imovel).*\b(outro assunto|cliente atual|financeiro|obra|outro atendimento)\b/.test(value)
+    || /\bqual assunto.*\b(compra|cliente atual|financeiro|obra|outro)\b/.test(value)
+    || value.includes(normalizeText(configuredTriageQuestion({} as AiTrainingContext)));
+}
+
+function buyerInterestOpening(history: ChatMessage[], context: AiTrainingContext) {
+  const name = selfReportedName(history);
+  const opening = firstContactOpening(context, name);
+  return `${opening} Vi seu interesse no anúncio. Você lembra qual apareceu pra você: Flow ou Alma?`;
+}
+
 function responseLooksLikeUnrelatedFallback(reply: string, lastUser: string) {
   const response = normalizeText(reply);
   const user = normalizeText(lastUser);
@@ -898,6 +911,15 @@ export function enforceNaraOperationalRules(
       ? `Oi, ${name}! Aqui é a Nara, da Bossa. Te mando agora.`
       : 'Te mando agora.';
     return turn;
+  }
+
+  if (
+    hasExplicitBuyerIntent({ metadata: {} } as Lead, history, context)
+    && looksLikeGenericBuyerTriage(turn.reply)
+  ) {
+    turn.reply = buyerInterestOpening(history, context);
+    turn.stage = 'ia';
+    turn.handoff = false;
   }
 
   if (asksForHuman(latest) && hasExplicitBuyerIntent({ metadata: {} } as Lead, history, context)) {
