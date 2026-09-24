@@ -51,6 +51,43 @@ const fileSelect = 'id,organization_id,agent,category,title,description,trigger_
 const acceptedExtensions = '.pdf,.jpg,.jpeg,.png,.webp,.mp4,.mp3,.m4a,.xlsx,.xls,.doc,.docx,.ppt,.pptx';
 const maxFileSize = 50 * 1024 * 1024;
 
+const whatsappImageTargetSize = Math.floor(4.5 * 1024 * 1024);
+
+async function compressLargeJpegForWhatsApp(file: File): Promise<File> {
+  if (!/^image\/jpe?g$/i.test(file.type) || file.size <= whatsappImageTargetSize) return file;
+
+  const bitmap = await createImageBitmap(file);
+  const attempts = [
+    { maxSide: 2560, quality: 0.82 },
+    { maxSide: 2200, quality: 0.78 },
+    { maxSide: 1920, quality: 0.74 },
+    { maxSide: 1600, quality: 0.70 },
+  ];
+
+  try {
+    for (const attempt of attempts) {
+      const scale = Math.min(1, attempt.maxSide / Math.max(bitmap.width, bitmap.height));
+      const width = Math.max(1, Math.round(bitmap.width * scale));
+      const height = Math.max(1, Math.round(bitmap.height * scale));
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const context = canvas.getContext('2d', { alpha: false });
+      if (!context) throw new Error('Não foi possível preparar a imagem.');
+      context.drawImage(bitmap, 0, 0, width, height);
+      const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/jpeg', attempt.quality));
+      if (!blob) continue;
+      if (blob.size <= whatsappImageTargetSize) {
+        return new File([blob], file.name, { type: 'image/jpeg', lastModified: file.lastModified });
+      }
+    }
+  } finally {
+    bitmap.close();
+  }
+
+  throw new Error('A imagem continua grande demais para envio como imagem no WhatsApp após a compressão.');
+}
+
 function formatBytes(value: number) {
   if (value < 1024) return `${value} B`;
   if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`;
@@ -236,11 +273,12 @@ export default function AiFilesPage() {
 
       if (!selectedFile) throw new Error('Selecione um arquivo para enviar.');
       if (selectedFile.size > maxFileSize) throw new Error('O arquivo deve ter no máximo 50 MB.');
+      const uploadFile = await compressLargeJpegForWhatsApp(selectedFile);
       const path = `${organizationId}/${crypto.randomUUID()}-${safeFilename(selectedFile.name)}`;
-      const { error: uploadError } = await supabase.storage.from('ai-files').upload(path, selectedFile, {
+      const { error: uploadError } = await supabase.storage.from('ai-files').upload(path, uploadFile, {
         cacheControl: '3600',
         upsert: false,
-        contentType: selectedFile.type || undefined,
+        contentType: uploadFile.type || undefined,
       });
       if (uploadError) throw uploadError;
       const { data, error: insertError } = await supabase
@@ -255,8 +293,8 @@ export default function AiFilesPage() {
           storage_bucket: 'ai-files',
           storage_path: path,
           original_name: selectedFile.name,
-          mime_type: selectedFile.type || null,
-          size_bytes: selectedFile.size,
+          mime_type: uploadFile.type || null,
+          size_bytes: uploadFile.size,
           active,
           ...versioning,
         })
