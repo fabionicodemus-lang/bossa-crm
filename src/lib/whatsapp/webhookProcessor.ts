@@ -135,16 +135,6 @@ async function handleNaraReset(args: {
     body: 'Conversa da Nara zerada. O próximo teste começa do zero.',
   });
 
-  await args.admin.from('whatsapp_webhook_events')
-    .update({
-      organization_id: args.channel.organization_id,
-      channel_id: args.channel.id,
-      processed_at: now,
-      processing_started_at: null,
-      error: null,
-    })
-    .eq('raw->change->value->messages->0->id', args.inboundWamid);
-
   return true;
 }
 
@@ -797,7 +787,6 @@ async function persistInboundMessage(args: {
   if (!storedMessage) return null;
 
   const attribution = mergeMetaAdAttribution(lead.metadata, args.message.referral, createdAt);
-  const body = messageBody(args.message);
   const selfDeclaredName = declaredName(body);
   const contactTime = extractContactTimePreference(body, new Date(createdAt));
   const metadata = {
