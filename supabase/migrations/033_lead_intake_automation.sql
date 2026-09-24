@@ -110,7 +110,7 @@ select cron.schedule(
   '* * * * *',
   $cron$
   select net.http_get(
-    url := 'https://crm.bossaempreendimentos.com.br/api/automation/lead-intake',
+    url := 'https://bossa-crm-phi.vercel.app/api/automation/lead-intake',
     headers := jsonb_build_object(
       'Authorization', 'Bearer ' || (
         select decrypted_secret
