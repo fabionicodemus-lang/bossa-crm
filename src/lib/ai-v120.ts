@@ -148,7 +148,7 @@ function choosePromisedFile(history: ChatMessage[], context: AiTrainingContext):
           : [];
   if (!terms.length) return [];
 
-  const qualifier = isPlant ? plantQualifier(userText(history)) : null;
+  const qualifier = isPlant ? plantQualifier(history.map((item) => item.content).join(' ')) : null;
   if (isPlant && !qualifier) return [];
 
   return (context.files ?? [])
@@ -340,9 +340,12 @@ export function postProcessNaraTurn(
     turn.reply = spanish
       ? `Sobre ${topic}, no tengo esa información confirmada en mi base. Te digo lo que sí está disponible y, si hace falta, el equipo comercial complementa sin que tengas que repetir.`
       : `Sobre ${topic}, isso não está confirmado na minha base. Posso te passar o que está disponível e, se precisar, o comercial complementa sem você repetir.`;
-    turn.handoff = false;
+    const alreadyInHandoff = priorMessages.some((message) => /ta[ií]s.*comercial|chamando a ta[ií]s|llamando a ta[ií]s|equipo comercial/.test(normalizeText(message)));
+    turn.handoff = alreadyInHandoff;
     turn.summary = `Dúvida fora da base: ${latestRaw.slice(0, 300)}`;
-    turn.next_action = 'Responder com o que estiver confirmado e só escalar se houver pedido explícito de atendimento humano.';
+    turn.next_action = alreadyInHandoff
+      ? 'Taís deve continuar a partir do histórico sem pedir o assunto novamente.'
+      : 'Responder com o que estiver confirmado e só escalar se houver pedido explícito de atendimento humano.';
   }
 
   const promisedFiles = choosePromisedFile(history, context);
@@ -351,7 +354,7 @@ export function postProcessNaraTurn(
   }
 
   const asksPlantNow = /\b(planta|plantas|plano|planos)\b/.test(latestNormalized);
-  const qualifier = plantQualifier(userText(history));
+  const qualifier = plantQualifier(history.map((item) => item.content).join(' '));
   if (asksPlantNow && !qualifier) {
     const plantIds = new Set((context.files ?? []).filter(isPlantFile).map((file) => file.id));
     turn.attachment_ids = turn.attachment_ids.filter((id) => !plantIds.has(id));
