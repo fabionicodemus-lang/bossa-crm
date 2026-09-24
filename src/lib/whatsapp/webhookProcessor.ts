@@ -395,7 +395,7 @@ async function processConversation(args: {
   }
 
   if (lead.kind === 'cliente') {
-    const [commercial, dynamic, operational] = await Promise.all([
+    const [commercial, dynamic] = await Promise.all([
       loadNaraCommercialTurnContext(
         args.admin,
         args.channel.organization_id,
@@ -407,16 +407,18 @@ async function processConversation(args: {
         args.channel.organization_id,
         lead.id,
       ),
+    ]);
+    const [operational, foreign] = await Promise.all([
       loadNaraOperationalContext(
         args.admin,
         args.channel.organization_id,
       ),
+      loadNaraForeignContext(
+        args.admin,
+        history,
+        commercial,
+      ),
     ]);
-    const foreign = await loadNaraForeignContext(
-      args.admin,
-      history,
-      commercial,
-    );
     context.commercial = commercial;
     context.dynamic = dynamic;
     context.foreign = foreign;
