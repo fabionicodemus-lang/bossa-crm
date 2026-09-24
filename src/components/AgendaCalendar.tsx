@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 type Member = { user_id: string; full_name: string; email: string; role: string };
 type ViewMode = 'month' | 'week' | 'day';
@@ -100,10 +100,16 @@ export function AgendaCalendar({ members, currentUserId, canEdit }: { members: M
     return { start, end: addDays(start, 1) };
   }, [cursor, view]);
 
-  async function load() {
+  const rangeStartMs = range.start.getTime();
+  const rangeEndMs = range.end.getTime();
+
+  const load = useCallback(async () => {
     setLoading(true); setError('');
     try {
-      const params = new URLSearchParams({ start: range.start.toISOString(), end: range.end.toISOString() });
+      const params = new URLSearchParams({
+        start: new Date(rangeStartMs).toISOString(),
+        end: new Date(rangeEndMs).toISOString(),
+      });
       if (assigneeFilter !== 'all') params.set('assigned_to', assigneeFilter);
       const response = await fetch(`/api/agenda?${params.toString()}`, { cache: 'no-store' });
       const payload = await response.json() as { events?: AgendaEvent[]; error?: string };
@@ -112,9 +118,12 @@ export function AgendaCalendar({ members, currentUserId, canEdit }: { members: M
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Não foi possível carregar a agenda.');
     } finally { setLoading(false); }
-  }
+  }, [rangeStartMs, rangeEndMs, assigneeFilter]);
 
-  useEffect(() => { void load(); }, [range.start.getTime(), range.end.getTime(), assigneeFilter]);
+  useEffect(() => {
+    const timer = window.setTimeout(() => { void load(); }, 0);
+    return () => window.clearTimeout(timer);
+  }, [load]);
 
   const visibleEvents = useMemo(() => events.filter((event) => event.status !== 'cancelled'), [events]);
 
@@ -128,7 +137,7 @@ export function AgendaCalendar({ members, currentUserId, canEdit }: { members: M
   function openEdit(event: AgendaEvent) {
     if (!canEdit) return;
     const start = new Date(event.starts_at);
-    const end = new Date(event.ends_at);
+    void event.ends_at;
     setForm({
       id: event.id, title: event.title, description: event.description || '', assigned_to: event.assigned_to || currentUserId,
       event_type: event.event_type, meeting_mode: event.meeting_mode, location: event.location || '', video_url: event.video_url || '',
@@ -182,10 +191,10 @@ export function AgendaCalendar({ members, currentUserId, canEdit }: { members: M
 
   const monthDays = useMemo(() => {
     const values: Date[] = [];
-    let d = new Date(range.start);
-    while (d < range.end) { values.push(new Date(d)); d = addDays(d, 1); }
+    let d = new Date(rangeStartMs);
+    while (d.getTime() < rangeEndMs) { values.push(new Date(d)); d = addDays(d, 1); }
     return values;
-  }, [range.start.getTime(), range.end.getTime()]);
+  }, [rangeStartMs, rangeEndMs]);
 
   function eventsForDay(day: Date) {
     return visibleEvents.filter((event) => sameDay(new Date(event.starts_at), day));
