@@ -459,7 +459,7 @@ export async function POST(request: Request) {
     const lead = syntheticLead(body.agent, context.organizationId, String(body.scenario ?? ''));
     const aiContext = makeAiContext(config, examples, files);
     if (body.agent === 'nara') {
-      const [commercial, dynamic] = await Promise.all([
+      const [commercial, dynamic, operational] = await Promise.all([
         loadNaraCommercialTurnContext(
           context.supabase,
           context.organizationId,
@@ -471,9 +471,20 @@ export async function POST(request: Request) {
           context.organizationId,
           null,
         ),
+        loadNaraOperationalContext(
+          context.supabase,
+          context.organizationId,
+        ),
       ]);
+      const foreign = await loadNaraForeignContext(
+        context.supabase,
+        messages,
+        commercial,
+      );
       aiContext.commercial = commercial;
       aiContext.dynamic = dynamic;
+      aiContext.foreign = foreign;
+      aiContext.operational = operational;
     }
     const turn = await generateAiTurn(lead, messages, aiContext);
     if (!turn) {
