@@ -567,10 +567,10 @@ function hasExplicitBuyerIntent(lead: Lead, history: ChatMessage[], context: AiT
   if (contextualBuyerReply(history, context)) return true;
 
   const value = normalizeText(userText(history));
-  const strongIntent = /\b(para morar|quero morar|pretendo morar|moradia|para investir|quero investir|pretendo investir|investimento|renda com aluguel|para revenda|quero comprar|pretendo comprar|busco (?:um |uma )?(?:apartamento|imovel)|procuro (?:um |uma )?(?:apartamento|imovel)|tenho interesse(?: no| na| em)?|me interessei|interessad[oa]|quero conhecer (?:o |a )?(?:flow|alma)|vi (?:um |o |esse |essa )?anuncio|vim pelo anuncio|anuncio.*(?:flow|alma|apartamento|imovel|empreendimento)|quero saber mais.*empreendimento|quanto custa|qual o valor|flow|alma)\b/.test(value);
+  const strongIntent = /\b(para morar|quero morar|pretendo morar|moradia|para investir|quero investir|pretendo investir|investimento|renda com aluguel|para revenda|quero comprar|pretendo comprar|busco (?:um |uma )?(?:apartamento|imovel)|procuro (?:um |uma )?(?:apartamento|imovel)|tenho interesse(?: no| na| em)?|me interessei|interessad[oa]|quero conhecer (?:o |a )?(?:flow|alma)|vi (?:um |o |esse |essa )?anuncio|vim pelo anuncio|anuncio.*(?:flow|alma|apartamento|imovel|empreendimento)|quero saber mais.*empreendimento)\b/.test(value);
   if (!strongIntent) return false;
   const onlyCommercialQuestion = asksCommercialValue(value)
-    && !/\b(morar|investir|investimento|comprar|tenho interesse|me interessei|interessad[oa]|quero conhecer|vi (?:um |o |esse |essa )?anuncio|vim pelo anuncio|flow|alma)\b/.test(value);
+    && !/\b(morar|investir|investimento|comprar|tenho interesse|me interessei|interessad[oa]|quero conhecer|vi (?:um |o |esse |essa )?anuncio|vim pelo anuncio)\b/.test(value);
   return !onlyCommercialQuestion;
 }
 
@@ -852,6 +852,11 @@ function topicalFallback(lastUser: string, context: AiTrainingContext) {
   return `Sobre ${topic}, não tenho essa informação confirmada na base. Já deixei a pergunta registrada para ${owner} te responder com precisão.`;
 }
 
+function hasClearPurchaseTopic(history: ChatMessage[]) {
+  const value = normalizeText(userText(history));
+  return /\b(comprar|compra|apartamento|imovel|empreendimento|flow|alma|soul|preco|valor|tabela|entrada|parcela|vi (?:um |o |esse |essa )?anuncio|vim pelo anuncio|me interessei|interessad[oa])\b/.test(value);
+}
+
 function looksLikeGenericBuyerTriage(reply: string) {
   const value = normalizeText(reply);
   return /\b(comprar|compra de imovel|buscando um imovel).*\b(outro assunto|cliente atual|financeiro|obra|outro atendimento)\b/.test(value)
@@ -914,7 +919,7 @@ export function enforceNaraOperationalRules(
   }
 
   if (
-    hasExplicitBuyerIntent({ metadata: {} } as Lead, history, context)
+    hasClearPurchaseTopic(history)
     && looksLikeGenericBuyerTriage(turn.reply)
   ) {
     turn.reply = buyerInterestOpening(history, context);
@@ -922,7 +927,7 @@ export function enforceNaraOperationalRules(
     turn.handoff = false;
   }
 
-  if (asksForHuman(latest) && hasExplicitBuyerIntent({ metadata: {} } as Lead, history, context)) {
+  if (asksForHuman(latest) && hasClearPurchaseTopic(history)) {
     turn.handoff = true;
     turn.stage = 'qualificado';
     turn.classification = turn.classification === 'sem_interesse' ? 'quente' : turn.classification;
