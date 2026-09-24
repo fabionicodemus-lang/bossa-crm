@@ -6,6 +6,37 @@ import { isAssistedSaleSignal, isBrokerRoutingSignal } from './nara-contact-rout
 
 export type AdminClient = SupabaseClient;
 
+type ClientHandoffSettings = {
+  organization_id: string;
+  primary_owner_user_id: string | null;
+  primary_owner_name: string;
+  primary_owner_alert_phone: string | null;
+  manager_user_id: string | null;
+  manager_name: string;
+  manager_alert_phone: string | null;
+  alert_sender_channel_id: string | null;
+  alert_template_name: string;
+  enabled: boolean;
+};
+
+async function loadClientHandoffSettings(
+  admin: AdminClient,
+  organizationId: string,
+): Promise<ClientHandoffSettings | null> {
+  const { data, error } = await admin
+    .from('client_handoff_settings')
+    .select('*')
+    .eq('organization_id', organizationId)
+    .maybeSingle();
+
+  if (error) {
+    // Durante deploy/migration o código continua funcionando com o roteamento antigo.
+    if (error.code === '42P01' || error.code === 'PGRST205') return null;
+    throw error;
+  }
+  return data as ClientHandoffSettings | null;
+}
+
 function changed(value: unknown, previous: unknown): boolean {
   return JSON.stringify(value ?? null) !== JSON.stringify(previous ?? null);
 }
@@ -90,6 +121,20 @@ export async function applyHybridDecision(args: {
       : baseDecision;
   const classification = routedToBroker ? 'cadastrado' : args.turn.classification;
   const now = new Date().toISOString();
+  const clientHandoffSettings = decision.handoffRequired
+    && args.lead.kind === 'cliente'
+    && args.lead.owner_mode !== 'human'
+    ? await loadClientHandoffSettings(args.admin, args.organizationId)
+    : null;
+  const designatedOwnerId = clientHandoffSettings?.enabled
+    ? clientHandoffSettings.primary_owner_user_id
+    : args.lead.owner_id;
+  const designatedOwnerName = clientHandoffSettings?.enabled
+    ? clientHandoffSettings.primary_owner_name
+    : null;
+  const resolvedNextAction = designatedOwnerName && decision.handoffRequired && args.lead.kind === 'cliente'
+    ? decision.nextAction.replace(/^Um consultor deve/i, `${designatedOwnerName} deve`)
+    : decision.nextAction;
   const metadata = {
     ...(args.lead.metadata || {}),
     ...(routedToBroker ? {
@@ -130,9 +175,9 @@ export async function applyHybridDecision(args: {
       : Math.max(0, Math.min(100, Math.round(args.turn.score))),
     ai_classification: classification,
     ai_summary: args.turn.summary,
-    ai_next_action: decision.nextAction,
+    ai_next_action: resolvedNextAction,
     ai_last_classified_at: now,
-    next_action: decision.nextAction,
+    next_action: resolvedNextAction,
     next_action_type: decision.nextActionType,
     next_action_due_at: decision.nextActionDueAt,
     reactivation_at: decision.reactivationAt,
@@ -146,6 +191,9 @@ export async function applyHybridDecision(args: {
   }
   if (decision.handoffRequired && args.lead.owner_mode !== 'human') {
     updatePayload.handoff_requested_at = args.lead.handoff_requested_at || now;
+    if (args.lead.kind === 'cliente' && designatedOwnerId) {
+      updatePayload.owner_id = designatedOwnerId;
+    }
   }
   if (decision.stage === 'encerrado' && /opt-out/i.test(decision.nextAction)) {
     updatePayload.opt_out = true;
@@ -202,21 +250,34 @@ export async function applyHybridDecision(args: {
         classification,
         score: args.turn.score,
         handoff_required: decision.handoffRequired,
-        next_action: decision.nextAction,
+        next_action: resolvedNextAction,
         next_action_due_at: decision.nextActionDueAt,
       },
     });
   }
 
   if (decision.taskTitle && decision.taskDedupeKey) {
+    const designatedHandoffTask = decision.handoffRequired
+      && args.lead.kind === 'cliente'
+      && Boolean(designatedOwnerId);
     const task = {
       organization_id: args.organizationId,
       lead_id: args.lead.id,
-      assigned_to: decision.ownerMode === 'human' ? args.lead.owner_id : null,
-      assigned_mode: decision.ownerMode === 'human' ? 'human' : 'ai',
+      assigned_to: designatedHandoffTask
+        ? designatedOwnerId
+        : decision.ownerMode === 'human'
+          ? args.lead.owner_id
+          : null,
+      assigned_mode: designatedHandoffTask
+        ? 'human'
+        : decision.ownerMode === 'human'
+          ? 'human'
+          : 'ai',
       type: decision.nextActionType,
       title: decision.taskTitle,
-      description: decision.taskDescription,
+      description: designatedOwnerName && designatedHandoffTask
+        ? `${decision.taskDescription} Responsável: ${designatedOwnerName}.`
+        : decision.taskDescription,
       priority: decision.taskPriority,
       status: 'pending',
       due_at: decision.taskDueAt,
@@ -246,27 +307,30 @@ export async function applyHybridDecision(args: {
 
   if (decision.handoffRequired && args.lead.owner_mode !== 'human') {
     const expiresAt = decision.nextActionDueAt;
+    const handoffBriefing = {
+      lead_name: args.lead.name,
+      phone: args.lead.phone,
+      source: args.lead.source,
+      enterprise: args.turn.extracted.enterprise || args.lead.enterprise,
+      purpose: args.turn.extracted.purpose,
+      typology: args.turn.extracted.typology,
+      budget: args.turn.extracted.budget,
+      deadline: args.turn.extracted.deadline,
+      decision_maker: args.turn.extracted.decision_maker,
+      main_objection: args.turn.summary,
+      next_best_action: resolvedNextAction,
+      priority_class: decision.priorityClass,
+      responsible_name: designatedOwnerName,
+    };
     const handoff = {
       organization_id: args.organizationId,
       lead_id: args.lead.id,
       requested_by: 'ai',
-      offered_to: args.lead.owner_id,
+      offered_to: designatedOwnerId,
       backup_to: args.lead.backup_owner_id,
       priority_class: decision.priorityClass,
       reason: decision.handoffReason,
-      briefing: {
-        lead_name: args.lead.name,
-        phone: args.lead.phone,
-        source: args.lead.source,
-        enterprise: args.turn.extracted.enterprise || args.lead.enterprise,
-        purpose: args.turn.extracted.purpose,
-        typology: args.turn.extracted.typology,
-        budget: args.turn.extracted.budget,
-        deadline: args.turn.extracted.deadline,
-        decision_maker: args.turn.extracted.decision_maker,
-        main_objection: args.turn.summary,
-        next_best_action: decision.nextAction,
-      },
+      briefing: handoffBriefing,
       status: 'pending',
       expires_at: expiresAt,
     };
@@ -276,10 +340,47 @@ export async function applyHybridDecision(args: {
       .eq('lead_id', args.lead.id)
       .eq('status', 'pending')
       .maybeSingle();
+
+    let handoffId: string | null = existing?.id ?? null;
     if (existing?.id) {
-      await args.admin.from('lead_handoffs').update(handoff).eq('id', existing.id);
+      const { data: updatedHandoff, error } = await args.admin
+        .from('lead_handoffs')
+        .update(handoff)
+        .eq('id', existing.id)
+        .select('id')
+        .single();
+      if (error) throw error;
+      handoffId = updatedHandoff.id;
     } else {
-      await args.admin.from('lead_handoffs').insert(handoff);
+      const { data: createdHandoff, error } = await args.admin
+        .from('lead_handoffs')
+        .insert(handoff)
+        .select('id')
+        .single();
+      if (error) throw error;
+      handoffId = createdHandoff.id;
+    }
+
+    if (
+      handoffId
+      && args.lead.kind === 'cliente'
+      && clientHandoffSettings?.enabled
+      && designatedOwnerId
+    ) {
+      const { error: queueError } = await args.admin
+        .from('client_handoff_alert_jobs')
+        .upsert({
+          organization_id: args.organizationId,
+          lead_id: args.lead.id,
+          handoff_id: handoffId,
+          briefing: handoffBriefing,
+          owner_status: 'queued',
+          manager_status: 'queued',
+          updated_at: now,
+        }, { onConflict: 'handoff_id', ignoreDuplicates: true });
+      if (queueError && queueError.code !== '42P01' && queueError.code !== 'PGRST205') {
+        console.error('[handoff alert queue]', queueError.message);
+      }
     }
   }
 
