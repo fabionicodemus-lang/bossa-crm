@@ -141,7 +141,7 @@ export async function POST(request: Request) {
       app_id: appId,
       token_encrypted: encryptToken(page.access_token),
       scopes: granted,
-      status: latestLeadReadable || !latestErrorEvent?.meta_leadgen_id ? 'connected' : 'error',
+      status: 'connected',
       connected_by: user.id,
       connected_at: now,
       token_expires_at: tokenExpiresAt,
@@ -162,6 +162,7 @@ export async function POST(request: Request) {
       scopes: granted,
       latestLeadReadable,
       leadTestError,
+      status: 'connected',
     });
   } catch (error) {
     console.error('[meta lead ads connect]', error);
