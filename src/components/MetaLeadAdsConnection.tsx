@@ -127,7 +127,7 @@ export function MetaLeadAdsConnection({ initial }: { initial: InitialConnection 
         .catch((cause) => setError(cause instanceof Error ? cause.message : 'Não foi possível conectar o Meta Lead Ads.'))
         .finally(() => setLoading(false));
     }, {
-      scope: 'leads_retrieval,pages_show_list,pages_read_engagement,pages_manage_metadata',
+      scope: 'leads_retrieval,pages_show_list,pages_read_engagement,pages_manage_metadata,ads_read',
       auth_type: 'rerequest',
       return_scopes: true,
     });
@@ -144,7 +144,7 @@ export function MetaLeadAdsConnection({ initial }: { initial: InitialConnection 
     </div>
     <div className="card-body">
       <p className="muted">
-        Autoriza o Bossa CRM a buscar nome, telefone, e-mail e respostas dos leads enviados pelos formulários instantâneos da Página da Bossa.
+        Autoriza o Bossa CRM a receber os formulários da Página da Bossa e ler o investimento da conta de anúncios para calcular CPL e custos do funil.
       </p>
 
       {connected && <div className="info-list" style={{ marginBottom: 12 }}>
