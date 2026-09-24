@@ -4,6 +4,7 @@ import {
   type WhatsAppChannelSummary,
 } from '@/components/WhatsAppChannelsManager';
 import { WhatsAppSettings, type Connection } from '@/components/WhatsAppSettings';
+import { MetaLeadAdsConnection } from '@/components/MetaLeadAdsConnection';
 import {
   WhatsAppUsageSummary,
   type WhatsAppMonthlyCount,
@@ -115,6 +116,12 @@ export default async function WhatsAppPage() {
     .sort()
     .join('|');
 
+  const { data: leadAdsConnection } = await admin
+    .from('meta_lead_ads_connections')
+    .select('page_id,page_name,status,last_tested_at,last_error')
+    .eq('organization_id', organizationId)
+    .maybeSingle();
+
   return <>
     <PageTopbar
       title="Canais WhatsApp"
@@ -144,6 +151,14 @@ export default async function WhatsAppPage() {
             visibleChannels={['clientes', 'corretores_extra']}
           />
         </>}
+
+      <MetaLeadAdsConnection initial={{
+        pageName: leadAdsConnection?.page_name ?? null,
+        pageId: leadAdsConnection?.page_id ?? null,
+        status: leadAdsConnection?.status ?? null,
+        lastTestedAt: leadAdsConnection?.last_tested_at ?? null,
+        lastError: leadAdsConnection?.last_error ?? null,
+      }} />
 
       <WhatsAppUsageSummary counts={monthlyCounts} />
 
