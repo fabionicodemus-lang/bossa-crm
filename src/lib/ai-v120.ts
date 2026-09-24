@@ -1,5 +1,5 @@
 import { enforceNaraReplyGuardrails, generateAiTurn as generateCoreAiTurn } from './ai';
-import type { AiTrainingContext, AiTurn } from './ai';
+import type { AiFileOption, AiTrainingContext, AiTurn } from './ai';
 import type { Lead } from './types';
 
 export * from './ai';
