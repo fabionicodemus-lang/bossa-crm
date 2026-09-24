@@ -132,6 +132,8 @@ function plantQualifier(text: string): string | null {
   if (duplex?.[1]) return `duplex ${duplex[1]}`;
   const suites = value.match(/\b(\d+)\s*suites?\b/);
   if (suites?.[1]) return `${suites[1]} suite`;
+  const numberedPlant = value.match(/\bplanta\s*0?(\d+)\b/);
+  if (numberedPlant?.[1]) return `planta ${numberedPlant[1]}`;
   return null;
 }
 
