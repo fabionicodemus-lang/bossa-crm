@@ -38,6 +38,15 @@ function declaredName(text: string): string {
   return match?.[1]?.trim() ?? '';
 }
 
+function paymentMethodFromText(text: string): string {
+  const value = text.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLocaleLowerCase('pt-BR');
+  if (/\ba vista\b|\bavista\b/.test(value)) return 'à vista';
+  if (/\bfinanciamento\b|\bfinanciar\b|\bcaixa\b/.test(value)) return 'financiamento bancário';
+  if (/\bparcelad|\bparcela|\bentrada\b|\bbalao|\breforco\b/.test(value)) return 'parcelado';
+  if (/\bdolar|\busd\b|\beuro|\beur\b|\bmoeda local\b/.test(value)) return 'pagamento do exterior / moeda estrangeira';
+  return '';
+}
+
 async function isAuthorizedNaraReset(
   admin: AdminClient,
   organizationId: string,
@@ -789,6 +798,7 @@ async function persistInboundMessage(args: {
   const attribution = mergeMetaAdAttribution(lead.metadata, args.message.referral, createdAt);
   const selfDeclaredName = declaredName(body);
   const contactTime = extractContactTimePreference(body, new Date(createdAt));
+  const paymentMethod = paymentMethodFromText(body);
   const metadata = {
     ...attribution.metadata,
     whatsapp_channel_id: args.channel.id,
@@ -800,6 +810,7 @@ async function persistInboundMessage(args: {
       contact_time_preference_timezone: contactTime.source_timezone,
       contact_time_preference_brasilia: contactTime.brasilia_time,
     } : {}),
+    ...(paymentMethod ? { payment_method: paymentMethod } : {}),
   };
   const currentNameLooksGeneric = !lead.name
     || lead.name === lead.phone
