@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { buildAiInstructions, generateAiTurn, type AiFileOption, type AiTrainingContext } from '@/lib/ai';
 import { loadNaraDynamicTurnContext, loadNaraRuntimeVariables, saveNaraRuntimeVariables } from '@/lib/nara-dynamic-context';
+import { loadNaraForeignContext } from '@/lib/nara-exterior';
+import { loadNaraOperationalContext } from '@/lib/nara-operations';
 import { deriveHybridDecision } from '@/lib/hybrid';
 import { loadNaraCommercialTurnContext } from '@/lib/nara-unit-queries';
 import { countReplyWords, naraCommercialDiagnostics } from '@/lib/nara-simulator-diagnostics';
