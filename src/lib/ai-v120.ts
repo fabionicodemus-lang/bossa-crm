@@ -194,6 +194,25 @@ function mapsSearchUrl(development: 'alma' | 'flow'): string {
     : 'https://www.google.com/maps/search/?api=1&query=Flow%20Aptos%20Porto%20Belo%20SC';
 }
 
+function conversationHasPlantIntent(history: ChatMessage[]): boolean {
+  return history.some((item) => item.role === 'user' && /\b(planta|plantas|plano|planos)\b/.test(normalizeText(item.content)));
+}
+
+function plantFileMatchesQualifier(file: AiFileOption, qualifier: string): boolean {
+  const haystack = normalizeText([file.category, file.title, file.description ?? '', ...(file.trigger_keywords ?? [])].join(' '));
+  return haystack.includes(qualifier) || haystack.includes(qualifier.replace(' ', ' 0'));
+}
+
+function projectPlantFiles(history: ChatMessage[], context: AiTrainingContext): AiFileOption[] {
+  const development = developmentFromHistory(history);
+  if (!development) return [];
+  return (context.files ?? []).filter((file) => {
+    if (!isPlantFile(file)) return false;
+    const haystack = normalizeText([file.category, file.title, file.description ?? '', ...(file.trigger_keywords ?? [])].join(' '));
+    return haystack.includes(development);
+  });
+}
+
 function ensureFirstReplyIdentity(reply: string, history: ChatMessage[]): string {
   if (assistantMessages(history).length > 0) return reply;
   const spanish = isSpanishLead(history);
@@ -356,10 +375,44 @@ export function postProcessNaraTurn(
   }
 
   const asksPlantNow = /\b(planta|plantas|plano|planos)\b/.test(latestNormalized);
-  const qualifier = plantQualifier(history.map((item) => item.content).join(' '));
-  if (asksPlantNow && !qualifier) {
-    const plantIds = new Set((context.files ?? []).filter(isPlantFile).map((file) => file.id));
-    turn.attachment_ids = turn.attachment_ids.filter((id) => !plantIds.has(id));
+  const latestPlantQualifier = plantQualifier(latestRaw);
+  const conversationQualifier = plantQualifier(history.map((item) => item.content).join(' '));
+  const plantIntent = conversationHasPlantIntent(history);
+  const allPlantIds = new Set((context.files ?? []).filter(isPlantFile).map((file) => file.id));
+
+  if (plantIntent && latestPlantQualifier) {
+    const projectPlants = projectPlantFiles(history, context);
+    const candidates = projectPlants.filter((file) => plantFileMatchesQualifier(file, latestPlantQualifier));
+    turn.attachment_ids = turn.attachment_ids.filter((id) => !allPlantIds.has(id));
+
+    if (candidates.length === 1) {
+      const file = candidates[0];
+      turn.attachment_ids = [file.id, ...turn.attachment_ids].slice(0, 3);
+      turn.reply = spanish
+        ? `Aquí tienes ${file.title}.`
+        : `Aqui está ${file.title}.`;
+      turn.handoff = false;
+      turn.summary = `Planta selecionada de forma determinística: ${file.title}.`;
+      turn.next_action = 'Continuar qualificação após confirmar o envio do arquivo correto.';
+    } else if (candidates.length > 1) {
+      const options = candidates.slice(0, 3).map((file) => file.title).join(' ou ');
+      turn.reply = spanish
+        ? `Encontré más de una planta compatible: ${options}. ¿Cuál quieres?`
+        : `Encontrei mais de uma planta compatível: ${options}. Qual você quer?`;
+      turn.handoff = false;
+      turn.summary = 'Mais de uma planta corresponde à informação de suítes; Nara pediu o tipo antes de anexar.';
+      turn.next_action = 'Aguardar o lead indicar o tipo exato e enviar somente a planta correspondente.';
+    } else if (/suite/.test(latestPlantQualifier) && projectPlants.length > 1) {
+      const options = projectPlants.slice(0, 3).map((file) => file.title).join(' ou ');
+      turn.reply = spanish
+        ? `Tengo estas plantas para el proyecto: ${options}. ¿Cuál quieres?`
+        : `Tenho estas plantas para o projeto: ${options}. Qual você quer?`;
+      turn.handoff = false;
+      turn.summary = 'Quantidade de suítes informada, mas a base não identificou uma única planta correspondente.';
+      turn.next_action = 'Aguardar o tipo exato; não enviar planta arbitrária.';
+    }
+  } else if (asksPlantNow && !conversationQualifier) {
+    turn.attachment_ids = turn.attachment_ids.filter((id) => !allPlantIds.has(id));
     turn.reply = spanish
       ? 'Tengo las plantas. Para enviarte la correcta, ¿cuántas suites buscas?'
       : 'Tenho as plantas. Para te enviar a correta, quantas suítes você procura?';
