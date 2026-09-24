@@ -4,7 +4,6 @@ alter table public.meta_lead_ads_connections
   add column if not exists user_token_encrypted text,
   add column if not exists ad_account_id text;
 
--- Conta de anúncios da Bossa usada no Ads Manager.
 update public.meta_lead_ads_connections
 set ad_account_id = coalesce(ad_account_id, '6358611547493181'),
     updated_at = now()
@@ -35,33 +34,72 @@ create index if not exists lead_funnel_milestones_proposal_idx
 create index if not exists lead_funnel_milestones_won_idx
   on public.lead_funnel_milestones(won_at);
 
-create schema if not exists private;
+drop policy if exists "members can read funnel milestones" on public.lead_funnel_milestones;
+create policy "members can read funnel milestones"
+  on public.lead_funnel_milestones
+  for select
+  to authenticated
+  using (
+    exists (
+      select 1
+      from public.memberships m
+      where m.organization_id = lead_funnel_milestones.organization_id
+        and m.user_id = (select auth.uid())
+    )
+  );
 
-create or replace function private.track_lead_funnel_milestones()
+drop policy if exists "members can insert funnel milestones" on public.lead_funnel_milestones;
+create policy "members can insert funnel milestones"
+  on public.lead_funnel_milestones
+  for insert
+  to authenticated
+  with check (
+    exists (
+      select 1
+      from public.memberships m
+      where m.organization_id = lead_funnel_milestones.organization_id
+        and m.user_id = (select auth.uid())
+    )
+  );
+
+drop policy if exists "members can update funnel milestones" on public.lead_funnel_milestones;
+create policy "members can update funnel milestones"
+  on public.lead_funnel_milestones
+  for update
+  to authenticated
+  using (
+    exists (
+      select 1
+      from public.memberships m
+      where m.organization_id = lead_funnel_milestones.organization_id
+        and m.user_id = (select auth.uid())
+    )
+  )
+  with check (
+    exists (
+      select 1
+      from public.memberships m
+      where m.organization_id = lead_funnel_milestones.organization_id
+        and m.user_id = (select auth.uid())
+    )
+  );
+
+create or replace function public.track_lead_funnel_milestones()
 returns trigger
 language plpgsql
-security definer
-set search_path = ''
+security invoker
+set search_path = public
 as $$
 declare
   event_at timestamptz := coalesce(new.updated_at, now());
   is_qualified boolean := new.stage in (
-    'passagem_pendente',
-    'humano_ativo',
-    'agendado',
-    'pos_reuniao',
-    'proposta_negociacao',
-    'fechado_ganho'
+    'passagem_pendente','humano_ativo','agendado','pos_reuniao','proposta_negociacao','fechado_ganho'
   );
   is_meeting boolean := new.stage in (
-    'agendado',
-    'pos_reuniao',
-    'proposta_negociacao',
-    'fechado_ganho'
+    'agendado','pos_reuniao','proposta_negociacao','fechado_ganho'
   );
   is_proposal boolean := new.stage in (
-    'proposta_negociacao',
-    'fechado_ganho'
+    'proposta_negociacao','fechado_ganho'
   );
   is_won boolean := new.stage = 'fechado_ganho';
 begin
@@ -100,18 +138,16 @@ begin
 end;
 $$;
 
-revoke all on function private.track_lead_funnel_milestones() from public, anon, authenticated;
+revoke execute on function public.track_lead_funnel_milestones() from anon;
+grant execute on function public.track_lead_funnel_milestones() to authenticated, service_role;
 
 drop trigger if exists track_lead_funnel_milestones on public.leads;
 create trigger track_lead_funnel_milestones
 after insert or update of stage
 on public.leads
 for each row
-execute function private.track_lead_funnel_milestones();
+execute function public.track_lead_funnel_milestones();
 
--- Backfill do estado atual: preserva a informação de que o lead já chegou
--- pelo menos ao estágio em que se encontra hoje. A partir desta migration os
--- marcos passam a ser registrados na primeira vez que cada etapa é atingida.
 insert into public.lead_funnel_milestones (
   organization_id,
   lead_id,
