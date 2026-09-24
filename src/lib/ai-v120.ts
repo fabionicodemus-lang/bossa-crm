@@ -191,7 +191,7 @@ export function postProcessNaraTurn(
   const latestNormalized = normalizeText(latestRaw);
 
   const asksForeignPurchase = /\b(moro|morando|resido|vivo)\b.{0,35}\b(orlando|miami|estados unidos|eua|usa|fora do brasil|exterior|portugal|dinamarca)\b/.test(latestNormalized)
-    && /\b(compr|assin|contrato|pag)\b/.test(latestNormalized);
+    && /\b(compr\w*|assin\w*|contrato|pag\w*)\b/.test(latestNormalized);
   if (asksForeignPurchase) {
     turn.reply = foreignPurchaseReply(name);
     turn.classification = turn.classification === 'frio' ? 'morno' : turn.classification;
