@@ -36,10 +36,12 @@ function userText(history: ChatMessage[]): string {
 export function detectForeignLead(history: ChatMessage[]) {
   const raw = userText(history);
   const value = normalize(raw);
-  const usd = /\b(dolar|dolares|usd|orlando|miami|florida|estados unidos|eua|usa)\b/.test(value);
-  const eur = /\b(euro|euros|eur|portugal|lisboa|dinamarca|copenhague|espanha|franca|alemanha|italia)\b/.test(value);
-  const livesAbroad = /\b(moro|morando|resido|vivendo)\b.{0,30}\b(fora do brasil|exterior|orlando|miami|florida|estados unidos|eua|usa|portugal|dinamarca|europa)\b/.test(value)
-    || /\b(comprar|compra).{0,30}\b(morando fora|fora do brasil|do exterior)\b/.test(value);
+  const usd = /\b(dolar|dolares|usd|orlando|miami|florida|estados unidos|eua|usa|chile|santiago)\b/.test(value);
+  const eur = /\b(euro|euros|eur|portugal|lisboa|dinamarca|copenhague|espanha|espana|franca|alemanha|italia)\b/.test(value);
+  const foreignPlace = /\b(fora do brasil|fuera de brasil|exterior|orlando|miami|florida|estados unidos|eua|usa|portugal|dinamarca|europa|chile|santiago)\b/;
+  const livesAbroad = /\b(moro|morando|resido|vivendo|vivo|vivo en|resido en|estoy viviendo)\b.{0,45}/.test(value) && foreignPlace.test(value)
+    || /\b(comprar|compra|comprando)\b.{0,40}\b(morando fora|fora do brasil|do exterior|viviendo fuera|fuera de brasil|desde el exterior)\b/.test(value)
+    || /\bsoy (?:chileno|chilena)|vivo en santiago|resido en santiago\b/.test(value);
   const location = /\borlando\b/.test(value) ? 'Orlando'
     : /\bmiami\b/.test(value) ? 'Miami'
       : /\bportugal|lisboa\b/.test(value) ? 'Portugal'
@@ -184,13 +186,13 @@ export async function loadNaraForeignContext(
     `- Mora fora do Brasil: ${detected.livesAbroad ? 'sim' : 'não confirmado'}.`,
     detected.location ? `- Local informado: ${detected.location}.` : '',
     '- É possível comprar morando fora; o contrato pode ser assinado eletronicamente e não exige presença física no Brasil para assinatura.',
-    '- O pagamento pode ser feito do exterior; a tabela oficial da Bossa permanece em reais.',
+    '- O pagamento pode ser feito do exterior em reais, dólar ou moeda local, conforme o fluxo comercial aplicável.',
     '- A Bossa já tem clientes residentes nos Estados Unidos, Dinamarca, Portugal e Chile que compraram à distância.',
     fx
       ? `- Cotação de referência do dia: 1 ${currency} = R$ ${fx.brl_per_currency.toFixed(4).replace('.', ',')} (BCB PTAX, referência aproximada).`
       : `- A cotação ${currency} não pôde ser obtida agora. Não calcule nem estime conversão por conta própria.`,
     ...conversions.map((item) => `- ${item.development}: a partir de R$ ${Math.round(item.brl).toLocaleString('pt-BR')} ≈ ${currency} ${Math.round(item.foreign).toLocaleString('pt-BR')} pela PTAX de hoje.`),
-    '- Qualquer valor em moeda estrangeira é apenas referência cambial; preço e contrato são regidos pela tabela oficial em reais.',
+    '- Sempre informe também o valor em reais quando houver preço confirmado. Qualquer valor em moeda estrangeira é uma referência cambial aproximada do dia.',
     '- Nunca calcule câmbio mentalmente. Use somente as conversões prontas deste bloco.',
   ].filter(Boolean);
 
