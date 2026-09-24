@@ -3,6 +3,7 @@ import { AiHealthBadge } from '@/components/AiHealthBadge';
 import { PageTopbar } from '@/components/PageTopbar';
 import { getCurrentContext } from '@/lib/auth';
 import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { formatDateTime } from '@/lib/format';
 
 type ActivityLead = { id: string; name: string; kind: string };
@@ -59,6 +60,7 @@ function minutesLabel(value: number | null) {
 export default async function DashboardPage() {
   const context = await getCurrentContext();
   const supabase = await createClient();
+  const admin = createAdminClient();
   const orgId = context!.organization.id;
   const now = new Date().toISOString();
   const isAdmin = context!.role === 'admin';
@@ -117,7 +119,7 @@ export default async function DashboardPage() {
       .gte('created_at', monthStart)
       .order('created_at', { ascending: true })
       .limit(10000),
-    supabase.from('lead_intake_jobs')
+    admin.from('lead_intake_jobs')
       .select('id', { count: 'exact', head: true })
       .eq('organization_id', orgId)
       .eq('nara_status', 'queued'),
