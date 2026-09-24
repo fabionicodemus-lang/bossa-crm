@@ -1,4 +1,4 @@
-import { generateAiTurn, type AiFileOption } from '@/lib/ai';
+import { extractSelfReportedName, generateAiTurn, type AiFileOption } from '@/lib/ai';
 import { loadAiContext } from '@/lib/ai-context';
 import { recordAiUsage } from '@/lib/ai-usage';
 import { loadNaraDynamicTurnContext } from '@/lib/nara-dynamic-context';
@@ -573,6 +573,86 @@ async function findOrCreateLead(args: {
   return leadData;
 }
 
+async function internalResetPhones(admin: AdminClient, organizationId: string) {
+  const phones = new Set<string>();
+  try {
+    const { data } = await admin
+      .from('client_handoff_settings')
+      .select('primary_owner_alert_phone,manager_alert_phone')
+      .eq('organization_id', organizationId)
+      .eq('enabled', true)
+      .maybeSingle();
+    for (const value of [data?.primary_owner_alert_phone, data?.manager_alert_phone]) {
+      const normalized = normalizeWaId(String(value ?? ''));
+      if (normalized) phones.add(normalized);
+    }
+  } catch {
+    // Se a configuração não estiver disponível, não habilitamos reset para ninguém.
+  }
+  return phones;
+}
+
+async function resetNaraTestConversation(args: {
+  admin: AdminClient;
+  channel: WhatsAppChannelRecord;
+  waId: string;
+}) {
+  const conversation = await findConversation(args.admin, args.channel.id, args.waId);
+  const leadId = conversation?.lead_id ?? null;
+
+  if (conversation) {
+    await Promise.all([
+      args.admin.from('messages').delete().eq('whatsapp_conversation_id', conversation.id),
+      args.admin.from('whatsapp_messages').delete().eq('conversation_id', conversation.id),
+    ]);
+  }
+
+  if (leadId) {
+    await Promise.all([
+      args.admin.from('whatsapp_ai_conversation_memory').delete().eq('lead_id', leadId),
+      args.admin.from('nara_offer_logs').delete().eq('lead_id', leadId),
+      args.admin.from('lead_tasks').delete().eq('lead_id', leadId),
+      args.admin.from('lead_handoffs').delete().eq('lead_id', leadId),
+      args.admin.from('activities').delete().eq('lead_id', leadId),
+    ]);
+
+    const { data: resetLead } = await args.admin
+      .from('leads')
+      .select('id,kind,phone')
+      .eq('id', leadId)
+      .maybeSingle();
+    if (
+      resetLead?.kind === 'cliente'
+      && normalizeWaId(String(resetLead.phone ?? '')) === args.waId
+    ) {
+      await args.admin.from('leads').delete().eq('id', leadId);
+    }
+  }
+
+  if (conversation) {
+    await args.admin.from('whatsapp_conversations').update({
+      lead_id: null,
+      last_inbound_at: null,
+      window_expires_at: null,
+      last_message_id: null,
+      last_message_body: null,
+      last_message_type: null,
+      last_message_direction: null,
+      last_message_status: null,
+      last_message_at: null,
+      updated_at: new Date().toISOString(),
+    }).eq('id', conversation.id);
+  }
+
+  const { provider, accessToken, phoneNumberId } = channelAccess(args.channel);
+  await provider.sendText({
+    phoneNumberId,
+    accessToken,
+    to: args.waId,
+    body: 'Conversa da Nara zerada. O próximo teste começa do zero.',
+  });
+}
+
 type PersistedInbound = {
   channel: WhatsAppChannelRecord;
   conversation: WhatsAppConversationRecord;
@@ -617,6 +697,7 @@ async function persistInboundMessage(args: {
     prefetched: existingConversation,
   });
   const body = messageBody(args.message);
+  const selfReportedName = extractSelfReportedName(body);
 
   const [transportResult, messageResult] = await Promise.all([
     args.admin
@@ -672,7 +753,7 @@ async function persistInboundMessage(args: {
     whatsapp_window_expires_at: conversation.window_expires_at,
   };
   await args.admin.from('leads').update({
-    name: lead.name === lead.phone && args.contactName ? args.contactName : lead.name,
+    name: selfReportedName || (lead.name === lead.phone && args.contactName ? args.contactName : lead.name),
     source: attribution.firstAttribution && attribution.sourceLabel ? attribution.sourceLabel : lead.source,
     last_inbound_at: createdAt,
     metadata,
@@ -768,11 +849,23 @@ export async function processWebhookEvent(eventId: string, knownPhoneNumberId?: 
         .map((item) => normalizeWaId(String(item.display_phone_number ?? '')))
         .filter(Boolean),
     );
+    const resetPhones = channel.role === 'cliente'
+      ? await internalResetPhones(admin, channel.organization_id)
+      : new Set<string>();
 
     const persisted: PersistedInbound[] = [];
     for (const message of value.messages ?? []) {
       const senderWaId = normalizeWaId(String(message.from ?? contactWaId));
       if (senderWaId && internalBusinessNumbers.has(senderWaId)) {
+        continue;
+      }
+      if (
+        channel.role === 'cliente'
+        && senderWaId
+        && resetPhones.has(senderWaId)
+        && messageBody(message).trim().toLocaleLowerCase('pt-BR') === '#reset'
+      ) {
+        await resetNaraTestConversation({ admin, channel, waId: senderWaId });
         continue;
       }
       const stored = await persistInboundMessage({
