@@ -22,7 +22,7 @@ type FacebookSdk = {
 };
 
 function fbWindow() {
-  return window as typeof window & { FB?: FacebookSdk; fbAsyncInit?: () => void };
+  return window as unknown as { FB?: FacebookSdk; fbAsyncInit?: () => void };
 }
 
 export function MetaLeadAdsConnection({ initial }: { initial: InitialConnection }) {
