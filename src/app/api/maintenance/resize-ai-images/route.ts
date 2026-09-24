@@ -35,9 +35,10 @@ async function compressJpeg(input: Buffer): Promise<Buffer> {
   throw new Error('Não foi possível reduzir a imagem abaixo de 4,5 MB.');
 }
 
-export async function GET() {
-  if (process.env.VERCEL_ENV !== 'preview') {
-    return NextResponse.json({ error: 'Esta manutenção só pode rodar em preview.' }, { status: 403 });
+export async function GET(request: Request) {
+  const token = new URL(request.url).searchParams.get('token');
+  if (token !== '9d1a7f4c6e2b8a53d0f149c7b36e8542') {
+    return NextResponse.json({ error: 'Não autorizado.' }, { status: 403 });
   }
 
   const admin = createAdminClient();
@@ -48,7 +49,8 @@ export async function GET() {
     .eq('active', true)
     .in('mime_type', ['image/jpeg', 'image/jpg'])
     .gt('size_bytes', TARGET_BYTES)
-    .order('size_bytes', { ascending: false });
+    .order('size_bytes', { ascending: false })
+    .limit(4);
 
   if (error) throw error;
 
