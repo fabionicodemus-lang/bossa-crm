@@ -27,8 +27,14 @@ function userText(history: ChatMessage[]): string {
   return history.filter((item) => item.role === 'user').map((item) => item.content).join(' ');
 }
 
+function isSpanishLead(history: ChatMessage[]): boolean {
+  const value = normalizeText(userText(history));
+  const matches = value.match(/\b(hola|soy|me llamo|mi nombre|vivo en|resido en|quiero|quisiera|precio|cuanto cuesta|departamento|ustedes|puedo|chile|santiago)\b/g) ?? [];
+  return matches.length >= 2 || /\b(hola|soy|me llamo|mi nombre)\b/.test(value);
+}
+
 function declaredFirstName(text: string): string {
-  const match = text.match(/\b(?:sou|me chamo|meu nome (?:é|e)|aqui é|aqui e)\s+(?:a\s+|o\s+)?([A-ZÁÀÂÃÉÊÍÓÔÕÚÇ][\p{L}'’-]+)(?:\s+[A-ZÁÀÂÃÉÊÍÓÔÕÚÇ][\p{L}'’-]+){0,2}/u);
+  const match = text.match(/\b(?:sou|me chamo|meu nome (?:é|e)|aqui é|aqui e|soy|me llamo|mi nombre (?:es|e))\s+(?:a\s+|o\s+)?([\p{L}'’-]{2,})(?:\s+[\p{L}'’-]+){0,2}/iu);
   return match?.[1]?.trim() ?? '';
 }
 
@@ -39,19 +45,31 @@ function buyerContextIsClear(history: ChatMessage[]): boolean {
 
 function asksHuman(text: string): boolean {
   const value = normalizeText(text);
-  return /\b(falar com (?:uma pessoa|alguem|um corretor|corretor|atendente)|quero um corretor|quero falar com gente|atendimento humano|me liga|pode me ligar)\b/.test(value);
+  return /\b(falar com (?:uma pessoa|alguem|um corretor|corretor|atendente)|quero um corretor|quero falar com gente|atendimento humano|me liga|pode me ligar|hablar con (?:una persona|alguien|un corredor|un asesor|un vendedor)|quiero (?:hablar con|un) (?:asesor|corredor|vendedor|persona)|atencion humana|pueden llamarme|me pueden llamar)\b/.test(value);
+}
+
+function isPureInformationRequest(text: string): boolean {
+  const value = normalizeText(text);
+  return /\b(preco|valor|quanto custa|tabela|foto|fotos|imagem|imagens|video|folder|book|planta|plantas|fachada|localizacao|mapa|endereco|precio|cuanto cuesta|tabla|foto|fotos|imagen|imagenes|video|folleto|plano|planos|ubicacion|direccion)\b/.test(value);
+}
+
+function requiresHumanHandoff(text: string): boolean {
+  const value = normalizeText(text);
+  return asksHuman(text)
+    || /\b(visita|visitar|agendar visita|marcar visita|conhecer pessoalmente|ir ai|proposta|reservar|reserva|negociar|negociacao|reclamacao|visita|visitar|agendar una visita|quiero visitar|conocer en persona|propuesta|reservar|reserva|negociar|negociacion|reclamo)\b/.test(value);
 }
 
 function handoffQuestion(history: ChatMessage[]): string {
   const value = normalizeText(userText(history));
-  if (!/\b(a vista|avista|parcelad|financi|entrada|sinal|mensal)\b/.test(value)) {
-    return 'Enquanto isso: você pensa em pagar à vista ou parcelado?';
+  const spanish = isSpanishLead(history);
+  if (!/\b(a vista|avista|parcelad|financi|entrada|sinal|mensal|contado|cuotas|financi|entrada|mensual)\b/.test(value)) {
+    return spanish ? 'Mientras tanto, ¿piensas pagar al contado o en cuotas?' : 'Enquanto isso: você pensa em pagar à vista ou parcelado?';
   }
-  if (!/\b(agora|este mes|esse mes|\d+ meses|ano que vem|202\d|sem pressa|prazo)\b/.test(value)) {
-    return 'Enquanto isso: você pensa em comprar em qual prazo?';
+  if (!/\b(agora|este mes|esse mes|\d+ meses|ano que vem|202\d|sem pressa|prazo|ahora|este mes|proximo mes|sin apuro|plazo)\b/.test(value)) {
+    return spanish ? 'Mientras tanto, ¿en qué plazo piensas comprar?' : 'Enquanto isso: você pensa em comprar em qual prazo?';
   }
-  if (!/\b(melhor horario|depois das|apos as|a partir das|manha|tarde|noite)\b/.test(value)) {
-    return 'Enquanto isso: qual é o melhor horário para a Taís te chamar?';
+  if (!/\b(melhor horario|depois das|apos as|a partir das|manha|tarde|noite|mejor horario|despues de|a partir de|manana|tarde|noche)\b/.test(value)) {
+    return spanish ? 'Mientras tanto, ¿cuál es el mejor horario para que Taís te contacte?' : 'Enquanto isso: qual é o melhor horário para a Taís te chamar?';
   }
   return '';
 }
@@ -80,52 +98,90 @@ function formatForeign(value: number, currency: 'USD' | 'EUR'): string {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency, maximumFractionDigits: 0 }).format(value);
 }
 
-function foreignCurrencyReply(context: AiTrainingContext): string {
+function foreignCurrencyReply(context: AiTrainingContext, spanish: boolean): string {
   const foreign = context.foreign;
   if (!foreign?.requested_currency || !foreign.fx || !foreign.conversions.length) return '';
   const first = foreign.conversions[0];
-  return `Hoje parte de ${formatBrl(first.brl)}, cerca de ${formatForeign(first.foreign, foreign.requested_currency)} pela PTAX. É uma referência cambial; a tabela oficial e o contrato ficam em reais.`;
+  if (spanish) {
+    return `Hoy parte de ${formatBrl(first.brl)}, aproximadamente ${formatForeign(first.foreign, foreign.requested_currency)} según la PTAX del día. El pago puede hacerse en reales, dólares o moneda local; la conversión es solo una referencia cambiaria.`;
+  }
+  return `Hoje parte de ${formatBrl(first.brl)}, cerca de ${formatForeign(first.foreign, foreign.requested_currency)} pela PTAX do dia. O pagamento pode ser feito em reais, dólar ou moeda local; a conversão é apenas uma referência cambial.`;
 }
 
-function foreignPurchaseReply(name: string): string {
+function foreignPurchaseReply(name: string, spanish: boolean): string {
   const prefix = name ? `${name}, ` : '';
-  return `${prefix}dá sim. Você compra morando fora, assina eletronicamente com validade jurídica e paga do exterior em reais, dólar ou moeda local. Já temos clientes nos EUA, Dinamarca, Portugal e Chile que compraram assim. É para morar, veranear ou investir?`;
+  if (spanish) {
+    return `${prefix}sí, puedes comprar viviendo fuera de Brasil. El contrato se firma electrónicamente con la misma validez jurídica de una firma física, y el pago puede hacerse en reales, dólares o moneda local. Bossa ya tiene clientes que compraron a distancia desde Estados Unidos, Dinamarca, Portugal y Chile. ¿Lo buscas para vivir, vacacionar o invertir?`;
+  }
+  return `${prefix}dá sim. Você pode comprar morando fora do Brasil: o contrato é assinado eletronicamente com a mesma validade jurídica de uma assinatura física, e o pagamento pode ser feito em reais, dólar ou moeda local. A Bossa já tem clientes nos EUA, Dinamarca, Portugal e Chile que compraram à distância. É para morar, veranear ou investir?`;
 }
 
-function slaReply(context: AiTrainingContext): string {
+function slaReply(context: AiTrainingContext, spanish: boolean): string {
   const op = context.operational;
-  if (!op) return 'Já passei para a Taís do comercial. Ela assume seu atendimento agora.';
+  if (!op) return spanish ? 'Ya pasé tu atención a Taís, del equipo comercial.' : 'Já passei para a Taís do comercial. Ela assume seu atendimento agora.';
   return op.business_open_now
-    ? `A Taís do comercial te chama em até ${op.hot_lead_sla_minutes} minutos.`
-    : `Nosso time volta ${op.next_business_label} e você será o primeiro a ser atendido.`;
+    ? (spanish ? `Taís, del equipo comercial, te contacta en hasta ${op.hot_lead_sla_minutes} minutos.` : `A Taís do comercial te chama em até ${op.hot_lead_sla_minutes} minutos.`)
+    : (spanish ? `Nuestro equipo vuelve ${op.next_business_label} y tu atención queda como prioridad.` : `Nosso time volta ${op.next_business_label} e você será o primeiro a ser atendido.`);
+}
+
+function plantQualifier(text: string): string | null {
+  const value = normalizeText(text);
+  const type = value.match(/\btipo\s*0?(\d+)\b/);
+  if (type?.[1]) return `tipo ${type[1]}`;
+  const duplex = value.match(/\bduplex\s*0?(\d+)\b/);
+  if (duplex?.[1]) return `duplex ${duplex[1]}`;
+  const suites = value.match(/\b(\d+)\s*suites?\b/);
+  if (suites?.[1]) return `${suites[1]} suite`;
+  return null;
 }
 
 function choosePromisedFile(history: ChatMessage[], context: AiTrainingContext): string[] {
   const latest = normalizeText(lastUserText(history));
-  if (!/^(sim|s|pode|pode mandar|manda|me manda|quero|legal|ok|ta|tá|beleza)\b/.test(latest)) return [];
+  if (!/^(sim|s|pode|pode mandar|manda|me manda|quero|legal|ok|ta|beleza|si|sí|puede|puedes|manda|enviame|envíame|quiero|dale)\b/.test(latest)) return [];
   const previousAssistant = [...history].reverse().find((item) => item.role === 'assistant')?.content ?? '';
   const offered = normalizeText(previousAssistant);
-  const terms = offered.includes('planta') ? ['planta']
-    : offered.includes('folder') || offered.includes('book') ? ['folder','book']
-      : offered.includes('foto') || offered.includes('imagem') ? ['foto','imagem','render']
+  const isPlant = offered.includes('planta') || offered.includes('plano');
+  const terms = isPlant ? ['planta','plano']
+    : offered.includes('folder') || offered.includes('book') || offered.includes('folleto') ? ['folder','book','folleto']
+      : offered.includes('foto') || offered.includes('imagem') || offered.includes('imagen') ? ['foto','imagem','imagen','render']
         : offered.includes('video') ? ['video','obra']
           : [];
   if (!terms.length) return [];
+
+  const qualifier = isPlant ? plantQualifier(userText(history)) : null;
+  if (isPlant && !qualifier) return [];
+
   return (context.files ?? [])
     .filter((file) => {
       const haystack = normalizeText([file.category,file.title,file.description ?? '',...(file.trigger_keywords ?? [])].join(' '));
-      return terms.some((term) => haystack.includes(term));
+      const categoryMatch = terms.some((term) => haystack.includes(term));
+      if (!categoryMatch) return false;
+      return !qualifier || haystack.includes(qualifier) || haystack.includes(qualifier.replace(' ', ' 0'));
     })
     .slice(0, 1)
     .map((file) => file.id);
 }
 
-function ensureDeclaredNameInFirstReply(reply: string, history: ChatMessage[]): string {
+function ensureFirstReplyIdentity(reply: string, history: ChatMessage[]): string {
   if (assistantMessages(history).length > 0) return reply;
+  const spanish = isSpanishLead(history);
   const name = declaredFirstName(lastUserText(history));
-  if (!name || normalizeText(reply).includes(normalizeText(name))) return reply;
-  if (/^oi\b/i.test(reply.trim())) return reply.trim().replace(/^oi[!,.]?\s*/i, `Oi, ${name}! `);
-  return `Oi, ${name}! ${reply.trim()}`;
+  const normalized = normalizeText(reply);
+  const alreadyIdentified = normalized.includes('nara') && normalized.includes('bossa');
+  if (alreadyIdentified) return reply;
+  const intro = spanish
+    ? `¡Hola${name ? `, ${name}` : ''}! Soy Nara, de Bossa.`
+    : `Oi${name ? `, ${name}` : ''}! Aqui é a Nara, da Bossa.`;
+  return `${intro} ${reply.trim()}`.trim();
+}
+
+function finishTurn(turn: AiTurn, history: ChatMessage[]): AiTurn {
+  turn.reply = ensureFirstReplyIdentity(turn.reply, history);
+  const latest = lastUserText(history);
+  if (isPureInformationRequest(latest) && !requiresHumanHandoff(latest)) {
+    turn.handoff = false;
+  }
+  return turn;
 }
 
 function looksLikeTriageQuestion(text: string): boolean {
@@ -189,63 +245,65 @@ export function postProcessNaraTurn(
   const clearBuyerContext = buyerContextIsClear(history);
   const latestRaw = lastUserText(history);
   const latestNormalized = normalizeText(latestRaw);
+  const spanish = isSpanishLead(history);
 
-  const asksForeignPurchase = /\b(moro|morando|resido|vivo)\b.{0,35}\b(orlando|miami|estados unidos|eua|usa|fora do brasil|exterior|portugal|dinamarca)\b/.test(latestNormalized)
-    && /\b(compr\w*|assin\w*|contrato|pag\w*)\b/.test(latestNormalized);
+  const asksForeignPurchase = /\b(moro|morando|resido|vivo|soy|vivo en|resido en)\b.{0,45}\b(orlando|miami|estados unidos|eua|usa|fora do brasil|exterior|portugal|dinamarca|chile|santiago|fuera de brasil)\b/.test(latestNormalized)
+    && /\b(compr\w*|assin\w*|contrato|pag\w*|comprar|firmar|pagar)\b/.test(latestNormalized);
   if (asksForeignPurchase) {
-    turn.reply = foreignPurchaseReply(name);
+    turn.reply = foreignPurchaseReply(name, spanish);
     turn.classification = turn.classification === 'frio' ? 'morno' : turn.classification;
     turn.score = Math.max(turn.score, 35);
     turn.summary = `Lead mora no exterior${context.foreign?.location ? ` (${context.foreign.location})` : ''} e confirmou interesse em compra à distância.`;
     turn.next_action = 'Continuar qualificação de uso, prazo e forma de pagamento; não exigir presença física para assinatura.';
-    return turn;
+    return finishTurn(turn, history);
   }
 
-  if (/\b(quanto|valor|fica|cust).{0,25}\b(dolar|usd|euro|eur)\b|\b(dolar|usd|euro|eur).{0,25}\b(quanto|valor|fica|cust)\b/.test(latestNormalized)) {
-    const converted = foreignCurrencyReply(context);
+  const asksPrice = /\b(quanto|valor|fica|cust|preco|precio|cuanto|cuesta|valor)\b/.test(latestNormalized);
+  if (context.foreign && (asksPrice || /\b(dolar|usd|euro|eur)\b/.test(latestNormalized))) {
+    const converted = foreignCurrencyReply(context, spanish);
     if (converted) {
       turn.reply = converted;
       turn.summary = 'Lead no exterior pediu conversão de preço; valor calculado com cotação PTAX do dia e tabela viva em reais.';
       turn.next_action = 'Seguir qualificação sem substituir a tabela oficial em reais pela referência cambial.';
-      return turn;
+      return finishTurn(turn, history);
     }
   }
 
   if (/\b(demora muito|quanto tempo|em quanto tempo|quando (?:ele|ela|o corretor|a corretora|o comercial) (?:me )?(?:chama|responde|liga))\b/.test(latestNormalized)) {
-    turn.reply = slaReply(context);
+    turn.reply = slaReply(context, spanish);
     turn.handoff = true;
     turn.classification = 'quente';
     turn.score = Math.max(turn.score, 80);
     turn.summary = turn.summary || 'Lead perguntou o prazo para retorno do comercial.';
     turn.next_action = 'Taís deve assumir o atendimento dentro do SLA informado.';
-    return turn;
+    return finishTurn(turn, history);
   }
 
   if (asksHuman(latestRaw) && clearBuyerContext) {
     const extra = handoffQuestion(history);
-    turn.reply = `Já estou chamando a Taís do comercial.${extra ? ` ${extra}` : ''}`;
+    turn.reply = spanish ? `Ya estoy llamando a Taís, del equipo comercial.${extra ? ` ${extra}` : ''}` : `Já estou chamando a Taís do comercial.${extra ? ` ${extra}` : ''}`;
     turn.handoff = true;
     turn.classification = 'quente';
     turn.score = Math.max(turn.score, 80);
     turn.summary = turn.summary || 'Lead de compra pediu atendimento humano.';
     turn.next_action = 'Taís deve assumir imediatamente usando o histórico e os dados já coletados.';
-    return turn;
+    return finishTurn(turn, history);
   }
 
   if (looksLikeBadMaterialFallback(turn.reply)) {
     const topic = topicFromQuestion(latestRaw);
-    turn.reply = `Sobre ${topic}, isso não está confirmado na minha base. Vou deixar essa dúvida no resumo para a Taís te responder sem você repetir.`;
-    turn.handoff = true;
+    turn.reply = spanish
+      ? `Sobre ${topic}, no tengo esa información confirmada en mi base. Te digo lo que sí está disponible y, si hace falta, el equipo comercial complementa sin que tengas que repetir.`
+      : `Sobre ${topic}, isso não está confirmado na minha base. Posso te passar o que está disponível e, se precisar, o comercial complementa sem você repetir.`;
+    turn.handoff = false;
     turn.summary = `Dúvida fora da base: ${latestRaw.slice(0, 300)}`;
-    turn.next_action = 'Taís deve responder exatamente à dúvida registrada no resumo.';
+    turn.next_action = 'Responder com o que estiver confirmado e só escalar se houver pedido explícito de atendimento humano.';
   }
 
   const promisedFiles = choosePromisedFile(history, context);
   if (promisedFiles.length && !turn.attachment_ids.length) {
     turn.attachment_ids = promisedFiles;
   }
-
-  turn.reply = ensureDeclaredNameInFirstReply(turn.reply, history);
 
   const asksIfRobot = /\b(voce e|vc e|e uma|eh uma)\s*(?:um |uma )?(?:robo|robot|ia|inteligencia artificial)|\bassistente digital\b/.test(latest);
   if (asksIfRobot) {
@@ -316,10 +374,10 @@ export function postProcessNaraTurn(
     turn.next_action = clearBuyerContext
       ? 'Taís deve continuar a partir da dúvida registrada, sem pedir o assunto novamente.'
       : 'Responder especificamente à última mensagem e avançar.';
-    return turn;
+    return finishTurn(turn, history);
   }
 
-  return turn;
+  return finishTurn(turn, history);
 }
 
 export async function generateAiTurn(
@@ -341,6 +399,6 @@ export async function generateAiTurn(
 
   const turn = await generateCoreAiTurn(effectiveLead, history, context);
   if (!turn || lead.kind !== 'cliente') return turn;
-  const processed = postProcessNaraTurn(turn, history, context);
+  const processed = finishTurn(postProcessNaraTurn(turn, history, context), history);
   return enforceNaraReplyGuardrails(processed, effectiveLead, history, context);
 }
