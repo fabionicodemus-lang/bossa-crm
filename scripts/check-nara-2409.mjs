@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { postProcessNaraTurn } from '../src/lib/ai-v120.ts';
 import { extractContactTimePreference } from '../src/lib/nara-timezone.ts';
+import { detectForeignLead } from '../src/lib/nara-exterior.ts';
 
 function turn(overrides = {}) {
   return {
@@ -140,7 +141,7 @@ const operationalContext = {
   );
   assert.match(result.reply, /aluguel/i);
   assert.doesNotMatch(result.reply, /confirmação do envio|pedido de material|comercial poderá verificar/i);
-  assert.equal(result.handoff, true);
+  assert.equal(result.handoff, false);
 }
 
 // 7. Continua correto depois de uma passagem pendente
@@ -192,14 +193,139 @@ const operationalContext = {
   assert.deepEqual(result.attachment_ids, ['planta-flow']);
 }
 
+// Rodada 2: espanhol integral + nome + exterior chileno
+{
+  const history = [{
+    role: 'user',
+    content: 'Hola, soy Matías, vivo en Santiago de Chile. Vi el Alma y quiero comprar. ¿Puedo comprar desde acá y firmar online?',
+  }];
+  const detected = detectForeignLead(history);
+  assert.equal(detected.livesAbroad, true);
+  assert.equal(detected.location, 'Chile');
+  assert.equal(detected.requestedCurrency, 'USD');
+
+  const result = postProcessNaraTurn(turn(), history, {
+    ...foreignContext,
+    foreign: { ...foreignContext.foreign, location: 'Chile' },
+  });
+  assert.match(result.reply, /Mat[ií]as/i);
+  assert.match(result.reply, /Soy Nara, de Bossa/i);
+  assert.match(result.reply, /misma validez jur[ií]dica/i);
+  assert.match(result.reply, /reales, d[oó]lares o moneda local/i);
+  assert.match(result.reply, /Estados Unidos.*Dinamarca.*Portugal.*Chile/i);
+  assert.doesNotMatch(result.reply, /\bvoc[eê]\b|\bmorando\b|\bd[aá] sim\b|\bassina\b/i);
+}
+
+// Rodada 2: preço no exterior sempre mantém BRL + referência em moeda estrangeira
+{
+  const history = [
+    { role: 'user', content: 'Hola, soy Matías, vivo en Santiago de Chile y me interesa el Flow.' },
+    { role: 'assistant', content: 'Perfecto, Matías.' },
+    { role: 'user', content: '¿Cuánto cuesta?' },
+  ];
+  const result = postProcessNaraTurn(turn({ handoff: true }), history, foreignContext);
+  assert.match(result.reply, /R\$\s*986\.590/i);
+  assert.match(result.reply, /US\$|USD/i);
+  assert.match(result.reply, /pago puede hacerse en reales, d[oó]lares o moneda local/i);
+  assert.doesNotMatch(result.reply, /tabela oficial.*reais|contrato.*reais/i);
+  assert.equal(result.handoff, false);
+}
+
+// Rodada 2: material/preço não entrega para humano
+{
+  const history = [{
+    role: 'user',
+    content: 'Oi, sou a Camila, de Blumenau, vi o Alma, tem mais fotos?',
+  }];
+  const result = postProcessNaraTurn(turn({
+    reply: 'Claro, vou te enviar a fachada do Alma.',
+    handoff: true,
+    attachment_ids: ['fachada-alma'],
+  }), history, {
+    files: [{
+      id: 'fachada-alma',
+      category: 'imagem',
+      title: 'Fachada Alma',
+      description: 'Fachada do empreendimento',
+      trigger_keywords: ['alma', 'fachada', 'fotos'],
+      storage_bucket: 'ai-files',
+      storage_path: 'alma/fachada.jpg',
+      original_name: 'Fachada Alma.jpg',
+      mime_type: 'image/jpeg',
+    }],
+  });
+  assert.equal(result.handoff, false);
+  assert.match(result.reply, /Camila/i);
+  assert.match(result.reply, /Nara.*Bossa/i);
+  assert.equal((result.reply.match(/\?/g) ?? []).length, 1);
+}
+
+// Rodada 2: planta genérica não escolhe arquivo arbitrário
+{
+  const history = [{
+    role: 'user',
+    content: 'Oi, sou a Camila, vi o Alma. Me manda as plantas?',
+  }];
+  const files = [{
+    id: 'alma-tipo-01',
+    category: 'planta',
+    title: 'Planta Tipo 01',
+    description: null,
+    trigger_keywords: ['alma', 'plantas', 'tipo'],
+    storage_bucket: 'ai-files',
+    storage_path: 'alma/tipo01.jpg',
+    original_name: 'Tipo 01.jpg',
+    mime_type: 'image/jpeg',
+  }];
+  const result = postProcessNaraTurn(turn({
+    reply: 'Claro, segue a planta.',
+    attachment_ids: ['alma-tipo-01'],
+  }), history, { files });
+  assert.deepEqual(result.attachment_ids, []);
+  assert.match(result.reply, /quantas su[ií]tes/i);
+  assert.equal(result.handoff, false);
+}
+
+// Rodada 2: localização do Alma traz Maps e material de localização sem handoff
+{
+  const history = [{
+    role: 'user',
+    content: 'Oi, sou a Camila, vi o Alma. Onde fica? Me manda a localização.',
+  }];
+  const result = postProcessNaraTurn(turn(), history, {
+    files: [{
+      id: 'localizacao-alma',
+      category: 'imagem',
+      title: 'LOCALIZAÇÃO ALMA',
+      description: null,
+      trigger_keywords: ['localização', 'Alma', 'mapa', 'vista'],
+      storage_bucket: 'ai-files',
+      storage_path: 'alma/localizacao.jpg',
+      original_name: 'LOCALIZAÇÃO ALMA.JPG',
+      mime_type: 'image/jpeg',
+    }],
+  });
+  assert.match(result.reply, /google\.com\/maps\/search/i);
+  assert.deepEqual(result.attachment_ids, ['localizacao-alma']);
+  assert.equal(result.handoff, false);
+  assert.equal((result.reply.match(/\?/g) ?? []).length, 1);
+}
+
 // Fonte única de preço e fatos não confirmados
 {
   const aiSource = await readFile(new URL('../src/lib/ai.ts', import.meta.url), 'utf8');
+  const webhookSource = await readFile(new URL('../src/lib/whatsapp/webhookProcessor.ts', import.meta.url), 'utf8');
+  const trainingRoute = await readFile(new URL('../src/app/api/ai-training/route.ts', import.meta.url), 'utf8');
   const promptMigration = await readFile(new URL('../supabase/migrations/037_nara_prompt_2409.sql', import.meta.url), 'utf8');
   assert.doesNotMatch(aiSource, /recordText\(context\.config\?\.knowledge\),\s*\n\s*context\.commercial/);
   assert.match(aiSource, /context\.foreign\?\.source_text/);
   assert.match(promptMigration, /REGRAS OPERACIONAIS 24\/09/);
   assert.match(promptMigration, /Preço, entrada, parcela e disponibilidade vêm SOMENTE da tabela viva/);
+  assert.doesNotMatch(webhookSource, /metadata:\s*\{\s*\.\.\.\(lead\.metadata/);
+  assert.match(webhookSource, /nara_offer_logs'\)\.delete\(\)\.eq\('lead_id'/);
+  assert.match(webhookSource, /replyAfterAttachmentDelivery/);
+  assert.match(webhookSource, /from '@\/lib\/ai-v120'/);
+  assert.match(trainingRoute, /from '@\/lib\/ai-v120'/);
 }
 
-console.log('Nara 24/09 validada: exterior, dólar/PTAX, nome, triagem, humano, SLA, fallback, fuso, material e preço.');
+console.log('Nara 24/09 rodada 2 validada: reset, espanhol, exterior, preço, materiais, plantas, localização e handoff.');
