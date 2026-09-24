@@ -212,12 +212,11 @@ export function BroadcastsManager({
     if (!continuing && !window.confirm(`Iniciar o envio de “${item.name}” para ${item.recipient_count} contatos?`)) return;
     stopRef.current = false; setRunningId(item.id); setError(''); setNotice('');
     try {
-      let completed = false;
       while (!stopRef.current) {
         const response = await fetch(`/api/transmissoes/${item.id}/send`, { method: 'POST' });
         const payload = await response.json().catch(() => ({}));
         if (!response.ok) throw new Error(payload.error || 'Falha durante o envio da transmissão.');
-        completed = Boolean(payload.done);
+        const completed = Boolean(payload.done);
         setBroadcasts((current) => current.map((broadcast) => broadcast.id === item.id ? {
           ...broadcast, status: completed ? 'completed' : 'running',
           queued_count: payload.counts?.queued ?? broadcast.queued_count,
@@ -226,10 +225,14 @@ export function BroadcastsManager({
           read_count: payload.counts?.read ?? broadcast.read_count,
           failed_count: payload.counts?.failed ?? broadcast.failed_count,
         } : broadcast));
-        if (completed) break;
+        if (completed) {
+          setNotice(`Transmissão “${item.name}” concluída.`);
+          router.refresh();
+          return;
+        }
         await new Promise((resolve) => window.setTimeout(resolve, 350));
       }
-      setNotice(completed ? `Transmissão “${item.name}” concluída.` : 'Envio pausado após o lote atual. Clique em Continuar para retomar.');
+      setNotice('Envio pausado após o lote atual. Clique em Continuar para retomar.');
       router.refresh();
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Falha durante o envio.'); }
     finally { setRunningId(null); }
