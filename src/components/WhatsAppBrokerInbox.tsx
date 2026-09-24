@@ -217,6 +217,7 @@ export function WhatsAppBrokerInbox() {
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
+  const [nowMs, setNowMs] = useState(0);
   const messagesRef = useRef<HTMLDivElement | null>(null);
   const previousSelected = useRef<string | null>(null);
   const selectedIdRef = useRef<string | null>(null);
@@ -350,10 +351,23 @@ export function WhatsAppBrokerInbox() {
   }, []);
 
   useEffect(() => {
-    void loadConversations(false);
+    const initialLoad = window.setTimeout(() => { void loadConversations(false); }, 0);
     const timer = window.setInterval(() => void loadConversations(true), CONVERSATION_REFRESH_MS);
-    return () => window.clearInterval(timer);
+    return () => {
+      window.clearTimeout(initialLoad);
+      window.clearInterval(timer);
+    };
   }, [loadConversations]);
+
+  useEffect(() => {
+    const refreshNow = () => setNowMs(Date.now());
+    const initialClock = window.setTimeout(refreshNow, 0);
+    const clock = window.setInterval(refreshNow, 30_000);
+    return () => {
+      window.clearTimeout(initialClock);
+      window.clearInterval(clock);
+    };
+  }, []);
 
   useEffect(() => {
     if (!selectedId) return;
@@ -396,7 +410,7 @@ export function WhatsAppBrokerInbox() {
     ].some((value) => String(value || '').toLowerCase().includes(needle)));
   }, [conversations, search]);
 
-  const windowOpen = Boolean(selected?.windowExpiresAt && new Date(selected.windowExpiresAt).getTime() > Date.now());
+  const windowOpen = Boolean(selected?.windowExpiresAt && new Date(selected.windowExpiresAt).getTime() > nowMs);
 
   const prefetchConversation = useCallback((conversationId: string) => {
     if (messageCache.current.has(conversationId) || conversationId === selectedIdRef.current) return;
