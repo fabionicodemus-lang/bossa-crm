@@ -317,6 +317,22 @@ export async function applyHybridDecision(args: {
       budget: args.turn.extracted.budget,
       deadline: args.turn.extracted.deadline,
       decision_maker: args.turn.extracted.decision_maker,
+      location: args.turn.extracted.region
+        || (typeof args.lead.metadata?.contact_time_preference_city === 'string'
+          ? args.lead.metadata.contact_time_preference_city
+          : ''),
+      payment_method: typeof args.lead.metadata?.payment_method === 'string'
+        ? args.lead.metadata.payment_method
+        : '',
+      best_contact_time_original: typeof args.lead.metadata?.contact_time_preference_original === 'string'
+        ? args.lead.metadata.contact_time_preference_original
+        : '',
+      best_contact_time_brasilia: typeof args.lead.metadata?.contact_time_preference_brasilia === 'string'
+        ? args.lead.metadata.contact_time_preference_brasilia
+        : '',
+      contact_timezone: typeof args.lead.metadata?.contact_time_preference_timezone === 'string'
+        ? args.lead.metadata.contact_time_preference_timezone
+        : '',
       main_objection: args.turn.summary,
       next_best_action: resolvedNextAction,
       priority_class: decision.priorityClass,
