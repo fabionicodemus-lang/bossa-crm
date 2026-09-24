@@ -154,6 +154,30 @@ function clockLabel(hour: number, minute: number) {
   return minute ? `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}` : `${String(hour).padStart(2, '0')}h`;
 }
 
+export function convertLocalClockToBrasilia(args: {
+  sourceTimeZone: string;
+  hour: number;
+  minute?: number;
+  referenceDate?: Date;
+}) {
+  const reference = args.referenceDate ?? new Date();
+  const localDate = partsInTimeZone(reference, args.sourceTimeZone);
+  const instant = localWallTimeToUtc({
+    year: localDate.year,
+    month: localDate.month,
+    day: localDate.day,
+    hour: args.hour,
+    minute: args.minute ?? 0,
+    timeZone: args.sourceTimeZone,
+  });
+  const brasilia = partsInTimeZone(instant, 'America/Sao_Paulo');
+  return {
+    instant,
+    hour: brasilia.hour,
+    minute: brasilia.minute,
+  };
+}
+
 export async function resolvePreferredContactTime(
   history: ChatMessage[],
   now = new Date(),
@@ -172,16 +196,13 @@ export async function resolvePreferredContactTime(
   }
   if (!geocoded?.timezone) return null;
 
-  const sourceDate = partsInTimeZone(now, geocoded.timezone);
-  const instant = localWallTimeToUtc({
-    year: sourceDate.year,
-    month: sourceDate.month,
-    day: sourceDate.day,
+  const converted = convertLocalClockToBrasilia({
+    sourceTimeZone: geocoded.timezone,
     hour: preference.hour,
     minute: preference.minute,
-    timeZone: geocoded.timezone,
+    referenceDate: now,
   });
-  const brasilia = partsInTimeZone(instant, 'America/Sao_Paulo');
+  const brasilia = { hour: converted.hour, minute: converted.minute };
   const prefix = preference.after ? 'depois das ' : 'às ';
   const localPreference = `${prefix}${clockLabel(preference.hour, preference.minute)} em ${geocoded.name || city}`;
   const brasiliaPreference = `${prefix}${clockLabel(brasilia.hour, brasilia.minute)} no horário de Brasília`;
