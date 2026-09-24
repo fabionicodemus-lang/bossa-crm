@@ -162,6 +162,36 @@ function choosePromisedFile(history: ChatMessage[], context: AiTrainingContext):
     .map((file) => file.id);
 }
 
+function isPlantFile(file: AiFileOption): boolean {
+  const haystack = normalizeText([file.category, file.title, file.description ?? '', ...(file.trigger_keywords ?? [])].join(' '));
+  return /\b(planta|plantas|plano|planos)\b/.test(haystack)
+    && !/\b(lazer|rooftop|roof|move)\b/.test(haystack);
+}
+
+function developmentFromHistory(history: ChatMessage[]): 'alma' | 'flow' | null {
+  const value = normalizeText(userText(history));
+  if (/\balma\b/.test(value)) return 'alma';
+  if (/\bflow\b/.test(value)) return 'flow';
+  return null;
+}
+
+function locationFileId(history: ChatMessage[], context: AiTrainingContext): string | null {
+  const development = developmentFromHistory(history);
+  if (!development) return null;
+  const candidate = (context.files ?? []).find((file) => {
+    const haystack = normalizeText([file.category, file.title, file.description ?? '', ...(file.trigger_keywords ?? [])].join(' '));
+    return haystack.includes(development)
+      && /\b(localizacao|ubicacion|mapa)\b/.test(haystack);
+  });
+  return candidate?.id ?? null;
+}
+
+function mapsSearchUrl(development: 'alma' | 'flow'): string {
+  return development === 'alma'
+    ? 'https://www.google.com/maps/search/?api=1&query=Alma%20Seahouses%20Porto%20Belo%20SC'
+    : 'https://www.google.com/maps/search/?api=1&query=Flow%20Aptos%20Porto%20Belo%20SC';
+}
+
 function ensureFirstReplyIdentity(reply: string, history: ChatMessage[]): string {
   if (assistantMessages(history).length > 0) return reply;
   const spanish = isSpanishLead(history);
@@ -303,6 +333,36 @@ export function postProcessNaraTurn(
   const promisedFiles = choosePromisedFile(history, context);
   if (promisedFiles.length && !turn.attachment_ids.length) {
     turn.attachment_ids = promisedFiles;
+  }
+
+  const asksPlantNow = /\b(planta|plantas|plano|planos)\b/.test(latestNormalized);
+  const qualifier = plantQualifier(userText(history));
+  if (asksPlantNow && !qualifier) {
+    const plantIds = new Set((context.files ?? []).filter(isPlantFile).map((file) => file.id));
+    turn.attachment_ids = turn.attachment_ids.filter((id) => !plantIds.has(id));
+    turn.reply = spanish
+      ? 'Tengo las plantas. Para enviarte la correcta, ¿cuántas suites buscas?'
+      : 'Tenho as plantas. Para te enviar a correta, quantas suítes você procura?';
+    turn.handoff = false;
+    turn.summary = 'Lead pediu planta sem informar tipologia/suítes.';
+    turn.next_action = 'Aguardar quantidade de suítes/tipologia antes de enviar planta; não escolher arquivo arbitrariamente.';
+  }
+
+  const asksLocationNow = /\b(localizacao|endereco|mapa|onde fica|ubicacion|direccion|donde queda)\b/.test(latestNormalized);
+  const development = developmentFromHistory(history);
+  if (asksLocationNow && development) {
+    const mapFile = locationFileId(history, context);
+    if (mapFile && !turn.attachment_ids.includes(mapFile)) {
+      turn.attachment_ids = [mapFile, ...turn.attachment_ids].slice(0, 3);
+    }
+    const url = mapsSearchUrl(development);
+    const projectName = development === 'alma' ? 'Alma Seahouses' : 'Flow Aptos';
+    turn.reply = spanish
+      ? `Aquí tienes la ubicación de ${projectName} en Google Maps: ${url}`
+      : `Aqui está a localização do ${projectName} no Google Maps: ${url}`;
+    turn.handoff = false;
+    turn.summary = `Lead pediu localização do ${projectName}; link do Google Maps fornecido.`;
+    turn.next_action = 'Continuar atendimento pela Nara e fazer uma pergunta de qualificação na próxima interação se necessário.';
   }
 
   const asksIfRobot = /\b(voce e|vc e|e uma|eh uma)\s*(?:um |uma )?(?:robo|robot|ia|inteligencia artificial)|\bassistente digital\b/.test(latest);
