@@ -63,7 +63,7 @@ export async function POST(request: Request) {
     const granted = (permissionsPayload.data ?? [])
       .filter((item) => item.status === 'granted' && item.permission)
       .map((item) => String(item.permission));
-    const required = ['leads_retrieval', 'pages_show_list', 'pages_read_engagement', 'pages_manage_metadata'];
+    const required = ['leads_retrieval', 'pages_show_list', 'pages_read_engagement', 'pages_manage_metadata', 'ads_read'];
     const missing = required.filter((scope) => !granted.includes(scope));
     if (missing.length) {
       return NextResponse.json({
@@ -140,6 +140,7 @@ export async function POST(request: Request) {
       page_name: page.name ?? null,
       app_id: appId,
       token_encrypted: encryptToken(page.access_token),
+      user_token_encrypted: encryptToken(userToken),
       scopes: granted,
       status: 'connected',
       connected_by: user.id,
