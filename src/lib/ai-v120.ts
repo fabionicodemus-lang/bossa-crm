@@ -205,11 +205,26 @@ function ensureFirstReplyIdentity(reply: string, history: ChatMessage[]): string
   return `${intro} ${reply.trim()}`.trim();
 }
 
+function materialQualificationQuestion(history: ChatMessage[]): string {
+  const value = normalizeText(userText(history));
+  const spanish = isSpanishLead(history);
+  if (!/\b\d+\s*(?:suites?|quartos?|habitaciones?)\b|\b(?:dois|tres|quatro|dos|tres|cuatro)\s*(?:suites?|quartos?|habitaciones?)\b/.test(value)) {
+    return spanish ? '¿Cuántas suites buscas?' : 'Quantas suítes você procura?';
+  }
+  if (!/\b(morar|moradia|investir|investimento|viver|vivir|invertir|inversion)\b/.test(value)) {
+    return spanish ? '¿Lo buscas para vivir o para invertir?' : 'Você procura para morar ou investir?';
+  }
+  return spanish ? '¿En qué plazo piensas comprar?' : 'Você pensa em comprar em qual prazo?';
+}
+
 function finishTurn(turn: AiTurn, history: ChatMessage[]): AiTurn {
   turn.reply = ensureFirstReplyIdentity(turn.reply, history);
   const latest = lastUserText(history);
   if (isPureInformationRequest(latest) && !requiresHumanHandoff(latest)) {
     turn.handoff = false;
+  }
+  if (turn.attachment_ids.length > 0 && !turn.handoff && !turn.reply.includes('?')) {
+    turn.reply = `${turn.reply.trim()} ${materialQualificationQuestion(history)}`;
   }
   return turn;
 }
