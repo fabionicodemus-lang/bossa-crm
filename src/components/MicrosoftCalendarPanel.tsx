@@ -27,9 +27,12 @@ export function MicrosoftCalendarPanel({ canEdit }: { canEdit: boolean }) {
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Erro ao consultar Microsoft.'); }
   }, []);
   useEffect(() => {
-    const value = new URLSearchParams(window.location.search).get('microsoft');
-    if (value && messages[value]) setNotice(messages[value]);
-    void load();
+    const timer = window.setTimeout(() => {
+      const value = new URLSearchParams(window.location.search).get('microsoft');
+      if (value && messages[value]) setNotice(messages[value]);
+      void load();
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, [load]);
 
   async function sync() {
