@@ -604,3 +604,19 @@ export async function generateAiTurn(
   const processed = finishTurn(postProcessNaraTurn(turn, history, context), history);
   return enforceNaraReplyGuardrails(processed, lead, history, context);
 }
+
+/**
+ * Turno supervisionado pelo gestor: mantém o histórico e todos os guardrails,
+ * mas não aplica os pós-processadores determinísticos que reinterpretam a
+ * última fala do cliente. A orientação interna decide a iniciativa deste turno.
+ */
+export async function generateSupervisedAiTurn(
+  lead: Lead,
+  history: ChatMessage[],
+  context: AiTrainingContext = {},
+): Promise<AiTurn | null> {
+  const turn = await generateCoreAiTurn(lead, history, context);
+  if (!turn || lead.kind !== 'cliente') return turn;
+  const processed = finishTurn(turn, history);
+  return enforceNaraReplyGuardrails(processed, lead, history, context);
+}

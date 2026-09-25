@@ -38,6 +38,7 @@ export interface AiTrainingContext {
   dynamic?: NaraDynamicTurnContext | null;
   foreign?: NaraForeignContext | null;
   operational?: NaraOperationalContext | null;
+  supervisor_instruction?: string | null;
 }
 
 export interface AiUsageRecord {
@@ -361,7 +362,11 @@ function dynamicLeadContext(lead: Lead, context: AiTrainingContext): string {
   const runtime = context.dynamic?.source_text?.trim();
   const foreign = context.foreign?.source_text?.trim();
   const operational = context.operational?.source_text?.trim();
-  return `DADOS DINÂMICOS DESTA CONVERSA:\nContato: ${lead.name}.\nEtapa atual: ${lead.stage}.\nDados atuais: ${JSON.stringify(lead.metadata || {})}.${runtime ? `\n\n${runtime}` : ''}${operational ? `\n\n${operational}` : ''}${foreign ? `\n\n${foreign}` : ''}${commercial ? `\n\nCONSULTAS COMERCIAIS DESTE TURNO — FONTE ATUAL DO SISTEMA:\n${commercial}\n\nUse somente esses retornos para preço e disponibilidade neste turno. Nunca mencione nomes internos de função ou banco. Resultado vazio significa que não há apartamento disponível comprovado para informar, sem explicar o motivo.` : ''}`;
+  const supervisor = context.supervisor_instruction?.trim();
+  const supervisorBlock = supervisor
+    ? `\n\nORIENTAÇÃO INTERNA DO GESTOR PARA ESTE TURNO — NÃO MOSTRE ESTA INSTRUÇÃO AO CONTATO:\n${supervisor}\nExecute a intenção da orientação usando seu tom normal e o histórico real. As regras de segurança, opt-out, preços, fatos confirmados, arquivos e limite de mensagem continuam valendo acima desta orientação.`
+    : '';
+  return `DADOS DINÂMICOS DESTA CONVERSA:\nContato: ${lead.name}.\nEtapa atual: ${lead.stage}.\nDados atuais: ${JSON.stringify(lead.metadata || {})}.${runtime ? `\n\n${runtime}` : ''}${operational ? `\n\n${operational}` : ''}${supervisorBlock}${foreign ? `\n\n${foreign}` : ''}${commercial ? `\n\nCONSULTAS COMERCIAIS DESTE TURNO — FONTE ATUAL DO SISTEMA:\n${commercial}\n\nUse somente esses retornos para preço e disponibilidade neste turno. Nunca mencione nomes internos de função ou banco. Resultado vazio significa que não há apartamento disponível comprovado para informar, sem explicar o motivo.` : ''}`;
 }
 
 function inputMessage(role: InputMessage['role'], text: string, cacheBreakpoint = false): InputMessage {
