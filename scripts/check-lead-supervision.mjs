@@ -17,7 +17,7 @@ assert.match(handoff, /owner_name/);
 assert.match(detail, /Transferir para…/);
 assert.match(detail, /Orientar a \{persona\}/);
 assert.match(detail, /api\/leads\/\$\{lead\.id\}\/ai-guidance/);
-assert.match(detail, /supervis/);
+assert.match(detail, /A instrução é interna/);
 assert.match(page, /Cíntia/);
 
 assert.match(guidance, /owner_mode !== 'ai'/);
