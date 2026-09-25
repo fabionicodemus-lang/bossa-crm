@@ -1,5 +1,5 @@
 import { extractNaraPrompt } from './nara-prompt-config';
-import { isAssistedSaleSignal, isBrokerRoutingSignal, isCurrentCustomerSignal } from './nara-contact-routing';
+import { isAssistedSaleSignal, isBrokerRoutingSignal, isPostSaleRoutingSignal } from './nara-contact-routing';
 import type { NaraDynamicTurnContext } from './nara-dynamic-context';
 import type { NaraForeignContext } from './nara-exterior';
 import type { NaraOperationalContext } from './nara-operations';
@@ -430,12 +430,10 @@ function outsideBuyerDestination(history: ChatMessage[]): OutsideBuyerDestinatio
 
   if (userMessages.some(isAssistedSaleSignal)) return 'venda_assistida';
   if (userMessages.some(isBrokerRoutingSignal)) return 'plantao';
-  if (userMessages.some(isCurrentCustomerSignal)) return 'pos_venda';
+  if (userMessages.some(isPostSaleRoutingSignal)) return 'pos_venda';
   if (/(fornecedor|prestador|curriculo|vaga|trabalhar com voces|cobranca|imprensa)/.test(fullHistory)) return 'equipe';
 
-  const ambiguousSignal = /(entrega|chaves|contrato|pos-venda|assistencia)/.test(current);
-  const existingClientSignal = /(ja comprei|sou cliente|minha unidade|meu apartamento|comprei com voces|minha obra)/.test(current);
-  return ambiguousSignal && existingClientSignal ? 'pos_venda' : null;
+  return null;
 }
 
 function routeOutsideBuyerProfile(history: ChatMessage[]): boolean {
