@@ -5,7 +5,7 @@ import type { Lead } from '@/lib/types';
 // só precisa da atribuição do anúncio (`metadata.ad`), então ela vem sozinha.
 // Os cards nunca gravam o metadata de volta: mudanças de etapa vão por /api/leads.
 export const PIPELINE_LEAD_COLUMNS = [
-  'id', 'organization_id', 'kind', 'kommo_id', 'name', 'phone', 'email', 'stage', 'source',
+  'id', 'organization_id', 'kind', 'kommo_id', 'name', 'first_name', 'last_name', 'phone', 'email', 'stage', 'source',
   'enterprise', 'company', 'group_name', 'creci', 'temperature', 'ai_enabled',
   'ai_classification', 'ai_summary', 'ai_next_action', 'ai_last_classified_at', 'owner_id',
   'owner_mode', 'backup_owner_id', 'priority_class', 'next_action', 'next_action_type',
