@@ -25,6 +25,7 @@
     "test:nara-2409": "node --experimental-strip-types --experimental-loader ./scripts/ts-extension-loader.mjs scripts/check-nara-2409.mjs",
     "test:nara-cadence": "node --experimental-strip-types --loader ./scripts/nara-cadence/loader.mjs scripts/nara-cadence/check.mjs",
     "test:phone-variants": "node --experimental-strip-types scripts/check-phone-variants.mjs",
+    "test:nara-broadcast": "node --experimental-strip-types scripts/check-nara-broadcast-response.mjs",
     "test:nara-round3": "node --experimental-strip-types --experimental-loader ./scripts/ts-extension-loader.mjs scripts/check-nara-round3.mjs"
   },
   "dependencies": {

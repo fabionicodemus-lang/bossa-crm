@@ -9,11 +9,20 @@ import { loadNaraCommercialTurnContext } from '@/lib/nara-unit-queries';
 import { markNaraOfferAuditFailed, markNaraOfferAuditSent, prepareNaraOfferAudit } from '@/lib/nara-offer-log';
 import { aiCanReply } from '@/lib/hybrid';
 import { optOutSignal } from '@/lib/hybrid';
-import { whatsappCanStillReply } from '@/lib/whatsapp/aiTurnSafety';
+import { whatsappCanStillReply, whatsappClaimAiTurn, whatsappMarkAiTurnSent } from '@/lib/whatsapp/aiTurnSafety';
 import { maybeScheduleAgendaFromAi } from '@/lib/agenda-ai-core';
 import { appendAgendaMessageToReply, hasNonAgendaQuestion, shouldHandleAgendaTurn } from '@/lib/nara-agenda-intent';
 import { mergeMetaAdAttribution } from '@/lib/meta-ad-attribution';
 import { applyHybridDecision } from '@/lib/hybrid-server';
+import {
+  broadcastResponseAction,
+  clientNoReplyReason,
+  findRecentBroadcastForLead,
+  queueBroadcastAttention,
+  reactivateLeadFromBroadcast,
+  recordClientNoReplySafetyNet,
+  shouldForceBroadcastReply,
+} from '@/lib/nara-broadcast-response';
 import { createAdminClient } from '@/lib/supabase/admin';
 import type { Lead, LeadKind } from '@/lib/types';
 import { handleAiFailure as recordAiFailure, resolveAiChannelFailure } from '@/lib/whatsapp/aiFailure';
@@ -432,11 +441,90 @@ export async function processConversation(args: {
   // (no Plantão) chegam aqui. Geral nunca recebe a IA comercial completa.
   if (lead.kind === 'geral') return;
 
+  const { data: source, error: sourceError } = await args.admin
+    .from('messages')
+    .select('id,created_at,body')
+    .eq('id', args.sourceMessageId)
+    .maybeSingle();
+  if (sourceError || !source) {
+    if (lead.kind === 'cliente') {
+      await recordClientNoReplySafetyNet({
+        admin: args.admin,
+        organizationId: args.channel.organization_id,
+        lead,
+        sourceMessageId: args.sourceMessageId,
+        inboundText: '',
+        reason: 'mensagem de origem não encontrada',
+      });
+    }
+    return;
+  }
+
+  const explicitOptOut = lead.kind === 'cliente' && optOutSignal(String(source.body ?? ''));
+  const recentBroadcast = lead.kind === 'cliente'
+    ? await findRecentBroadcastForLead({
+      admin: args.admin,
+      organizationId: args.channel.organization_id,
+      lead,
+      sourceCreatedAt: String(source.created_at),
+    })
+    : null;
+  const broadcastAction = lead.kind === 'cliente'
+    ? broadcastResponseAction(lead, Boolean(recentBroadcast), explicitOptOut)
+    : 'none';
+
+  if (recentBroadcast && broadcastAction === 'handoff_closed_won') {
+    await queueBroadcastAttention({
+      admin: args.admin,
+      organizationId: args.channel.organization_id,
+      lead,
+      broadcast: recentBroadcast,
+      sourceMessageId: args.sourceMessageId,
+      inboundText: String(source.body ?? ''),
+      mode: 'closed_won',
+    });
+    return;
+  }
+
+  if (recentBroadcast && broadcastAction === 'notify_human') {
+    await queueBroadcastAttention({
+      admin: args.admin,
+      organizationId: args.channel.organization_id,
+      lead,
+      broadcast: recentBroadcast,
+      sourceMessageId: args.sourceMessageId,
+      inboundText: String(source.body ?? ''),
+      mode: 'human',
+    });
+    return;
+  }
+
+  if (recentBroadcast && broadcastAction === 'reactivate_ai') {
+    lead = await reactivateLeadFromBroadcast({
+      admin: args.admin,
+      organizationId: args.channel.organization_id,
+      lead,
+      broadcast: recentBroadcast,
+    });
+  }
+
   const context = await loadAiContext(args.admin, args.channel.organization_id, lead.kind);
-  if (context.config?.active === false) return;
+  if (context.config?.active === false) {
+    if (lead.kind === 'cliente') {
+      await recordClientNoReplySafetyNet({
+        admin: args.admin,
+        organizationId: args.channel.organization_id,
+        lead,
+        sourceMessageId: args.sourceMessageId,
+        inboundText: String(source.body ?? ''),
+        reason: 'IA da organização está desativada',
+      });
+    }
+    return;
+  }
 
   let historyQuery = args.admin.from('messages')
-    .select('direction,sender_kind,body,created_at')
+    .select('id,direction,sender_kind,body,created_at')
     .eq('lead_id', lead.id)
     .neq('direction', 'system');
   const resetAt = typeof lead.metadata?.nara_reset_at === 'string'
@@ -446,13 +534,23 @@ export async function processConversation(args: {
   const { data: historyRows } = await historyQuery
     .order('created_at', { ascending: true })
     .limit(100);
-  const history = (historyRows ?? []).map((row) => ({
+  if (resetAt && source.created_at < resetAt) return;
+
+  const mergedHistoryRows = [...(historyRows ?? [])];
+  if (recentBroadcast && !mergedHistoryRows.some((row) => String(row.id) === recentBroadcast.id)) {
+    mergedHistoryRows.push({
+      id: recentBroadcast.id,
+      direction: 'out',
+      sender_kind: 'humano',
+      body: recentBroadcast.body,
+      created_at: recentBroadcast.createdAt,
+    });
+    mergedHistoryRows.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+  }
+  const history = mergedHistoryRows.map((row) => ({
     role: row.direction === 'in' ? 'user' as const : 'assistant' as const,
     content: row.body,
   }));
-  const { data: source } = await args.admin.from('messages').select('created_at').eq('id', args.sourceMessageId).maybeSingle();
-  if (resetAt && (!source || source.created_at < resetAt)) return;
-  const shouldReply = aiCanReply(lead);
   if (!history.length) {
     await handleAiFailure({
       admin: args.admin,
@@ -485,6 +583,29 @@ export async function processConversation(args: {
       providerPayload: sent.raw });
     return;
   }
+
+  const shouldReply = aiCanReply(lead);
+  if (!shouldReply) {
+    if (lead.kind === 'cliente') {
+      await recordClientNoReplySafetyNet({
+        admin: args.admin,
+        organizationId: args.channel.organization_id,
+        lead,
+        sourceMessageId: args.sourceMessageId,
+        inboundText: lastInbound,
+        reason: clientNoReplyReason(lead),
+      });
+    }
+    return;
+  }
+
+  const claimed = await whatsappClaimAiTurn({
+    admin: args.admin,
+    leadId: lead.id,
+    conversationId: args.conversation.id,
+    sourceId: args.sourceMessageId,
+  });
+  if (!claimed) return;
 
   if (lead.kind === 'cliente') {
     const [commercial, dynamic] = await Promise.all([
@@ -544,7 +665,19 @@ export async function processConversation(args: {
 
   const lastUserMessage = [...history].reverse().find((item) => item.role === 'user')?.content ?? '';
   if (!(await whatsappCanStillReply({ admin: args.admin, leadId: lead.id,
-    conversationId: args.conversation.id, sourceId: args.sourceMessageId }))) return;
+    conversationId: args.conversation.id, sourceId: args.sourceMessageId }))) {
+    if (lead.kind === 'cliente') {
+      await recordClientNoReplySafetyNet({
+        admin: args.admin,
+        organizationId: args.channel.organization_id,
+        lead,
+        sourceMessageId: args.sourceMessageId,
+        inboundText: lastUserMessage,
+        reason: 'estado da conversa mudou durante o processamento da IA',
+      });
+    }
+    return;
+  }
   if (lead.kind === 'cliente' && shouldHandleAgendaTurn(history, lastUserMessage)) {
     const officeAddress = context.dynamic?.values.office_address?.trim();
     const appointment = await maybeScheduleAgendaFromAi({ admin: args.admin,
@@ -578,7 +711,22 @@ export async function processConversation(args: {
     records: turn.usage_records ?? [],
   });
 
-  if (!shouldReply || decision.ownerMode !== 'ai' || !decision.aiEnabled) return;
+  const forceBroadcastReply = shouldForceBroadcastReply(broadcastAction, Boolean(recentBroadcast));
+  if (!shouldReply || ((decision.ownerMode !== 'ai' || !decision.aiEnabled) && !forceBroadcastReply)) {
+    if (lead.kind === 'cliente') {
+      await recordClientNoReplySafetyNet({
+        admin: args.admin,
+        organizationId: args.channel.organization_id,
+        lead,
+        sourceMessageId: args.sourceMessageId,
+        inboundText: lastUserMessage,
+        reason: decision.ownerMode !== 'ai'
+          ? `decisão da conversa mudou o responsável para ${decision.ownerMode}`
+          : 'decisão da conversa desligou a IA',
+      });
+    }
+    return;
+  }
 
   if (!isCustomerServiceWindowOpen(args.conversation.window_expires_at)) {
     await args.admin.from('activities').insert({
@@ -595,8 +743,25 @@ export async function processConversation(args: {
   const destination = normalizeWaId(lead.phone ?? '');
   let reply = turn.reply.trim();
   if (!destination || !reply) return;
-  if (!(await whatsappCanStillReply({ admin: args.admin, leadId: lead.id,
-    conversationId: args.conversation.id, sourceId: args.sourceMessageId }))) return;
+  if (!(await whatsappCanStillReply({
+    admin: args.admin,
+    leadId: lead.id,
+    conversationId: args.conversation.id,
+    sourceId: args.sourceMessageId,
+    allowDisabledLead: forceBroadcastReply,
+  }))) {
+    if (lead.kind === 'cliente') {
+      await recordClientNoReplySafetyNet({
+        admin: args.admin,
+        organizationId: args.channel.organization_id,
+        lead,
+        sourceMessageId: args.sourceMessageId,
+        inboundText: lastUserMessage,
+        reason: 'resposta bloqueada pela trava final de concorrência',
+      });
+    }
+    return;
+  }
 
   if (turn.attachment_ids.length) {
     const delivery = await sendSelectedFiles({
@@ -685,6 +850,16 @@ export async function processConversation(args: {
       nara_offer_audit_ids: offerAuditIds,
     },
   });
+  try {
+    await whatsappMarkAiTurnSent({
+      admin: args.admin,
+      leadId: lead.id,
+      conversationId: args.conversation.id,
+      sourceId: args.sourceMessageId,
+    });
+  } catch (error) {
+    console.error('[whatsapp ai mark sent]', error);
+  }
 
   const now = new Date().toISOString();
   await args.admin.from('leads').update({
