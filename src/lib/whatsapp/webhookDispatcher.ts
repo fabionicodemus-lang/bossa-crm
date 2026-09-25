@@ -7,7 +7,7 @@ import {
 } from '@/lib/whatsapp/channelService';
 import { importHistory, importStateSync } from '@/lib/whatsapp/coexistenceSync';
 import { processWebhookEvent } from '@/lib/whatsapp/webhookProcessor';
-import { metaTimestamp, normalizeWaId } from '@/lib/whatsapp/utils';
+import { metaTimestamp, metaWaId, phoneMatchVariants } from '@/lib/whatsapp/utils';
 
 type AdminClient = ReturnType<typeof createAdminClient>;
 
@@ -113,7 +113,7 @@ async function findOrCreateLead(args: {
     .select('*')
     .eq('organization_id', args.channel.organization_id)
     .eq('kind', kind)
-    .eq('phone', args.contactWaId)
+    .in('phone', phoneMatchVariants(args.contactWaId))
     .is('archived_at', null)
     .order('updated_at', { ascending: false })
     .limit(1);
@@ -201,7 +201,7 @@ async function processEcho(args: {
   const wamid = String(args.echo.id ?? '').trim();
   if (!wamid) return;
 
-  const contactWaId = normalizeWaId(String(args.echo.to ?? args.fallbackContact));
+  const contactWaId = metaWaId(args.echo.to ?? args.fallbackContact);
   if (!contactWaId) return;
 
   const sentAt = metaTimestamp(args.echo.timestamp);

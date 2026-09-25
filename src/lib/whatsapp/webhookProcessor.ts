@@ -34,7 +34,7 @@ import type {
   MetaWebhookStatus,
   StoredMetaWebhookEvent,
 } from '@/lib/whatsapp/webhookTypes';
-import { metaTimestamp, normalizeWaId } from '@/lib/whatsapp/utils';
+import { metaTimestamp, metaWaId, normalizeWaId, phoneMatchVariants } from '@/lib/whatsapp/utils';
 
 type AdminClient = ReturnType<typeof createAdminClient>;
 
@@ -60,8 +60,9 @@ async function isAuthorizedNaraReset(
   const { data, error } = await admin.from('nara_internal_numbers')
     .select('phone,can_reset')
     .eq('organization_id', organizationId)
-    .eq('phone', waId)
+    .in('phone', phoneMatchVariants(waId))
     .eq('can_reset', true)
+    .limit(1)
     .maybeSingle();
   if (error && error.code !== '42P01' && error.code !== 'PGRST205') throw error;
   return Boolean(data);
@@ -83,7 +84,7 @@ async function handleNaraReset(args: {
   const { data: leads, error: leadsError } = await args.admin.from('leads')
     .select('*')
     .eq('organization_id', args.channel.organization_id)
-    .eq('phone', args.waId)
+    .in('phone', phoneMatchVariants(args.waId))
     .eq('kind', 'cliente')
     .is('archived_at', null)
     .order('updated_at', { ascending: false })
@@ -468,13 +469,13 @@ export async function processConversation(args: {
     const now = new Date().toISOString();
     const { error } = await args.admin.from('leads').update({ opt_out: true, ai_enabled: false,
       automation_paused: true, owner_mode: 'none', stage: 'encerrado', updated_at: now })
-      .eq('organization_id', args.channel.organization_id).eq('phone', lead.phone);
+      .eq('organization_id', args.channel.organization_id).in('phone', phoneMatchVariants(lead.phone));
     if (error) throw error;
     await Promise.all([
       args.admin.from('nara_followup_sequences').update({ status: 'cancelled', updated_at: now }).eq('lead_id', lead.id).eq('status', 'active'),
       args.admin.from('nara_deferred_replies').update({ status: 'cancelled', updated_at: now }).eq('lead_id', lead.id).eq('status', 'pending'),
       args.admin.from('broadcast_recipients').update({ status: 'skipped' }).eq('organization_id', args.channel.organization_id)
-        .eq('phone', normalizeWaId(lead.phone ?? '')).eq('status', 'queued'),
+        .in('phone', phoneMatchVariants(lead.phone)).eq('status', 'queued'),
     ]);
     const reply = 'Desculpe o incômodo! Seu número foi removido e você não vai receber mais mensagens da Bossa.';
     const { provider, accessToken, phoneNumberId } = channelAccess(args.channel);
@@ -758,7 +759,7 @@ async function findOrCreateLead(args: {
       .select('*')
       .eq('organization_id', args.channel.organization_id)
       .eq('kind', expectedKind)
-      .eq('phone', args.waId)
+      .in('phone', phoneMatchVariants(args.waId))
       .is('archived_at', null)
       .order('updated_at', { ascending: false })
       .limit(1);
@@ -772,7 +773,7 @@ async function findOrCreateLead(args: {
       .from('leads')
       .select('*')
       .eq('organization_id', args.channel.organization_id)
-      .eq('phone', args.waId)
+      .in('phone', phoneMatchVariants(args.waId))
       .in('kind', ['cliente', 'corretor', 'geral'])
       .is('archived_at', null)
       .order('updated_at', { ascending: false })
@@ -840,7 +841,7 @@ async function persistInboundMessage(args: {
   const inboundWamid = String(args.message.id ?? '').trim();
   if (!inboundWamid) return null;
 
-  const waId = normalizeWaId(String(args.message.from ?? args.contactWaId));
+  const waId = metaWaId(args.message.from ?? args.contactWaId);
   if (!waId) return null;
 
   const createdAt = metaTimestamp(args.message.timestamp);
@@ -1033,7 +1034,7 @@ export async function processWebhookEvent(eventId: string, knownPhoneNumberId?: 
 
     const persisted: PersistedInbound[] = [];
     for (const message of value.messages ?? []) {
-      const senderWaId = normalizeWaId(String(message.from ?? contactWaId));
+      const senderWaId = metaWaId(message.from ?? contactWaId);
       const body = messageBody(message).trim();
       if (body.toLowerCase() === '#reset' && senderWaId) {
         const reset = await handleNaraReset({

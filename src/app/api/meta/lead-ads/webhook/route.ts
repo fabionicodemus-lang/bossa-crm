@@ -1,5 +1,6 @@
 import { after, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { phoneMatchVariants } from '@/lib/whatsapp/utils';
 import { decryptToken, verifyMetaSignature } from '@/lib/whatsapp/crypto';
 import {
   extractMetaLeadgenEvents,
@@ -157,7 +158,7 @@ async function findExistingLead(
       .select('id,name,phone,email,enterprise,source,metadata')
       .eq('organization_id', organizationId)
       .eq('kind', 'cliente')
-      .eq('phone', phone)
+      .in('phone', phoneMatchVariants(phone))
       .is('archived_at', null)
       .order('updated_at', { ascending: false })
       .limit(1)
