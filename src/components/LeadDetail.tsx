@@ -136,6 +136,8 @@ export function LeadDetail({
   const [taskDescription, setTaskDescription] = useState('');
   const [taskDue, setTaskDue] = useState('');
   const [taskPriority, setTaskPriority] = useState('normal');
+  const [transferOwnerId, setTransferOwnerId] = useState('');
+  const [aiInstruction, setAiInstruction] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [clock, setClock] = useState(0);
@@ -286,6 +288,7 @@ export function LeadDetail({
   });
 
   const persona = lead.kind === 'cliente' ? 'Nara' : 'Plantão';
+  const humanMembers = teamMembers.filter((member) => member.role !== 'viewer');
   const owner = teamMembers.find((member) => member.user_id === lead.owner_id);
   const backup = teamMembers.find((member) => member.user_id === lead.backup_owner_id);
   const pendingTasks = tasks.filter((task) => task.status === 'pending' || task.status === 'overdue');
@@ -357,6 +360,52 @@ export function LeadDetail({
       setLead((current) => ({ ...current, owner_id: null, owner_mode: 'ai', ai_enabled: true, stage: 'nutricao_ativa' }));
       router.refresh();
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Não foi possível devolver para a IA.'); }
+    setLoading(false);
+  }
+
+  async function transferToHuman() {
+    if (!canEdit || !transferOwnerId) return;
+    setLoading(true);
+    setError('');
+    try {
+      const payload = await requestJson(`/api/leads/${lead.id}/handoff`, 'POST', {
+        action: 'transfer',
+        ownerId: transferOwnerId,
+      });
+      setLead((current) => ({
+        ...current,
+        owner_id: payload.owner_id,
+        owner_mode: 'human',
+        ai_enabled: false,
+        stage: payload.stage ?? 'humano_ativo',
+        next_action_due_at: payload.due_at,
+      }));
+      setTransferOwnerId('');
+      router.refresh();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Não foi possível transferir o atendimento.');
+    }
+    setLoading(false);
+  }
+
+  async function sendAiGuidance(event: FormEvent) {
+    event.preventDefault();
+    const instruction = aiInstruction.trim();
+    if (!canEdit || !instruction) return;
+    if (!windowOpen) {
+      setError(OUTSIDE_WINDOW_MESSAGE);
+      return;
+    }
+    setLoading(true);
+    setError('');
+    try {
+      const payload = await requestJson(`/api/leads/${lead.id}/ai-guidance`, 'POST', { instruction });
+      setAiInstruction('');
+      if (payload.message) applyMessages([payload.message]);
+      router.refresh();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Não foi possível orientar a Nara.');
+    }
     setLoading(false);
   }
 
@@ -433,6 +482,13 @@ export function LeadDetail({
         <div><div className="profile-name">{lead.name}</div><div className="profile-meta">{displayPhone(lead.phone)}{lead.email ? ` · ${lead.email}` : ''}<br />{lead.kind === 'cliente' ? `${lead.enterprise || 'Empreendimento não informado'} · ${sourceLabel}` : `${lead.company || 'Autônomo'} · ${lead.group_name || 'Sem grupo'}`}</div></div>
         <div className="profile-actions">
           <select className="select" style={{ width: 230 }} value={lead.stage} disabled={!canEdit} onChange={(event) => void changeStage(event.target.value)}>{stagesFor(lead.kind).map((stage) => <option value={stage.id} key={stage.id}>{stage.label}</option>)}</select>
+          {canEdit && <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <select className="select" style={{ width: 190 }} value={transferOwnerId} disabled={loading} onChange={(event) => setTransferOwnerId(event.target.value)}>
+              <option value="">Transferir para…</option>
+              {humanMembers.map((member) => <option value={member.user_id} key={member.user_id}>{member.full_name}</option>)}
+            </select>
+            <button type="button" className="btn btn-secondary btn-sm" disabled={loading || !transferOwnerId} onClick={() => void transferToHuman()}>Transferir</button>
+          </div>}
           {canEdit && lead.stage === 'passagem_pendente' && <button className="btn btn-primary btn-sm" disabled={loading} onClick={() => void acceptHandoff()}>✅ Aceitar lead</button>}
           {canEdit && lead.owner_mode === 'human' && <button className="btn btn-ghost btn-sm" disabled={loading} onClick={() => void releaseToAi()}>🤖 Devolver para {persona}</button>}
           {canEdit && lead.owner_mode !== 'human' && !lead.ai_enabled && canReactivateAi && <button className="btn btn-primary btn-sm" onClick={() => void toggleAi(true)}>🤖 Reativar {persona}</button>}
@@ -443,7 +499,20 @@ export function LeadDetail({
 
     <div className="detail-grid">
       <section className="card">
-        {tab === 'whatsapp' && <div className="whatsapp-panel"><div className="wa-head"><div className="wa-icon">☏</div><div><strong>Conversa no WhatsApp</strong><div className="faint" style={{ fontSize: 11 }}>IA e humano compartilham o histórico</div></div><span className={`connection-pill ${whatsappConnected ? '' : 'off'}`}>{whatsappConnected ? 'Canal conectado' : 'Aguardando integração'}</span><span className={`connection-pill ${windowOpen ? '' : 'off'}`}>{windowOpen ? 'Janela de 24h aberta' : 'Janela fechada'}</span><span className={`connection-pill ${feedStatus === 'live' ? '' : 'off'}`} title="Mensagens recebidas aparecem sozinhas, sem recarregar a página.">{feedStatus === 'live' ? 'Tempo real ativo' : feedStatus === 'connecting' ? 'Conectando…' : 'Reconectando…'}</span></div><div className="messages-wrap"><div className="messages" ref={messagesRef} onScroll={handleMessagesScroll}>{messages.length === 0 ? <div className="empty-state">As mensagens aparecerão aqui.</div> : messages.map((message) => <div className={`message ${messageClass(message)}`} key={message.id}><small style={{ fontWeight: 700, display: 'block', marginBottom: 3 }}>{senderLabel(message)}</small><MessageContent message={message} /><span className="message-meta">{formatDateTime(message.created_at)}{message.status ? ` · ${message.status}` : ''}</span></div>)}</div>{unseenCount > 0 && <button type="button" className="btn btn-primary btn-sm new-messages-jump" onClick={() => scrollToBottom('smooth')}>↓ {unseenCount} {unseenCount === 1 ? 'nova mensagem' : 'novas mensagens'}</button>}</div>{!canEdit ? <div className="blocked"><span><strong>Acesso somente para consulta.</strong></span></div> : lead.owner_mode === 'ai' && lead.ai_enabled ? <div className="blocked"><span><strong>{persona} é a dona deste contato.</strong><br />Aceite a passagem ou assuma para enviar mensagens humanas.</span><button className="btn btn-primary btn-sm" onClick={() => void toggleAi(false)}>Assumir conversa</button></div> : !whatsappConnected ? <div className="blocked"><span><strong>WhatsApp ainda não conectado.</strong></span></div> : !windowOpen ? <div className="blocked"><span><strong>{OUTSIDE_WINDOW_MESSAGE}</strong><br />Aguarde uma mensagem do contato ou envie um template pela área de Transmissões.</span></div> : <form className="composer" onSubmit={sendMessage}><textarea value={text} onChange={(event) => setText(event.target.value)} placeholder="Escreva uma mensagem…" onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} /><button className="btn btn-primary" disabled={loading}>{loading ? 'Enviando…' : 'Enviar'}</button></form>}</div>}
+        {tab === 'whatsapp' && <div className="whatsapp-panel"><div className="wa-head"><div className="wa-icon">☏</div><div><strong>Conversa no WhatsApp</strong><div className="faint" style={{ fontSize: 11 }}>IA e humano compartilham o histórico</div></div><span className={`connection-pill ${whatsappConnected ? '' : 'off'}`}>{whatsappConnected ? 'Canal conectado' : 'Aguardando integração'}</span><span className={`connection-pill ${windowOpen ? '' : 'off'}`}>{windowOpen ? 'Janela de 24h aberta' : 'Janela fechada'}</span><span className={`connection-pill ${feedStatus === 'live' ? '' : 'off'}`} title="Mensagens recebidas aparecem sozinhas, sem recarregar a página.">{feedStatus === 'live' ? 'Tempo real ativo' : feedStatus === 'connecting' ? 'Conectando…' : 'Reconectando…'}</span></div><div className="messages-wrap"><div className="messages" ref={messagesRef} onScroll={handleMessagesScroll}>{messages.length === 0 ? <div className="empty-state">As mensagens aparecerão aqui.</div> : messages.map((message) => <div className={`message ${messageClass(message)}`} key={message.id}><small style={{ fontWeight: 700, display: 'block', marginBottom: 3 }}>{senderLabel(message)}</small><MessageContent message={message} /><span className="message-meta">{formatDateTime(message.created_at)}{message.status ? ` · ${message.status}` : ''}</span></div>)}</div>{unseenCount > 0 && <button type="button" className="btn btn-primary btn-sm new-messages-jump" onClick={() => scrollToBottom('smooth')}>↓ {unseenCount} {unseenCount === 1 ? 'nova mensagem' : 'novas mensagens'}</button>}</div>{!canEdit ? <div className="blocked"><span><strong>Acesso somente para consulta.</strong></span></div> : lead.owner_mode === 'ai' && lead.ai_enabled ? <div className="blocked" style={{ display: 'block' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', marginBottom: 12 }}>
+            <span><strong>{persona} é a dona deste contato.</strong><br />Você pode orientar a próxima fala da IA sem assumir a conversa, ou transferir o atendimento acima.</span>
+            <button className="btn btn-primary btn-sm" onClick={() => void toggleAi(false)}>Assumir conversa</button>
+          </div>
+          <form onSubmit={sendAiGuidance} style={{ display: 'flex', gap: 10, alignItems: 'flex-end' }}>
+            <div className="field" style={{ flex: 1, marginBottom: 0 }}>
+              <label>Orientar a {persona}</label>
+              <textarea className="textarea" value={aiInstruction} onChange={(event) => setAiInstruction(event.target.value)} placeholder="Ex.: Fale um pouco dos nossos empreendimentos e mande a foto da fachada de cada um." />
+              <small className="faint">A instrução é interna. O cliente recebe somente a resposta escrita pela {persona} e os materiais escolhidos por ela.</small>
+            </div>
+            <button className="btn btn-secondary" disabled={loading || !aiInstruction.trim() || !whatsappConnected || !windowOpen}>{loading ? 'Gerando…' : `Pedir para ${persona} enviar`}</button>
+          </form>
+        </div> : !whatsappConnected ? <div className="blocked"><span><strong>WhatsApp ainda não conectado.</strong></span></div> : !windowOpen ? <div className="blocked"><span><strong>{OUTSIDE_WINDOW_MESSAGE}</strong><br />Aguarde uma mensagem do contato ou envie um template pela área de Transmissões.</span></div> : <form className="composer" onSubmit={sendMessage}><textarea value={text} onChange={(event) => setText(event.target.value)} placeholder="Escreva uma mensagem…" onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} /><button className="btn btn-primary" disabled={loading}>{loading ? 'Enviando…' : 'Enviar'}</button></form>}</div>}
 
         {tab === 'historico' && <div><div className="card-head"><h3>Histórico e próxima ação</h3></div><div className="card-body">{canEdit && <form onSubmit={addNote} style={{ marginBottom: 20 }}><div className="field"><label>O que aconteceu</label><textarea className="textarea" value={note} onChange={(event) => setNote(event.target.value)} placeholder="Ex.: avaliou o fluxo, vai conversar com a esposa e pediu retorno na sexta." /></div><div className="grid grid-2"><div className="field"><label>Próxima ação {lead.owner_mode === 'human' ? '(obrigatória)' : ''}</label><input className="input" value={nextAction} onChange={(event) => setNextAction(event.target.value)} /></div><div className="field"><label>Data e hora</label><input className="input" type="datetime-local" value={nextActionDue} onChange={(event) => setNextActionDue(event.target.value)} /></div></div><button className="btn btn-secondary btn-sm" disabled={loading}>Salvar registro e tarefa</button></form>}<div className="timeline">{activities.length === 0 ? <div className="empty-state">Nenhum histórico registrado.</div> : activities.map((item) => <div className="timeline-item" key={item.id}><div className="timeline-icon">•</div><div><div className="timeline-title">{item.title}</div>{item.description && <div className="timeline-desc">{item.description}</div>}<div className="timeline-time">{formatDateTime(item.created_at)}</div></div></div>)}</div></div></div>}
 

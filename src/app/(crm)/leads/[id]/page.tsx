@@ -34,7 +34,11 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
 
   const teamMembers: TeamMember[] = ((memberships ?? []) as MembershipRow[]).map((item) => {
     const profile = Array.isArray(item.profiles) ? item.profiles[0] : item.profiles;
-    return { user_id: item.user_id, role: item.role, full_name: profile?.full_name || 'Usuário', email: profile?.email || '' };
+    const email = profile?.email || '';
+    const displayName = email.toLowerCase() === 'contato@bossaempreendimentos.com.br'
+      ? 'Cíntia'
+      : profile?.full_name || 'Usuário';
+    return { user_id: item.user_id, role: item.role, full_name: displayName, email };
   });
 
   const backPath = lead.archived_at
