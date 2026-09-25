@@ -112,11 +112,13 @@ function verifiedStartingPrices(context: AiTrainingContext, history: ChatMessage
   const english = isEnglishLead(history);
   const spanish = isSpanishLead(history);
   const conversion = context.foreign?.fx && context.foreign.conversions;
-  return ranges.map((range) => {
+  const prices = ranges.map((range) => {
     const foreign = conversion && context.foreign?.conversions.find((item) => item.development === range.empreendimento && item.brl === range.valor_minimo);
     const converted = foreign ? ` (≈ ${formatForeign(foreign.foreign, foreign.currency)})` : '';
     return `${range.empreendimento}: ${english ? 'from' : spanish ? 'desde' : 'a partir de'} ${formatBrl(range.valor_minimo)}${converted}`;
   }).join('; ') + (conversion ? english ? '. Approximate PTAX conversion.' : spanish ? '. Conversión PTAX aproximada.' : '. Conversão PTAX aproximada.' : '.');
+  const question = english ? 'Which one interests you most?' : spanish ? '¿Cuál te interesa más?' : 'Qual deles te interessa mais?';
+  return `${prices} ${question}`;
 }
 
 function foreignCurrencyReply(context: AiTrainingContext, spanish: boolean): string {
@@ -345,7 +347,8 @@ export function postProcessNaraTurn(
   const latestRaw = lastUserText(history);
   const latestNormalized = normalizeText(latestRaw);
   const spanish = isSpanishLead(history);
-  const asksPriceNow = /\b(preco|precio|prices?|valor|quanto custa|cuanto cuesta|how much|dolar|usd)\b/.test(latestNormalized);
+  const nonApartmentValue = /\b(?:valor|preco|precio|quanto custa|cuanto cuesta|how much)\b.{0,28}\b(?:condominio|iptu|aluguel|taxa|laudemio|itbi|escritura|entrada|parcelas?|reforcos?|chaves)\b/.test(latestNormalized);
+  const asksPriceNow = !nonApartmentValue && /\b(preco|precio|prices?|valor|quanto custa|cuanto cuesta|how much|dolar|usd)\b/.test(latestNormalized);
   const asksPlan = /\b(entrada|parcelas?|reforcos?|chaves|condicao de pagamento)\b/.test(latestNormalized);
   if (asksPlan) {
     const specific = context.commercial?.calls.flatMap((call) => call.name === 'consultar_apartamento'
