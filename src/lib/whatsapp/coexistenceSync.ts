@@ -2,7 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Lead } from '@/lib/types';
 import type { WhatsAppChannelRecord } from '@/lib/whatsapp/channelService';
 import { channelAccess } from '@/lib/whatsapp/channelService';
-import { metaTimestamp, normalizeWaId } from '@/lib/whatsapp/utils';
+import { metaTimestamp, normalizeWaId, phoneMatchVariants } from '@/lib/whatsapp/utils';
 import { windowExpiresFromInbound } from '@/lib/whatsapp/window';
 
 type AdminClient = SupabaseClient;
@@ -110,7 +110,7 @@ async function findOrCreateHistoricalLead(args: {
     .select('*')
     .eq('organization_id', args.channel.organization_id)
     .eq('kind', args.channel.role)
-    .eq('phone', args.contactWaId)
+    .in('phone', phoneMatchVariants(args.contactWaId))
     .order('updated_at', { ascending: false })
     .limit(1);
   if (readError) throw readError;
@@ -403,7 +403,7 @@ export async function importStateSync(args: {
       .select('id,name')
       .eq('organization_id', args.channel.organization_id)
       .eq('kind', args.channel.role)
-      .eq('phone', waId)
+      .in('phone', phoneMatchVariants(waId))
       .limit(5);
     for (const lead of leads ?? []) {
       if (looksLikePhoneName(lead.name, waId)) {

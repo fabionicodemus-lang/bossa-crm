@@ -7,7 +7,7 @@ import {
   findChannelById,
 } from '@/lib/whatsapp/channelService';
 import type { WhatsAppMessageCategory } from '@/lib/whatsapp/channelProvider';
-import { normalizeWaId } from '@/lib/whatsapp/utils';
+import { normalizeWaId, phoneMatchVariants } from '@/lib/whatsapp/utils';
 import { stageLabel } from '@/lib/stages';
 import type { LeadKind } from '@/lib/types';
 
@@ -128,7 +128,7 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
       const destination = normalizeWaId(recipient.phone ?? '');
       if (!destination) throw new Error('Telefone inválido.');
       const { data: optedOut, error: optOutError } = await admin.from('leads').select('id')
-        .eq('organization_id', membership.organization_id).eq('phone', destination)
+        .eq('organization_id', membership.organization_id).in('phone', phoneMatchVariants(destination))
         .eq('opt_out', true).limit(1).maybeSingle();
       if (optOutError) throw optOutError;
       if (optedOut) {
