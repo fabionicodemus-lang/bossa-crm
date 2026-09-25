@@ -389,6 +389,12 @@ async function runWorker() {
     const commercialTemplateApproved = String(template.status ?? '').toUpperCase() === 'APPROVED';
 
     let postSaleTemplate: Record<string, unknown> | null = null;
+    try {
+      postSaleTemplate = await syncTemplate(admin, channel, POST_SALE_TEMPLATE.name, POST_SALE_TEMPLATE) as Record<string, unknown>;
+    } catch (error) {
+      console.error('[post-sale template]', error);
+      summary.errors += 1;
+    }
 
     const { data: jobs, error: jobsError } = await admin
       .from('client_handoff_alert_jobs')
@@ -405,15 +411,6 @@ async function runWorker() {
 
     for (const rawJob of jobs ?? []) {
       const job = rawJob as HandoffJob;
-      if (job.recipient_kind === 'post_sale' && !postSaleTemplate) {
-        try {
-          postSaleTemplate = await syncTemplate(admin, channel, POST_SALE_TEMPLATE.name, POST_SALE_TEMPLATE) as Record<string, unknown>;
-        } catch (error) {
-          console.error('[post-sale template]', error);
-          summary.errors += 1;
-          continue;
-        }
-      }
       if (job.recipient_kind === 'post_sale' && String(postSaleTemplate?.status ?? '').toUpperCase() !== 'APPROVED') {
         summary.templates_pending += 1;
         continue;
