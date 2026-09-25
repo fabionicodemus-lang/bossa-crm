@@ -58,7 +58,16 @@ function explicitHighIntent(text: string, kind: LeadKind): string | null {
 function proposalSignal(text: string) { return /\b(proposta|reservar|reserva|fechar|negociar|contraproposta|desconto|condicao|entrada|reforco|parcelamento)\b/.test(normalize(text)); }
 function appointmentSignal(text: string) { return /\b(agendar|marcar|visita|visitar|decorado|conhecer pessoalmente|videochamada)\b/.test(normalize(text)); }
 function futureSignal(text: string) { return /\b(ano que vem|daqui a (?:\d+|alguns) meses|mais pra frente|sem pressa|depois que vender|quando vender|aguardando vender|aguardando credito|aguardando financiamento|so no futuro|em 20\d\d)\b/.test(normalize(text)); }
-export function optOutSignal(text: string) { return /\b(para de (?:me )?mandar|pare de (?:me )?mandar|nao me mande mais|nao quero (?:receber|nada|mensagens)|me tira da lista|tira meu numero|remova meu numero|sair da lista|descadastr|cancele as mensagens|stop)\b/.test(normalize(text)); }
+export function optOutSignal(text: string) {
+  const value = normalize(text);
+  const bare = value.replace(/[^\p{L}\p{N}\s]/gu, ' ').replace(/\s+/g, ' ').trim();
+
+  if (['stop', 'nao quero receber', 'para de mandar', 'pare de mandar', 'para de me mandar', 'pare de me mandar'].includes(bare)) return true;
+  if (/\b(?:por favor\s+)?nao me mande mais(?:\s+(?:mensagens?|contato|nada|propaganda|whatsapp))?\b/.test(value)) return true;
+  if (/\bnao quero receber(?: mais)?\s+(?:mensagens?|contato|nada|propaganda|whatsapp)\b/.test(value)) return true;
+  if (/\b(?:para|pare) de (?:me )?mandar(?: mais)?\s+(?:mensagens?|contato|nada|propaganda|whatsapp)\b/.test(value)) return true;
+  return /\b(me tira da lista|tira meu numero|remova meu numero|sair da lista|descadastr|cancele as mensagens)\b/.test(value);
+}
 function closedWonSignal(text: string) {
   return /\b(fechei com a bossa|fechamos (?:a|o|uma|um) unidade|negocio com a bossa fechado|contrato da bossa assinado|assinei o contrato da bossa|venda concluida pela bossa)\b/.test(normalize(text));
 }
