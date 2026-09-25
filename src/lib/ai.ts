@@ -459,13 +459,7 @@ function outsideBuyerReply(history: ChatMessage[], context: AiTrainingContext): 
     return 'Vou direcionar você para o Plantão da Bossa, que atende corretores parceiros.';
   }
   if (destination === 'pos_venda') {
-    const phone = /\b(boleto|financeiro|parcela|pagamento)\b/.test(current)
-      ? runtimeVariable(context, 'finance_phone')
-      : /\b(assistencia|problema|defeito|manutencao)\b/.test(current)
-        ? runtimeVariable(context, 'technical_assistance_phone')
-        : runtimeVariable(context, 'post_construction_phone');
-    if (phone) return `O setor responsável atende pelo ${phone}. Vou encaminhar seu pedido para a equipe continuar.`;
-    return 'Vou encaminhar você para o pós-venda da Bossa; por favor, diga em uma frase qual é o assunto para a equipe continuar.';
+    return 'Vou encaminhar seu pedido de pós-venda ou obra para a Cíntia, no Canal 2 do Plantão. Pode me dizer em uma frase o assunto e a unidade?';
   }
   const phone = /\b(fornecedor|prestador|suprimento)\b/.test(current)
     ? runtimeVariable(context, 'supplies_phone')
