@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import type { Lead, LeadKind } from '@/lib/types';
+import { PIPELINE_LEAD_COLUMNS, toPipelineLeads } from '@/lib/pipeline-lead-select';
 
 // A lista de leads não precisa aparecer no mesmo milissegundo que a conversa —
 // para um kanban, ~15s é imperceptível. Por isso aqui basta a sincronização
@@ -36,7 +37,7 @@ export function usePipelineLeadsFeed(feed: PipelineLeadsFeed) {
     // por `updated_at` no consumidor absorve esse reprocessamento barato.
     let query = supabase
       .from('leads')
-      .select('*')
+      .select(PIPELINE_LEAD_COLUMNS)
       .eq('organization_id', feedRef.current.organizationId)
       .eq('kind', feedRef.current.kind)
       .order('updated_at', { ascending: true })
@@ -45,7 +46,7 @@ export function usePipelineLeadsFeed(feed: PipelineLeadsFeed) {
 
     const { data, error } = await query;
     if (error) throw error;
-    if (data?.length) feedRef.current.onLeads(data as Lead[]);
+    if (data?.length) feedRef.current.onLeads(toPipelineLeads(data));
   }, []);
 
   useEffect(() => {

@@ -264,3 +264,24 @@ tr:hover td { background: var(--bg); }
   .profile-actions { width: 100%; margin-left: 65px; }
   .import-summary { grid-template-columns: repeat(2, 1fr); }
 }
+
+/* Esqueletos de carregamento (loading.tsx) */
+.sk-bar { display: block; border-radius: 6px; background: linear-gradient(90deg, var(--line) 0%, #ece8e2 50%, var(--line) 100%); background-size: 200% 100%; animation: sk-shimmer 1.4s ease-in-out infinite; }
+.topbar p .sk-bar { margin-top: 6px; }
+.sk-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.sk-panel { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+.sk-tall { min-height: 320px; }
+.sk-board { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(230px, 1fr); gap: 14px; overflow-x: auto; }
+.sk-column { background: var(--sidebar); border-radius: var(--radius); padding: 12px; display: flex; flex-direction: column; gap: 10px; min-height: 420px; }
+.sk-card { background: var(--panel); border: 1px solid var(--line); border-radius: 9px; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+.sk-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 14px; }
+.sk-split { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.sk-detail { grid-template-columns: minmax(260px, 0.8fr) 1.6fr; }
+.sk-row { display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 16px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.sk-row:last-child { border-bottom: 0; }
+.sk-chat { gap: 14px; }
+.sk-bubble { display: block; height: 34px; border-radius: 12px; background: var(--line); animation: sk-shimmer 1.4s ease-in-out infinite; background-image: linear-gradient(90deg, var(--line) 0%, #ece8e2 50%, var(--line) 100%); background-size: 200% 100%; }
+.sk-bubble.sk-out { align-self: flex-end; background-image: linear-gradient(90deg, var(--teal-soft) 0%, #eef4f5 50%, var(--teal-soft) 100%); }
+@keyframes sk-shimmer { 0% { background-position: 100% 0; } 100% { background-position: -100% 0; } }
+@media (max-width: 800px) { .sk-split, .sk-detail { grid-template-columns: 1fr; } }
+@media (prefers-reduced-motion: reduce) { .sk-bar, .sk-bubble { animation: none; } }
