@@ -22,6 +22,7 @@ import {
 } from '@/lib/whatsapp/channelService';
 import { isCustomerServiceWindowOpen, leadWindowExpiresAt, OUTSIDE_WINDOW_MESSAGE } from '@/lib/whatsapp/window';
 import { normalizeWaId } from '@/lib/whatsapp/utils';
+import { mergeSupervisorAttachmentIds, promoteSupervisorFiles } from '@/lib/nara-supervisor-guidance';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -272,12 +273,19 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     if (context.config?.active === false) {
       return NextResponse.json({ error: 'A Nara está desativada nas configurações.' }, { status: 409 });
     }
-    context.files = rankAiFilesForConversation(
-      context.files ?? [],
+    const allFiles = context.files ?? [];
+    const rankedFiles = rankAiFilesForConversation(
+      allFiles,
       [...history, { role: 'user', content: instruction }],
       lead,
       40,
     );
+    context.files = promoteSupervisorFiles({
+      instruction,
+      allFiles,
+      rankedFiles,
+      limit: 40,
+    });
 
     const [commercial, dynamic, operational] = await Promise.all([
       loadNaraCommercialTurnContext(admin, membership.organization_id, lead, history),
@@ -295,6 +303,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     if (!turn?.reply?.trim()) {
       return NextResponse.json({ error: 'A Nara não conseguiu montar uma resposta para essa orientação.' }, { status: 500 });
     }
+    turn.attachment_ids = mergeSupervisorAttachmentIds({
+      instruction,
+      files: context.files ?? [],
+      modelAttachmentIds: turn.attachment_ids ?? [],
+    });
 
     const sentFileIds = await sendFiles({
       admin,

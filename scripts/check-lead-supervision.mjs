@@ -1,5 +1,11 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import {
+  mergeSupervisorAttachmentIds,
+  promoteSupervisorFiles,
+  requestsAllEnterpriseFacades,
+  selectAllEnterpriseFacadeIds,
+} from '../src/lib/nara-supervisor-guidance.ts';
 
 const handoff = readFileSync(new URL('../src/app/api/leads/[id]/handoff/route.ts', import.meta.url), 'utf8');
 const detail = readFileSync(new URL('../src/components/LeadDetail.tsx', import.meta.url), 'utf8');
@@ -32,5 +38,48 @@ assert.match(ai, /supervisor_instruction\?: string \| null/);
 assert.match(ai, /ORIENTAÇÃO INTERNA DO GESTOR/);
 assert.match(v120, /generateSupervisedAiTurn/);
 assert.match(v120, /enforceNaraReplyGuardrails/);
+assert.match(ai, /TURNO SUPERVISIONADO PELO GESTOR/);
+assert.match(ai, /!context\.supervisor_instruction\?\.trim\(\)/);
+assert.match(guidance, /mergeSupervisorAttachmentIds/);
+assert.match(guidance, /promoteSupervisorFiles/);
 
-console.log('Supervisão de lead validada: transferência humana e orientação interna da Nara sem troca de dono.');
+const file = (id, title, keywords) => ({
+  id,
+  category: 'imagem',
+  title,
+  description: null,
+  trigger_keywords: keywords,
+  storage_bucket: 'bucket',
+  storage_path: id + '.jpg',
+  original_name: id + '.jpg',
+  mime_type: 'image/jpeg',
+});
+const files = [
+  file('soul', 'SOUL BOSSA', ['Soul', 'pronto', 'imagens']),
+  file('flow', 'Fachada Flow Rua: São José', ['fachada', 'Flow', 'fotos']),
+  file('alma', 'Fachada Alma', ['fachada', 'Alma', 'imagens']),
+  file('flow-rooftop', 'Flow Rooftop', ['Flow', 'lazer']),
+];
+
+const instruction = 'Fale um pouco de cada empreendimento nosso e mande a foto da fachada de cada um.';
+assert.equal(requestsAllEnterpriseFacades(instruction), true);
+assert.deepEqual(selectAllEnterpriseFacadeIds(instruction, files), ['soul', 'flow', 'alma']);
+assert.deepEqual(
+  mergeSupervisorAttachmentIds({
+    instruction,
+    files,
+    modelAttachmentIds: ['flow-rooftop'],
+  }),
+  ['soul', 'flow', 'alma'],
+);
+assert.deepEqual(
+  promoteSupervisorFiles({
+    instruction,
+    allFiles: files,
+    rankedFiles: [files[3]],
+    limit: 40,
+  }).slice(0, 3).map((item) => item.id),
+  ['soul', 'flow', 'alma'],
+);
+
+console.log('Supervisão de lead validada: transferência humana, prioridade da orientação e fachadas Soul/Flow/Alma.');
