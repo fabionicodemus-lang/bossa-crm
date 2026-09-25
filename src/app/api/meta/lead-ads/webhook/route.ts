@@ -156,7 +156,7 @@ async function findExistingLead(
 ) {
   if (phone) {
     const { data, error } = await admin.from('leads')
-      .select('id,name,phone,email,enterprise,source,metadata')
+      .select('id,name,first_name,last_name,phone,email,enterprise,source,metadata')
       .eq('organization_id', organizationId)
       .eq('kind', 'cliente')
       .in('phone', phoneMatchVariants(phone))
@@ -170,7 +170,7 @@ async function findExistingLead(
 
   if (email) {
     const { data, error } = await admin.from('leads')
-      .select('id,name,phone,email,enterprise,source,metadata')
+      .select('id,name,first_name,last_name,phone,email,enterprise,source,metadata')
       .eq('organization_id', organizationId)
       .eq('kind', 'cliente')
       .ilike('email', email)
