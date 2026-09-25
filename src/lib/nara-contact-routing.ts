@@ -43,8 +43,19 @@ export function isBrokerRoutingSignal(value: string): boolean {
   return isExplicitBrokerSignal(value) || hasStrongBrokerVocabulary(value);
 }
 
+export function hasPostSaleCorrection(value: string): boolean {
+  const text = normalizeNaraRoutingText(value);
+  return /\b(?:nao sou (?:um |uma )?cliente|nao comprei|quero comprar)\b/.test(text);
+}
+
 export function isCurrentCustomerSignal(value: string): boolean {
   const text = normalizeNaraRoutingText(value);
-  if (/\bnao sou (?:um |uma )?cliente\b/.test(text)) return false;
+  if (hasPostSaleCorrection(text)) return false;
   return /\b(?:ja comprei|sou cliente|comprei com voces|segunda via|boleto|meu contrato|minha unidade|meu apartamento|assistencia tecnica|pos-venda)\b/.test(text);
+}
+
+export function isPostSaleRoutingSignal(value: string): boolean {
+  const text = normalizeNaraRoutingText(value);
+  if (hasPostSaleCorrection(text)) return false;
+  return isCurrentCustomerSignal(text) || /\b(?:pos-venda|minha obra|minha unidade)\b/.test(text);
 }

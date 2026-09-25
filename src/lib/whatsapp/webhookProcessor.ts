@@ -11,6 +11,7 @@ import { aiCanReply } from '@/lib/hybrid';
 import { optOutSignal } from '@/lib/hybrid';
 import { whatsappCanStillReply } from '@/lib/whatsapp/aiTurnSafety';
 import { maybeScheduleAgendaFromAi } from '@/lib/agenda-ai-core';
+import { appendAgendaMessageToReply, hasNonAgendaQuestion, shouldHandleAgendaTurn } from '@/lib/nara-agenda-intent';
 import { mergeMetaAdAttribution } from '@/lib/meta-ad-attribution';
 import { applyHybridDecision } from '@/lib/hybrid-server';
 import { createAdminClient } from '@/lib/supabase/admin';
@@ -543,7 +544,7 @@ export async function processConversation(args: {
   const lastUserMessage = [...history].reverse().find((item) => item.role === 'user')?.content ?? '';
   if (!(await whatsappCanStillReply({ admin: args.admin, leadId: lead.id,
     conversationId: args.conversation.id, sourceId: args.sourceMessageId }))) return;
-  if (lead.kind === 'cliente' && /\b(visita|decorado|apartamento modelo|agendar|marcar|remarcar|cancelar|mudar)\b/i.test(history.slice(-5).map((item) => item.content).join(' '))) {
+  if (lead.kind === 'cliente' && shouldHandleAgendaTurn(history, lastUserMessage)) {
     const officeAddress = context.dynamic?.values.office_address?.trim();
     const appointment = await maybeScheduleAgendaFromAi({ admin: args.admin,
       organizationId: args.channel.organization_id, lead, turn, lastUserMessage,
@@ -555,7 +556,10 @@ export async function processConversation(args: {
       turn.reply = `Sua visita ficou marcada para ${new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo', dateStyle: 'short', timeStyle: 'short' }).format(new Date(appointment.startsAt))}, no escritório da Bossa, ${officeAddress}. ${maps} Se precisar mudar, avise por aqui.`;
       turn.stage = 'agendado'; turn.classification = 'agendamento'; turn.handoff = false;
     } else if (appointment.status !== 'none') {
-      turn.reply = appointment.message; turn.stage = 'ia'; turn.handoff = false;
+      turn.reply = hasNonAgendaQuestion(lastUserMessage)
+        ? appendAgendaMessageToReply(turn.reply, appointment.message)
+        : appointment.message;
+      turn.stage = 'ia'; turn.handoff = false;
     }
   }
   const decision = await applyHybridDecision({
