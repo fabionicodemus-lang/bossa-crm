@@ -8,7 +8,8 @@ import { processConversation } from '@/lib/whatsapp/webhookProcessor';
 
 type Admin = ReturnType<typeof createAdminClient>;
 const HOUR = 3_600_000;
-const START = Date.parse('2026-09-25T00:00:00Z');
+// Ativação: nunca inicia uma cadência retroativa para conversas anteriores ao deploy.
+const START = Date.parse('2026-09-25T01:10:00Z');
 const ACTIVE = ['novo_triagem', 'qualificacao_ia', 'nutricao_ativa'];
 
 export function followupZone(text: string) {
