@@ -8,8 +8,10 @@ import { processConversation } from '@/lib/whatsapp/webhookProcessor';
 
 type Admin = ReturnType<typeof createAdminClient>;
 const HOUR = 3_600_000;
-// Ativação: nunca inicia uma cadência retroativa para conversas anteriores ao deploy.
-const START = Date.parse('2026-09-25T01:10:00Z');
+// Janela da cadência: a 2ª mensagem vence em 72h, então conversas mais antigas
+// nunca são elegíveis. Isso já impede disparos para conversas antigas sem depender
+// de uma data fixa de ativação (a data fixa excluía leads contatados antes dela).
+const LOOKBACK = 72 * HOUR;
 const ACTIVE = ['novo_triagem', 'qualificacao_ia', 'nutricao_ativa'];
 
 export function followupZone(text: string) {
@@ -145,10 +147,13 @@ async function recordSend(admin: Admin, lead: { id: string; organization_id: str
 }
 
 export async function runNaraFollowups(admin: Admin, now = new Date()) {
-  const counts = { created: 0, first_sent: 0, second_sent: 0, cancelled: 0, waiting_template: 0, errors: 0 };
+  const counts = { created: 0, first_sent: 0, second_sent: 0, cancelled: 0, waiting_template: 0, errors: 0,
+    skipped: {} as Record<string, number> };
+  const skip = (reason: string) => { counts.skipped[reason] = (counts.skipped[reason] ?? 0) + 1; };
+  const windowStart = new Date(now.getTime() - LOOKBACK).toISOString();
   const { data: leads, error } = await admin.from('leads').select('*').eq('kind', 'cliente')
     .eq('owner_mode', 'ai').eq('ai_enabled', true).eq('opt_out', false)
-    .gte('last_outbound_at', new Date(START).toISOString()).limit(500);
+    .gte('last_outbound_at', windowStart).order('last_outbound_at', { ascending: false }).limit(500);
   if (error) throw error;
   const { data: clientChannels } = await admin.from('whatsapp_channels').select('organization_id')
     .eq('role', 'cliente').eq('status', 'connected');
@@ -158,7 +163,8 @@ export async function runNaraFollowups(admin: Admin, now = new Date()) {
     catch (templateError) { console.error('[nara cadence templates]', templateError); counts.errors++; }
   }
   for (const lead of leads ?? []) {
-    if (!ACTIVE.includes(lead.stage) || lead.automation_paused || !lead.phone) continue;
+    if (!ACTIVE.includes(lead.stage)) { skip(`etapa_${lead.stage}`); continue; }
+    if (lead.automation_paused || !lead.phone) { skip('pausado_ou_sem_telefone'); continue; }
     const reset = typeof lead.metadata?.nara_reset_at === 'string' ? lead.metadata.nara_reset_at : null;
     const { data: existing } = await admin.from('nara_followup_sequences').select('*').eq('lead_id', lead.id)
       .order('created_at', { ascending: false }).limit(1).maybeSingle();
@@ -170,10 +176,10 @@ export async function runNaraFollowups(admin: Admin, now = new Date()) {
     }
     let firstQuery = admin.from('messages').select('id,created_at')
       .eq('lead_id', lead.id).eq('direction', 'out').eq('sender_kind', 'ia')
-      .gte('created_at', new Date(START).toISOString());
+      .gte('created_at', windowStart);
     if (lead.last_inbound_at) firstQuery = firstQuery.gte('created_at', lead.last_inbound_at);
     const { data: first, error: msgError } = await firstQuery.order('created_at', { ascending: true }).limit(1).maybeSingle();
-    if (msgError || !first || new Date(first.created_at).getTime() > now.getTime()) continue;
+    if (msgError || !first || new Date(first.created_at).getTime() > now.getTime()) { skip('sem_mensagem_da_nara_na_janela'); continue; }
     let sequence = existing?.anchor_message_id === first.id ? existing : null;
     if (!sequence) {
       let inboundQuery = admin.from('messages').select('body').eq('lead_id', lead.id).eq('direction', 'in');
@@ -186,13 +192,21 @@ export async function runNaraFollowups(admin: Admin, now = new Date()) {
         language: followupLanguage(inbound?.body || ''), timezone: followupZone(context),
       }, { onConflict: 'anchor_message_id', ignoreDuplicates: true }).select('*').maybeSingle();
       if (createError) { console.error('[nara cadence create]', createError); counts.errors++; continue; }
-      sequence = data;
-      counts.created++;
+      if (!data) {
+        // Já existia sequência para esta mensagem (ignoreDuplicates não devolve a linha): reaproveita.
+        const { data: stored } = await admin.from('nara_followup_sequences').select('*')
+          .eq('anchor_message_id', first.id).maybeSingle();
+        sequence = stored;
+      } else {
+        sequence = data;
+        counts.created++;
+      }
     }
-    if (!sequence || sequence.status !== 'active') continue;
+    if (!sequence || sequence.status !== 'active') { skip(`sequencia_${sequence?.status ?? 'ausente'}`); continue; }
     const firstAt = new Date(sequence.first_outbound_at).getTime();
-    if (firstAt + 8 * HOUR > now.getTime() || firstAt + 72 * HOUR <= now.getTime()
-      || !insideFollowupHours(now, sequence.timezone)) continue;
+    if (firstAt + 8 * HOUR > now.getTime()) { skip('aguardando_8h'); continue; }
+    if (firstAt + 72 * HOUR <= now.getTime()) { skip('passou_72h'); continue; }
+    if (!insideFollowupHours(now, sequence.timezone)) { skip('fora_do_horario'); continue; }
     const { data: recent } = await admin.from('messages').select('id,direction,sender_kind,created_at')
       .eq('lead_id', lead.id).gt('created_at', sequence.first_outbound_at)
       .order('created_at', { ascending: true }).limit(30);
@@ -204,11 +218,11 @@ export async function runNaraFollowups(admin: Admin, now = new Date()) {
     const { count: sentRecently } = await admin.from('messages').select('id', { count: 'exact', head: true })
       .eq('lead_id', lead.id).eq('direction', 'out').gte('created_at', new Date(now.getTime() - 14 * 24 * HOUR).toISOString())
       .contains('raw_payload', { automation: 'nara_no_reply' });
-    if ((sentRecently ?? 0) >= 2) continue;
+    if ((sentRecently ?? 0) >= 2) { skip('limite_2_em_14_dias'); continue; }
     const channel = await findChannelByRole(admin, lead.organization_id, 'cliente');
-    if (!channel) continue;
+    if (!channel) { skip('sem_canal_whatsapp'); continue; }
     const destination = normalizeWaId(lead.phone);
-    if (!destination) continue;
+    if (!destination) { skip('telefone_invalido'); continue; }
     const { provider, phoneNumberId, accessToken } = channelAccess(channel);
     const language = (sequence.language in copy ? sequence.language : 'pt_BR') as keyof typeof copy;
     const name = String(lead.name || '').trim().split(/\s+/)[0] || (language === 'es' ? 'amigo' : 'você');
@@ -221,6 +235,7 @@ export async function runNaraFollowups(admin: Admin, now = new Date()) {
         .eq('channel_id', channel.id).eq('name', firstTemplate.name).eq('language', language).maybeSingle() : { data: null };
       if (!windowOpen && String(firstListed?.status).toUpperCase() !== 'APPROVED') {
         counts.waiting_template++;
+        skip(`modelo_1_${String(firstListed?.status ?? 'nao_encontrado').toLowerCase()}`);
       } else {
         const { data: claimed } = await admin.rpc('claim_nara_followup_step', { p_id: sequence.id, p_step: 'first' });
         if (claimed) {
@@ -234,6 +249,7 @@ export async function runNaraFollowups(admin: Admin, now = new Date()) {
             await admin.from('nara_followup_sequences').update({ first_status: 'sent', first_sent_at: sentAt }).eq('id', sequence.id);
             counts.first_sent++;
           } catch (sendError) {
+            console.error('[nara cadence first send]', lead.id, sendError);
             await admin.from('nara_followup_sequences').update({ first_status: 'failed', error: String(sendError) }).eq('id', sequence.id);
             counts.errors++;
           }
@@ -246,7 +262,11 @@ export async function runNaraFollowups(admin: Admin, now = new Date()) {
     const spec = followupTemplates.find((item) => item.name === 'nara_retomada_opcoes_v1' && item.language === language)!;
     const { data: listed } = await admin.from('whatsapp_templates').select('status')
       .eq('channel_id', channel.id).eq('name', spec.name).eq('language', language).maybeSingle();
-    if (String(listed?.status).toUpperCase() !== 'APPROVED') { counts.waiting_template++; continue; }
+    if (String(listed?.status).toUpperCase() !== 'APPROVED') {
+      counts.waiting_template++;
+      skip(`modelo_2_${String(listed?.status ?? 'nao_encontrado').toLowerCase()}`);
+      continue;
+    }
     const { data: claimed } = await admin.rpc('claim_nara_followup_step', { p_id: sequence.id, p_step: 'second' });
     if (!claimed) continue;
     try {
@@ -257,9 +277,12 @@ export async function runNaraFollowups(admin: Admin, now = new Date()) {
       await admin.from('nara_followup_sequences').update({ second_status: 'sent', second_sent_at: sentAt }).eq('id', sequence.id);
       counts.second_sent++;
     } catch (sendError) {
+      console.error('[nara cadence second send]', lead.id, sendError);
       await admin.from('nara_followup_sequences').update({ second_status: 'failed', error: String(sendError) }).eq('id', sequence.id);
       counts.errors++;
     }
   }
+  // Registro de cada rodada nos logs da Vercel, para diagnosticar por que um lead não recebeu a retomada.
+  console.info('[nara cadence]', JSON.stringify(counts));
   return counts;
 }
