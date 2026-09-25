@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Lead } from '@/lib/types';
+import { chooseLeadIdentity, leadNameLooksGeneric, normalizeLeadIdentity, splitLeadFullName } from '@/lib/lead-identity';
 import type { WhatsAppChannelRecord } from '@/lib/whatsapp/channelService';
 import { channelAccess } from '@/lib/whatsapp/channelService';
 import { metaTimestamp, normalizeWaId, phoneMatchVariants } from '@/lib/whatsapp/utils';
@@ -80,12 +81,6 @@ function stageForHistoricalContact(lastActivityAt: string) {
   return 'futuro';
 }
 
-function looksLikePhoneName(name: string | null | undefined, phone: string) {
-  if (!name) return true;
-  const digits = String(name).replace(/\D/g, '');
-  return digits.length >= 10 && (digits === phone || digits.endsWith(phone.slice(-10)));
-}
-
 async function contactName(admin: AdminClient, channelId: string, waId: string) {
   const { data } = await admin
     .from('whatsapp_synced_contacts')
@@ -93,7 +88,7 @@ async function contactName(admin: AdminClient, channelId: string, waId: string) 
     .eq('channel_id', channelId)
     .eq('wa_id', waId)
     .maybeSingle();
-  return String(data?.full_name || data?.first_name || '').trim() || waId;
+  return String(data?.first_name || data?.full_name || '').trim() || waId;
 }
 
 async function findOrCreateHistoricalLead(args: {
@@ -117,6 +112,7 @@ async function findOrCreateHistoricalLead(args: {
 
   const existing = (matches?.[0] ?? null) as Lead | null;
   const now = new Date().toISOString();
+  const identity = normalizeLeadIdentity(args.name, existing?.company);
 
   if (existing) {
     const updates: Record<string, unknown> = {
@@ -132,7 +128,17 @@ async function findOrCreateHistoricalLead(args: {
         whatsapp_canonical_wa_id: args.contactWaId,
       },
     };
-    if (looksLikePhoneName(existing.name, args.contactWaId) && args.name !== args.contactWaId) updates.name = args.name;
+    if (leadNameLooksGeneric(existing.name, args.contactWaId) && identity.displayName) {
+      updates.name = identity.displayName;
+      updates.first_name = identity.firstName;
+      updates.last_name = identity.lastName;
+    } else if (!existing.first_name) {
+      const split = splitLeadFullName(existing.name);
+      updates.first_name = split.firstName;
+      updates.last_name = split.lastName;
+    }
+    if ((!existing.company || existing.company === 'Não informada') && identity.company) updates.company = identity.company;
+    if (!existing.creci && identity.creci) updates.creci = identity.creci;
     const { data, error } = await args.admin.from('leads').update(updates).eq('id', existing.id).select('*').single();
     if (error) throw error;
     return data as Lead;
@@ -141,11 +147,14 @@ async function findOrCreateHistoricalLead(args: {
   const { data, error } = await args.admin.from('leads').insert({
     organization_id: args.channel.organization_id,
     kind: args.channel.role,
-    name: args.name || args.contactWaId,
+    name: identity.displayName || args.contactWaId,
+    first_name: identity.firstName,
+    last_name: identity.lastName,
     phone: args.contactWaId,
     stage: stageForHistoricalContact(args.latestActivity),
     source: 'WhatsApp Business · histórico',
-    company: args.channel.role === 'corretor' ? 'Não informada' : null,
+    company: identity.company || (args.channel.role === 'corretor' ? 'Não informada' : null),
+    creci: identity.creci,
     temperature: 0,
     ai_enabled: false,
     automation_paused: true,
@@ -369,7 +378,7 @@ export async function importStateSync(args: {
   stateSync: StateSyncItem[];
 }) {
   const rows: Array<Record<string, unknown>> = [];
-  const names = new Map<string, string>();
+  const names = new Map<string, { firstName: string | null; fullName: string | null }>();
 
   for (const item of args.stateSync ?? []) {
     if (item.type && item.type !== 'contact') continue;
@@ -387,7 +396,7 @@ export async function importStateSync(args: {
       synced_at: item.metadata?.timestamp ? metaTimestamp(item.metadata.timestamp) : new Date().toISOString(),
       updated_at: new Date().toISOString(),
     });
-    if (fullName || firstName) names.set(waId, fullName || firstName || waId);
+    if (fullName || firstName) names.set(waId, { firstName, fullName });
   }
 
   if (rows.length) {
@@ -398,17 +407,28 @@ export async function importStateSync(args: {
 
   // Se o histórico já criou o card antes do nome chegar, melhora o card do pipeline
   // sem sobrescrever nomes já curados/importados no CRM.
-  for (const [waId, name] of names) {
+  for (const [waId, contact] of names) {
     const { data: leads } = await args.admin.from('leads')
-      .select('id,name')
+      .select('id,name,first_name,last_name,company,creci')
       .eq('organization_id', args.channel.organization_id)
       .eq('kind', args.channel.role)
       .in('phone', phoneMatchVariants(waId))
       .limit(5);
     for (const lead of leads ?? []) {
-      if (looksLikePhoneName(lead.name, waId)) {
-        await args.admin.from('leads').update({ name }).eq('id', lead.id);
+      const identity = chooseLeadIdentity([contact.firstName, contact.fullName], lead.company);
+      const patch: Record<string, unknown> = {};
+      if (leadNameLooksGeneric(lead.name, waId) && identity.displayName) {
+        patch.name = identity.displayName;
+        patch.first_name = identity.firstName;
+        patch.last_name = identity.lastName;
+      } else if (!lead.first_name) {
+        const split = splitLeadFullName(lead.name);
+        patch.first_name = split.firstName;
+        patch.last_name = split.lastName;
       }
+      if ((!lead.company || lead.company === 'Não informada') && identity.company) patch.company = identity.company;
+      if (!lead.creci && identity.creci) patch.creci = identity.creci;
+      if (Object.keys(patch).length) await args.admin.from('leads').update(patch).eq('id', lead.id);
     }
   }
 

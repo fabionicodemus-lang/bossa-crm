@@ -1,5 +1,6 @@
 import { after, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { leadNameLooksGeneric, normalizeLeadIdentity } from '@/lib/lead-identity';
 import { phoneMatchVariants } from '@/lib/whatsapp/utils';
 import { decryptToken, verifyMetaSignature } from '@/lib/whatsapp/crypto';
 import {
@@ -202,7 +203,8 @@ async function processStoredEvent(eventId: string) {
     const parsed = parseMetaLeadFieldData(details.field_data);
     const origin = await resolveLeadOrigin(event, details, accessToken);
     const now = new Date().toISOString();
-    const leadName = parsed.name || parsed.email || parsed.phone || `Lead Meta ${event.meta_leadgen_id}`;
+    const identity = normalizeLeadIdentity(parsed.name);
+    const leadName = identity.displayName || parsed.email || parsed.phone || `Lead Meta ${event.meta_leadgen_id}`;
     const existing = await findExistingLead(
       admin,
       event.organization_id,
@@ -240,8 +242,13 @@ async function processStoredEvent(eventId: string) {
       if (!existing.source || String(existing.source).startsWith('Meta Lead Ads') || String(existing.source).startsWith('Meta ·')) {
         patch.source = origin.sourceLabel;
       }
-      if ((!existing.name || String(existing.name).startsWith('Lead Meta ')) && parsed.name) {
-        patch.name = parsed.name;
+      if (parsed.name && leadNameLooksGeneric(existing.name, existing.phone)) {
+        patch.name = identity.displayName || parsed.name;
+        patch.first_name = identity.firstName;
+        patch.last_name = identity.lastName;
+      } else if (parsed.name && !existing.first_name && identity.firstName) {
+        patch.first_name = identity.firstName;
+        patch.last_name = identity.lastName;
       }
       const { error } = await admin.from('leads').update(patch).eq('id', existing.id);
       if (error) throw error;
@@ -251,6 +258,8 @@ async function processStoredEvent(eventId: string) {
         organization_id: event.organization_id,
         kind: 'cliente',
         name: leadName,
+        first_name: identity.firstName,
+        last_name: identity.lastName,
         phone: parsed.phone,
         email: parsed.email,
         stage: 'novo_triagem',

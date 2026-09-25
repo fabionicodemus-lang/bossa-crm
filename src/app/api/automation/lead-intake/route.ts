@@ -290,7 +290,7 @@ async function processNara(admin: AdminClient, job: LeadIntakeJob, settings: Lea
     return 'skipped';
   }
 
-  const values = [firstName(lead.name)];
+  const values = [firstName(lead.first_name || lead.name)];
   const { provider, accessToken, phoneNumberId } = channelAccess(channel);
   const result = await provider.sendTemplate({
     phoneNumberId,

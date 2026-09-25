@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { stagesFor } from '@/lib/stages';
+import { normalizeLeadIdentity } from '@/lib/lead-identity';
 import type { LeadKind } from '@/lib/types';
 
 interface ImportRecord {
@@ -124,21 +125,24 @@ export async function POST(request: Request) {
     }
 
     const stage = normalizeImportedStage(record.kind, String(record.stage || ''));
+    const identity = normalizeLeadIdentity(record.name, record.company);
     const terminal = ['fechado_ganho', 'encerrado'].includes(stage);
     const human = ['humano_ativo', 'agendado', 'pos_reuniao', 'proposta_negociacao'].includes(stage);
     const basePayload = {
       organization_id: membership.organization_id,
       kind: record.kind,
       kommo_id: record.kommo_id || null,
-      name: String(record.name).slice(0, 200),
+      name: String(identity.displayName || record.name).slice(0, 200),
+      first_name: identity.firstName,
+      last_name: identity.lastName,
       phone: record.phone || null,
       email: record.email || null,
       stage,
       source: record.source || null,
       enterprise: record.enterprise || null,
-      company: record.company || null,
+      company: record.company || identity.company || null,
       group_name: record.group_name || null,
-      creci: record.creci || null,
+      creci: record.creci || identity.creci || null,
       temperature: Math.max(0, Math.min(100, Number(record.temperature) || 0)),
       owner_mode: terminal ? 'none' : human ? 'human' : 'ai',
       ai_enabled: !terminal && !human,

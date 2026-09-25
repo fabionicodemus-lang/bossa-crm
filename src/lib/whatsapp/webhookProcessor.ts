@@ -13,6 +13,7 @@ import { whatsappCanStillReply, whatsappClaimAiTurn, whatsappMarkAiTurnSent } fr
 import { maybeScheduleAgendaFromAi } from '@/lib/agenda-ai-core';
 import { appendAgendaMessageToReply, hasNonAgendaQuestion, shouldHandleAgendaTurn } from '@/lib/nara-agenda-intent';
 import { mergeMetaAdAttribution } from '@/lib/meta-ad-attribution';
+import { leadNameLooksGeneric, normalizeLeadIdentity, splitLeadFullName } from '@/lib/lead-identity';
 import { applyHybridDecision } from '@/lib/hybrid-server';
 import {
   broadcastResponseAction,
@@ -53,7 +54,7 @@ import { metaTimestamp, metaWaId, normalizeWaId, phoneMatchVariants } from '@/li
 type AdminClient = ReturnType<typeof createAdminClient>;
 
 function declaredName(text: string): string {
-  const match = text.match(/\b(?:sou|me chamo|meu nome (?:é|e)|aqui é|aqui e|soy|me llamo|mi nombre (?:es|e)|i'm|i am|my name is)\s+(?:a\s+|o\s+)?([\p{L}'’-]{2,})(?:\s+[\p{L}'’-]+){0,2}/iu);
+  const match = text.match(/\b(?:sou|me chamo|meu nome (?:é|e)|aqui é|aqui e|soy|me llamo|mi nombre (?:es|e)|i'm|i am|my name is)\s+(?:a\s+|o\s+)?((?:[\p{L}'’-]{2,})(?:\s+[\p{L}'’-]+){0,2})/iu);
   return match?.[1]?.trim() ?? '';
 }
 
@@ -1132,18 +1133,26 @@ async function persistInboundMessage(args: {
     } : {}),
     ...(paymentMethod ? { payment_method: paymentMethod } : {}),
   };
-  const currentNameLooksGeneric = !lead.name
-    || lead.name === lead.phone
-    || /^lead\b/i.test(String(lead.name))
-    || /^\d{10,15}$/.test(String(lead.name));
-  await args.admin.from('leads').update({
-    name: selfDeclaredName
-      || (currentNameLooksGeneric && args.contactName ? args.contactName : lead.name),
+  const currentNameLooksGeneric = leadNameLooksGeneric(lead.name, lead.phone);
+  const detectedIdentity = normalizeLeadIdentity(selfDeclaredName || args.contactName, lead.company);
+  const currentIdentity = splitLeadFullName(lead.name);
+  const identityPatch: Record<string, unknown> = {
     source: attribution.firstAttribution && attribution.sourceLabel ? attribution.sourceLabel : lead.source,
     last_inbound_at: createdAt,
     metadata,
     updated_at: new Date().toISOString(),
-  }).eq('id', lead.id);
+  };
+  if (currentNameLooksGeneric && detectedIdentity.displayName) {
+    identityPatch.name = detectedIdentity.displayName;
+    identityPatch.first_name = detectedIdentity.firstName;
+    identityPatch.last_name = detectedIdentity.lastName;
+  } else if (!lead.first_name && currentIdentity.firstName) {
+    identityPatch.first_name = currentIdentity.firstName;
+    identityPatch.last_name = currentIdentity.lastName;
+  }
+  if ((!lead.company || lead.company === 'Não informada') && detectedIdentity.company) identityPatch.company = detectedIdentity.company;
+  if (!lead.creci && detectedIdentity.creci) identityPatch.creci = detectedIdentity.creci;
+  await args.admin.from('leads').update(identityPatch).eq('id', lead.id);
 
   return {
     channel: args.channel,

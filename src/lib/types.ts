@@ -25,6 +25,8 @@ export interface Lead {
   kind: LeadKind;
   kommo_id: string | null;
   name: string;
+  first_name: string | null;
+  last_name: string | null;
   phone: string | null;
   email: string | null;
   stage: string;
