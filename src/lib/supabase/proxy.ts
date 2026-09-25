@@ -21,7 +21,11 @@ export async function updateSession(request: NextRequest) {
     },
   );
 
-  const { data: { user } } = await supabase.auth.getUser();
+  // getClaims valida o token localmente quando o projeto usa chaves assimétricas,
+  // evitando uma ida ao servidor de autenticação a cada clique. Também renova a
+  // sessão (cookies) quando o token está perto de expirar.
+  const { data: claimsData, error: claimsError } = await supabase.auth.getClaims();
+  const user = !claimsError && typeof claimsData?.claims?.sub === 'string' ? claimsData.claims : null;
   const pathname = request.nextUrl.pathname;
   const isAuthPath = AUTH_PATHS.some((path) => pathname.startsWith(path));
   const isPublicPath = isAuthPath || pathname.startsWith('/auth/') || pathname.startsWith('/api/') || pathname === '/atualizar-senha';

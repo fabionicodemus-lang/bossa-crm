@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { Suspense } from 'react';
 import { AiHealthBadge } from '@/components/AiHealthBadge';
 import { PageTopbar } from '@/components/PageTopbar';
 import { getCurrentContext } from '@/lib/auth';
@@ -133,80 +134,11 @@ function divideCost(spend: number | null, count: number) {
   return spend / count;
 }
 
-export default async function DashboardPage({
-  searchParams,
-}: {
-  searchParams: Promise<DashboardSearchParams>;
-}) {
-  const params = await searchParams;
-  const context = await getCurrentContext();
-  const supabase = await createClient();
+// Bloco de marketing: depende da API da Meta (externa e mais lenta) e do funil.
+// Carrega separado para não atrasar o restante do Dashboard.
+async function MarketingSection({ orgId, marketing }: { orgId: string; marketing: ReturnType<typeof marketingRange> }) {
   const admin = createAdminClient();
-  const orgId = context!.organization.id;
-  const now = new Date().toISOString();
-  const isAdmin = context!.role === 'admin';
-  const starts = periodStarts();
-  const marketing = marketingRange(params, starts.today);
-  const periodStart = new Date(Math.min(starts.week.getTime(), starts.month.getTime())).toISOString();
-  const todayStart = starts.today.toISOString();
-  const monthStart = starts.month.toISOString();
-
-  let overdueTasksQuery = supabase.from('lead_tasks')
-    .select('id', { count: 'exact', head: true })
-    .eq('organization_id', orgId)
-    .in('status', ['pending', 'overdue'])
-    .lt('due_at', now);
-  if (!isAdmin) overdueTasksQuery = overdueTasksQuery.eq('assigned_to', context!.userId);
-
-  const [
-    { count: totalClients },
-    { count: aiCount },
-    { count: hotCount },
-    { count: brokerCount },
-    { count: overdueTasks },
-    { count: pendingHandoffs },
-    activitiesResult,
-    aiMessagesResult,
-    periodLeadsResult,
-    activeServiceLeadsResult,
-    outboundMonthResult,
-    { count: pendingIntake },
-    marketingLeadsResult,
-    metaSpend,
-  ] = await Promise.all([
-    supabase.from('leads').select('id', { count: 'exact', head: true }).eq('organization_id', orgId).eq('kind', 'cliente').is('archived_at', null),
-    supabase.from('leads').select('id', { count: 'exact', head: true }).eq('organization_id', orgId).eq('owner_mode', 'ai').eq('ai_enabled', true).is('archived_at', null),
-    supabase.from('leads').select('id', { count: 'exact', head: true }).eq('organization_id', orgId).in('priority_class', ['A1', 'A2']).not('stage', 'in', '(fechado_ganho,encerrado)').is('archived_at', null),
-    supabase.from('leads').select('id', { count: 'exact', head: true }).eq('organization_id', orgId).eq('kind', 'corretor').is('archived_at', null),
-    overdueTasksQuery,
-    supabase.from('lead_handoffs').select('id', { count: 'exact', head: true }).eq('organization_id', orgId).eq('status', 'pending'),
-    supabase.from('activities').select('id,title,description,created_at,leads(id,name,kind)').eq('organization_id', orgId).order('created_at', { ascending: false }).limit(10),
-    supabase.from('messages').select('created_at,raw_payload').eq('organization_id', orgId).eq('direction', 'out').eq('sender_kind', 'ia').eq('status', 'sent').order('created_at', { ascending: false }).limit(20),
-    supabase.from('leads')
-      .select('id,kind,created_at,source,phone,last_inbound_at,last_outbound_at,owner_mode,stage')
-      .eq('organization_id', orgId)
-      .in('kind', ['cliente', 'corretor'])
-      .gte('created_at', periodStart)
-      .order('created_at', { ascending: false })
-      .limit(5000),
-    supabase.from('leads')
-      .select('id,kind,created_at,source,phone,last_inbound_at,last_outbound_at,owner_mode,stage')
-      .eq('organization_id', orgId)
-      .eq('kind', 'cliente')
-      .is('archived_at', null)
-      .not('stage', 'in', '(fechado_ganho,encerrado)')
-      .limit(5000),
-    supabase.from('messages')
-      .select('lead_id,sender_kind,created_at')
-      .eq('organization_id', orgId)
-      .eq('direction', 'out')
-      .gte('created_at', monthStart)
-      .order('created_at', { ascending: true })
-      .limit(10000),
-    admin.from('lead_intake_jobs')
-      .select('id', { count: 'exact', head: true })
-      .eq('organization_id', orgId)
-      .eq('nara_status', 'queued'),
+  const [marketingLeadsResult, metaSpend] = await Promise.all([
     admin.from('leads')
       .select('id,created_at,stage,source')
       .eq('organization_id', orgId)
@@ -219,72 +151,18 @@ export default async function DashboardPage({
     fetchMetaAdSpend(admin, orgId, marketing.since, marketing.until),
   ]);
 
-  const activities: DashboardActivity[] = (activitiesResult.data ?? []).map((item) => {
-    const relatedLead = Array.isArray(item.leads) ? (item.leads[0] ?? null) : (item.leads ?? null);
-    return { id: item.id, title: item.title, description: item.description, created_at: item.created_at, leads: relatedLead };
-  });
-  const lastAiSuccessAt = ((aiMessagesResult.data ?? []) as AiMessage[])
-    .find((item) => item.raw_payload?.ai_fallback_message !== true)
-    ?.created_at ?? null;
-  const periodLeads = (periodLeadsResult.data ?? []) as PeriodLead[];
-  const activeServiceLeads = (activeServiceLeadsResult.data ?? []) as PeriodLead[];
-  const outboundMonth = (outboundMonthResult.data ?? []) as OutboundMessage[];
-  const clientsInPeriod = periodLeads.filter((lead) => lead.kind === 'cliente');
-  const brokersInPeriod = periodLeads.filter((lead) => lead.kind === 'corretor');
-
-  const intake = {
-    clientsDay: countSince(clientsInPeriod, starts.today),
-    clientsWeek: countSince(clientsInPeriod, starts.week),
-    clientsMonth: countSince(clientsInPeriod, starts.month),
-    brokersDay: countSince(brokersInPeriod, starts.today),
-    brokersWeek: countSince(brokersInPeriod, starts.week),
-    brokersMonth: countSince(brokersInPeriod, starts.month),
-    metaDay: countSince(clientsInPeriod.filter((lead) => String(lead.source ?? '').startsWith('Meta')), starts.today),
-  };
-
-  const monthlyClientIds = new Set(clientsInPeriod
-    .filter((lead) => new Date(lead.created_at).getTime() >= starts.month.getTime())
-    .map((lead) => lead.id));
-  const firstOutbound = new Map<string, number>();
-  for (const message of outboundMonth) {
-    if (!monthlyClientIds.has(message.lead_id)) continue;
-    const time = new Date(message.created_at).getTime();
-    if (!firstOutbound.has(message.lead_id) || time < (firstOutbound.get(message.lead_id) ?? Infinity)) {
-      firstOutbound.set(message.lead_id, time);
-    }
-  }
-  const responseMinutes = clientsInPeriod
-    .filter((lead) => monthlyClientIds.has(lead.id) && firstOutbound.has(lead.id))
-    .map((lead) => ((firstOutbound.get(lead.id) ?? 0) - new Date(lead.created_at).getTime()) / 60_000)
-    .filter((value) => value >= 0 && Number.isFinite(value));
-  const avgFirstContactMinutes = responseMinutes.length
-    ? responseMinutes.reduce((total, value) => total + value, 0) / responseMinutes.length
-    : null;
-  const within5Rate = responseMinutes.length
-    ? Math.round((responseMinutes.filter((value) => value <= 5).length / responseMinutes.length) * 100)
-    : null;
-  const waitingReply = activeServiceLeads.filter((lead) => {
-    if (!lead.last_inbound_at) return false;
-    const inbound = new Date(lead.last_inbound_at).getTime();
-    const outbound = lead.last_outbound_at ? new Date(lead.last_outbound_at).getTime() : Number.NEGATIVE_INFINITY;
-    return inbound > outbound;
-  }).length;
-  const withoutFirstContact = activeServiceLeads.filter((lead) => !lead.last_outbound_at && Boolean(lead.phone)).length;
-  const naraToday = outboundMonth.filter((message) =>
-    message.sender_kind === 'ia' && new Date(message.created_at).getTime() >= starts.today.getTime()
-  ).length;
-  const humanToday = outboundMonth.filter((message) =>
-    message.sender_kind === 'humano' && new Date(message.created_at).getTime() >= starts.today.getTime()
-  ).length;
-
   const marketingLeads = (marketingLeadsResult.data ?? []) as MarketingLead[];
   const marketingLeadIds = marketingLeads.map((lead) => lead.id);
   let funnelMilestones: FunnelMilestone[] = [];
   if (marketingLeadIds.length) {
-    const { data: milestoneRows } = await admin.from('lead_funnel_milestones')
+    // Consulta em lotes: uma lista com milhares de IDs numa única URL fica lenta
+    // ou é recusada pelo servidor.
+    const batches: string[][] = [];
+    for (let index = 0; index < marketingLeadIds.length; index += 300) batches.push(marketingLeadIds.slice(index, index + 300));
+    const results = await Promise.all(batches.map((ids) => admin.from('lead_funnel_milestones')
       .select('lead_id,qualified_at,meeting_at,proposal_at,won_at')
-      .in('lead_id', marketingLeadIds);
-    funnelMilestones = (milestoneRows ?? []) as FunnelMilestone[];
+      .in('lead_id', ids)));
+    funnelMilestones = results.flatMap((result) => (result.data ?? []) as FunnelMilestone[]);
   }
   const milestoneByLead = new Map(funnelMilestones.map((item) => [item.lead_id, item]));
   const qualifiedCount = marketingLeads.filter((lead) => Boolean(milestoneByLead.get(lead.id)?.qualified_at)).length;
@@ -307,28 +185,8 @@ export default async function DashboardPage({
         ? 'Últimos 6 meses'
         : `${new Intl.DateTimeFormat('pt-BR').format(marketing.start)} a ${new Intl.DateTimeFormat('pt-BR').format(new Date(marketing.endExclusive.getTime() - DAY_MS))}`;
 
-  const overdueTasksHref = isAdmin
-    ? '/tarefas?status=vencidas'
-    : '/tarefas?status=vencidas&responsavel=minhas';
 
-  return <>
-    <PageTopbar
-      title="Dashboard"
-      subtitle={`Operação híbrida Nara + equipe · ${context!.organization.name}`}
-      actions={<div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-        {isAdmin && <AiHealthBadge lastSuccessAt={lastAiSuccessAt} />}
-        <Link href="/importar" className="btn btn-primary btn-sm">📥 Importar XLSX</Link>
-      </div>}
-    />
-    <div className="page-content">
-      <div className="kpis">
-        <div className="kpi"><div className="kpi-label">Leads de clientes</div><div className="kpi-value">{totalClients ?? 0}</div><div className="kpi-note">base ativa</div></div>
-        <div className="kpi"><div className="kpi-label">Sob responsabilidade da IA</div><div className="kpi-value">{aiCount ?? 0}</div><div className="kpi-note">Nara e Plantão ativos</div></div>
-        <div className="kpi"><div className="kpi-label">Prioridade A1/A2</div><div className="kpi-value" style={{ color: 'var(--red)' }}>{hotCount ?? 0}</div><div className="kpi-note">pedem resposta rápida</div></div>
-        <div className="kpi"><div className="kpi-label">Passagens pendentes</div><div className="kpi-value" style={{ color: (pendingHandoffs ?? 0) > 0 ? 'var(--red)' : undefined }}>{pendingHandoffs ?? 0}</div><div className="kpi-note">aguardando aceite</div></div>
-        <Link href={overdueTasksHref} className="kpi" style={{ display: 'block' }}><div className="kpi-label">Tarefas vencidas</div><div className="kpi-value" style={{ color: (overdueTasks ?? 0) > 0 ? 'var(--red)' : undefined }}>{overdueTasks ?? 0}</div><div className="kpi-note">clique para ver e agir</div></Link>
-        <div className="kpi"><div className="kpi-label">Corretores</div><div className="kpi-value">{brokerCount ?? 0}</div><div className="kpi-note">pipeline de parceiros</div></div>
-      </div>
+  return (
       <section className="card" style={{ marginBottom: 14 }}>
         <div className="card-head" style={{ alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
           <div>
@@ -404,6 +262,179 @@ export default async function DashboardPage({
           </div>
         </div>
       </section>
+  );
+}
+
+function MarketingSectionSkeleton() {
+  return (
+    <section className="card" style={{ marginBottom: 14 }}>
+      <div className="card-head"><h3>Performance de Marketing</h3></div>
+      <div className="card-body" aria-busy="true">
+        <div className="sk-stats" style={{ marginBottom: 0 }}>
+          {Array.from({ length: 6 }, (_, i) => <div className="sk-panel" key={i}><span className="sk-bar" style={{ width: '55%', height: 10 }} /><span className="sk-bar" style={{ width: '40%', height: 24 }} /></div>)}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<DashboardSearchParams>;
+}) {
+  const params = await searchParams;
+  const context = await getCurrentContext();
+  const supabase = await createClient();
+  const admin = createAdminClient();
+  const orgId = context!.organization.id;
+  const now = new Date().toISOString();
+  const isAdmin = context!.role === 'admin';
+  const starts = periodStarts();
+  const marketing = marketingRange(params, starts.today);
+  const periodStart = new Date(Math.min(starts.week.getTime(), starts.month.getTime())).toISOString();
+  const todayStart = starts.today.toISOString();
+  const monthStart = starts.month.toISOString();
+
+  let overdueTasksQuery = supabase.from('lead_tasks')
+    .select('id', { count: 'exact', head: true })
+    .eq('organization_id', orgId)
+    .in('status', ['pending', 'overdue'])
+    .lt('due_at', now);
+  if (!isAdmin) overdueTasksQuery = overdueTasksQuery.eq('assigned_to', context!.userId);
+
+  const [
+    { count: totalClients },
+    { count: aiCount },
+    { count: hotCount },
+    { count: brokerCount },
+    { count: overdueTasks },
+    { count: pendingHandoffs },
+    activitiesResult,
+    aiMessagesResult,
+    periodLeadsResult,
+    activeServiceLeadsResult,
+    outboundMonthResult,
+    { count: pendingIntake },
+  ] = await Promise.all([
+    supabase.from('leads').select('id', { count: 'exact', head: true }).eq('organization_id', orgId).eq('kind', 'cliente').is('archived_at', null),
+    supabase.from('leads').select('id', { count: 'exact', head: true }).eq('organization_id', orgId).eq('owner_mode', 'ai').eq('ai_enabled', true).is('archived_at', null),
+    supabase.from('leads').select('id', { count: 'exact', head: true }).eq('organization_id', orgId).in('priority_class', ['A1', 'A2']).not('stage', 'in', '(fechado_ganho,encerrado)').is('archived_at', null),
+    supabase.from('leads').select('id', { count: 'exact', head: true }).eq('organization_id', orgId).eq('kind', 'corretor').is('archived_at', null),
+    overdueTasksQuery,
+    supabase.from('lead_handoffs').select('id', { count: 'exact', head: true }).eq('organization_id', orgId).eq('status', 'pending'),
+    supabase.from('activities').select('id,title,description,created_at,leads(id,name,kind)').eq('organization_id', orgId).order('created_at', { ascending: false }).limit(10),
+    supabase.from('messages').select('created_at,raw_payload').eq('organization_id', orgId).eq('direction', 'out').eq('sender_kind', 'ia').eq('status', 'sent').order('created_at', { ascending: false }).limit(20),
+    supabase.from('leads')
+      .select('id,kind,created_at,source,phone,last_inbound_at,last_outbound_at,owner_mode,stage')
+      .eq('organization_id', orgId)
+      .in('kind', ['cliente', 'corretor'])
+      .gte('created_at', periodStart)
+      .order('created_at', { ascending: false })
+      .limit(5000),
+    supabase.from('leads')
+      .select('id,kind,created_at,source,phone,last_inbound_at,last_outbound_at,owner_mode,stage')
+      .eq('organization_id', orgId)
+      .eq('kind', 'cliente')
+      .is('archived_at', null)
+      .not('stage', 'in', '(fechado_ganho,encerrado)')
+      .limit(5000),
+    supabase.from('messages')
+      .select('lead_id,sender_kind,created_at')
+      .eq('organization_id', orgId)
+      .eq('direction', 'out')
+      .gte('created_at', monthStart)
+      .order('created_at', { ascending: true })
+      .limit(10000),
+    admin.from('lead_intake_jobs')
+      .select('id', { count: 'exact', head: true })
+      .eq('organization_id', orgId)
+      .eq('nara_status', 'queued'),
+  ]);
+
+  const activities: DashboardActivity[] = (activitiesResult.data ?? []).map((item) => {
+    const relatedLead = Array.isArray(item.leads) ? (item.leads[0] ?? null) : (item.leads ?? null);
+    return { id: item.id, title: item.title, description: item.description, created_at: item.created_at, leads: relatedLead };
+  });
+  const lastAiSuccessAt = ((aiMessagesResult.data ?? []) as AiMessage[])
+    .find((item) => item.raw_payload?.ai_fallback_message !== true)
+    ?.created_at ?? null;
+  const periodLeads = (periodLeadsResult.data ?? []) as PeriodLead[];
+  const activeServiceLeads = (activeServiceLeadsResult.data ?? []) as PeriodLead[];
+  const outboundMonth = (outboundMonthResult.data ?? []) as OutboundMessage[];
+  const clientsInPeriod = periodLeads.filter((lead) => lead.kind === 'cliente');
+  const brokersInPeriod = periodLeads.filter((lead) => lead.kind === 'corretor');
+
+  const intake = {
+    clientsDay: countSince(clientsInPeriod, starts.today),
+    clientsWeek: countSince(clientsInPeriod, starts.week),
+    clientsMonth: countSince(clientsInPeriod, starts.month),
+    brokersDay: countSince(brokersInPeriod, starts.today),
+    brokersWeek: countSince(brokersInPeriod, starts.week),
+    brokersMonth: countSince(brokersInPeriod, starts.month),
+    metaDay: countSince(clientsInPeriod.filter((lead) => String(lead.source ?? '').startsWith('Meta')), starts.today),
+  };
+
+  const monthlyClientIds = new Set(clientsInPeriod
+    .filter((lead) => new Date(lead.created_at).getTime() >= starts.month.getTime())
+    .map((lead) => lead.id));
+  const firstOutbound = new Map<string, number>();
+  for (const message of outboundMonth) {
+    if (!monthlyClientIds.has(message.lead_id)) continue;
+    const time = new Date(message.created_at).getTime();
+    if (!firstOutbound.has(message.lead_id) || time < (firstOutbound.get(message.lead_id) ?? Infinity)) {
+      firstOutbound.set(message.lead_id, time);
+    }
+  }
+  const responseMinutes = clientsInPeriod
+    .filter((lead) => monthlyClientIds.has(lead.id) && firstOutbound.has(lead.id))
+    .map((lead) => ((firstOutbound.get(lead.id) ?? 0) - new Date(lead.created_at).getTime()) / 60_000)
+    .filter((value) => value >= 0 && Number.isFinite(value));
+  const avgFirstContactMinutes = responseMinutes.length
+    ? responseMinutes.reduce((total, value) => total + value, 0) / responseMinutes.length
+    : null;
+  const within5Rate = responseMinutes.length
+    ? Math.round((responseMinutes.filter((value) => value <= 5).length / responseMinutes.length) * 100)
+    : null;
+  const waitingReply = activeServiceLeads.filter((lead) => {
+    if (!lead.last_inbound_at) return false;
+    const inbound = new Date(lead.last_inbound_at).getTime();
+    const outbound = lead.last_outbound_at ? new Date(lead.last_outbound_at).getTime() : Number.NEGATIVE_INFINITY;
+    return inbound > outbound;
+  }).length;
+  const withoutFirstContact = activeServiceLeads.filter((lead) => !lead.last_outbound_at && Boolean(lead.phone)).length;
+  const naraToday = outboundMonth.filter((message) =>
+    message.sender_kind === 'ia' && new Date(message.created_at).getTime() >= starts.today.getTime()
+  ).length;
+  const humanToday = outboundMonth.filter((message) =>
+    message.sender_kind === 'humano' && new Date(message.created_at).getTime() >= starts.today.getTime()
+  ).length;
+
+  const overdueTasksHref = isAdmin
+    ? '/tarefas?status=vencidas'
+    : '/tarefas?status=vencidas&responsavel=minhas';
+
+  return <>
+    <PageTopbar
+      title="Dashboard"
+      subtitle={`Operação híbrida Nara + equipe · ${context!.organization.name}`}
+      actions={<div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+        {isAdmin && <AiHealthBadge lastSuccessAt={lastAiSuccessAt} />}
+        <Link href="/importar" className="btn btn-primary btn-sm">📥 Importar XLSX</Link>
+      </div>}
+    />
+    <div className="page-content">
+      <div className="kpis">
+        <div className="kpi"><div className="kpi-label">Leads de clientes</div><div className="kpi-value">{totalClients ?? 0}</div><div className="kpi-note">base ativa</div></div>
+        <div className="kpi"><div className="kpi-label">Sob responsabilidade da IA</div><div className="kpi-value">{aiCount ?? 0}</div><div className="kpi-note">Nara e Plantão ativos</div></div>
+        <div className="kpi"><div className="kpi-label">Prioridade A1/A2</div><div className="kpi-value" style={{ color: 'var(--red)' }}>{hotCount ?? 0}</div><div className="kpi-note">pedem resposta rápida</div></div>
+        <div className="kpi"><div className="kpi-label">Passagens pendentes</div><div className="kpi-value" style={{ color: (pendingHandoffs ?? 0) > 0 ? 'var(--red)' : undefined }}>{pendingHandoffs ?? 0}</div><div className="kpi-note">aguardando aceite</div></div>
+        <Link href={overdueTasksHref} className="kpi" style={{ display: 'block' }}><div className="kpi-label">Tarefas vencidas</div><div className="kpi-value" style={{ color: (overdueTasks ?? 0) > 0 ? 'var(--red)' : undefined }}>{overdueTasks ?? 0}</div><div className="kpi-note">clique para ver e agir</div></Link>
+        <div className="kpi"><div className="kpi-label">Corretores</div><div className="kpi-value">{brokerCount ?? 0}</div><div className="kpi-note">pipeline de parceiros</div></div>
+      </div>
+      <Suspense fallback={<MarketingSectionSkeleton />}>
+        <MarketingSection orgId={orgId} marketing={marketing} />
+      </Suspense>
 
       <section className="card" style={{ marginBottom: 14 }}>
         <div className="card-head"><h3>Entradas no CRM</h3></div>

@@ -2,14 +2,14 @@ import { GeneralPipelineBoard } from '@/components/GeneralPipelineBoard';
 import { PageTopbar } from '@/components/PageTopbar';
 import { getCurrentContext } from '@/lib/auth';
 import { createClient } from '@/lib/supabase/server';
-import type { Lead } from '@/lib/types';
+import { PIPELINE_LEAD_COLUMNS, toPipelineLeads } from '@/lib/pipeline-lead-select';
 
 export default async function GeneralContactsPage() {
   const context = await getCurrentContext();
   const supabase = await createClient();
   const { data } = await supabase
     .from('leads')
-    .select('*')
+    .select(PIPELINE_LEAD_COLUMNS)
     .eq('organization_id', context!.organization.id)
     .eq('kind', 'geral')
     .is('archived_at', null)
@@ -20,7 +20,7 @@ export default async function GeneralContactsPage() {
     <PageTopbar title="Contatos gerais" subtitle="Números do WhatsApp que ainda não são clientes nem corretores" />
     <div className="page-content">
       <GeneralPipelineBoard
-        initialLeads={(data ?? []) as Lead[]}
+        initialLeads={toPipelineLeads(data)}
         organizationId={context!.organization.id}
         canEdit={context!.role !== 'viewer'}
       />
