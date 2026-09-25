@@ -213,7 +213,9 @@ export async function runNaraFollowups(admin: Admin, now = new Date()) {
     const language = (sequence.language in copy ? sequence.language : 'pt_BR') as keyof typeof copy;
     const name = String(lead.name || '').trim().split(/\s+/)[0] || (language === 'es' ? 'amigo' : 'você');
     const windowOpen = lead.last_inbound_at && now.getTime() < new Date(lead.last_inbound_at).getTime() + 24 * HOUR;
-    if (sequence.first_status === 'pending') {
+    if (sequence.first_status === 'pending' && firstAt + 48 * HOUR <= now.getTime()) {
+      await admin.from('nara_followup_sequences').update({ first_status: 'skipped' }).eq('id', sequence.id);
+    } else if (sequence.first_status === 'pending') {
       const firstTemplate = followupTemplates.find((item) => item.name === 'nara_retomada_interesse_v1' && item.language === language)!;
       const { data: firstListed } = !windowOpen ? await admin.from('whatsapp_templates').select('status')
         .eq('channel_id', channel.id).eq('name', firstTemplate.name).eq('language', language).maybeSingle() : { data: null };
@@ -238,7 +240,9 @@ export async function runNaraFollowups(admin: Admin, now = new Date()) {
         }
       }
     }
-    if (firstAt + 48 * HOUR > now.getTime() || firstAt + 72 * HOUR <= now.getTime() || sequence.second_status !== 'pending') continue;
+    if (firstAt + 48 * HOUR > now.getTime() || firstAt + 72 * HOUR <= now.getTime()
+      || (sequence.first_sent_at && now.getTime() - new Date(sequence.first_sent_at).getTime() < 24 * HOUR)
+      || sequence.second_status !== 'pending') continue;
     const spec = followupTemplates.find((item) => item.name === 'nara_retomada_opcoes_v1' && item.language === language)!;
     const { data: listed } = await admin.from('whatsapp_templates').select('status')
       .eq('channel_id', channel.id).eq('name', spec.name).eq('language', language).maybeSingle();
