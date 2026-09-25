@@ -37,6 +37,16 @@ assert.equal(identity.company, 'marliwursterimoveis');
 identity = normalizeLeadIdentity('Litoral Catarinense qualidade de vida CRECI 59131F');
 assert.equal(identity.creci, '59131F');
 
+identity = normalizeLeadIdentity('Eng. Patrícia Gomez - Homrich Engenharia');
+assert.equal(identity.fullName, 'Patrícia Gomez');
+assert.equal(identity.firstName, 'Patrícia');
+assert.equal(identity.company, 'Homrich Engenharia');
+
+identity = normalizeLeadIdentity('Alan Davoglio | CRECI 57241');
+assert.equal(identity.fullName, 'Alan Davoglio');
+assert.equal(identity.company, null);
+assert.equal(identity.creci, '57241');
+
 const split = splitLeadFullName('Luiz Alberto Almeida');
 assert.equal(split.firstName, 'Luiz');
 assert.equal(split.lastName, 'Alberto Almeida');

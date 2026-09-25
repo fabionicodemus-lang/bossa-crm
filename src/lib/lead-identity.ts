@@ -48,6 +48,7 @@ function stripPrefix(value: string) {
 function cutAtSeparator(value: string) {
   return value
     .split('|')[0]
+    .split(' / ')[0]
     .split(';')[0]
     .replace(/\s[-=]\s.*$/u, '')
     .replace(/\.\s+.*$/u, '')
@@ -58,7 +59,7 @@ function cutAtSeparator(value: string) {
 function truncateAtDescriptor(value: string) {
   const normalized = clean(value);
   const ascii = normalized.normalize('NFD').replace(/\p{Diacritic}/gu, '');
-  const descriptor = /\s+(?:corretor(?:a)?|vendedor(?:a)?|proprietari[oa]|financeiro|comercial|representante|fundador(?:a)?|ceo|designer|engenheir[oa]|fornecedor(?:a)?|prestador(?:a)?|inquilin[oa]|marido|esposa|imobiliaria|imoveis|engenharia|construtora|construcoes|marmoraria|marmitaria|grafica|empreiteira|locacoes|distribuidora|investimentos?|representacoes|servicos|studio|acos|materiais?|decor|iluminacao|vidros|aluminio)\b/i.exec(ascii);
+  const descriptor = /\s+(?:corretor(?:a)?|vendedor(?:a)?|proprietari[oa]|financeiro|comercial|representante|fundador(?:a)?|ceo|designer|engenheir[oa]|fornecedor(?:a)?|prestador(?:a)?|inquilin[oa]|marido|esposa|prop|seu|imobiliaria|imoveis|engenharia|construtora|construcoes|marmoraria|marmitaria|grafica|empreiteira|locacoes|distribuidora|investimentos?|representacoes|servicos|studio|acos|materiais?|decor|iluminacao|vidros|aluminio)\b/i.exec(ascii);
   if (!descriptor || descriptor.index === undefined) return normalized;
   return normalized.slice(0, descriptor.index).trim();
 }
@@ -72,7 +73,7 @@ function personCandidate(value: string) {
 
 function containsBusinessSignal(value: string) {
   const text = fold(value);
-  return /(?:imobiliaria|imoveis|engenharia|construtora|construcoes|marmoraria|marmitaria|grafica|empreiteira|locacoes|distribuidora|investimentos?|representacoes|servicos|studio|acos|materiais?|decor|iluminacao|vidros|aluminio|ltda)\b/.test(text)
+  return /(?:imobiliaria|imobiliarios?|imoveis|engenharia|construtora|construcoes|marmoraria|marmitaria|grafica|empreiteira|locacoes|distribuidora|investimentos?|representacoes|servicos|studio|acos|materiais?|decor|iluminacao|vidros|aluminio|comercial|ltda)\b/.test(text)
     || /imoveis$/.test(text.replace(/\s+/g, ''));
 }
 
@@ -95,13 +96,18 @@ function companyFromRaw(value: string) {
   const raw = clean(value);
   if (!raw) return null;
 
-  const separator = raw.match(/(?:\||\s[-=]\s)(.+)$/u)?.[1]?.trim();
+  const separator = raw.match(/(?:\||\s[-=]\s|\s\/\s)(.+)$/u)?.[1]?.trim();
   if (separator) {
     const cleaned = separator
       .replace(/^corretor(?:a)?\s+(?:de\s+)?im[oó]veis?\s*/iu, '')
       .replace(/^corretor(?:a)?\s*/iu, '')
       .trim();
-    if (cleaned && (containsBusinessSignal(cleaned) || cleaned.split(/\s+/).length <= 5)) return cleaned;
+    if (cleaned
+      && !/^(?:creci|corretor|corretora)(?:\s|$)/i.test(cleaned)
+      && (containsBusinessSignal(cleaned)
+        || (cleaned.length <= 40 && cleaned === cleaned.toLocaleUpperCase('pt-BR')))) {
+      return cleaned;
+    }
   }
 
   const imobiliaria = raw.match(/\b(imobili[aá]ria\s+[\p{L}0-9&.'’ -]{2,60})/iu)?.[1]?.trim();
