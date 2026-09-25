@@ -14,7 +14,8 @@ export function agendaActionFromText(text: string): AgendaAction {
   if (/\b(?:remarcar|reagendar)\b/.test(value)
     || /\b(?:mudar|trocar|alterar)\b.{0,28}\b(?:visita|data|dia|horario|agendamento)\b/.test(value)) return 'reschedule';
   if (/\b(?:agendar|marcar)\b.{0,30}\b(?:visita|decorado|horario|reuniao)\b/.test(value)
-    || /\b(?:quero|gostaria|pretendo|posso)\b.{0,28}\b(?:visitar|conhecer)\b/.test(value)
+    || /\b(?:quero|gostaria|pretendo|posso)\b.{0,28}\bvisitar\b/.test(value)
+    || /\b(?:quero|gostaria|pretendo|posso)\b.{0,40}\bconhecer\b.{0,30}\b(?:pessoalmente|decorado|estande|obra)\b/.test(value)
     || /\b(?:quero visitar|visitar o decorado|visita ao decorado)\b/.test(value)) return 'schedule';
   return 'none';
 }

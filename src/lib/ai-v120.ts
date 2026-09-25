@@ -2,6 +2,7 @@ import { enforceNaraReplyGuardrails, generateAiTurn as generateCoreAiTurn } from
 import type { AiFileOption, AiTrainingContext, AiTurn } from './ai';
 import type { Lead } from './types';
 import type { NaraUnitOffer } from './nara-unit-queries';
+import { isGenericPortfolioInterest, selectPortfolioFacadeIds } from './nara-generic-interest';
 
 export * from './ai';
 
@@ -350,6 +351,22 @@ export function postProcessNaraTurn(
   const nonApartmentValue = /\b(?:valor|preco|precio|quanto custa|cuanto cuesta|how much)\b.{0,28}\b(?:condominio|iptu|aluguel|taxa|laudemio|itbi|escritura|entrada|parcelas?|reforcos?|chaves)\b/.test(latestNormalized);
   const asksPriceNow = !nonApartmentValue && /\b(preco|precio|prices?|valor|quanto custa|cuanto cuesta|how much|dolar|usd)\b/.test(latestNormalized);
   const asksPlan = /\b(entrada|parcelas?|reforcos?|chaves|condicao de pagamento)\b/.test(latestNormalized);
+
+  if (isGenericPortfolioInterest(history)) {
+    const facadeIds = selectPortfolioFacadeIds(context.files ?? []);
+    turn.reply = facadeIds.length
+      ? 'Hoje temos o Soul pronto em Itapema, o Flow com 2 suítes e duplex para 2027, e o Alma com 3 e 4 suítes para 2030. Te mando duas fachadas. Quer mais fotos, plantas ou folder de algum deles?'
+      : 'Hoje temos o Soul pronto em Itapema, o Flow com 2 suítes e duplex para 2027, e o Alma com 3 e 4 suítes para 2030. Quer mais fotos, plantas ou folder de algum deles?';
+    turn.classification = 'morno';
+    turn.score = Math.max(30, Math.min(turn.score, 59));
+    turn.stage = 'ia';
+    turn.summary = 'Contato respondeu a uma apresentação geral e quer conhecer melhor os empreendimentos.';
+    turn.next_action = 'Apresentar os produtos e oferecer material do empreendimento que gerar mais interesse.';
+    turn.handoff = false;
+    turn.attachment_ids = facadeIds;
+    return finishTurn(turn, history);
+  }
+
   if (asksPlan) {
     const specific = context.commercial?.calls.flatMap((call) => call.name === 'consultar_apartamento'
       ? call.result && !Array.isArray(call.result) ? [call.result] : []

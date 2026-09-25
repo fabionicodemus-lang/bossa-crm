@@ -5,6 +5,11 @@ import {
   clientNoReplyReason,
   shouldForceBroadcastReply,
 } from '../src/lib/nara-broadcast-rules.ts';
+import { agendaActionFromText } from '../src/lib/nara-agenda-intent.ts';
+import {
+  isGenericPortfolioInterest,
+  selectPortfolioFacadeIds,
+} from '../src/lib/nara-generic-interest.ts';
 
 const base = {
   stage: 'futuro',
@@ -50,6 +55,28 @@ const endedWithoutBroadcast = { ...base, stage: 'encerrado', owner_mode: 'none',
 assert.equal(broadcastResponseAction(endedWithoutBroadcast, false), 'none');
 assert.equal(clientNoReplyReason(endedWithoutBroadcast), 'lead encerrado');
 assert.equal(shouldForceBroadcastReply('none', false), false);
+
+assert.equal(agendaActionFromText('Quero conhecer'), 'none');
+assert.equal(agendaActionFromText('Quero conhecer os empreendimentos'), 'none');
+assert.equal(agendaActionFromText('Quero conhecer pessoalmente'), 'schedule');
+assert.equal(agendaActionFromText('Quero visitar o decorado'), 'schedule');
+
+const broadcastHistory = [
+  { role: 'assistant', content: 'Hoje temos novas oportunidades em Porto Belo. Gostaria de conhecer as oportunidades disponíveis?' },
+  { role: 'user', content: 'Quero conhecer' },
+];
+assert.equal(isGenericPortfolioInterest(broadcastHistory), true);
+assert.equal(isGenericPortfolioInterest([
+  { role: 'assistant', content: 'Quer agendar uma visita ao decorado?' },
+  { role: 'user', content: 'Quero conhecer' },
+]), false);
+
+const facadeIds = selectPortfolioFacadeIds([
+  { id: 'flow-fachada', category: 'imagem', title: 'Fachada Flow', description: null, trigger_keywords: ['fachada', 'flow'], storage_bucket: '', storage_path: '', original_name: 'flow.jpg', mime_type: 'image/jpeg' },
+  { id: 'alma-fachada', category: 'imagem', title: 'Fachada Alma', description: null, trigger_keywords: ['fachada', 'alma'], storage_bucket: '', storage_path: '', original_name: 'alma.jpg', mime_type: 'image/jpeg' },
+  { id: 'flow-planta', category: 'planta', title: 'Planta Flow', description: null, trigger_keywords: ['flow'], storage_bucket: '', storage_path: '', original_name: 'planta.jpg', mime_type: 'image/jpeg' },
+]);
+assert.deepEqual(facadeIds, ['flow-fachada', 'alma-fachada']);
 
 const processor = readFileSync(new URL('../src/lib/whatsapp/webhookProcessor.ts', import.meta.url), 'utf8');
 const safety = readFileSync(new URL('../src/lib/whatsapp/aiTurnSafety.ts', import.meta.url), 'utf8');
