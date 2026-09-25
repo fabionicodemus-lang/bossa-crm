@@ -393,6 +393,17 @@ function buildRequestInput(
     ...prior.map((item) => inputMessage(item.role, item.content)),
   ];
   if (latest) input.push(inputMessage(latest.role, latest.content));
+  const supervisor = context.supervisor_instruction?.trim();
+  if (supervisor) {
+    input.push(inputMessage('developer', [
+      'TURNO SUPERVISIONADO PELO GESTOR. A tarefa imediata deste turno é cumprir a orientação abaixo.',
+      'Não faça a pergunta padrão de triagem, não retome um fluxo anterior e não trate a orientação como fala do contato.',
+      'Responda ao contato de forma natural, coerente com o histórico, executando a orientação agora.',
+      'Se a orientação pedir imagens, fotos, folder, plantas ou outro material disponível, selecione os attachment_ids correspondentes.',
+      'Mantenha os guardrails de opt-out, fatos confirmados, preços, disponibilidade, segurança e limite de mensagem.',
+      `ORIENTAÇÃO: ${supervisor}`,
+    ].join('\n')));
+  }
   return input;
 }
 
@@ -1176,7 +1187,7 @@ export async function generateAiTurn(
     parsed.attachment_ids = [...new Set(parsed.attachment_ids ?? [])]
       .filter((id) => allowedIds.has(id))
       .slice(0, 3);
-    const finalTurn = lead.kind === 'cliente'
+    const finalTurn = lead.kind === 'cliente' && !context.supervisor_instruction?.trim()
       ? enforceNaraTriage(parsed, lead, effectiveHistory, context)
       : parsed;
     finalTurn.usage_records = usageRecords;
