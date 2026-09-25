@@ -46,6 +46,9 @@ function likelyAutomaticReply(body: string) {
     'para iniciar nosso atendimento',
     'somos especialistas em laudos',
     'ja vamos conversar com voce',
+    'agradecemos sua mensagem',
+    'seja muito bem-vindo',
+    'como podemos te ajudar?',
   ].some((needle) => value.includes(needle));
 }
 
@@ -73,6 +76,8 @@ async function recover(request: Request) {
   const broadcastId = String(url.searchParams.get('broadcastId') ?? '').trim();
   const requestedLimit = Number(url.searchParams.get('limit') ?? '4');
   const limit = Math.max(1, Math.min(5, Number.isFinite(requestedLimit) ? Math.floor(requestedLimit) : 4));
+  const targetPhone = String(url.searchParams.get('phone') ?? '').trim();
+  const targetVariants = phoneMatchVariants(targetPhone);
   if (!broadcastId) return NextResponse.json({ error: 'broadcastId obrigatório.' }, { status: 400 });
 
   const admin = createAdminClient();
@@ -160,11 +165,14 @@ async function recover(request: Request) {
   }
 
   candidates.sort((a, b) => new Date(a.source.created_at).getTime() - new Date(b.source.created_at).getTime());
-  const ignoredAuto = candidates
+  const scopedCandidates = targetVariants.length
+    ? candidates.filter(({ lead }) => intersects(phoneMatchVariants(lead.phone), targetVariants))
+    : candidates;
+  const ignoredAuto = scopedCandidates
     .filter(({ source }) => likelyAutomaticReply(String(source.body ?? '')))
     .map(({ lead, source }) => ({ name: lead.name, phone: lead.phone, message: source.body, received_at: source.created_at }));
 
-  const actionable = candidates
+  const actionable = scopedCandidates
     .filter(({ source }) => !likelyAutomaticReply(String(source.body ?? '')))
     .slice(0, limit);
 
