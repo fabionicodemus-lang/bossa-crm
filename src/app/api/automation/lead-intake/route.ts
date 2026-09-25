@@ -7,6 +7,7 @@ import {
   type WhatsAppChannelRecord,
 } from '@/lib/whatsapp/channelService';
 import { normalizeWaId } from '@/lib/whatsapp/utils';
+import { naraContactZone, naraSendHours } from '@/lib/nara-timezone';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -254,6 +255,9 @@ async function processNara(admin: AdminClient, job: LeadIntakeJob, settings: Lea
     .select('*').eq('id', job.lead_id).eq('organization_id', job.organization_id).maybeSingle();
   if (leadError) throw leadError;
   if (!lead) throw new Error('Lead não encontrado.');
+
+  const leadZone = naraContactZone(`${lead.metadata?.city || ''} ${lead.city || ''}`);
+  if (!naraSendHours(new Date(), leadZone)) return 'waiting_hours';
 
   if (lead.kind !== 'cliente' || lead.opt_out || lead.automation_paused || lead.owner_mode === 'human') {
     await admin.from('lead_intake_jobs').update({

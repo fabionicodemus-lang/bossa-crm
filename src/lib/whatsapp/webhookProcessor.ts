@@ -4,7 +4,7 @@ import { recordAiUsage } from '@/lib/ai-usage';
 import { loadNaraDynamicTurnContext } from '@/lib/nara-dynamic-context';
 import { loadNaraForeignContext } from '@/lib/nara-exterior';
 import { loadNaraOperationalContext } from '@/lib/nara-operations';
-import { extractContactTimePreference } from '@/lib/nara-timezone';
+import { extractContactTimePreference, naraContactZone, naraSendHours } from '@/lib/nara-timezone';
 import { loadNaraCommercialTurnContext } from '@/lib/nara-unit-queries';
 import { markNaraOfferAuditFailed, markNaraOfferAuditSent, prepareNaraOfferAudit } from '@/lib/nara-offer-log';
 import { aiCanReply } from '@/lib/hybrid';
@@ -386,7 +386,7 @@ async function handleAiFailure(args: {
   await recordAiFailure(args);
 }
 
-async function processConversation(args: {
+export async function processConversation(args: {
   admin: AdminClient;
   channel: WhatsAppChannelRecord;
   conversation: WhatsAppConversationRecord;
@@ -1016,6 +1016,26 @@ export async function processWebhookEvent(eventId: string, knownPhoneNumberId?: 
     const aiErrors: string[] = [];
     for (const inbound of persisted) {
       try {
+        if (inbound.channel.role === 'cliente') {
+          const { data: quietLead } = await admin.from('leads').select('kind,metadata').eq('id', inbound.leadId).maybeSingle();
+          const resetAt = typeof quietLead?.metadata?.nara_reset_at === 'string' ? quietLead.metadata.nara_reset_at : null;
+          let priorQuery = admin.from('messages').select('id', { count: 'exact', head: true })
+            .eq('lead_id', inbound.leadId).eq('direction', 'out').eq('sender_kind', 'ia');
+          if (resetAt) priorQuery = priorQuery.gte('created_at', resetAt);
+          const { count: priorReplies } = await priorQuery;
+          if (quietLead?.kind === 'cliente' && !priorReplies) {
+            const { data: inboundBody } = await admin.from('messages').select('body').eq('id', inbound.storedMessageId).single();
+            const zone = naraContactZone(`${inboundBody?.body || ''} ${quietLead.metadata?.city || ''}`);
+            if (!naraSendHours(new Date(), zone)) {
+              await admin.from('nara_deferred_replies').upsert({
+                organization_id: inbound.channel.organization_id, lead_id: inbound.leadId,
+                channel_id: inbound.channel.id, conversation_id: inbound.conversation.id,
+                source_message_id: inbound.storedMessageId, timezone: zone,
+              }, { onConflict: 'source_message_id', ignoreDuplicates: true });
+              continue;
+            }
+          }
+        }
         await processConversation({
           admin,
           channel: inbound.channel,

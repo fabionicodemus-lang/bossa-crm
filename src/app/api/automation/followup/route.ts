@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { runDeferredNaraReplies, runNaraFollowups } from '@/lib/nara-followup';
 
 export const maxDuration = 60;
 
@@ -79,6 +80,8 @@ async function runFollowupWorker() {
   const nowIso = nowDate.toISOString();
   const staleAiCutoffIso = new Date(now - AI_NO_REPLY_ESCALATION_MS).toISOString();
   const summary = {
+    deferred_replies: null as Awaited<ReturnType<typeof runDeferredNaraReplies>> | null,
+    nara_cadence: null as Awaited<ReturnType<typeof runNaraFollowups>> | null,
     tasks_overdue: 0,
     handoffs_rescued: 0,
     human_rescued: 0,
@@ -86,6 +89,12 @@ async function runFollowupWorker() {
     ai_no_reply_escalated: 0,
     escalation_owner_missing: 0,
   };
+
+  summary.deferred_replies = await runDeferredNaraReplies(admin, nowDate);
+  summary.nara_cadence = await runNaraFollowups(admin, nowDate);
+  const { data: activeCadences } = await admin.from('nara_followup_sequences')
+    .select('id,lead_id,first_outbound_at,anchor_inbound_at,status').eq('status', 'active').limit(2000);
+  const cadenceByLead = new Map((activeCadences ?? []).map((item) => [item.lead_id, item]));
 
   const { data: overdueTasks } = await admin.from('lead_tasks').select('id')
     .eq('status', 'pending').not('due_at', 'is', null).lt('due_at', nowIso).limit(1000);
@@ -195,15 +204,19 @@ async function runFollowupWorker() {
 
     const lastOutboundAt = timestampMs(lead.last_outbound_at);
     const lastInboundAt = timestampMs(lead.last_inbound_at);
+    const cadence = cadenceByLead.get(lead.id);
+    const cadenceIsWaiting = cadence && (lastInboundAt === null
+      || lastInboundAt <= (timestampMs(cadence.anchor_inbound_at) ?? 0));
     const waitingForCustomerReply = lastOutboundAt !== null
       && (lastInboundAt === null || lastInboundAt < lastOutboundAt);
     const aiUnownedForThreeDays = lead.owner_mode === 'ai'
       && !lead.owner_id
       && AI_ACTIVE_STAGES.has(lead.stage)
-      && staleAiLeadIds.has(lead.id);
+      && (cadenceIsWaiting || staleAiLeadIds.has(lead.id));
     const customerSilentForThreeDays = waitingForCustomerReply
-      && lastOutboundAt !== null
-      && now - lastOutboundAt >= AI_NO_REPLY_ESCALATION_MS;
+      && (cadenceIsWaiting
+        ? now - (timestampMs(cadence.first_outbound_at) ?? now) >= AI_NO_REPLY_ESCALATION_MS
+        : lastOutboundAt !== null && now - lastOutboundAt >= AI_NO_REPLY_ESCALATION_MS);
 
     if (aiUnownedForThreeDays && customerSilentForThreeDays) {
       let escalationOwner = escalationOwnerCache.get(lead.organization_id);
@@ -217,7 +230,9 @@ async function runFollowupWorker() {
         console.error(`[followup escalation] Organização ${lead.organization_id} sem Cintia ou administrador elegível.`);
       } else {
         const ownerLabel = escalationOwner.isCintia ? 'Cintia' : 'administrador de contingência';
-        const taskDescription = 'A IA fez a última tentativa há mais de 3 dias e o cliente não respondeu. Fazer uma abordagem humana, registrar o resultado e definir a próxima ação.';
+        const taskDescription = 'O cliente não respondeu à Nara em 72 horas. Fazer uma abordagem humana, registrar o resultado e definir a próxima ação.';
+        if (cadenceIsWaiting) await admin.from('nara_followup_sequences')
+          .update({ status: 'escalated', updated_at: nowIso }).eq('id', cadence.id);
 
         await admin.from('lead_tasks').update({ status: 'cancelled' })
           .eq('lead_id', lead.id)

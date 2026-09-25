@@ -9,6 +9,21 @@ const CITY_TIMEZONES: Array<{ pattern: RegExp; label: string; zone: string }> = 
   { pattern: /\bsantiago\b/i, label: 'Santiago', zone: 'America/Santiago' },
 ];
 
+export function naraContactZone(text: string) {
+  const city = CITY_TIMEZONES.find((item) => item.pattern.test(text));
+  if (city) return city.zone;
+  if (/\b(chile|chileno)\b/i.test(text)) return 'America/Santiago';
+  if (/\b(portugal)\b/i.test(text)) return 'Europe/Lisbon';
+  return 'America/Sao_Paulo';
+}
+
+export function naraSendHours(date: Date, zone: string) {
+  const parts = new Intl.DateTimeFormat('en-US', { timeZone: zone, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(date);
+  const hour = Number(parts.find((part) => part.type === 'hour')?.value);
+  const minute = Number(parts.find((part) => part.type === 'minute')?.value);
+  return hour * 60 + minute >= 8 * 60 + 30 && hour * 60 + minute <= 20 * 60 + 30;
+}
+
 function partsInZone(date: Date, timeZone: string) {
   const parts = new Intl.DateTimeFormat('en-CA', {
     timeZone,
