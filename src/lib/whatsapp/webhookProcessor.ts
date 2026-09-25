@@ -8,6 +8,9 @@ import { extractContactTimePreference, naraContactZone, naraSendHours } from '@/
 import { loadNaraCommercialTurnContext } from '@/lib/nara-unit-queries';
 import { markNaraOfferAuditFailed, markNaraOfferAuditSent, prepareNaraOfferAudit } from '@/lib/nara-offer-log';
 import { aiCanReply } from '@/lib/hybrid';
+import { optOutSignal } from '@/lib/hybrid';
+import { whatsappCanStillReply } from '@/lib/whatsapp/aiTurnSafety';
+import { maybeScheduleAgendaFromAi } from '@/lib/agenda-ai-core';
 import { mergeMetaAdAttribution } from '@/lib/meta-ad-attribution';
 import { applyHybridDecision } from '@/lib/hybrid-server';
 import { createAdminClient } from '@/lib/supabase/admin';
@@ -35,7 +38,7 @@ import { metaTimestamp, normalizeWaId } from '@/lib/whatsapp/utils';
 type AdminClient = ReturnType<typeof createAdminClient>;
 
 function declaredName(text: string): string {
-  const match = text.match(/\b(?:sou|me chamo|meu nome (?:é|e)|aqui é|aqui e|soy|me llamo|mi nombre (?:es|e))\s+(?:a\s+|o\s+)?([\p{L}'’-]{2,})(?:\s+[\p{L}'’-]+){0,2}/iu);
+  const match = text.match(/\b(?:sou|me chamo|meu nome (?:é|e)|aqui é|aqui e|soy|me llamo|mi nombre (?:es|e)|i'm|i am|my name is)\s+(?:a\s+|o\s+)?([\p{L}'’-]{2,})(?:\s+[\p{L}'’-]+){0,2}/iu);
   return match?.[1]?.trim() ?? '';
 }
 
@@ -89,9 +92,12 @@ async function handleNaraReset(args: {
   const now = new Date().toISOString();
 
   if (lead) {
-    await Promise.all([
+    const resetResults = await Promise.all([
       args.admin.from('whatsapp_ai_conversation_memory').delete().eq('lead_id', lead.id),
       args.admin.from('nara_offer_logs').delete().eq('lead_id', lead.id),
+      args.admin.from('nara_followup_sequences').update({ status: 'cancelled', updated_at: now }).eq('lead_id', lead.id).eq('status', 'active'),
+      args.admin.from('nara_deferred_replies').update({ status: 'cancelled', updated_at: now }).eq('lead_id', lead.id).in('status', ['pending', 'processing']),
+      args.admin.from('client_handoff_alert_jobs').update({ owner_status: 'cancelled', manager_status: 'cancelled' }).eq('lead_id', lead.id).or('owner_status.eq.queued,manager_status.eq.queued'),
       args.admin.from('lead_handoffs').update({
         status: 'cancelled',
         updated_at: now,
@@ -144,6 +150,8 @@ async function handleNaraReset(args: {
         metadata: { reset_at: now, reset_by_phone: args.waId },
       }),
     ]);
+    const resetError = resetResults.find((result) => result.error)?.error;
+    if (resetError) throw resetError;
   }
 
   await sendNaraResetConfirmation(args.channel, args.waId);
@@ -440,6 +448,8 @@ export async function processConversation(args: {
     role: row.direction === 'in' ? 'user' as const : 'assistant' as const,
     content: row.body,
   }));
+  const { data: source } = await args.admin.from('messages').select('created_at').eq('id', args.sourceMessageId).maybeSingle();
+  if (resetAt && (!source || source.created_at < resetAt)) return;
   const shouldReply = aiCanReply(lead);
   if (!history.length) {
     await handleAiFailure({
@@ -449,6 +459,28 @@ export async function processConversation(args: {
       lead,
       error: new Error('IA indisponível — chave ausente ou histórico vazio'),
     });
+    return;
+  }
+
+  const lastInbound = [...history].reverse().find((item) => item.role === 'user')?.content ?? '';
+  if (lead.kind === 'cliente' && optOutSignal(lastInbound)) {
+    const now = new Date().toISOString();
+    const { error } = await args.admin.from('leads').update({ opt_out: true, ai_enabled: false,
+      automation_paused: true, owner_mode: 'none', stage: 'encerrado', updated_at: now })
+      .eq('organization_id', args.channel.organization_id).eq('phone', lead.phone);
+    if (error) throw error;
+    await Promise.all([
+      args.admin.from('nara_followup_sequences').update({ status: 'cancelled', updated_at: now }).eq('lead_id', lead.id).eq('status', 'active'),
+      args.admin.from('nara_deferred_replies').update({ status: 'cancelled', updated_at: now }).eq('lead_id', lead.id).eq('status', 'pending'),
+      args.admin.from('broadcast_recipients').update({ status: 'skipped' }).eq('organization_id', args.channel.organization_id)
+        .eq('phone', normalizeWaId(lead.phone ?? '')).eq('status', 'queued'),
+    ]);
+    const reply = 'Desculpe o incômodo! Seu número foi removido e você não vai receber mais mensagens da Bossa.';
+    const { provider, accessToken, phoneNumberId } = channelAccess(args.channel);
+    const sent = await provider.sendText({ phoneNumberId, accessToken, to: normalizeWaId(lead.phone ?? ''), body: reply });
+    await recordOutbound({ admin: args.admin, channel: args.channel, conversation: args.conversation,
+      lead, senderKind: 'ia', body: reply, type: 'text', category: 'service', wamid: sent.messageId,
+      providerPayload: sent.raw });
     return;
   }
 
@@ -509,6 +541,20 @@ export async function processConversation(args: {
   }
 
   const lastUserMessage = [...history].reverse().find((item) => item.role === 'user')?.content ?? '';
+  if (!(await whatsappCanStillReply({ admin: args.admin, leadId: lead.id,
+    conversationId: args.conversation.id, sourceId: args.sourceMessageId }))) return;
+  if (lead.kind === 'cliente' && /\b(visita|decorado|apartamento modelo|agendar|marcar|remarcar|cancelar|mudar)\b/i.test(history.slice(-5).map((item) => item.content).join(' '))) {
+    const appointment = await maybeScheduleAgendaFromAi({ admin: args.admin,
+      organizationId: args.channel.organization_id, lead, turn, lastUserMessage,
+      officeAddress: process.env.NARA_OFFICE_ADDRESS });
+    if (appointment.status === 'created') {
+      const where = process.env.NARA_OFFICE_ADDRESS ? ` no escritório da Bossa, ${process.env.NARA_OFFICE_ADDRESS}` : ' no escritório da Bossa (endereço a confirmar pelo time)';
+      turn.reply = `Sua visita ficou marcada para ${new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo', dateStyle: 'short', timeStyle: 'short' }).format(new Date(appointment.startsAt))}${where}. Qualquer mudança, avise por aqui.`;
+      turn.stage = 'agendado'; turn.classification = 'agendamento'; turn.handoff = false;
+    } else if (appointment.status !== 'none') {
+      turn.reply = appointment.message; turn.stage = 'ia'; turn.handoff = false;
+    }
+  }
   const decision = await applyHybridDecision({
     admin: args.admin,
     organizationId: args.channel.organization_id,
@@ -541,6 +587,8 @@ export async function processConversation(args: {
   const destination = normalizeWaId(lead.phone ?? '');
   let reply = turn.reply.trim();
   if (!destination || !reply) return;
+  if (!(await whatsappCanStillReply({ admin: args.admin, leadId: lead.id,
+    conversationId: args.conversation.id, sourceId: args.sourceMessageId }))) return;
 
   if (turn.attachment_ids.length) {
     const delivery = await sendSelectedFiles({
@@ -1030,7 +1078,7 @@ export async function processWebhookEvent(eventId: string, knownPhoneNumberId?: 
               .order('created_at', { ascending: true }).limit(1).maybeSingle();
             const zone = naraContactZone(`${inboundBody?.body || ''} ${quietLead.metadata?.city || ''}`);
             const effectiveZone = zone === 'America/Sao_Paulo' ? earlierDeferred?.timezone || zone : zone;
-            if (!naraSendHours(new Date(), effectiveZone)) {
+            if (!optOutSignal(inboundBody?.body || '') && !naraSendHours(new Date(), effectiveZone)) {
               await admin.from('nara_deferred_replies').upsert({
                 organization_id: inbound.channel.organization_id, lead_id: inbound.leadId,
                 channel_id: inbound.channel.id, conversation_id: inbound.conversation.id,

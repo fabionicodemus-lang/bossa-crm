@@ -227,6 +227,12 @@ async function sendRecipient(args: {
   const sentAtKey = isOwner ? 'owner_sent_at' : 'manager_sent_at';
   const currentAttempts = isOwner ? args.job.owner_attempts : args.job.manager_attempts;
 
+  const [{ data: currentJob }, { data: handoff }] = await Promise.all([
+    args.admin.from('client_handoff_alert_jobs').select('owner_status,manager_status').eq('id', args.job.id).maybeSingle(),
+    args.admin.from('lead_handoffs').select('status').eq('id', args.job.handoff_id).maybeSingle(),
+  ]);
+  if (!currentJob || currentJob[statusKey] !== 'queued' || handoff?.status !== 'pending') return 'skipped';
+
   const destination = normalizeWaId(phone ?? '');
   if (!destination) {
     await args.admin.from('client_handoff_alert_jobs').update({

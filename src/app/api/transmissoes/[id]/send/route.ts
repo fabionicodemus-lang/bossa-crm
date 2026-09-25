@@ -127,6 +127,14 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
     try {
       const destination = normalizeWaId(recipient.phone ?? '');
       if (!destination) throw new Error('Telefone inválido.');
+      const { data: optedOut, error: optOutError } = await admin.from('leads').select('id')
+        .eq('organization_id', membership.organization_id).eq('phone', destination)
+        .eq('opt_out', true).limit(1).maybeSingle();
+      if (optOutError) throw optOutError;
+      if (optedOut) {
+        await admin.from('broadcast_recipients').update({ status: 'skipped', error_message: 'Número descadastrado.' }).eq('id', recipient.id);
+        continue;
+      }
       const snapshot = recipient.lead_snapshot || {};
       const values = mappings.map((mapping) => mappingValue(mapping, snapshot, kind));
       const result = await provider.sendTemplate({

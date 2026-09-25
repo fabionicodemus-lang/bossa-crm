@@ -50,7 +50,6 @@ function currentOwnerMode(lead: Lead): OwnerMode {
 function explicitHighIntent(text: string, kind: LeadKind): string | null {
   const value = normalize(text);
   if (/\b(quero falar com (?:uma pessoa|alguem|consultor|corretor)|atendimento humano|me liga|pode me ligar|ligacao|videochamada)\b/.test(value)) return 'O contato pediu atendimento humano ou ligação.';
-  if (/\b(agendar|marcar|visita|visitar|decorado|conhecer pessoalmente)\b/.test(value)) return 'O contato pediu ou demonstrou intenção de agendar visita.';
   if (/\b(proposta|reservar|reserva|fechar|negociar|contraproposta|desconto|condicao|entrada|reforco|parcelamento)\b/.test(value)) return 'O contato entrou em proposta, condição ou negociação.';
   if (/\b(unidade disponivel|qual unidade|apartamento pronto|pronto para morar|soul)\b/.test(value)) return 'O contato pediu unidade específica ou demonstrou aderência à unidade pronta do Soul.';
   if (kind === 'corretor' && /\b(tenho cliente|cliente ativo|estou com cliente|visita com cliente|proposta do cliente|reserva para cliente)\b/.test(value)) return 'Corretor informou cliente ativo ou oportunidade concreta.';
@@ -59,7 +58,7 @@ function explicitHighIntent(text: string, kind: LeadKind): string | null {
 function proposalSignal(text: string) { return /\b(proposta|reservar|reserva|fechar|negociar|contraproposta|desconto|condicao|entrada|reforco|parcelamento)\b/.test(normalize(text)); }
 function appointmentSignal(text: string) { return /\b(agendar|marcar|visita|visitar|decorado|conhecer pessoalmente|videochamada)\b/.test(normalize(text)); }
 function futureSignal(text: string) { return /\b(ano que vem|daqui a (?:\d+|alguns) meses|mais pra frente|sem pressa|depois que vender|quando vender|aguardando vender|aguardando credito|aguardando financiamento|so no futuro|em 20\d\d)\b/.test(normalize(text)); }
-function optOutSignal(text: string) { return /\b(pare de mandar|nao me mande mais|nao quero receber|remova meu numero|sair da lista|cancele as mensagens|stop)\b/.test(normalize(text)); }
+export function optOutSignal(text: string) { return /\b(para de (?:me )?mandar|pare de (?:me )?mandar|nao me mande mais|nao quero (?:receber|nada|mensagens)|me tira da lista|tira meu numero|remova meu numero|sair da lista|descadastr|cancele as mensagens|stop)\b/.test(normalize(text)); }
 function closedWonSignal(text: string) {
   return /\b(fechei com a bossa|fechamos (?:a|o|uma|um) unidade|negocio com a bossa fechado|contrato da bossa assinado|assinei o contrato da bossa|venda concluida pela bossa)\b/.test(normalize(text));
 }
@@ -90,7 +89,7 @@ export function deriveHybridDecision({ lead, turn, lastUserMessage, now = new Da
   const won = lead.kind === 'cliente' && currentStage === 'proposta_negociacao' && ownerMode === 'human' && closedWonSignal(lastUserMessage);
   const alreadyHuman = ownerMode === 'human' || HUMAN_STAGES.has(currentStage);
   const future = futureSignal(lastUserMessage);
-  const handoffRequired = !isOptOut && !won && (Boolean(highIntentReason) || turn.handoff || turn.stage === 'agendado' || (lead.kind === 'corretor' && ['negociando', 'parceiro'].includes(turn.classification)));
+  const handoffRequired = !isOptOut && !won && (Boolean(highIntentReason) || turn.handoff || (lead.kind === 'corretor' && ['negociando', 'parceiro'].includes(turn.classification)));
 
   let stage = currentStage;
   let resolvedOwnerMode = ownerMode;

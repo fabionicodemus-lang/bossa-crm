@@ -121,12 +121,15 @@ export async function applyHybridDecision(args: {
       : baseDecision;
   const classification = routedToBroker ? 'cadastrado' : args.turn.classification;
   const now = new Date().toISOString();
+  const postSaleHandoff = args.lead.kind === 'cliente'
+    && /p[oó]s[- ]?venda|p[oó]s[- ]?obra|assist[eê]ncia|financeiro|boleto/i.test(`${args.turn.next_action} ${args.turn.summary}`);
   const clientHandoffSettings = decision.handoffRequired
     && args.lead.kind === 'cliente'
     && args.lead.owner_mode !== 'human'
+    && !postSaleHandoff
     ? await loadClientHandoffSettings(args.admin, args.organizationId)
     : null;
-  const designatedOwnerId = clientHandoffSettings?.enabled
+  const designatedOwnerId = postSaleHandoff ? null : clientHandoffSettings?.enabled
     ? clientHandoffSettings.primary_owner_user_id
     : args.lead.owner_id;
   const designatedOwnerName = clientHandoffSettings?.enabled
