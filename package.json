@@ -23,6 +23,7 @@
     "test:nara-phase9": "node --experimental-strip-types --experimental-loader ./scripts/ts-extension-loader.mjs scripts/check-nara-phase9.mjs",
     "test:nara-phase10": "node --experimental-strip-types --experimental-loader ./scripts/ts-extension-loader.mjs scripts/check-nara-phase10.mjs && npm run test:nara-2409",
     "test:nara-2409": "node --experimental-strip-types --experimental-loader ./scripts/ts-extension-loader.mjs scripts/check-nara-2409.mjs",
+    "test:nara-cadence": "node --experimental-strip-types --loader ./scripts/nara-cadence/loader.mjs scripts/nara-cadence/check.mjs",
     "test:nara-round3": "node --experimental-strip-types --experimental-loader ./scripts/ts-extension-loader.mjs scripts/check-nara-round3.mjs"
   },
   "dependencies": {
