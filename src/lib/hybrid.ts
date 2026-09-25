@@ -63,9 +63,9 @@ export function optOutSignal(text: string) {
   const bare = value.replace(/[^\p{L}\p{N}\s]/gu, ' ').replace(/\s+/g, ' ').trim();
 
   if (['stop', 'nao quero receber', 'para de mandar', 'pare de mandar', 'para de me mandar', 'pare de me mandar'].includes(bare)) return true;
-  if (/\b(?:por favor\s+)?nao me mande mais(?:\s+(?:mensagens?|contato|nada|propaganda|whatsapp))?\b/.test(value)) return true;
-  if (/\bnao quero receber(?: mais)?\s+(?:mensagens?|contato|nada|propaganda|whatsapp)\b/.test(value)) return true;
-  if (/\b(?:para|pare) de (?:me )?mandar(?: mais)?\s+(?:mensagens?|contato|nada|propaganda|whatsapp)\b/.test(value)) return true;
+  if (/\b(?:por favor\s+)?nao me mande mais(?:\s+(?:mensage(?:m|ns)|contato|nada|propaganda|whatsapp))?\b/.test(value)) return true;
+  if (/\bnao quero receber(?: mais)?\s+(?:mensage(?:m|ns)|contato|nada|propaganda|whatsapp)\b/.test(value)) return true;
+  if (/\b(?:para|pare) de (?:me )?mandar(?: mais)?\s+(?:mensage(?:m|ns)|contato|nada|propaganda|whatsapp)\b/.test(value)) return true;
   return /\b(me tira da lista|tira meu numero|remova meu numero|sair da lista|descadastr|cancele as mensagens)\b/.test(value);
 }
 function closedWonSignal(text: string) {
