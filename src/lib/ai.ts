@@ -424,8 +424,9 @@ function outsideBuyerDestination(history: ChatMessage[]): OutsideBuyerDestinatio
   const userMessages = history
     .filter((item) => item.role === 'user')
     .map((item) => item.content);
-  const fullHistory = userMessages.map(routingText).join('\n');
   const current = routingText(lastUserText(history));
+  if (/\b(nao sou (?:um |uma )?cliente|nao comprei|quero comprar)\b/.test(current)) return null;
+  const fullHistory = userMessages.map(routingText).join('\n');
 
   if (userMessages.some(isAssistedSaleSignal)) return 'venda_assistida';
   if (userMessages.some(isBrokerRoutingSignal)) return 'plantao';
@@ -458,13 +459,7 @@ function outsideBuyerReply(history: ChatMessage[], context: AiTrainingContext): 
     return 'Vou direcionar você para o Plantão da Bossa, que atende corretores parceiros.';
   }
   if (destination === 'pos_venda') {
-    const phone = /\b(boleto|financeiro|parcela|pagamento)\b/.test(current)
-      ? runtimeVariable(context, 'finance_phone')
-      : /\b(assistencia|problema|defeito|manutencao)\b/.test(current)
-        ? runtimeVariable(context, 'technical_assistance_phone')
-        : runtimeVariable(context, 'post_construction_phone');
-    if (phone) return `O setor responsável atende pelo ${phone}. Vou encaminhar seu pedido para a equipe continuar.`;
-    return 'Vou encaminhar você para o pós-venda da Bossa; por favor, diga em uma frase qual é o assunto para a equipe continuar.';
+    return 'Vou encaminhar seu pedido de pós-venda ou obra para a Cíntia, no Canal 2 do Plantão. Pode me dizer em uma frase o assunto e a unidade?';
   }
   const phone = /\b(fornecedor|prestador|suprimento)\b/.test(current)
     ? runtimeVariable(context, 'supplies_phone')
@@ -561,8 +556,12 @@ function isSpanishConversation(history: ChatMessage[]): boolean {
   return matches.length >= 2 || /\b(hola|soy|me llamo|mi nombre)\b/.test(value);
 }
 
+function isEnglishConversation(history: ChatMessage[]): boolean {
+  return !isSpanishConversation(history) && /\b(hi|hello|i'm|i am|we saw|prices?|how much|buy|usd|dollars?)\b/i.test(lastUserText(history));
+}
+
 function declaredContactFirstName(text: string): string {
-  const match = text.match(/\b(?:sou|me chamo|meu nome (?:é|e)|aqui é|aqui e|soy|me llamo|mi nombre (?:es|e))\s+(?:a\s+|o\s+)?([\p{L}'’-]{2,})/iu);
+  const match = text.match(/\b(?:sou|me chamo|meu nome (?:é|e)|aqui é|aqui e|soy|me llamo|mi nombre (?:es|e)|i'm|i am|my name is)\s+(?:a\s+|o\s+)?([\p{L}'’-]{2,})/iu);
   return match?.[1]?.trim() ?? '';
 }
 
@@ -572,7 +571,9 @@ function firstContactOpening(context: AiTrainingContext, history: ChatMessage[])
     : '';
   const agentName = configuredName || 'Nara';
   const name = declaredContactFirstName(lastUserText(history));
-  return isSpanishConversation(history)
+  return isEnglishConversation(history)
+    ? `Hi${name ? `, ${name}` : ''}! I'm ${agentName} from Bossa.`
+    : isSpanishConversation(history)
     ? `¡Hola${name ? `, ${name}` : ''}! Soy ${agentName}, de Bossa 😊`
     : `Oi${name ? `, ${name}` : ''}! Aqui é a ${agentName}, da Bossa 😊`;
 }
@@ -580,7 +581,7 @@ function firstContactOpening(context: AiTrainingContext, history: ChatMessage[])
 function ensureFirstTurnIntroduction(reply: string, history: ChatMessage[], context: AiTrainingContext): string {
   if (assistantMessages(history).length > 0) return reply.trim();
   const value = normalizeText(reply);
-  const hasGreeting = /^(ola|oi|bom dia|boa tarde|boa noite|hola|buenos dias|buenas tardes|buenas noches)\b/.test(value);
+  const hasGreeting = /^(ola|oi|bom dia|boa tarde|boa noite|hola|buenos dias|buenas tardes|buenas noches|hi|hello)\b/.test(value);
   const hasIdentity = /\bnara\b/.test(value) && /\bbossa\b/.test(value);
   if (hasGreeting && hasIdentity) return reply.trim();
   return `${firstContactOpening(context, history)} ${reply.trim()}`.trim();
@@ -724,6 +725,15 @@ export async function enforceNaraReplyGuardrails(
     if (!violations.length) return turn;
   }
 
+  if (violations.length === 1 && violations[0] === 'mais_de_45_palavras') {
+    const words = [...turn.reply.matchAll(/[\p{L}\p{N}]+(?:['’.-][\p{L}\p{N}]+)*/gu)];
+    const cutoff = words[44]?.index;
+    if (cutoff !== undefined) {
+      const last = words[44][0];
+      turn.reply = `${turn.reply.slice(0, cutoff + last.length).replace(/[,:;\s]+$/g, '')}.`;
+      if (!naraReplyGuardrailViolations(turn.reply).length) return turn;
+    }
+  }
   throw new NaraReplyGuardrailError(violations);
 }
 
@@ -747,6 +757,17 @@ export function enforceNaraTriage(turn: AiTurn, lead: Lead, history: ChatMessage
     && !asksProtectedCommercialDetail(lastUser)
     && isGeneralPriceRangeReply(turn.reply)
     && !hasUngroundedMoney(turn.reply, history, context);
+  const clearTopic = /\b(flow|alma|soul|apartamento|imovel|anuncio|decorado|visita|visitar|planta|fotos?|video|preco|precio|prices?|valor|quanto|cuanto|desconto|financiamento|troca|permuta|comprar|buy|usd|dolar)\b/.test(normalizeText(lastUser));
+
+  if (canKeepGeneralPriceRange && !routed && !/\b(quero comprar|pretendo comprar|quero investir|quero morar|proposta|reserva)\b/.test(normalizeText(userText(history)))) {
+    turn.classification = 'frio';
+    turn.score = Math.min(turn.score, 20);
+    turn.stage = 'ia';
+    turn.handoff = false;
+    turn.attachment_ids = [];
+    turn.reply = ensureFirstTurnIntroduction(turn.reply, history, context);
+    return turn;
+  }
 
   if (!buyerConfirmed && !routed) {
     if (canKeepGeneralPriceRange) {
@@ -764,7 +785,16 @@ export function enforceNaraTriage(turn: AiTurn, lead: Lead, history: ChatMessage
       turn.extracted.decision_maker = '';
       return turn;
     }
-    if (triageAttempts >= 2) {
+    if (clearTopic) {
+      turn.reply = asksProtectedCommercialDetail(lastUser) || looksLikeTriageQuestion(turn.reply, context)
+        ? nextQualificationQuestion(history) : turn.reply;
+      turn.classification = 'frio'; turn.score = Math.min(turn.score, 20);
+      turn.stage = 'ia'; turn.handoff = false;
+      turn.attachment_ids = [];
+      turn.reply = ensureFirstTurnIntroduction(turn.reply, history, context);
+      return turn;
+    }
+    if (triageAttempts >= 1) {
       turn.reply = ensureFirstTurnIntroduction(
         'Vou encaminhar você para um atendente da Bossa; por favor, diga em uma frase qual é o assunto para o time continuar.',
         history,
@@ -773,7 +803,7 @@ export function enforceNaraTriage(turn: AiTurn, lead: Lead, history: ChatMessage
       turn.classification = 'frio';
       turn.score = Math.min(turn.score, 20);
       turn.stage = 'ia';
-      turn.summary = 'A intenção de compra não foi confirmada após duas tentativas de triagem.';
+      turn.summary = 'A intenção do contato permanece indefinida após a pergunta inicial.';
       turn.next_action = 'Transferir para atendimento humano e identificar o assunto solicitado.';
       turn.handoff = true;
       turn.attachment_ids = [];
@@ -786,8 +816,8 @@ export function enforceNaraTriage(turn: AiTurn, lead: Lead, history: ChatMessage
 
     const learnedCorrection = exactManagerCorrection(history, context);
     const safeLearnedCorrection = learnedCorrection && !moneyTokens(learnedCorrection).length && learnedCorrection.includes('?');
-    const question = askedBefore ? alternativeTriageQuestion() : configuredTriageQuestion(context);
-    turn.reply = safeLearnedCorrection ? learnedCorrection : askedBefore ? `Entendi. ${question}` : question;
+    const question = configuredTriageQuestion(context);
+    turn.reply = safeLearnedCorrection ? learnedCorrection : question;
     turn.reply = ensureFirstTurnIntroduction(turn.reply, history, context);
     turn.classification = 'frio';
     turn.score = Math.min(turn.score, 20);
@@ -815,6 +845,11 @@ export function enforceNaraTriage(turn: AiTurn, lead: Lead, history: ChatMessage
     turn.next_action = outsideBuyerNextAction(history);
     turn.reply = ensureFirstTurnIntroduction(outsideBuyerReply(history, context), history, context);
     return turn;
+  }
+
+  if (looksLikeTriageQuestion(turn.reply, context)) {
+    turn.reply = nextQualificationQuestion(history);
+    turn.handoff = false;
   }
 
   const learnedCorrection = exactManagerCorrection(history, context);

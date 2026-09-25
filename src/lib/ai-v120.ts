@@ -1,6 +1,7 @@
 import { enforceNaraReplyGuardrails, generateAiTurn as generateCoreAiTurn } from './ai';
 import type { AiFileOption, AiTrainingContext, AiTurn } from './ai';
 import type { Lead } from './types';
+import type { NaraUnitOffer } from './nara-unit-queries';
 
 export * from './ai';
 
@@ -33,14 +34,18 @@ function isSpanishLead(history: ChatMessage[]): boolean {
   return matches.length >= 2 || /\b(hola|soy|me llamo|mi nombre)\b/.test(value);
 }
 
+function isEnglishLead(history: ChatMessage[]): boolean {
+  return !isSpanishLead(history) && /\b(hi|hello|i'm|i am|we saw|prices?|how much|buy|usd|dollars?)\b/i.test(lastUserText(history));
+}
+
 function declaredFirstName(text: string): string {
-  const match = text.match(/\b(?:sou|me chamo|meu nome (?:é|e)|aqui é|aqui e|soy|me llamo|mi nombre (?:es|e))\s+(?:a\s+|o\s+)?([\p{L}'’-]{2,})(?:\s+[\p{L}'’-]+){0,2}/iu);
+  const match = text.match(/\b(?:sou|me chamo|meu nome (?:é|e)|aqui é|aqui e|soy|me llamo|mi nombre (?:es|e)|i'm|i am|my name is)\s+(?:a\s+|o\s+)?([\p{L}'’-]{2,})(?:\s+[\p{L}'’-]+){0,2}/iu);
   return match?.[1]?.trim() ?? '';
 }
 
 function buyerContextIsClear(history: ChatMessage[]): boolean {
   const value = normalizeText(userText(history));
-  return /\b(vi (?:um |o |a )?anuncio|me interessei|tenho interesse|flow|alma|soul|apartamento|imovel|comprar|compra|morar|veranear|investir|investimento|preco|valor|quanto custa|pagamento|parcela|entrada|planta|obra|entrega|aluguel)\b/.test(value);
+  return /\b(vi (?:um |o |a )?anuncio|me interessei|tenho interesse|flow|alma|soul|apartamento|imovel|comprar|compra|morar|veranear|investir|investimento|preco|valor|quanto custa|pagamento|parcela|entrada|planta|obra|entrega|aluguel|prices?|buy|usd|dollars?|decorado|desconto|troca|financiamento)\b/.test(value);
 }
 
 function asksHuman(text: string): boolean {
@@ -56,7 +61,7 @@ function isPureInformationRequest(text: string): boolean {
 function requiresHumanHandoff(text: string): boolean {
   const value = normalizeText(text);
   return asksHuman(text)
-    || /\b(visita|visitar|agendar visita|marcar visita|conhecer pessoalmente|ir ai|proposta|reservar|reserva|negociar|negociacao|reclamacao|visita|visitar|agendar una visita|quiero visitar|conocer en persona|propuesta|reservar|reserva|negociar|negociacion|reclamo)\b/.test(value);
+    || /\b(proposta|reservar|reserva|negociar|negociacao|desconto|reclamacao|propuesta|reservar|reserva|negociar|negociacion|reclamo)\b/.test(value);
 }
 
 function handoffQuestion(history: ChatMessage[]): string {
@@ -98,6 +103,22 @@ function formatForeign(value: number, currency: 'USD' | 'EUR'): string {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency, maximumFractionDigits: 0 }).format(value);
 }
 
+function verifiedStartingPrices(context: AiTrainingContext, history: ChatMessage[]): string {
+  const ranges = (context.commercial?.calls ?? []).filter((call) => call.name === 'faixa_empreendimento'
+    && call.result && !Array.isArray(call.result))
+    .map((call) => call.result as { empreendimento: string; valor_minimo: number })
+    .filter((item) => item.valor_minimo > 0);
+  if (!ranges.length) return '';
+  const english = isEnglishLead(history);
+  const spanish = isSpanishLead(history);
+  const conversion = context.foreign?.fx && context.foreign.conversions;
+  return ranges.map((range) => {
+    const foreign = conversion && context.foreign?.conversions.find((item) => item.development === range.empreendimento && item.brl === range.valor_minimo);
+    const converted = foreign ? ` (≈ ${formatForeign(foreign.foreign, foreign.currency)})` : '';
+    return `${range.empreendimento}: ${english ? 'from' : spanish ? 'desde' : 'a partir de'} ${formatBrl(range.valor_minimo)}${converted}`;
+  }).join('; ') + (conversion ? english ? '. Approximate PTAX conversion.' : spanish ? '. Conversión PTAX aproximada.' : '. Conversão PTAX aproximada.' : '.');
+}
+
 function foreignCurrencyReply(context: AiTrainingContext, spanish: boolean): string {
   const foreign = context.foreign;
   if (!foreign?.requested_currency || !foreign.fx || !foreign.conversions.length) return '';
@@ -109,11 +130,11 @@ function foreignCurrencyReply(context: AiTrainingContext, spanish: boolean): str
 }
 
 function foreignPurchaseReply(name: string, spanish: boolean): string {
-  const prefix = name ? `${name}, ` : '';
+  void name;
   if (spanish) {
-    return `${prefix}sí, puedes comprar viviendo fuera de Brasil. El contrato se firma electrónicamente con la misma validez jurídica de una firma física, y el pago puede hacerse en reales, dólares o moneda local. Bossa ya tiene clientes que compraron a distancia desde Estados Unidos, Dinamarca, Portugal y Chile. ¿Lo buscas para vivir, vacacionar o invertir?`;
+    return 'Sí, puedes comprar desde el exterior. Contrato firmado electrónicamente con la misma validez jurídica. Pago en reales, dólares o moneda local. Clientes de Estados Unidos, Dinamarca, Portugal y Chile ya compraron a distancia. ¿Para vivir, vacacionar o invertir?';
   }
-  return `${prefix}dá sim. Você pode comprar morando fora do Brasil: o contrato é assinado eletronicamente com a mesma validade jurídica de uma assinatura física, e o pagamento pode ser feito em reais, dólar ou moeda local. A Bossa já tem clientes nos EUA, Dinamarca, Portugal e Chile que compraram à distância. É para morar, veranear ou investir?`;
+  return 'Dá sim. O contrato é assinado eletronicamente com validade jurídica. Pagamento em reais, dólar ou moeda local. Clientes nos EUA, Dinamarca, Portugal e Chile já compraram à distância. É para morar, veranear ou investir?';
 }
 
 function slaReply(context: AiTrainingContext, spanish: boolean): string {
@@ -216,6 +237,7 @@ function projectPlantFiles(history: ChatMessage[], context: AiTrainingContext): 
 function ensureFirstReplyIdentity(reply: string, history: ChatMessage[]): string {
   if (assistantMessages(history).length > 0) return reply;
   const spanish = isSpanishLead(history);
+  const english = isEnglishLead(history);
   const name = declaredFirstName(lastUserText(history));
   const normalized = normalizeText(reply);
   const alreadyIdentified = normalized.includes('nara') && normalized.includes('bossa');
@@ -231,7 +253,7 @@ function ensureFirstReplyIdentity(reply: string, history: ChatMessage[]): string
     return `${spanish ? `¡Hola, ${name}!` : `Oi, ${name}!`} ${reply.trim()}`;
   }
 
-  const intro = spanish
+  const intro = english ? `Hi${name ? `, ${name}` : ''}! I'm Nara from Bossa.` : spanish
     ? `¡Hola${name ? `, ${name}` : ''}! Soy Nara, de Bossa.`
     : `Oi${name ? `, ${name}` : ''}! Aqui é a Nara, da Bossa.`;
   return `${intro} ${reply.trim()}`.trim();
@@ -323,6 +345,34 @@ export function postProcessNaraTurn(
   const latestRaw = lastUserText(history);
   const latestNormalized = normalizeText(latestRaw);
   const spanish = isSpanishLead(history);
+  const asksPriceNow = /\b(preco|precio|prices?|valor|quanto custa|cuanto cuesta|how much|dolar|usd)\b/.test(latestNormalized);
+  const asksPlan = /\b(entrada|parcelas?|reforcos?|chaves|condicao de pagamento)\b/.test(latestNormalized);
+  if (asksPlan) {
+    const specific = context.commercial?.calls.flatMap((call) => call.name === 'consultar_apartamento'
+      ? call.result && !Array.isArray(call.result) ? [call.result] : []
+      : call.name === 'buscar_apartamentos' && Array.isArray(call.result) ? call.result : []) ?? [];
+    if (specific.length) {
+      const offer = specific[0] as NaraUnitOffer;
+      turn.reply = `${offer.empreendimento} ${offer.unidade}: valor total ${formatBrl(offer.valor)}. Vou pedir ao comercial o plano completo, incluindo entrada, mensais, reforços e saldo nas chaves.`;
+      turn.handoff = true;
+      turn.summary = 'Lead pediu plano de pagamento completo; tabela não discrimina todas as parcelas do total.';
+      turn.next_action = 'Confirmar plano completo antes de informar parcelas.';
+      return finishTurn(turn, history);
+    }
+  }
+  if (asksPriceNow) {
+    const verified = verifiedStartingPrices(context, history);
+    if (verified) {
+      const foreignPurchase = /\b(puedo comprar|buy from|buy remotely|comprar desde|comprar morando)\b/.test(latestNormalized);
+      turn.reply = foreignPurchase
+        ? `${spanish ? 'Sí, puedes comprar desde el exterior con firma electrónica.' : 'Yes, you can buy remotely with an electronic signature.'} ${verified}`
+        : verified;
+      turn.handoff = false;
+      turn.summary = 'Valores iniciais informados a partir da tabela vigente consultada neste turno.';
+      turn.next_action = 'Continuar o atendimento e confirmar empreendimento de interesse.';
+      return finishTurn(turn, history);
+    }
+  }
 
   const asksForeignPurchase = /\b(moro|morando|resido|vivo|soy|vivo en|resido en)\b.{0,45}\b(orlando|miami|estados unidos|eua|usa|fora do brasil|exterior|portugal|dinamarca|chile|santiago|fuera de brasil)\b/.test(latestNormalized)
     && /\b(compr\w*|assin\w*|contrato|pag\w*|comprar|firmar|pagar)\b/.test(latestNormalized);
@@ -453,7 +503,7 @@ export function postProcessNaraTurn(
   if (asksIfRobot) {
     return applyConversationDecision(turn, {
       reply: 'Sou a assistente digital da Bossa, sim 🙂 Se preferir falar com uma pessoa, chamo alguém do time agora. Quer que eu faça isso?',
-      handoff: true,
+      handoff: false,
       summary: 'Contato perguntou se a Nara é uma inteligência artificial.',
       nextAction: 'Oferecer passagem imediata para atendimento humano.',
     });
@@ -529,20 +579,8 @@ export async function generateAiTurn(
   history: ChatMessage[],
   context: AiTrainingContext = {},
 ): Promise<AiTurn | null> {
-  const priorTriageAsked = lead.kind === 'cliente' && hasPriorTriage(history);
-  const effectiveLead: Lead = priorTriageAsked
-    ? {
-        ...lead,
-        metadata: {
-          ...(lead.metadata ?? {}),
-          triage_confirmed: true,
-          triage_source: 'resposta_apos_pergunta_inicial',
-        },
-      }
-    : lead;
-
-  const turn = await generateCoreAiTurn(effectiveLead, history, context);
+  const turn = await generateCoreAiTurn(lead, history, context);
   if (!turn || lead.kind !== 'cliente') return turn;
   const processed = finishTurn(postProcessNaraTurn(turn, history, context), history);
-  return enforceNaraReplyGuardrails(processed, effectiveLead, history, context);
+  return enforceNaraReplyGuardrails(processed, lead, history, context);
 }

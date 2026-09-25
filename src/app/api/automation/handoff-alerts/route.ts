@@ -22,6 +22,7 @@ type HandoffSettings = {
   manager_alert_phone: string | null;
   alert_sender_channel_id: string | null;
   alert_template_name: string;
+  post_sale_alert_phone: string | null;
   enabled: boolean;
 };
 
@@ -39,6 +40,7 @@ type HandoffJob = {
   manager_message_id: string | null;
   owner_error: string | null;
   manager_error: string | null;
+  recipient_kind: string;
   created_at: string;
 };
 
@@ -52,6 +54,18 @@ const DEFAULT_TEMPLATE = {
     'Telefone: +55 47 99999-9999 | Origem: Meta | Empreendimento: Flow | Prioridade: A1',
     'Busca apartamento para morar e pediu uma visita nesta semana.',
     'Entrar em contato e confirmar o melhor horário para a visita.',
+  ],
+};
+
+const POST_SALE_TEMPLATE = {
+  ...DEFAULT_TEMPLATE,
+  name: 'alerta_pos_venda_nara',
+  body: 'Novo atendimento de pós-venda ou obra para Cíntia (Canal 2).\n\nCliente: {{1}}\n\nDados principais:\n{{2}}\n\nResumo:\n{{3}}\n\nPróxima ação:\n{{4}}\n\nAbra o Bossa CRM para continuar o atendimento.',
+  examples: [
+    'Maria Silva',
+    'Telefone: +55 47 99999-9999 | Origem: WhatsApp | Empreendimento: Flow | Prioridade: B',
+    'Cliente pediu informações sobre a entrega da unidade.',
+    'Cíntia deve assumir o pedido de pós-venda no Canal 2.',
   ],
 };
 
@@ -96,10 +110,10 @@ function detailsFromBriefing(briefing: Record<string, unknown>) {
   return parts.join(' | ').slice(0, 950);
 }
 
-function renderTemplate(values: string[]) {
+function renderTemplate(values: string[], definition = DEFAULT_TEMPLATE) {
   return values.reduce(
     (body, value, index) => body.replaceAll(`{{${index + 1}}}`, value),
-    DEFAULT_TEMPLATE.body,
+    definition.body,
   );
 }
 
@@ -107,6 +121,7 @@ async function syncTemplate(
   admin: AdminClient,
   channel: WhatsAppChannelRecord,
   templateName: string,
+  definition = DEFAULT_TEMPLATE,
 ) {
   const { data: existing } = await admin
     .from('whatsapp_templates')
@@ -114,13 +129,13 @@ async function syncTemplate(
     .eq('organization_id', channel.organization_id)
     .eq('channel_id', channel.id)
     .eq('name', templateName)
-    .eq('language', DEFAULT_TEMPLATE.language)
+    .eq('language', definition.language)
     .maybeSingle();
 
   const { provider, accessToken, wabaId } = channelAccess(channel);
   const listed = await provider.listTemplates({ wabaId, accessToken });
   const remote = (listed.data ?? []).find(
-    (item) => item.name === templateName && item.language === DEFAULT_TEMPLATE.language,
+    (item) => item.name === templateName && item.language === definition.language,
   );
 
   if (remote) {
@@ -132,15 +147,15 @@ async function syncTemplate(
       waba_id: channel.waba_id,
       meta_template_id: remote.id ?? existing?.meta_template_id ?? null,
       name: templateName,
-      language: DEFAULT_TEMPLATE.language,
-      category: remote.category || DEFAULT_TEMPLATE.category,
+      language: definition.language,
+      category: remote.category || definition.category,
       status: remote.status || 'PENDING',
       quality_score: typeof remote.quality_score === 'string'
         ? remote.quality_score
         : remote.quality_score?.score ?? null,
       rejected_reason: remote.rejected_reason ?? null,
       header_format: 'NONE',
-      body_text: DEFAULT_TEMPLATE.body,
+      body_text: definition.body,
       footer_text: null,
       components: remote.components ?? existing?.components ?? [],
       buttons: [],
@@ -163,15 +178,15 @@ async function syncTemplate(
 
   const components = [{
     type: 'BODY',
-    text: DEFAULT_TEMPLATE.body,
-    example: { body_text: [DEFAULT_TEMPLATE.examples] },
+    text: definition.body,
+    example: { body_text: [definition.examples] },
   }];
   const created = await provider.createTemplate({
     wabaId,
     accessToken,
     name: templateName,
-    language: DEFAULT_TEMPLATE.language,
-    category: DEFAULT_TEMPLATE.category,
+    language: definition.language,
+    category: definition.category,
     components,
   });
   const now = new Date().toISOString();
@@ -184,13 +199,13 @@ async function syncTemplate(
       waba_id: channel.waba_id,
       meta_template_id: created.id ?? null,
       name: templateName,
-      language: DEFAULT_TEMPLATE.language,
-      category: created.category ?? DEFAULT_TEMPLATE.category,
+      language: definition.language,
+      category: created.category ?? definition.category,
       status: created.status ?? 'PENDING',
       quality_score: null,
       rejected_reason: null,
       header_format: 'NONE',
-      body_text: DEFAULT_TEMPLATE.body,
+      body_text: definition.body,
       footer_text: null,
       components,
       buttons: [],
@@ -212,13 +227,15 @@ async function sendRecipient(args: {
   channel: WhatsAppChannelRecord;
   template: Record<string, unknown>;
   recipient: 'owner' | 'manager';
+  definition?: typeof DEFAULT_TEMPLATE;
 }) {
+  const postSale = args.job.recipient_kind === 'post_sale';
   const isOwner = args.recipient === 'owner';
   const phone = isOwner
-    ? args.settings.primary_owner_alert_phone
+    ? postSale ? args.settings.post_sale_alert_phone : args.settings.primary_owner_alert_phone
     : args.settings.manager_alert_phone;
   const recipientName = isOwner
-    ? args.settings.primary_owner_name
+    ? postSale ? 'Cíntia (Canal 2)' : args.settings.primary_owner_name
     : args.settings.manager_name;
   const statusKey = isOwner ? 'owner_status' : 'manager_status';
   const attemptsKey = isOwner ? 'owner_attempts' : 'manager_attempts';
@@ -226,6 +243,12 @@ async function sendRecipient(args: {
   const errorKey = isOwner ? 'owner_error' : 'manager_error';
   const sentAtKey = isOwner ? 'owner_sent_at' : 'manager_sent_at';
   const currentAttempts = isOwner ? args.job.owner_attempts : args.job.manager_attempts;
+
+  const [{ data: currentJob }, { data: handoff }] = await Promise.all([
+    args.admin.from('client_handoff_alert_jobs').select('owner_status,manager_status').eq('id', args.job.id).maybeSingle(),
+    args.admin.from('lead_handoffs').select('status').eq('id', args.job.handoff_id).maybeSingle(),
+  ]);
+  if (!currentJob || currentJob[statusKey] !== 'queued' || handoff?.status !== 'pending') return 'skipped';
 
   const destination = normalizeWaId(phone ?? '');
   if (!destination) {
@@ -255,7 +278,7 @@ async function sendRecipient(args: {
     headerType: 'NONE',
   });
   const sentAt = new Date().toISOString();
-  const rendered = renderTemplate(values);
+  const rendered = renderTemplate(values, args.definition);
 
   const transport = {
     organization_id: args.job.organization_id,
@@ -270,8 +293,8 @@ async function sendRecipient(args: {
     payload: {
       provider: result.raw,
       internal_notification: true,
-      notification_kind: 'nara_handoff',
-      recipient: isOwner ? 'tais' : 'fabio',
+      notification_kind: postSale ? 'nara_post_sale' : 'nara_handoff',
+      recipient: postSale ? 'cintia_canal_2' : isOwner ? 'tais' : 'fabio',
       handoff_id: args.job.handoff_id,
       template_name: String(args.template.name),
     },
@@ -363,10 +386,9 @@ async function runWorker() {
       continue;
     }
 
-    if (String(template.status ?? '').toUpperCase() !== 'APPROVED') {
-      summary.templates_pending += 1;
-      continue;
-    }
+    const commercialTemplateApproved = String(template.status ?? '').toUpperCase() === 'APPROVED';
+
+    let postSaleTemplate: Record<string, unknown> | null = null;
 
     const { data: jobs, error: jobsError } = await admin
       .from('client_handoff_alert_jobs')
@@ -383,10 +405,30 @@ async function runWorker() {
 
     for (const rawJob of jobs ?? []) {
       const job = rawJob as HandoffJob;
+      if (job.recipient_kind === 'post_sale' && !postSaleTemplate) {
+        try {
+          postSaleTemplate = await syncTemplate(admin, channel, POST_SALE_TEMPLATE.name, POST_SALE_TEMPLATE) as Record<string, unknown>;
+        } catch (error) {
+          console.error('[post-sale template]', error);
+          summary.errors += 1;
+          continue;
+        }
+      }
+      if (job.recipient_kind === 'post_sale' && String(postSaleTemplate?.status ?? '').toUpperCase() !== 'APPROVED') {
+        summary.templates_pending += 1;
+        continue;
+      }
+      if (job.recipient_kind !== 'post_sale' && !commercialTemplateApproved) {
+        summary.templates_pending += 1;
+        continue;
+      }
       if (job.owner_status === 'queued') {
         try {
           const result = await sendRecipient({
-            admin, job, settings, channel, template, recipient: 'owner',
+            admin, job, settings, channel,
+            template: job.recipient_kind === 'post_sale' ? postSaleTemplate! : template,
+            definition: job.recipient_kind === 'post_sale' ? POST_SALE_TEMPLATE : DEFAULT_TEMPLATE,
+            recipient: 'owner',
           });
           if (result === 'sent') summary.owner_sent += 1;
           else summary.skipped += 1;

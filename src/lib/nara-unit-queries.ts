@@ -329,15 +329,16 @@ function formatRange(result: NaraDevelopmentRange | null): string {
 }
 
 function formatOffer(result: NaraUnitOffer): string {
+  const installmentsMatchTotal = result.parcela_media !== null && result.quantidade_parcelas > 0
+    && Math.abs(result.entrada + result.parcela_media * result.quantidade_parcelas - result.valor) <= 1;
   return [
     `empreendimento=${result.empreendimento}`,
     `unidade=${result.unidade}`,
     `andar=${result.andar ?? 'não informado'}`,
     `tipologia=${result.tipologia}`,
     `valor=${formatBrl(result.valor)}`,
-    `entrada=${formatBrl(result.entrada)}`,
-    result.parcela_media === null ? 'parcela_media=não informada' : `parcela_media=${formatBrl(result.parcela_media)}`,
-    `quantidade_parcelas=${result.quantidade_parcelas}`,
+    installmentsMatchTotal ? `entrada=${formatBrl(result.entrada)}` : 'plano_de_pagamento=parcial; confirmar reforços e saldo nas chaves',
+    ...(installmentsMatchTotal ? [`parcela_media=${formatBrl(result.parcela_media!)}`, `quantidade_parcelas=${result.quantidade_parcelas}`] : []),
     `indice_correcao=${result.indice_correcao ?? 'não informado'}`,
     `validade_tabela=${result.validade_tabela ?? 'não informada'}`,
     `referencia_tabela=${result.referencia_tabela ?? 'não informada'}`,
@@ -435,7 +436,7 @@ function filtersFromMessage(enterprise: string, message: string): NaraApartmentF
 }
 
 function hasCommercialSignal(message: string): boolean {
-  return /\b(precos?|valor(?:es)?|quanto custa|quanto fica|faixa|a partir de|tabela|disponibilidade|disponive(?:l|is)|unidade|apto|apartamento|entrada|parcela|andar|suites?|quartos?|duplex|dolar|usd|euro|eur|moeda)\b/.test(normalizeText(message));
+  return /\b(precos?|prices?|precio|cuanto cuesta|how much|valor(?:es)?|quanto custa|quanto fica|faixa|a partir de|tabela|disponibilidade|disponive(?:l|is)|unidade|apto|apartamento|entrada|parcela|andar|suites?|quartos?|duplex|dolar|usd|euro|eur|moeda)\b/.test(normalizeText(message));
 }
 
 function asksForSpecificOptions(message: string): boolean {
@@ -451,11 +452,13 @@ function blockedCommercialProfile(
   const userMessages = history
     .filter((item) => item.role === 'user')
     .map((item) => item.content);
+  const latest = normalizeText(userMessages.at(-1));
+  const correctedCustomer = /\b(nao sou (?:um |uma )?cliente|nao comprei|quero comprar)\b/.test(latest);
   if (userMessages.some(isAssistedSaleSignal)) return 'venda_assistida';
   if (userMessages.some(isBrokerRoutingSignal)) return 'corretor';
   const metadata = JSON.stringify(lead.metadata ?? {});
   if (isBrokerRoutingSignal(metadata)) return 'corretor';
-  if (userMessages.some(isCurrentCustomerSignal) || isCurrentCustomerSignal(metadata)) return 'cliente_atual';
+  if (!correctedCustomer && (userMessages.some(isCurrentCustomerSignal) || isCurrentCustomerSignal(metadata))) return 'cliente_atual';
   return null;
 }
 

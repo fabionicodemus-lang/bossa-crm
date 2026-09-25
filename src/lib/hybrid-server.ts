@@ -2,7 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { AiTurn } from './ai';
 import { deriveHybridDecision, type HybridDecision } from './hybrid';
 import type { Lead } from './types';
-import { isAssistedSaleSignal, isBrokerRoutingSignal } from './nara-contact-routing';
+import { isAssistedSaleSignal, isBrokerRoutingSignal, isCurrentCustomerSignal } from './nara-contact-routing';
 
 export type AdminClient = SupabaseClient;
 
@@ -92,6 +92,22 @@ function assistedSaleDecision(base: HybridDecision, turn: AiTurn): HybridDecisio
   };
 }
 
+function postSaleDecision(base: HybridDecision): HybridDecision {
+  const dueAt = new Date(Date.now() + 5 * 60_000).toISOString();
+  return {
+    ...base,
+    stage: 'passagem_pendente', ownerMode: 'ai', aiEnabled: true, handoffRequired: true,
+    handoffReason: 'Cliente solicitou pós-venda ou acompanhamento da obra.',
+    nextAction: 'Cíntia, no Canal 2 do Plantão, deve assumir o pedido de pós-venda ou obra.',
+    nextActionType: 'pos_venda', nextActionDueAt: dueAt, reactivationAt: null,
+    noteTitle: 'Pedido de pós-venda ou obra para Cíntia',
+    noteDescription: 'Encaminhar para Cíntia no Canal 2 do Plantão.',
+    taskTitle: 'Cíntia: assumir pós-venda ou obra (Canal 2)',
+    taskDescription: 'Continuar o atendimento no Canal 2 do Plantão.',
+    taskPriority: 'urgent', taskDueAt: dueAt, taskDedupeKey: 'handoff:pos-venda-cintia',
+  };
+}
+
 export async function applyHybridDecision(args: {
   admin: AdminClient;
   organizationId: string;
@@ -113,8 +129,13 @@ export async function applyHybridDecision(args: {
     && isAssistedSaleSignal(args.lastUserMessage);
   const routedToBroker = args.lead.kind === 'geral'
     && isBrokerRoutingSignal(args.lastUserMessage);
+  const postSaleHandoff = args.lead.kind === 'cliente'
+    && (isCurrentCustomerSignal(args.lastUserMessage)
+      || /p[oó]s[- ]?(?:venda|obra)|minha obra|andamento da obra/i.test(args.lastUserMessage));
 
-  const decision = routedToAssistedSale
+  const decision = postSaleHandoff
+    ? postSaleDecision(baseDecision)
+    : routedToAssistedSale
     ? assistedSaleDecision(baseDecision, args.turn)
     : routedToBroker
       ? brokerRoutingDecision(baseDecision, args.turn)
@@ -124,9 +145,10 @@ export async function applyHybridDecision(args: {
   const clientHandoffSettings = decision.handoffRequired
     && args.lead.kind === 'cliente'
     && args.lead.owner_mode !== 'human'
+    && !postSaleHandoff
     ? await loadClientHandoffSettings(args.admin, args.organizationId)
     : null;
-  const designatedOwnerId = clientHandoffSettings?.enabled
+  const designatedOwnerId = postSaleHandoff ? null : clientHandoffSettings?.enabled
     ? clientHandoffSettings.primary_owner_user_id
     : args.lead.owner_id;
   const designatedOwnerName = clientHandoffSettings?.enabled
@@ -148,6 +170,7 @@ export async function applyHybridDecision(args: {
       sale_assisted_detected_at: now,
       sale_assisted_source_message: args.lastUserMessage,
     } : {}),
+    ...(postSaleHandoff ? { post_sale_route: 'cintia_canal_2', post_sale_routed_at: now } : {}),
     ai_extracted: {
       ...((args.lead.metadata?.ai_extracted && typeof args.lead.metadata.ai_extracted === 'object')
         ? args.lead.metadata.ai_extracted as Record<string, unknown>
@@ -270,12 +293,16 @@ export async function applyHybridDecision(args: {
           : null,
       assigned_mode: designatedHandoffTask
         ? 'human'
+        : postSaleHandoff
+          ? 'human'
         : decision.ownerMode === 'human'
           ? 'human'
           : 'ai',
       type: decision.nextActionType,
       title: decision.taskTitle,
-      description: designatedOwnerName && designatedHandoffTask
+      description: postSaleHandoff
+        ? `${decision.taskDescription} Responsável: Cíntia (Canal 2 do Plantão, +55 47 9238-1206).`
+        : designatedOwnerName && designatedHandoffTask
         ? `${decision.taskDescription} Responsável: ${designatedOwnerName}.`
         : decision.taskDescription,
       priority: decision.taskPriority,
@@ -380,8 +407,7 @@ export async function applyHybridDecision(args: {
     if (
       handoffId
       && args.lead.kind === 'cliente'
-      && clientHandoffSettings?.enabled
-      && designatedOwnerId
+      && (postSaleHandoff || (clientHandoffSettings?.enabled && designatedOwnerId))
     ) {
       const { error: queueError } = await args.admin
         .from('client_handoff_alert_jobs')
@@ -390,8 +416,9 @@ export async function applyHybridDecision(args: {
           lead_id: args.lead.id,
           handoff_id: handoffId,
           briefing: handoffBriefing,
+          recipient_kind: postSaleHandoff ? 'post_sale' : 'commercial',
           owner_status: 'queued',
-          manager_status: 'queued',
+          manager_status: postSaleHandoff ? 'skipped' : 'queued',
           updated_at: now,
         }, { onConflict: 'handoff_id', ignoreDuplicates: true });
       if (queueError && queueError.code !== '42P01' && queueError.code !== 'PGRST205') {

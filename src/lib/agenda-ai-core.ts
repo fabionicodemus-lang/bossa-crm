@@ -2,12 +2,15 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { findAgendaConflicts } from '@/lib/agenda';
 import type { AiTurn } from '@/lib/ai';
 import type { Lead } from '@/lib/types';
+import { officeHours } from '@/lib/nara-office-hours';
 
 type AdminClient = SupabaseClient;
 export type AgendaAiResult =
   | { status: 'none' }
   | { status: 'needs_details'; message: string }
   | { status: 'conflict'; message: string }
+  | { status: 'cancelled'; message: string }
+  | { status: 'options'; message: string }
   | { status: 'created'; eventId: string; assignedTo: string; startsAt: string; endsAt: string };
 
 const weekdays: Record<string, number> = {
@@ -56,9 +59,9 @@ function parseTimeFromText(raw: string): string | null {
 }
 function durationMinutes(text: string) {
   const normalized = normalize(text);
-  const minutes = normalized.match(/\b(\d{1,3})\s*(?:min|minutos)\b/);
+  const minutes = normalized.match(/\b(?:duracao|durar|por)\s+(\d{1,3})\s*(?:min|minutos)\b/);
   if (minutes) return Math.max(15, Math.min(180, Number(minutes[1])));
-  const hours = normalized.match(/\b(\d(?:[.,]5)?)\s*(?:h|hora|horas)\b/);
+  const hours = normalized.match(/\b(?:duracao|durar|por)\s+(\d(?:[.,]5)?)\s*(?:h|hora|horas)\b/);
   if (hours) return Math.max(15, Math.min(180, Math.round(Number(hours[1].replace(',', '.')) * 60)));
   return 60;
 }
@@ -78,11 +81,21 @@ function appointmentType(text: string) {
 function hasSchedulingIntent(text: string, turn: AiTurn) {
   const value = normalize(text);
   return turn.stage === 'agendado' || turn.classification === 'agendamento'
-    || /\b(agendar|marcar|agenda|visita|videochamada|reuniao|ligacao|pode ser|combinado|fechado)\b/.test(value);
+    || /\b(agendar|marcar|agenda|visita|decorado|videochamada|reuniao|ligacao|remarcar|mudar|cancelar|pode ser|combinado|fechado)\b/.test(value);
 }
-async function recentConversation(admin: AdminClient, leadId: string) {
-  const { data } = await admin.from('messages').select('direction,body,created_at').eq('lead_id', leadId)
-    .neq('direction','system').order('created_at',{ ascending:false }).limit(12);
+function withinOfficeHours(date: string, time: string, minutes: number, weekdayHours?: string, saturdayHours?: string) {
+  const hours = officeHours(date,weekdayHours,saturdayHours);
+  if (!hours) return false;
+  const [hour, minute] = time.split(':').map(Number);
+  const start = hour * 60 + minute;
+  return start >= hours.open && start + minutes <= hours.close;
+}
+function slotStartIso(date: string, time: string) { return new Date(`${date}T${time}:00-03:00`).toISOString(); }
+async function recentConversation(admin: AdminClient, leadId: string, resetAt?: string) {
+  let query = admin.from('messages').select('direction,body,created_at').eq('lead_id', leadId)
+    .neq('direction','system');
+  if (resetAt) query = query.gte('created_at',resetAt);
+  const { data } = await query.order('created_at',{ ascending:false }).limit(12);
   return [...(data || [])].reverse() as Array<{direction:string; body:string; created_at:string}>;
 }
 async function candidateMembers(admin: AdminClient, organizationId: string, preferred: string | null) {
@@ -95,27 +108,60 @@ async function candidateMembers(admin: AdminClient, organizationId: string, pref
   return [...commercials,...admins];
 }
 
-export async function maybeScheduleAgendaFromAi(args: { admin: AdminClient; organizationId: string; lead: Lead; turn: AiTurn; lastUserMessage: string; }): Promise<AgendaAiResult> {
-  if (!hasSchedulingIntent(args.lastUserMessage,args.turn)) return {status:'none'};
-  const rows = await recentConversation(args.admin,args.lead.id);
+export async function maybeScheduleAgendaFromAi(args: { admin: AdminClient; organizationId: string; lead: Lead; turn: AiTurn; lastUserMessage: string; officeAddress?: string; weekdayHours?: string; saturdayHours?: string; }): Promise<AgendaAiResult> {
+  const rows = await recentConversation(args.admin,args.lead.id,
+    typeof args.lead.metadata?.nara_reset_at === 'string' ? args.lead.metadata.nara_reset_at : undefined);
   const recentText = rows.slice(-8).map((row)=>row.body).join('\n');
+  if (!hasSchedulingIntent(args.lastUserMessage,args.turn) && !/\b(visita|decorado|agendar|marcar)\b/.test(normalize(recentText))) return {status:'none'};
   // Data/hora precisam ter sido informados pelo contato, nunca inventados na resposta da IA.
   const userText = rows.filter((row) => row.direction === 'in').slice(-6).map((row) => row.body).join('\n');
+  const current = normalize(args.lastUserMessage);
+  const { data: existing, error: existingError } = await args.admin.from('agenda_events')
+    .select('id,assigned_to,starts_at,ends_at').eq('organization_id',args.organizationId)
+    .eq('lead_id',args.lead.id).eq('status','scheduled').gte('starts_at',new Date().toISOString())
+    .order('starts_at',{ascending:true}).limit(1).maybeSingle();
+  if (existingError) throw existingError;
+  if (/\b(cancelar|desmarcar)\b/.test(current) && existing) {
+    const {error} = await args.admin.from('agenda_events').update({status:'cancelled'}).eq('id',existing.id).eq('status','scheduled');
+    if (error) throw error;
+    return {status:'cancelled',message:'Sua visita foi cancelada no CRM. Se quiser marcar outra data, é só me avisar.'};
+  }
+  if (!args.officeAddress?.trim()) return {status:'needs_details',message:'Vou pedir ao time para confirmar o endereço do escritório antes de marcar sua visita.'};
   const date = parseDateFromText(args.lastUserMessage) || parseDateFromText(userText);
   const time = parseTimeFromText(args.lastUserMessage) || parseTimeFromText(userText);
-  if (!date || !time) return {status:'needs_details',message:'Para marcar, preciso confirmar a data e o horário exatos.'};
+  if (!date) return {status:'needs_details',message:'Qual dia você prefere para a visita?'};
+  const candidates = await candidateMembers(args.admin,args.organizationId,args.lead.owner_id);
+  if (!candidates.length) return {status:'needs_details',message:'Vou pedir ao time para confirmar quem ficará responsável pela visita.'};
+  if (!time) {
+    const hours = officeHours(date,args.weekdayHours,args.saturdayHours);
+    if (!hours) return {status:'needs_details',message:'Ainda não tenho o expediente desse dia confirmado. Vou pedir ao time para combinar um horário com você.'};
+    const preferred = /\bmanha\b/.test(current) ? [9,10,11] : /\btarde\b/.test(current) ? [14,15,16] : [];
+    const slots = preferred.length ? preferred.map((h)=>h*60) : Array.from({length:Math.max(0,Math.floor((hours.close-hours.open-60)/60)+1)},(_,i)=>hours.open+i*60);
+    const free:string[]=[];
+    for (const slot of slots) {
+      if (slot < hours.open || slot+60 > hours.close) continue;
+      const label=`${String(Math.floor(slot/60)).padStart(2,'0')}:${String(slot%60).padStart(2,'0')}`;
+      const start=slotStartIso(date,label); const end=new Date(new Date(start).getTime()+60*60_000).toISOString();
+      if (new Date(start).getTime()<=Date.now()) continue;
+      for (const id of candidates) {
+        if (!(await findAgendaConflicts({organizationId:args.organizationId,assignedTo:id,startsAt:start,endsAt:end})).length) {free.push(label);break;}
+      }
+      if (free.length===3) break;
+    }
+    return free.length ? {status:'options',message:`Tenho estes horários livres em ${date.split('-').reverse().join('/')}: ${free.join(', ')}. Qual você prefere?`}
+      : {status:'conflict',message:'Não encontrei horários livres nesse período. Qual outro dia funciona para você?'};
+  }
+  const minutes = durationMinutes(recentText);
+  if (!withinOfficeHours(date,time,minutes,args.weekdayHours,args.saturdayHours)) return {status:'needs_details',message:'Esse horário está fora do expediente confirmado do escritório. Qual outro horário você prefere?'};
   const startsAt = new Date(`${date}T${time}:00-03:00`);
   if (!Number.isFinite(startsAt.getTime()) || startsAt.getTime() <= Date.now()-5*60_000)
     return {status:'needs_details',message:'Esse horário já passou. Qual outro dia e horário funciona melhor?'};
-  const minutes = durationMinutes(recentText);
   const endsAt = new Date(startsAt.getTime()+minutes*60_000);
   const startsIso = startsAt.toISOString(); const endsIso = endsAt.toISOString();
   const {data:duplicate} = await args.admin.from('agenda_events').select('id,assigned_to,starts_at,ends_at')
     .eq('organization_id',args.organizationId).eq('lead_id',args.lead.id).eq('status','scheduled')
     .eq('starts_at',startsIso).maybeSingle();
   if (duplicate) return {status:'created',eventId:duplicate.id,assignedTo:duplicate.assigned_to,startsAt:duplicate.starts_at,endsAt:duplicate.ends_at};
-  const candidates = await candidateMembers(args.admin,args.organizationId,args.lead.owner_id);
-  if (!candidates.length) return {status:'needs_details',message:'Vou pedir ao time para confirmar quem ficará responsável por esse horário.'};
   let assignedTo:string|null = null; let preferredBusy = false;
   for (const userId of candidates) {
     const conflicts = await findAgendaConflicts({organizationId:args.organizationId,assignedTo:userId,startsAt:startsIso,endsAt:endsIso});
@@ -132,12 +178,17 @@ export async function maybeScheduleAgendaFromAi(args: { admin: AdminClient; orga
     organization_id:args.organizationId,lead_id:args.lead.id,assigned_to:assignedTo,created_by_kind:'ai',
     agent:args.lead.kind==='cliente'?'nara':'plantao',title:`${label} · ${args.lead.name}`,
     description:args.turn.summary||args.turn.next_action||null,event_type:type,meeting_mode:mode,
+    location: mode==='presencial' ? args.officeAddress || 'Escritório da Bossa (endereço a confirmar)' : null,
     starts_at:startsIso,ends_at:endsIso,metadata:{source:'whatsapp_ai',lead_name:args.lead.name,
       last_user_message:args.lastUserMessage,ai_summary:args.turn.summary},
   }).select('id,assigned_to,starts_at,ends_at').single();
   if (error) {
     if (error.code==='23P01') return {status:'conflict',message:'Esse horário acabou de ser ocupado. Pode me informar outra opção?'};
     throw error;
+  }
+  if (existing && existing.id!==event.id && /\b(remarcar|mudar|trocar|alterar)\b/.test(current)) {
+    const {error:cancelError}=await args.admin.from('agenda_events').update({status:'cancelled'}).eq('id',existing.id).eq('status','scheduled');
+    if (cancelError) throw cancelError;
   }
   return {status:'created',eventId:event.id,assignedTo:event.assigned_to,startsAt:event.starts_at,endsAt:event.ends_at};
 }

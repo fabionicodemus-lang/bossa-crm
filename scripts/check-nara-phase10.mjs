@@ -198,13 +198,11 @@ await accept(13, 'Venda assistida preserva o corretor e bloqueia condução dire
   assert.equal(context?.calls.length, 0);
 });
 
-await accept(14, 'Pedido de visita vira A1 com tarefa em cinco minutos', () => {
+await accept(14, 'Pedido de visita permanece com a Nara para consultar a agenda', () => {
   const now = new Date('2026-08-05T12:00:00Z');
   const decision = deriveHybridDecision({ lead: baseLead, turn: turn({ score: 60 }), lastUserMessage: 'Quero agendar uma visita', now });
-  assert.equal(decision.priorityClass, 'A1');
-  assert.equal(decision.stage, 'passagem_pendente');
-  assert.equal(decision.taskPriority, 'urgent');
-  assert.equal(decision.taskDueAt, '2026-08-05T12:05:00.000Z');
+  assert.equal(decision.handoffRequired, false);
+  assert.equal(decision.ownerMode, 'ai');
 });
 
 await accept(15, 'Humano ativo não é reassumido pela IA', () => {
@@ -241,11 +239,11 @@ await accept(19, 'Nenhuma resposta contém duas perguntas', () => {
   assert.ok(naraReplyGuardrailViolations(reply).includes('mais_de_uma_pergunta'));
 });
 
-await accept(20, 'Pergunta sobre robô assume IA e oferece humano', () => {
+await accept(20, 'Pergunta sobre robô oferece humano sem passagem prematura', () => {
   const result = postProcessNaraTurn(turn(), [{ role: 'user', content: 'Você é robô?' }]);
   assert.match(result.reply, /assistente digital da Bossa/i);
   assert.match(result.reply, /pessoa|time/i);
-  assert.equal(result.handoff, true);
+  assert.equal(result.handoff, false);
 });
 
 const hybridServer = await readFile(new URL('../src/lib/hybrid-server.ts', import.meta.url), 'utf8');
