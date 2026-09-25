@@ -194,6 +194,7 @@ export async function maybeScheduleAgendaFromAi(args: { admin: AdminClient; orga
   // Data/hora precisam ter sido informados pelo contato, nunca inventados na resposta da IA.
   const userText = rows.filter((row) => row.direction === 'in').slice(-6).map((row) => row.body).join('\n');
   const action = agendaActionFromText(args.lastUserMessage);
+  const current = normalize(args.lastUserMessage);
   const { data: existing, error: existingError } = await args.admin.from('agenda_events')
     .select('id,assigned_to,starts_at,ends_at').eq('organization_id',args.organizationId)
     .eq('lead_id',args.lead.id).eq('status','scheduled').gte('starts_at',new Date().toISOString())
