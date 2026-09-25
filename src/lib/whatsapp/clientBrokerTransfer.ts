@@ -46,7 +46,7 @@ function extractCreci(text: string) {
 }
 
 function extractCompany(text: string) {
-  const match = text.match(/\b(?:da|do|de)\s+([\p{L}0-9&.' -]{2,60}(?:im[oó]veis|imobili[aá]ria))\b/iu);
+  const match = text.match(/\b(?:da|do|de)\s+([\p{L}0-9&.' -]{2,40}?(?:im[oó]veis|imobili[aá]ria))(?=\s|[,.;]|$)/iu);
   return match?.[1]?.trim() ?? '';
 }
 
@@ -363,6 +363,7 @@ export async function routeClientBrokerFromBroadcast(args: {
     client_broker_transfer_broadcast_id: args.broadcastId ?? null,
     client_broker_transfer_from_kind: args.lead.kind,
     client_broker_transfer_to_kind: 'corretor',
+    client_broker_transfer_verified: true,
     client_broker_transfer_plantao_channel_id: channel.id,
     client_broker_transfer_plantao_phone: channel.display_phone_number,
   };

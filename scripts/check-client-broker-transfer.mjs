@@ -15,6 +15,7 @@ assert.equal(isBrokerRoutingSignal('Não sou corretor, quero comprar para mim'),
 
 const processor = readFileSync(new URL('../src/lib/whatsapp/webhookProcessor.ts', import.meta.url), 'utf8');
 const transfer = readFileSync(new URL('../src/lib/whatsapp/clientBrokerTransfer.ts', import.meta.url), 'utf8');
+const migration = readFileSync(new URL('../supabase/migrations/043_allow_verified_client_broker_transfer.sql', import.meta.url), 'utf8');
 
 assert.match(processor, /routeClientBrokerFromBroadcast/);
 assert.match(processor, /completePendingBrokerPortfolio/);
@@ -22,6 +23,11 @@ assert.match(processor, /recentBroadcast/);
 assert.match(transfer, /function extractCreci/);
 assert.match(transfer, /function extractCompany/);
 assert.match(transfer, /kind: 'corretor'/);
+assert.match(transfer, /client_broker_transfer_verified: true/);
+assert.match(transfer, /\{2,40\}\?/);
+assert.match(migration, /client_broker_transfer_verified/);
+assert.match(migration, /client_broker_transfer_source_message_id/);
+assert.match(migration, /client_broker_transfer_broadcast_id/);
 assert.match(transfer, /WELCOME_TEMPLATE = 'boas_vindas_mact74'/);
 assert.match(transfer, /selectAllEnterpriseFacadeIds/);
 assert.match(transfer, /Soul/);
