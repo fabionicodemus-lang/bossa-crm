@@ -8,6 +8,9 @@ export const NARA_RUNTIME_VARIABLE_FIELDS = [
   { key: 'hr_phone', label: 'Contato do RH', group: 'contatos', placeholder: '(47) 00000-0000' },
   { key: 'marketing_phone', label: 'Contato do marketing', group: 'contatos', placeholder: '(47) 00000-0000' },
   { key: 'administration_phone', label: 'Contato administrativo', group: 'contatos', placeholder: '(47) 00000-0000' },
+  { key: 'office_address', label: 'Endereço do escritório e decorados', group: 'visitas', placeholder: 'Rua, número, bairro, cidade e UF' },
+  { key: 'office_weekday_hours', label: 'Visitas de segunda a sexta', group: 'visitas', placeholder: '08:00-18:00' },
+  { key: 'office_saturday_hours', label: 'Visitas aos sábados mediante agendamento', group: 'visitas', placeholder: '08:00-18:00' },
   { key: 'flow_registry_number', label: 'Matrícula do Flow', group: 'flow', placeholder: 'Número da matrícula imobiliária' },
   { key: 'flow_notary_office', label: 'Cartório do Flow', group: 'flow', placeholder: 'Nome e cidade do Registro de Imóveis' },
   { key: 'partners_response_time', label: 'Prazo de retorno — Plantão de parceiros', group: 'prazos', placeholder: 'Ex.: até 15 minutos' },
@@ -23,6 +26,7 @@ export const NARA_RUNTIME_VARIABLE_FIELDS = [
 export const NARA_RUNTIME_VARIABLE_GROUPS = [
   { key: 'plantao', label: 'Plantão atual', description: 'Como não existe uma escala automática no CRM, o nome abaixo representa manualmente quem está de plantão agora.' },
   { key: 'contatos', label: 'Contatos dos setores', description: 'Números oficiais que a Nara pode usar para direcionar cada tipo de atendimento.' },
+  { key: 'visitas', label: 'Visitas ao escritório', description: 'No sábado, abrir somente para visitas previamente agendadas. Domingo sem atendimento.' },
   { key: 'flow', label: 'Documentação do Flow', description: 'Dados oficiais para perguntas sobre matrícula e Registro de Imóveis.' },
   { key: 'prazos', label: 'Prazos padrão de retorno', description: 'Prazo que pode ser informado ao contato para cada setor.' },
 ] as const;

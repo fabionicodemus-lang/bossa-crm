@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { findAgendaConflicts } from '@/lib/agenda';
 import type { AiTurn } from '@/lib/ai';
 import type { Lead } from '@/lib/types';
+import { officeHours } from '@/lib/nara-office-hours';
 
 type AdminClient = SupabaseClient;
 export type AgendaAiResult =
@@ -82,19 +83,8 @@ function hasSchedulingIntent(text: string, turn: AiTurn) {
   return turn.stage === 'agendado' || turn.classification === 'agendamento'
     || /\b(agendar|marcar|agenda|visita|decorado|videochamada|reuniao|ligacao|remarcar|mudar|cancelar|pode ser|combinado|fechado)\b/.test(value);
 }
-function officeHours(date: string): { open: number; close: number } | null {
-  const weekday = new Date(`${date}T12:00:00-03:00`).getUTCDay();
-  if (weekday === 0) return null;
-  // Horários devem ser confirmados na configuração antes de ativar agendamentos.
-  const raw = weekday === 6 ? process.env.NARA_OFFICE_SATURDAY_HOURS : process.env.NARA_OFFICE_WEEKDAY_HOURS;
-  const match = raw?.match(/^(\d{1,2}):([0-5]\d)-(\d{1,2}):([0-5]\d)$/);
-  if (!match) return null;
-  const open = Number(match[1]) * 60 + Number(match[2]);
-  const close = Number(match[3]) * 60 + Number(match[4]);
-  return close > open ? {open, close} : null;
-}
-function withinOfficeHours(date: string, time: string, minutes: number) {
-  const hours = officeHours(date);
+function withinOfficeHours(date: string, time: string, minutes: number, weekdayHours?: string, saturdayHours?: string) {
+  const hours = officeHours(date,weekdayHours,saturdayHours);
   if (!hours) return false;
   const [hour, minute] = time.split(':').map(Number);
   const start = hour * 60 + minute;
@@ -118,7 +108,7 @@ async function candidateMembers(admin: AdminClient, organizationId: string, pref
   return [...commercials,...admins];
 }
 
-export async function maybeScheduleAgendaFromAi(args: { admin: AdminClient; organizationId: string; lead: Lead; turn: AiTurn; lastUserMessage: string; officeAddress?: string; }): Promise<AgendaAiResult> {
+export async function maybeScheduleAgendaFromAi(args: { admin: AdminClient; organizationId: string; lead: Lead; turn: AiTurn; lastUserMessage: string; officeAddress?: string; weekdayHours?: string; saturdayHours?: string; }): Promise<AgendaAiResult> {
   const rows = await recentConversation(args.admin,args.lead.id,
     typeof args.lead.metadata?.nara_reset_at === 'string' ? args.lead.metadata.nara_reset_at : undefined);
   const recentText = rows.slice(-8).map((row)=>row.body).join('\n');
@@ -143,7 +133,7 @@ export async function maybeScheduleAgendaFromAi(args: { admin: AdminClient; orga
   const candidates = await candidateMembers(args.admin,args.organizationId,args.lead.owner_id);
   if (!candidates.length) return {status:'needs_details',message:'Vou pedir ao time para confirmar quem ficará responsável pela visita.'};
   if (!time) {
-    const hours = officeHours(date);
+    const hours = officeHours(date,args.weekdayHours,args.saturdayHours);
     if (!hours) return {status:'needs_details',message:'Ainda não tenho o expediente desse dia confirmado. Vou pedir ao time para combinar um horário com você.'};
     const preferred = /\bmanha\b/.test(current) ? [9,10,11] : /\btarde\b/.test(current) ? [14,15,16] : [];
     const slots = preferred.length ? preferred.map((h)=>h*60) : Array.from({length:Math.max(0,Math.floor((hours.close-hours.open-60)/60)+1)},(_,i)=>hours.open+i*60);
@@ -162,7 +152,7 @@ export async function maybeScheduleAgendaFromAi(args: { admin: AdminClient; orga
       : {status:'conflict',message:'Não encontrei horários livres nesse período. Qual outro dia funciona para você?'};
   }
   const minutes = durationMinutes(recentText);
-  if (!withinOfficeHours(date,time,minutes)) return {status:'needs_details',message:'Esse horário está fora do expediente confirmado do escritório. Qual outro horário você prefere?'};
+  if (!withinOfficeHours(date,time,minutes,args.weekdayHours,args.saturdayHours)) return {status:'needs_details',message:'Esse horário está fora do expediente confirmado do escritório. Qual outro horário você prefere?'};
   const startsAt = new Date(`${date}T${time}:00-03:00`);
   if (!Number.isFinite(startsAt.getTime()) || startsAt.getTime() <= Date.now()-5*60_000)
     return {status:'needs_details',message:'Esse horário já passou. Qual outro dia e horário funciona melhor?'};

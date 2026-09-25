@@ -544,12 +544,15 @@ export async function processConversation(args: {
   if (!(await whatsappCanStillReply({ admin: args.admin, leadId: lead.id,
     conversationId: args.conversation.id, sourceId: args.sourceMessageId }))) return;
   if (lead.kind === 'cliente' && /\b(visita|decorado|apartamento modelo|agendar|marcar|remarcar|cancelar|mudar)\b/i.test(history.slice(-5).map((item) => item.content).join(' '))) {
+    const officeAddress = context.dynamic?.values.office_address?.trim();
     const appointment = await maybeScheduleAgendaFromAi({ admin: args.admin,
       organizationId: args.channel.organization_id, lead, turn, lastUserMessage,
-      officeAddress: process.env.NARA_OFFICE_ADDRESS });
+      officeAddress,
+      weekdayHours: context.dynamic?.values.office_weekday_hours,
+      saturdayHours: context.dynamic?.values.office_saturday_hours });
     if (appointment.status === 'created') {
-      const where = process.env.NARA_OFFICE_ADDRESS ? ` no escritório da Bossa, ${process.env.NARA_OFFICE_ADDRESS}` : ' no escritório da Bossa (endereço a confirmar pelo time)';
-      turn.reply = `Sua visita ficou marcada para ${new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo', dateStyle: 'short', timeStyle: 'short' }).format(new Date(appointment.startsAt))}${where}. Qualquer mudança, avise por aqui.`;
+      const maps = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(officeAddress || '')}`;
+      turn.reply = `Sua visita ficou marcada para ${new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo', dateStyle: 'short', timeStyle: 'short' }).format(new Date(appointment.startsAt))}, no escritório da Bossa, ${officeAddress}. ${maps} Se precisar mudar, avise por aqui.`;
       turn.stage = 'agendado'; turn.classification = 'agendamento'; turn.handoff = false;
     } else if (appointment.status !== 'none') {
       turn.reply = appointment.message; turn.stage = 'ia'; turn.handoff = false;

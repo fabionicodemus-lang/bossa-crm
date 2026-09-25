@@ -2,13 +2,13 @@
 
 ## Ativar visitas ao decorado
 
-Defina no ambiente de produção:
+Preencha as variáveis operacionais da Nara no CRM:
 
-- `NARA_OFFICE_WEEKDAY_HOURS=09:00-18:00` — substitua pelo expediente real de segunda a sexta.
-- `NARA_OFFICE_SATURDAY_HOURS=09:00-12:00` — substitua pelo expediente real de sábado; omita se fechado.
-- `NARA_OFFICE_ADDRESS=...` — endereço completo do escritório com os decorados.
+- Endereço do escritório e decorados: `Rua São José, 163, Perequê, Porto Belo - SC`.
+- Visitas de segunda a sexta: `08:00-18:00`.
+- Visitas aos sábados mediante agendamento: `08:00-18:00`. O escritório não abre regularmente no sábado, mas atende o cliente com visita marcada.
 
-Os horários acima são exemplos, não foram cadastrados. Sem expediente confirmado, a Nara não cria visita; solicita confirmação do time. Domingo fica fechado. A agenda consulta conflitos no CRM e na Microsoft, oferece até três horários livres e só confirma após gravar o evento. O endereço no evento e na mensagem vem da variável configurada. Visita à obra requer fluxo próprio e não deve ser apresentada como visita ao escritório.
+Sem endereço ou expediente confirmado, a Nara não cria visita; solicita confirmação do time. Domingo fica fechado. A agenda consulta conflitos no CRM e na Microsoft, oferece até três horários livres e só confirma após gravar o evento. O endereço no evento e na mensagem vem da variável configurada. Visita à obra requer fluxo próprio e não deve ser apresentada como visita ao escritório.
 
 ## Pendências de negócio
 

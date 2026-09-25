@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { enforceNaraTriage, naraReplyWordCount } from '../src/lib/ai.ts';
 import { postProcessNaraTurn } from '../src/lib/ai-v120.ts';
 import { deriveHybridDecision, optOutSignal } from '../src/lib/hybrid.ts';
+import { officeHours } from '../src/lib/nara-office-hours.ts';
 
 const lead = { id: 'test', kind: 'cliente', name: 'Fábio', stage: 'novo_triagem', owner_mode: 'ai', ai_enabled: true, metadata: {} };
 function turn(reply = 'Para eu te direcionar certinho, você está buscando um imóvel para comprar ou precisa falar com a Bossa sobre outro assunto?') {
@@ -35,4 +36,6 @@ assert.equal(deriveHybridDecision({lead,turn:robot,lastUserMessage:'Você é rob
 assert.equal(optOutSignal('Para de me mandar mensagem'),true);
 assert.equal(optOutSignal('Me tira da lista'),true);
 assert.equal(deriveHybridDecision({lead,turn:turn(),lastUserMessage:'Me tira da lista'}).stage,'encerrado');
+assert.deepEqual(officeHours('2026-09-26','08:00-18:00','08:00-18:00'),{open:480,close:1080});
+assert.equal(officeHours('2026-09-27','08:00-18:00','08:00-18:00'),null);
 console.log('Nara rodada 3: triagem, preços multilíngues, robô e opt-out validados.');
