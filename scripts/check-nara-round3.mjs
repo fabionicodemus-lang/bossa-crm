@@ -4,7 +4,7 @@ import { postProcessNaraTurn } from '../src/lib/ai-v120.ts';
 import { deriveHybridDecision, optOutSignal } from '../src/lib/hybrid.ts';
 import { officeHours } from '../src/lib/nara-office-hours.ts';
 import { isPostSaleRoutingSignal } from '../src/lib/nara-contact-routing.ts';
-import { agendaActionFromText, appendAgendaMessageToReply, hasNonAgendaQuestion, shouldHandleAgendaTurn } from '../src/lib/agenda-ai-core.ts';
+import { agendaActionFromText, appendAgendaMessageToReply, hasNonAgendaQuestion, shouldHandleAgendaTurn } from '../src/lib/nara-agenda-intent.ts';
 import { readFile } from 'node:fs/promises';
 
 const lead = { id: 'test', kind: 'cliente', name: 'Fábio', stage: 'novo_triagem', owner_mode: 'ai', ai_enabled: true, metadata: {} };
