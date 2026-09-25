@@ -28,20 +28,20 @@ export function insideFollowupHours(date: Date, zone: string) {
 
 const copy = {
   pt_BR: {
-    first: 'Oi, {{1}}! Você procura quantas suítes em Porto Belo? Posso separar as opções mais adequadas para você.',
+    first: 'Oi, {{1}}! Ainda está procurando um imóvel em Porto Belo? Posso te ajudar com as opções da Bossa.',
     second: 'Oi, {{1}}! Se ainda estiver considerando um imóvel da Bossa em Porto Belo, posso separar opções para você. Quer que eu faça isso?',
   },
   es: {
-    first: 'Hola, {{1}}. ¿Cuántas suites buscas en Porto Belo? Puedo seleccionar las opciones más adecuadas para ti.',
+    first: 'Hola, {{1}}. ¿Sigues buscando una propiedad en Porto Belo? Puedo ayudarte con las opciones de Bossa.',
     second: 'Hola, {{1}}. Si todavía estás considerando una propiedad de Bossa en Porto Belo, puedo seleccionar opciones para ti. ¿Te gustaría?',
   },
   en: {
-    first: 'Hi, {{1}}. How many suites are you looking for in Porto Belo? I can select suitable options for you.',
+    first: 'Hi, {{1}}. Are you still looking for a property in Porto Belo? I can help with Bossa options.',
     second: 'Hi, {{1}}. If you are still considering a Bossa property in Porto Belo, I can select some options for you. Would you like that?',
   },
 };
 export const followupTemplates = Object.entries(copy).flatMap(([language, value]) => [
-  { name: 'nara_retomada_suites_v1', language, body: value.first },
+  { name: 'nara_retomada_interesse_v1', language, body: value.first },
   { name: 'nara_retomada_opcoes_v1', language, body: value.second },
 ]);
 
@@ -214,7 +214,7 @@ export async function runNaraFollowups(admin: Admin, now = new Date()) {
     const name = String(lead.name || '').trim().split(/\s+/)[0] || (language === 'es' ? 'amigo' : 'você');
     const windowOpen = lead.last_inbound_at && now.getTime() < new Date(lead.last_inbound_at).getTime() + 24 * HOUR;
     if (sequence.first_status === 'pending') {
-      const firstTemplate = followupTemplates.find((item) => item.name === 'nara_retomada_suites_v1' && item.language === language)!;
+      const firstTemplate = followupTemplates.find((item) => item.name === 'nara_retomada_interesse_v1' && item.language === language)!;
       const { data: firstListed } = !windowOpen ? await admin.from('whatsapp_templates').select('status')
         .eq('channel_id', channel.id).eq('name', firstTemplate.name).eq('language', language).maybeSingle() : { data: null };
       if (!windowOpen && String(firstListed?.status).toUpperCase() !== 'APPROVED') {
