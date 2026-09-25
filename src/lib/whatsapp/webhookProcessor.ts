@@ -36,6 +36,11 @@ import {
   type WhatsAppConversationRecord,
 } from '@/lib/whatsapp/channelService';
 import { handleMixedPlantaoConversation } from '@/lib/whatsapp/plantaoMixedRouting';
+import {
+  clientBroadcastBrokerSignal,
+  completePendingBrokerPortfolio,
+  routeClientBrokerFromBroadcast,
+} from '@/lib/whatsapp/clientBrokerTransfer';
 import { sendNaraResetConfirmation } from '@/lib/whatsapp/naraReset';
 import { isCustomerServiceWindowOpen, OUTSIDE_WINDOW_MESSAGE } from '@/lib/whatsapp/window';
 import type {
@@ -420,6 +425,15 @@ export async function processConversation(args: {
   let lead = leadData as Lead | null;
   if (!lead || lead.opt_out) return;
 
+  const pendingBrokerPortfolio = await completePendingBrokerPortfolio({
+    admin: args.admin,
+    channel: args.channel,
+    conversation: args.conversation,
+    lead,
+    sourceMessageId: args.sourceMessageId,
+  });
+  if (pendingBrokerPortfolio.handled) return;
+
   // O número do Plantão é compartilhado. Antes de qualquer IA comercial,
   // aplicamos a regra de identidade: CLIENTE é protegido; GERAL é triado;
   // somente CORRETOR segue para o Plantão normal.
@@ -469,6 +483,20 @@ export async function processConversation(args: {
       sourceCreatedAt: String(source.created_at),
     })
     : null;
+  if (lead.kind === 'cliente'
+    && recentBroadcast
+    && !explicitOptOut
+    && clientBroadcastBrokerSignal(String(source.body ?? ''))) {
+    await routeClientBrokerFromBroadcast({
+      admin: args.admin,
+      lead,
+      sourceMessageId: args.sourceMessageId,
+      sourceText: String(source.body ?? ''),
+      broadcastId: recentBroadcast.broadcastId,
+    });
+    return;
+  }
+
   const broadcastAction = lead.kind === 'cliente'
     ? broadcastResponseAction(lead, Boolean(recentBroadcast), explicitOptOut)
     : 'none';

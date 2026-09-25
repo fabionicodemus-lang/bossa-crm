@@ -27,6 +27,7 @@
     "test:phone-variants": "node --experimental-strip-types scripts/check-phone-variants.mjs",
     "test:nara-broadcast": "node --experimental-strip-types --experimental-loader ./scripts/ts-extension-loader.mjs scripts/check-nara-broadcast-response.mjs",
     "test:lead-supervision": "node --experimental-strip-types --experimental-loader ./scripts/ts-extension-loader.mjs scripts/check-lead-supervision.mjs",
+    "test:client-broker-transfer": "node --experimental-strip-types --experimental-loader ./scripts/ts-extension-loader.mjs scripts/check-client-broker-transfer.mjs",
     "test:nara-round3": "node --experimental-strip-types --experimental-loader ./scripts/ts-extension-loader.mjs scripts/check-nara-round3.mjs"
   },
   "dependencies": {
