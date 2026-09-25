@@ -1025,12 +1025,16 @@ export async function processWebhookEvent(eventId: string, knownPhoneNumberId?: 
           const { count: priorReplies } = await priorQuery;
           if (quietLead?.kind === 'cliente' && !priorReplies) {
             const { data: inboundBody } = await admin.from('messages').select('body').eq('id', inbound.storedMessageId).single();
+            const { data: earlierDeferred } = await admin.from('nara_deferred_replies').select('timezone')
+              .eq('lead_id', inbound.leadId).eq('status', 'pending')
+              .order('created_at', { ascending: true }).limit(1).maybeSingle();
             const zone = naraContactZone(`${inboundBody?.body || ''} ${quietLead.metadata?.city || ''}`);
-            if (!naraSendHours(new Date(), zone)) {
+            const effectiveZone = zone === 'America/Sao_Paulo' ? earlierDeferred?.timezone || zone : zone;
+            if (!naraSendHours(new Date(), effectiveZone)) {
               await admin.from('nara_deferred_replies').upsert({
                 organization_id: inbound.channel.organization_id, lead_id: inbound.leadId,
                 channel_id: inbound.channel.id, conversation_id: inbound.conversation.id,
-                source_message_id: inbound.storedMessageId, timezone: zone,
+                source_message_id: inbound.storedMessageId, timezone: effectiveZone,
               }, { onConflict: 'source_message_id', ignoreDuplicates: true });
               continue;
             }
