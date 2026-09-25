@@ -2,7 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { AiTurn } from './ai';
 import { deriveHybridDecision, type HybridDecision } from './hybrid';
 import type { Lead } from './types';
-import { isAssistedSaleSignal, isBrokerRoutingSignal, isCurrentCustomerSignal } from './nara-contact-routing';
+import { isAssistedSaleSignal, isBrokerRoutingSignal, isPostSaleRoutingSignal } from './nara-contact-routing';
 
 export type AdminClient = SupabaseClient;
 
@@ -130,8 +130,7 @@ export async function applyHybridDecision(args: {
   const routedToBroker = args.lead.kind === 'geral'
     && isBrokerRoutingSignal(args.lastUserMessage);
   const postSaleHandoff = args.lead.kind === 'cliente'
-    && (isCurrentCustomerSignal(args.lastUserMessage)
-      || /p[oó]s[- ]?(?:venda|obra)|minha obra|andamento da obra/i.test(args.lastUserMessage));
+    && isPostSaleRoutingSignal(args.lastUserMessage);
 
   const decision = postSaleHandoff
     ? postSaleDecision(baseDecision)
