@@ -669,6 +669,41 @@ export function naraReplyQuestionCount(value: string): number {
   return value.match(/\?/g)?.length ?? 0;
 }
 
+export function truncateNaraReplyToWordLimit(value: string, limit = NARA_REPLY_WORD_LIMIT): string {
+  const trimmed = value.trim();
+  if (!trimmed || naraReplyWordCount(trimmed) <= limit) return trimmed;
+
+  const completeSentences = [...trimmed.matchAll(/[^.!?]+[.!?]+(?:["'”’\)\]]*)/g)]
+    .map((match) => match[0].trim())
+    .filter(Boolean);
+  const finalQuestion = /\?\s*$/.test(trimmed) ? completeSentences.at(-1) : undefined;
+
+  if (finalQuestion && naraReplyWordCount(finalQuestion) <= limit) {
+    const kept: string[] = [];
+    for (const sentence of completeSentences.slice(0, -1)) {
+      const candidate = [...kept, sentence, finalQuestion].join(' ');
+      if (naraReplyWordCount(candidate) > limit) break;
+      kept.push(sentence);
+    }
+    return [...kept, finalQuestion].join(' ').trim();
+  }
+
+  const kept: string[] = [];
+  for (const sentence of completeSentences) {
+    const candidate = [...kept, sentence].join(' ');
+    if (naraReplyWordCount(candidate) > limit) break;
+    kept.push(sentence);
+  }
+  if (kept.length) return kept.join(' ').trim();
+
+  const words = [...trimmed.matchAll(/[\p{L}\p{N}]+(?:['’.-][\p{L}\p{N}]+)*/gu)];
+  const cutoffWord = words[Math.max(0, limit - 1)];
+  if (!cutoffWord?.index && cutoffWord?.index !== 0) return trimmed;
+  const end = cutoffWord.index + cutoffWord[0].length;
+  const cut = trimmed.slice(0, end).replace(/[,:;\s]+$/g, '');
+  return /[.!?]$/.test(cut) ? cut : `${cut}.`;
+}
+
 export function hasForbiddenScarcityClaim(value: string): boolean {
   const normalized = normalizeText(value);
   return /\b(acabou de ser (?:vendid[oa]|reservad[oa]|bloquead[oa])|acabou de (?:vender|reservar|bloquear)|foi (?:vendid[oa]|reservad[oa]) (?:agora|hoje|ha pouco))\b/.test(normalized);
@@ -696,8 +731,10 @@ export async function enforceNaraReplyGuardrails(
   context: AiTrainingContext,
 ): Promise<AiTurn> {
   turn.reply = ensureFirstTurnIntroduction(turn.reply, history, context);
+  const originalReplyForTruncation = turn.reply;
   let violations = naraReplyGuardrailViolations(turn.reply);
   if (hasUngroundedMoney(turn.reply, history, context)) violations.push('valor_sem_fonte');
+  const originalOnlyLengthViolation = violations.length === 1 && violations[0] === 'mais_de_45_palavras';
   if (!violations.length) return turn;
 
   for (let attempt = 0; attempt < NARA_REPLY_REGENERATION_ATTEMPTS; attempt += 1) {
@@ -724,13 +761,10 @@ export async function enforceNaraReplyGuardrails(
   }
 
   if (violations.length === 1 && violations[0] === 'mais_de_45_palavras') {
-    const words = [...turn.reply.matchAll(/[\p{L}\p{N}]+(?:['’.-][\p{L}\p{N}]+)*/gu)];
-    const cutoff = words[44]?.index;
-    if (cutoff !== undefined) {
-      const last = words[44][0];
-      turn.reply = `${turn.reply.slice(0, cutoff + last.length).replace(/[,:;\s]+$/g, '')}.`;
-      if (!naraReplyGuardrailViolations(turn.reply).length) return turn;
-    }
+    turn.reply = truncateNaraReplyToWordLimit(
+      originalOnlyLengthViolation ? originalReplyForTruncation : turn.reply,
+    );
+    if (!naraReplyGuardrailViolations(turn.reply).length) return turn;
   }
   throw new NaraReplyGuardrailError(violations);
 }
