@@ -3,7 +3,8 @@
 import { FormEvent, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import type { Activity, Lead, LeadTask, Message, TeamMember } from '@/lib/types';
-import { displayPhone, formatDateTime, initials } from '@/lib/format';
+import { displayPhone, formatDateTime, initials, normalizePhone } from '@/lib/format';
+import { createClient } from '@/lib/supabase/client';
 import { stageLabel, stagesFor } from '@/lib/stages';
 import { useLeadLiveFeed } from '@/lib/use-lead-live-feed';
 import { MessageContent } from '@/components/MessageContent';
@@ -141,6 +142,9 @@ export function LeadDetail({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [clock, setClock] = useState(0);
+  const [editingData, setEditingData] = useState(false);
+  const [savingData, setSavingData] = useState(false);
+  const [dataNotice, setDataNotice] = useState('');
 
   useEffect(() => {
     const updateClock = () => setClock(Date.now());
@@ -317,6 +321,58 @@ export function LeadDetail({
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(payload.error || 'Não foi possível concluir a ação.');
     return payload;
+  }
+
+  async function saveLeadData(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!canEdit || savingData) return;
+    setSavingData(true);
+    setError('');
+    setDataNotice('');
+    try {
+      const form = new FormData(event.currentTarget);
+      const firstName = String(form.get('first_name') || '').trim();
+      const lastName = String(form.get('last_name') || '').trim();
+      const fullNameInput = String(form.get('name') || '').trim();
+      const fullName = fullNameInput || [firstName, lastName].filter(Boolean).join(' ').trim();
+      if (!fullName) throw new Error('Informe o nome do lead.');
+
+      const kind = String(form.get('kind') || lead.kind) as Lead['kind'];
+      const phone = normalizePhone(form.get('phone'));
+      const payload = {
+        name: fullName,
+        first_name: firstName || null,
+        last_name: lastName || null,
+        phone: phone || null,
+        email: String(form.get('email') || '').trim() || null,
+        kind,
+        company: String(form.get('company') || '').trim() || null,
+        creci: String(form.get('creci') || '').trim() || null,
+        enterprise: String(form.get('enterprise') || '').trim() || null,
+        source: String(form.get('source') || '').trim() || null,
+        group_name: String(form.get('group_name') || '').trim() || null,
+        updated_at: new Date().toISOString(),
+      };
+
+      const supabase = createClient();
+      const { data, error: updateError } = await supabase
+        .from('leads')
+        .update(payload)
+        .eq('id', lead.id)
+        .eq('organization_id', lead.organization_id)
+        .select('*')
+        .single();
+
+      if (updateError) throw updateError;
+      setLead(data as Lead);
+      setEditingData(false);
+      setDataNotice('Informações do lead atualizadas.');
+      router.refresh();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Não foi possível atualizar as informações do lead.');
+    } finally {
+      setSavingData(false);
+    }
   }
 
   async function changeStage(stage: string) {
@@ -518,7 +574,53 @@ export function LeadDetail({
 
         {tab === 'tarefas' && <div><div className="card-head"><h3>Próximas ações e SLAs</h3></div><div className="card-body">{canEdit && <form onSubmit={createTask} className="grid grid-2" style={{ marginBottom: 22 }}><div className="field"><label>Tarefa</label><input className="input" value={taskTitle} onChange={(event) => setTaskTitle(event.target.value)} /></div><div className="field"><label>Prazo</label><input className="input" type="datetime-local" value={taskDue} onChange={(event) => setTaskDue(event.target.value)} /></div><div className="field"><label>Descrição</label><textarea className="textarea" value={taskDescription} onChange={(event) => setTaskDescription(event.target.value)} /></div><div className="field"><label>Prioridade</label><select className="select" value={taskPriority} onChange={(event) => setTaskPriority(event.target.value)}><option value="urgent">Urgente</option><option value="high">Alta</option><option value="normal">Normal</option><option value="low">Baixa</option></select><button className="btn btn-primary btn-sm" style={{ marginTop: 12 }} disabled={loading}>Criar tarefa</button></div></form>}<h4>Pendentes</h4><div className="info-list">{pendingTasks.length === 0 && <div className="empty-state">Nenhuma tarefa pendente.</div>}{pendingTasks.map((task) => { const due = dueStatus(task.due_at); return <div className="info-row" key={task.id} style={{ alignItems: 'flex-start' }}><span><strong>{task.priority === 'urgent' ? '🚨 ' : task.priority === 'high' ? '⚡ ' : ''}{task.title}</strong><br /><small>{task.description || 'Sem descrição'} · <span style={{ color: due.overdue ? 'var(--red)' : undefined }}>{due.label}</span></small></span>{canEdit && <button className="btn btn-primary btn-sm" onClick={() => void completeTask(task.id)}>Concluir</button>}</div>; })}</div>{completedTasks.length > 0 && <><h4 style={{ marginTop: 22 }}>Concluídas</h4><div className="info-list">{completedTasks.slice(0, 10).map((task) => <div className="info-row" key={task.id}><span>✓ {task.title}</span><strong>{task.completed_at ? formatDateTime(task.completed_at) : 'Concluída'}</strong></div>)}</div></>}</div></div>}
 
-        {tab === 'dados' && <div><div className="card-head"><h3>Dados e qualificação</h3></div><div className="card-body grid grid-2"><div className="info-list"><div className="info-row"><span>Nome</span><strong>{lead.name}</strong></div><div className="info-row"><span>WhatsApp</span><strong>{displayPhone(lead.phone)}</strong></div><div className="info-row"><span>E-mail</span><strong>{lead.email || '—'}</strong></div><div className="info-row"><span>Etapa</span><strong>{stageLabel(lead.kind, lead.stage)}</strong></div></div><div className="info-list"><div className="info-row"><span>{lead.kind === 'cliente' ? 'Empreendimento' : 'Imobiliária'}</span><strong>{lead.kind === 'cliente' ? lead.enterprise || '—' : lead.company || '—'}</strong></div><div className="info-row"><span>CRECI</span><strong>{lead.creci || '—'}</strong></div><div className="info-row"><span>Score</span><strong>{lead.temperature}/100</strong></div><div className="info-row"><span>Criado em</span><strong>{formatDateTime(lead.created_at)}</strong></div></div>{adAttribution && <div style={{ gridColumn: '1 / -1' }}><h4>Origem do anúncio Meta</h4><div className="info-list"><div className="info-row"><span>Origem</span><strong>{sourceLabel}</strong></div><div className="info-row"><span>ID do anúncio</span><strong>{adAttribution.source_id || '—'}</strong></div><div className="info-row"><span>Tipo</span><strong>{adAttribution.source_type || '—'}</strong></div><div className="info-row"><span>URL</span><strong style={{ overflowWrap: 'anywhere' }}>{adAttribution.source_url || '—'}</strong></div><div className="info-row"><span>Título</span><strong>{adAttribution.headline || '—'}</strong></div><div className="info-row"><span>Texto</span><strong>{adAttribution.body || '—'}</strong></div><div className="info-row"><span>Capturado em</span><strong>{formatDateTime(adAttribution.captured_at)}</strong></div></div></div>}{metaEntries.length > 0 && <div style={{ gridColumn: '1 / -1' }}><h4>Campos identificados</h4><div className="table-wrap"><table><tbody>{metaEntries.map(([key, value]) => <tr key={key}><td className="faint">{key}</td><td>{typeof value === 'object' ? JSON.stringify(value) : String(value)}</td></tr>)}</tbody></table></div></div>}</div></div>}
+        {tab === 'dados' && <div>
+          <div className="card-head">
+            <h3>Dados e qualificação</h3>
+            {canEdit && <button className="btn btn-ghost btn-sm" onClick={() => { setEditingData((value) => !value); setDataNotice(''); }}>{editingData ? 'Cancelar edição' : '✏️ Editar informações'}</button>}
+          </div>
+          {dataNotice && <div className="success-box" style={{ margin: 12 }}>{dataNotice}</div>}
+          {editingData ? <form className="card-body" onSubmit={saveLeadData}>
+            <div className="grid grid-2">
+              <div className="field"><label>Nome completo</label><input name="name" className="input" defaultValue={lead.name || ''} /></div>
+              <div className="field"><label>Tipo do lead</label><select name="kind" className="select" defaultValue={lead.kind}><option value="cliente">Cliente</option><option value="corretor">Corretor</option><option value="geral">Contato geral</option></select></div>
+              <div className="field"><label>Primeiro nome</label><input name="first_name" className="input" defaultValue={lead.first_name || ''} placeholder="Ex.: João" /></div>
+              <div className="field"><label>Sobrenome</label><input name="last_name" className="input" defaultValue={lead.last_name || ''} placeholder="Ex.: da Silva" /></div>
+              <div className="field"><label>WhatsApp</label><input name="phone" className="input" defaultValue={lead.phone || ''} placeholder="(47) 99999-9999" /></div>
+              <div className="field"><label>E-mail</label><input name="email" type="email" className="input" defaultValue={lead.email || ''} /></div>
+              <div className="field"><label>Imobiliária / empresa</label><input name="company" className="input" defaultValue={lead.company || ''} placeholder="Ex.: Ricardo Imóveis ou Autônomo" /></div>
+              <div className="field"><label>CRECI</label><input name="creci" className="input" defaultValue={lead.creci || ''} /></div>
+              <div className="field"><label>Empreendimento</label><input name="enterprise" className="input" defaultValue={lead.enterprise || ''} placeholder="Flow, Alma, Soul..." /></div>
+              <div className="field"><label>Origem</label><input name="source" className="input" defaultValue={lead.source || ''} /></div>
+              <div className="field"><label>Grupo</label><input name="group_name" className="input" defaultValue={lead.group_name || ''} /></div>
+            </div>
+            <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+              <button className="btn btn-primary" disabled={savingData}>{savingData ? 'Salvando…' : 'Salvar alterações'}</button>
+              <button type="button" className="btn btn-ghost" onClick={() => setEditingData(false)}>Cancelar</button>
+            </div>
+          </form> : <div className="card-body grid grid-2">
+            <div className="info-list">
+              <div className="info-row"><span>Nome</span><strong>{lead.name}</strong></div>
+              <div className="info-row"><span>Primeiro nome</span><strong>{lead.first_name || '—'}</strong></div>
+              <div className="info-row"><span>Sobrenome</span><strong>{lead.last_name || '—'}</strong></div>
+              <div className="info-row"><span>WhatsApp</span><strong>{displayPhone(lead.phone)}</strong></div>
+              <div className="info-row"><span>E-mail</span><strong>{lead.email || '—'}</strong></div>
+              <div className="info-row"><span>Etapa</span><strong>{stageLabel(lead.kind, lead.stage)}</strong></div>
+            </div>
+            <div className="info-list">
+              <div className="info-row"><span>Tipo</span><strong>{lead.kind === 'cliente' ? 'Cliente' : lead.kind === 'corretor' ? 'Corretor' : 'Contato geral'}</strong></div>
+              <div className="info-row"><span>Imobiliária / empresa</span><strong>{lead.company || '—'}</strong></div>
+              <div className="info-row"><span>Empreendimento</span><strong>{lead.enterprise || '—'}</strong></div>
+              <div className="info-row"><span>CRECI</span><strong>{lead.creci || '—'}</strong></div>
+              <div className="info-row"><span>Origem</span><strong>{lead.source || '—'}</strong></div>
+              <div className="info-row"><span>Grupo</span><strong>{lead.group_name || '—'}</strong></div>
+              <div className="info-row"><span>Score</span><strong>{lead.temperature}/100</strong></div>
+              <div className="info-row"><span>Criado em</span><strong>{formatDateTime(lead.created_at)}</strong></div>
+            </div>
+            {adAttribution && <div style={{ gridColumn: '1 / -1' }}><h4>Origem do anúncio Meta</h4><div className="info-list"><div className="info-row"><span>Origem</span><strong>{sourceLabel}</strong></div><div className="info-row"><span>ID do anúncio</span><strong>{adAttribution.source_id || '—'}</strong></div><div className="info-row"><span>Tipo</span><strong>{adAttribution.source_type || '—'}</strong></div><div className="info-row"><span>URL</span><strong style={{ overflowWrap: 'anywhere' }}>{adAttribution.source_url || '—'}</strong></div><div className="info-row"><span>Título</span><strong>{adAttribution.headline || '—'}</strong></div><div className="info-row"><span>Texto</span><strong>{adAttribution.body || '—'}</strong></div><div className="info-row"><span>Capturado em</span><strong>{formatDateTime(adAttribution.captured_at)}</strong></div></div></div>}
+            {metaEntries.length > 0 && <div style={{ gridColumn: '1 / -1' }}><h4>Campos identificados</h4><div className="table-wrap"><table><tbody>{metaEntries.map(([key, value]) => <tr key={key}><td className="faint">{key}</td><td>{typeof value === 'object' ? JSON.stringify(value) : String(value)}</td></tr>)}</tbody></table></div></div>}
+          </div>}
+        </div>}
       </section>
 
       <aside className="side-stack">
