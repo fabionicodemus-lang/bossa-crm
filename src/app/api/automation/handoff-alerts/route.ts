@@ -61,6 +61,12 @@ const POST_SALE_TEMPLATE = {
   ...DEFAULT_TEMPLATE,
   name: 'alerta_pos_venda_nara',
   body: 'Novo atendimento de pós-venda ou obra para Cíntia (Canal 2).\n\nCliente: {{1}}\n\nDados principais:\n{{2}}\n\nResumo:\n{{3}}\n\nPróxima ação:\n{{4}}\n\nAbra o Bossa CRM para continuar o atendimento.',
+  examples: [
+    'Maria Silva',
+    'Telefone: +55 47 99999-9999 | Origem: WhatsApp | Empreendimento: Flow | Prioridade: B',
+    'Cliente pediu informações sobre a entrega da unidade.',
+    'Cíntia deve assumir o pedido de pós-venda no Canal 2.',
+  ],
 };
 
 function authorized(request: Request) {
