@@ -10,7 +10,8 @@ import { markNaraOfferAuditFailed, markNaraOfferAuditSent, prepareNaraOfferAudit
 import { aiCanReply } from '@/lib/hybrid';
 import { optOutSignal } from '@/lib/hybrid';
 import { whatsappCanStillReply } from '@/lib/whatsapp/aiTurnSafety';
-import { appendAgendaMessageToReply, hasNonAgendaQuestion, maybeScheduleAgendaFromAi, shouldHandleAgendaTurn } from '@/lib/agenda-ai-core';
+import { maybeScheduleAgendaFromAi } from '@/lib/agenda-ai-core';
+import { appendAgendaMessageToReply, hasNonAgendaQuestion, shouldHandleAgendaTurn } from '@/lib/nara-agenda-intent';
 import { mergeMetaAdAttribution } from '@/lib/meta-ad-attribution';
 import { applyHybridDecision } from '@/lib/hybrid-server';
 import { createAdminClient } from '@/lib/supabase/admin';
