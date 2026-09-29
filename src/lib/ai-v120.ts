@@ -127,17 +127,17 @@ function foreignCurrencyReply(context: AiTrainingContext, spanish: boolean): str
   if (!foreign?.requested_currency || !foreign.fx || !foreign.conversions.length) return '';
   const first = foreign.conversions[0];
   if (spanish) {
-    return `Hoy parte de ${formatBrl(first.brl)}, aproximadamente ${formatForeign(first.foreign, foreign.requested_currency)} según la PTAX del día. El pago puede hacerse en reales, dólares o moneda local; la conversión es solo una referencia cambiaria.`;
+    return `Hoy parte de ${formatBrl(first.brl)}, aproximadamente ${formatForeign(first.foreign, foreign.requested_currency)} según la PTAX del día. El contrato se trabaja en reales y la conversión es solo una referencia cambiaria.`;
   }
-  return `Hoje parte de ${formatBrl(first.brl)}, cerca de ${formatForeign(first.foreign, foreign.requested_currency)} pela PTAX do dia. O pagamento pode ser feito em reais, dólar ou moeda local; a conversão é apenas uma referência cambial.`;
+  return `Hoje parte de ${formatBrl(first.brl)}, cerca de ${formatForeign(first.foreign, foreign.requested_currency)} pela PTAX do dia. O contrato é trabalhado em reais e a conversão é apenas uma referência cambial.`;
 }
 
 function foreignPurchaseReply(name: string, spanish: boolean): string {
   void name;
   if (spanish) {
-    return 'Sí, puedes comprar desde el exterior. Contrato firmado electrónicamente con la misma validez jurídica. Pago en reales, dólares o moneda local. Clientes de Estados Unidos, Dinamarca, Portugal y Chile ya compraron a distancia. ¿Para vivir, vacacionar o invertir?';
+    return 'Sí, gran parte de la negociación puede hacerse a distancia. El contrato y los valores se trabajan en reales; al elegir una unidad, el equipo confirma la documentación y firma aplicables. ¿Buscas invertir o usar el inmueble con tu familia?';
   }
-  return 'Dá sim. O contrato é assinado eletronicamente com validade jurídica. Pagamento em reais, dólar ou moeda local. Clientes nos EUA, Dinamarca, Portugal e Chile já compraram à distância. É para morar, veranear ou investir?';
+  return 'Dá sim. Grande parte da negociação pode ser feita à distância. O contrato e os valores são trabalhados em reais; ao escolher uma unidade, o comercial confirma documentação e assinatura. Você busca investir ou usar o imóvel com a família?';
 }
 
 function slaReply(context: AiTrainingContext, spanish: boolean): string {
@@ -351,6 +351,19 @@ export function postProcessNaraTurn(
   const nonApartmentValue = /\b(?:valor|preco|precio|quanto custa|cuanto cuesta|how much)\b.{0,28}\b(?:condominio|iptu|aluguel|taxa|laudemio|itbi|escritura|entrada|parcelas?|reforcos?|chaves)\b/.test(latestNormalized);
   const asksPriceNow = !nonApartmentValue && /\b(preco|precio|prices?|valor|quanto custa|cuanto cuesta|how much|dolar|usd)\b/.test(latestNormalized);
   const asksPlan = /\b(entrada|parcelas?|reforcos?|chaves|condicao de pagamento)\b/.test(latestNormalized);
+  const exactUsCampaignSeed = /^ola moro nos (?:eua|estados unidos|usa) e quero conhecer os imoveis da bossa em sc\.?$/.test(latestNormalized);
+
+  if (context.foreign?.us_campaign_lead && exactUsCampaignSeed && history.filter((item) => item.role === 'user').length === 1) {
+    turn.reply = 'Oi! 😊 Que bom falar com você. Temos imóveis em Porto Belo, no litoral de Santa Catarina, em diferentes fases de obra. Pra eu te mostrar primeiro o que combina com você: busca mais investimento ou um imóvel no Brasil para usar com a família?';
+    turn.classification = 'morno';
+    turn.score = Math.max(30, Math.min(turn.score, 59));
+    turn.stage = 'ia';
+    turn.summary = 'Lead da campanha para brasileiros nos EUA iniciou pela mensagem padrão do anúncio.';
+    turn.next_action = 'Aguardar investimento ou uso próprio; não enviar material no primeiro contato.';
+    turn.handoff = false;
+    turn.attachment_ids = [];
+    return finishTurn(turn, history);
+  }
 
   if (isGenericPortfolioInterest(history)) {
     const facadeIds = selectPortfolioFacadeIds(context.files ?? []);
