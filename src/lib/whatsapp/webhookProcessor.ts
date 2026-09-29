@@ -287,7 +287,7 @@ async function sendSelectedFiles(args: {
     .filter((file): file is AiFileOption => Boolean(file))
     .slice(0, 3);
   const { provider, accessToken, phoneNumberId } = channelAccess(args.channel);
-  const destination = normalizeWaId(args.lead.phone ?? '');
+  const destination = metaWaId(args.conversation.contact_wa_id || args.lead.phone);
   const sentIds: string[] = [];
   const failedTitles: string[] = [];
   if (!destination) return { sentIds, failedTitles: selected.map((file) => file.title) };
@@ -605,7 +605,7 @@ export async function processConversation(args: {
     ]);
     const reply = 'Desculpe o incômodo! Seu número foi removido e você não vai receber mais mensagens da Bossa.';
     const { provider, accessToken, phoneNumberId } = channelAccess(args.channel);
-    const sent = await provider.sendText({ phoneNumberId, accessToken, to: normalizeWaId(lead.phone ?? ''), body: reply });
+    const sent = await provider.sendText({ phoneNumberId, accessToken, to: metaWaId(args.conversation.contact_wa_id || lead.phone), body: reply });
     await recordOutbound({ admin: args.admin, channel: args.channel, conversation: args.conversation,
       lead, senderKind: 'ia', body: reply, type: 'text', category: 'service', wamid: sent.messageId,
       providerPayload: sent.raw });
@@ -768,7 +768,7 @@ export async function processConversation(args: {
     return;
   }
 
-  const destination = normalizeWaId(lead.phone ?? '');
+  const destination = metaWaId(args.conversation.contact_wa_id || lead.phone);
   let reply = turn.reply.trim();
   if (!destination || !reply) return;
   if (!(await whatsappCanStillReply({

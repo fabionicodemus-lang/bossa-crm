@@ -1,11 +1,19 @@
 export function normalizeWaId(value: string) {
-  const digits = value.replace(/\D/g, '');
-  if (!digits) return '';
-  if (digits.startsWith('55')) return digits;
-  // Telefones brasileiros locais chegam com 10/11 dígitos. IDs internacionais
-  // já vêm no formato E.164 sem "+" e não podem receber o DDI 55 artificialmente.
-  if (digits.length === 10 || digits.length === 11) return `55${digits}`;
-  return digits;
+  // wa_id e telefones já salvos podem ser internacionais. O tamanho não revela
+  // sua origem: 1 + 10 dígitos é um número comum dos EUA.
+  return value.replace(/\D/g, '');
+}
+
+/** Somente para números digitados sem DDI no CRM, nunca para IDs da Meta. */
+export function normalizeManualPhone(value: string): string {
+  const digits = normalizeWaId(value);
+  const hasInternationalPrefix = value.trim().startsWith('+');
+  if (hasInternationalPrefix || digits.startsWith('55')) return digits;
+  // DDD brasileiro precisa existir; comprimento sozinho não identifica país.
+  const validDdd = /^(?:1[1-9]|2[12478]|3[1-578]|4[1-9]|5[1345]|6[1-9]|7[134579]|8[1-9]|9[1-9])$/.test(digits.slice(0, 2));
+  const validLocal = (digits.length === 10 && /^[2-9]\d{7}$/.test(digits.slice(2)))
+    || (digits.length === 11 && /^9\d{8}$/.test(digits.slice(2)));
+  return validDdd && validLocal ? `55${digits}` : digits;
 }
 
 export function metaTimestamp(value: string | number | undefined) {
@@ -41,6 +49,9 @@ export function phoneMatchVariants(value: string | null | undefined): string[] {
   // Inclui também os dígitos crus: números estrangeiros (ex.: EUA, 1 + 10 dígitos)
   // não podem depender da suposição de que 11 dígitos são um celular brasileiro.
   const variants = new Set<string>([raw, digits].filter(Boolean));
+  // Compatibilidade para números brasileiros locais digitados no cadastro.
+  // A variante nunca substitui o ID original vindo da Meta.
+  if (digits.length === 10 || digits.length === 11) variants.add(normalizeManualPhone(digits));
   if (digits.startsWith('55')) {
     const ddd = digits.slice(2, 4);
     const local = digits.slice(4);

@@ -123,9 +123,8 @@ export async function runDeferredNaraReplies(admin: Admin, now = new Date()) {
   return summary;
 }
 
-async function recordSend(admin: Admin, lead: { id: string; organization_id: string }, channel: WhatsAppChannelRecord, destination: string, body: string, result: WhatsAppSendResult, type: 'text' | 'template', step: string) {
+async function recordSend(admin: Admin, lead: { id: string; organization_id: string }, channel: WhatsAppChannelRecord, destination: string, body: string, result: WhatsAppSendResult, type: 'text' | 'template', step: string, sentAt: string) {
   const conversation = await ensureConversation({ admin, channel, contactWaId: destination, leadId: lead.id });
-  const sentAt = new Date().toISOString();
   const payload = { provider: result.raw, automation: 'nara_no_reply', step };
   const transport = {
     organization_id: lead.organization_id, channel_id: channel.id, conversation_id: conversation.id,
@@ -221,7 +220,10 @@ export async function runNaraFollowups(admin: Admin, now = new Date()) {
     if ((sentRecently ?? 0) >= 2) { skip('limite_2_em_14_dias'); continue; }
     const channel = await findChannelByRole(admin, lead.organization_id, 'cliente');
     if (!channel) { skip('sem_canal_whatsapp'); continue; }
-    const destination = normalizeWaId(lead.phone);
+    const { data: conversation } = await admin.from('whatsapp_conversations')
+      .select('contact_wa_id').eq('lead_id', lead.id).eq('channel_id', channel.id)
+      .order('last_inbound_at', { ascending: false }).limit(1).maybeSingle();
+    const destination = normalizeWaId(conversation?.contact_wa_id || lead.metadata?.whatsapp_canonical_wa_id || lead.phone);
     if (!destination) { skip('telefone_invalido'); continue; }
     const { provider, phoneNumberId, accessToken } = channelAccess(channel);
     const language = (sequence.language in copy ? sequence.language : 'pt_BR') as keyof typeof copy;
@@ -245,7 +247,7 @@ export async function runNaraFollowups(admin: Admin, now = new Date()) {
               ? await provider.sendText({ phoneNumberId, accessToken, to: destination, body })
               : await provider.sendTemplate({ phoneNumberId, accessToken, to: destination,
                 name: firstTemplate.name, language, bodyParameters: [name], headerType: 'NONE' });
-            const sentAt = await recordSend(admin, lead, channel, destination, body, result, windowOpen ? 'text' : 'template', 'first');
+            const sentAt = await recordSend(admin, lead, channel, destination, body, result, windowOpen ? 'text' : 'template', 'first', now.toISOString());
             await admin.from('nara_followup_sequences').update({ first_status: 'sent', first_sent_at: sentAt }).eq('id', sequence.id);
             counts.first_sent++;
           } catch (sendError) {
@@ -273,7 +275,7 @@ export async function runNaraFollowups(admin: Admin, now = new Date()) {
       const body = spec.body.replace('{{1}}', name);
       const result = await provider.sendTemplate({ phoneNumberId, accessToken, to: destination,
         name: spec.name, language, bodyParameters: [name], headerType: 'NONE' });
-      const sentAt = await recordSend(admin, lead, channel, destination, body, result, 'template', 'second');
+      const sentAt = await recordSend(admin, lead, channel, destination, body, result, 'template', 'second', now.toISOString());
       await admin.from('nara_followup_sequences').update({ second_status: 'sent', second_sent_at: sentAt }).eq('id', sequence.id);
       counts.second_sent++;
     } catch (sendError) {

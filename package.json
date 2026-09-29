@@ -25,6 +25,7 @@
     "test:nara-2409": "node --experimental-strip-types --experimental-loader ./scripts/ts-extension-loader.mjs scripts/check-nara-2409.mjs",
     "test:nara-cadence": "node --experimental-strip-types --loader ./scripts/nara-cadence/loader.mjs scripts/nara-cadence/check.mjs",
     "test:phone-variants": "node --experimental-strip-types scripts/check-phone-variants.mjs",
+    "test:whatsapp-recipient-send": "node --experimental-strip-types --experimental-loader ./scripts/ts-extension-loader.mjs scripts/check-whatsapp-recipient-send.mjs",
     "test:nara-broadcast": "node --experimental-strip-types --experimental-loader ./scripts/ts-extension-loader.mjs scripts/check-nara-broadcast-response.mjs",
     "test:lead-supervision": "node --experimental-strip-types --experimental-loader ./scripts/ts-extension-loader.mjs scripts/check-lead-supervision.mjs",
     "test:client-broker-transfer": "node --experimental-strip-types --experimental-loader ./scripts/ts-extension-loader.mjs scripts/check-client-broker-transfer.mjs",

@@ -1,3 +1,5 @@
+import { normalizeManualPhone } from '@/lib/whatsapp/utils';
+
 export type MetaLeadField = {
   name?: string;
   values?: unknown[];
@@ -33,10 +35,7 @@ export function normalizeMetaLeadPhone(raw: string | null) {
   const trimmed = raw.trim();
   const digits = trimmed.replace(/\D/g, '');
   if (!digits) return null;
-  if (trimmed.startsWith('+')) return digits;
-  if (digits.startsWith('55')) return digits;
-  if (digits.length === 10 || digits.length === 11) return `55${digits}`;
-  return digits;
+  return normalizeManualPhone(trimmed);
 }
 
 function canonicalEnterprise(value: string) {

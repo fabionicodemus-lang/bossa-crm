@@ -159,7 +159,7 @@ async function sendPortfolio(args: {
   const files = context.files ?? [];
   const ids = selectAllEnterpriseFacadeIds(PORTFOLIO_INSTRUCTION, files);
   const { provider, accessToken, phoneNumberId } = channelAccess(args.channel);
-  const destination = normalizeWaId(args.lead.phone ?? args.conversation.contact_wa_id ?? '');
+  const destination = normalizeWaId(args.conversation.contact_wa_id || args.lead.phone || '');
   if (!destination) throw new Error('Telefone do corretor inválido.');
 
   const sentIds: string[] = [];
@@ -291,7 +291,7 @@ async function sendWelcomeTemplate(args: {
   conversation: WhatsAppConversationRecord;
   lead: Lead;
 }) {
-  const destination = normalizeWaId(args.lead.phone ?? '');
+  const destination = normalizeWaId(args.conversation.contact_wa_id || args.lead.phone || '');
   if (!destination) throw new Error('Telefone do corretor inválido.');
   const { provider, accessToken, phoneNumberId } = channelAccess(args.channel);
   const name = displayName(args.lead);

@@ -1,9 +1,7 @@
+import { normalizeManualPhone } from '@/lib/whatsapp/utils';
+
 export function normalizePhone(value: unknown): string {
-  const digits = String(value ?? '').replace(/\D/g, '');
-  if (!digits) return '';
-  if (digits.length >= 12 && digits.startsWith('55')) return digits;
-  if (digits.length === 10 || digits.length === 11) return `55${digits}`;
-  return digits;
+  return normalizeManualPhone(String(value ?? ''));
 }
 
 export function displayPhone(value: string | null | undefined): string {

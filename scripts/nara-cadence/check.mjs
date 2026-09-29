@@ -3,12 +3,13 @@ import { makeDb } from './fakedb.mjs';
 import { sent } from './stubs/cs.mjs';
 const { runNaraFollowups } = await import('../../src/lib/nara-followup.ts');
 const iso=(s)=>new Date(s).toISOString();
-function scenario(){
+function scenario(phone='5547999990000'){
   return makeDb({
     whatsapp_channels:[{organization_id:'org',role:'cliente',status:'connected'}],
+    whatsapp_conversations:[{id:'conv',lead_id:'L1',channel_id:'ch',contact_wa_id:phone,last_inbound_at:iso('2026-09-24T17:55:00-03:00')}],
     whatsapp_templates:[], whatsapp_messages:[], nara_followup_sequences:[],
     leads:[{id:'L1',organization_id:'org',kind:'cliente',owner_mode:'ai',ai_enabled:true,opt_out:false,automation_paused:false,
-      stage:'qualificacao_ia',phone:'5547999990000',name:'Marina Souza',metadata:{},
+      stage:'qualificacao_ia',phone,name:'Marina Souza',metadata:{},
       last_inbound_at:iso('2026-09-24T17:55:00-03:00'),last_outbound_at:iso('2026-09-24T18:00:00-03:00')}],
     messages:[{id:'M0',lead_id:'L1',direction:'in',sender_kind:'lead',body:'Oi, vi o anúncio do Flow',created_at:iso('2026-09-24T17:55:00-03:00')},
       {id:'M1',lead_id:'L1',direction:'out',sender_kind:'ia',body:'Oi Marina! ...',created_at:iso('2026-09-24T18:00:00-03:00'),raw_payload:{}}],
@@ -41,5 +42,16 @@ console.log('Caso 4 lead respondeu:', r.second_sent===0?'não mandou 2ª ✔':'M
 globalThis.NOW='2026-09-25T23:00:00-03:00'; db=scenario(); db.tables.leads[0].last_inbound_at=iso('2026-09-25T14:00:00-03:00'); db.tables.leads[0].last_outbound_at=iso('2026-09-25T14:05:00-03:00');
 db.tables.messages=[{id:'A',lead_id:'L1',direction:'in',created_at:iso('2026-09-25T14:00:00-03:00')},{id:'B',lead_id:'L1',direction:'out',sender_kind:'ia',created_at:iso('2026-09-25T14:05:00-03:00')}];
 r=await runNaraFollowups(db,new Date(NOW)); assert.equal(r.first_sent,0,'Caso 5: fora do horário'); console.log('Caso 5 (23h):', JSON.stringify(r.skipped));
+// wa_id recebido do WhatsApp deve seguir intacto no texto e no template.
+globalThis.NOW='2026-09-25T10:58:00-03:00'; db=scenario('18563947763');
+r=await runNaraFollowups(db,new Date(NOW));
+assert.equal(r.first_sent,1);
+assert.equal(sent.at(-1)?.to,'18563947763','Follow-up por texto para o wa_id original');
+globalThis.NOW='2026-09-26T19:00:00-03:00';
+db.tables.whatsapp_templates.forEach(t=>t.status='APPROVED');
+globalThis.REMOTE_TEMPLATES=db.tables.whatsapp_templates.map(t=>({name:t.name,language:t.language,status:'APPROVED',id:'x'}));
+r=await runNaraFollowups(db,new Date(NOW));
+assert.equal(r.second_sent,1);
+assert.equal(sent.at(-1)?.to,'18563947763','Follow-up por template para o wa_id original');
 // Falha o teste se algum cenário não se comportar como esperado.
 console.log('Cadência da Nara validada: 1ª e 2ª retomadas, sem repetição, cancelamento por resposta e horário.');

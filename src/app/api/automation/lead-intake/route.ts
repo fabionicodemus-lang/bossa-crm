@@ -6,7 +6,7 @@ import {
   findChannelById,
   type WhatsAppChannelRecord,
 } from '@/lib/whatsapp/channelService';
-import { normalizeWaId } from '@/lib/whatsapp/utils';
+import { normalizeManualPhone, normalizeWaId } from '@/lib/whatsapp/utils';
 import { naraContactZone, naraSendHours } from '@/lib/nara-timezone';
 
 export const runtime = 'nodejs';
@@ -203,7 +203,7 @@ async function processAlert(admin: AdminClient, job: LeadIntakeJob, settings: Le
   }
   if (String(template.status).toUpperCase() !== 'APPROVED') return 'waiting_template';
 
-  const destination = normalizeWaId(String(settings.alert_phone));
+  const destination = normalizeManualPhone(String(settings.alert_phone));
   if (!destination) throw new Error('Telefone de alerta inválido.');
   const values = [
     String(job.lead_name || 'Lead sem nome').slice(0, 200),

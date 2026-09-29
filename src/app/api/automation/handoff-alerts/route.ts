@@ -5,7 +5,7 @@ import {
   findChannelById,
   type WhatsAppChannelRecord,
 } from '@/lib/whatsapp/channelService';
-import { normalizeWaId } from '@/lib/whatsapp/utils';
+import { normalizeManualPhone } from '@/lib/whatsapp/utils';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -250,7 +250,7 @@ async function sendRecipient(args: {
   ]);
   if (!currentJob || currentJob[statusKey] !== 'queued' || handoff?.status !== 'pending') return 'skipped';
 
-  const destination = normalizeWaId(phone ?? '');
+  const destination = normalizeManualPhone(phone ?? '');
   if (!destination) {
     await args.admin.from('client_handoff_alert_jobs').update({
       [statusKey]: 'skipped',
