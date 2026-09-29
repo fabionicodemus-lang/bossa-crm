@@ -35,6 +35,7 @@ const foreignContext = {
     requested_currency: 'USD',
     lives_abroad: true,
     location: 'Orlando',
+    us_campaign_lead: false,
     fx: {
       currency: 'USD',
       rate_date: '2026-09-24',
@@ -72,11 +73,11 @@ const operationalContext = {
   const history = [{ role: 'user', content: 'Moro em Orlando, dá pra comprar morando fora? Como pago? Preciso ir aí assinar?' }];
   const result = postProcessNaraTurn(turn(), history, foreignContext);
   assert.match(result.reply, /d[aá] sim/i);
-  assert.match(result.reply, /assin(?:a|ado).*eletronicamente/i);
-  assert.match(result.reply, /validade jur[ií]dica/i);
-  assert.match(result.reply, /reais, d[oó]lar ou moeda local/i);
-  assert.match(result.reply, /EUA.*Dinamarca.*Portugal.*Chile/i);
-  assert.doesNotMatch(result.reply, /vou verificar|comercial.*verificar/i);
+  assert.match(result.reply, /negocia[cç][aã]o.*dist[aâ]ncia|dist[aâ]ncia/i);
+  assert.match(result.reply, /contrato.*reais/i);
+  assert.match(result.reply, /documenta[cç][aã]o.*assinatura/i);
+  assert.doesNotMatch(result.reply, /reais, d[oó]lar ou moeda local/i);
+  assert.doesNotMatch(result.reply, /EUA.*Dinamarca.*Portugal.*Chile/i);
 }
 
 // 2. Valor em dólar vem pronto do sistema
@@ -210,9 +211,10 @@ const operationalContext = {
   });
   assert.match(result.reply, /Mat[ií]as/i);
   assert.match(result.reply, /Soy Nara, de Bossa/i);
-  assert.match(result.reply, /misma validez jur[ií]dica/i);
-  assert.match(result.reply, /reales, d[oó]lares o moneda local/i);
-  assert.match(result.reply, /Estados Unidos.*Dinamarca.*Portugal.*Chile/i);
+  assert.match(result.reply, /negociaci[oó]n.*distancia|distancia/i);
+  assert.match(result.reply, /contrato.*reales/i);
+  assert.doesNotMatch(result.reply, /reales, d[oó]lares o moneda local/i);
+  assert.doesNotMatch(result.reply, /Estados Unidos.*Dinamarca.*Portugal.*Chile/i);
   assert.doesNotMatch(result.reply, /\bvoc[eê]\b|\bmorando\b|\bd[aá] sim\b|\bassina\b/i);
 }
 
@@ -226,9 +228,37 @@ const operationalContext = {
   const result = postProcessNaraTurn(turn({ handoff: true }), history, foreignContext);
   assert.match(result.reply, /R\$\s*986\.590/i);
   assert.match(result.reply, /US\$|USD/i);
-  assert.match(result.reply, /pago puede hacerse en reales, d[oó]lares o moneda local/i);
-  assert.doesNotMatch(result.reply, /tabela oficial.*reais|contrato.*reais/i);
+  assert.match(result.reply, /contrato.*reales/i);
+  assert.doesNotMatch(result.reply, /pago puede hacerse en reales, d[oó]lares o moneda local/i);
   assert.equal(result.handoff, false);
+}
+
+// Campanha EUA: mensagem pré-preenchida inicia conversa sem material
+{
+  const history = [{
+    role: 'user',
+    content: 'Olá! Moro nos EUA e quero conhecer os imóveis da Bossa em SC.',
+  }];
+  const result = postProcessNaraTurn(turn({
+    reply: 'Hoje temos Flow e Alma. Vou te mandar duas fachadas.',
+    attachment_ids: ['flow-fachada', 'alma-fachada'],
+  }), history, {
+    foreign: {
+      ...foreignContext.foreign,
+      location: 'Estados Unidos',
+      us_campaign_lead: true,
+    },
+    files: [
+      { id: 'flow-fachada', category: 'imagem', title: 'Flow fachada', description: null, trigger_keywords: ['flow'], storage_bucket: 'ai-files', storage_path: 'flow.jpg', original_name: 'flow.jpg', mime_type: 'image/jpeg' },
+      { id: 'alma-fachada', category: 'imagem', title: 'Alma fachada', description: null, trigger_keywords: ['alma'], storage_bucket: 'ai-files', storage_path: 'alma.jpg', original_name: 'alma.jpg', mime_type: 'image/jpeg' },
+    ],
+  });
+  assert.match(result.reply, /Nara|Bossa/i);
+  assert.match(result.reply, /investimento/i);
+  assert.match(result.reply, /fam[ií]lia/i);
+  assert.deepEqual(result.attachment_ids, []);
+  assert.equal((result.reply.match(/\?/g) ?? []).length, 1);
+  assert.doesNotMatch(result.reply, /que legal que voc[eê] mora nos EUA/i);
 }
 
 // Rodada 2: material/preço não entrega para humano

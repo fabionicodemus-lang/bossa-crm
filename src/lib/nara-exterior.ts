@@ -15,6 +15,7 @@ export type NaraForeignContext = {
   requested_currency: 'USD' | 'EUR' | null;
   lives_abroad: boolean;
   location: string | null;
+  us_campaign_lead: boolean;
   fx: NaraFxQuote | null;
   conversions: Array<{
     development: string;
@@ -31,6 +32,17 @@ function normalize(value: string): string {
 
 function userText(history: ChatMessage[]): string {
   return history.filter((item) => item.role === 'user').map((item) => item.content).join(' ');
+}
+
+const US_CAMPAIGN_SEED = 'ola moro nos eua e quero conhecer os imoveis da bossa em sc';
+
+function isUsCampaignLead(history: ChatMessage[]) {
+  const firstUser = history.find((item) => item.role === 'user')?.content ?? '';
+  const value = normalize(firstUser).replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim();
+  return value.includes(US_CAMPAIGN_SEED)
+    || (/\bmoro nos (?:eua|estados unidos|usa)\b/.test(value)
+      && /\bquero conhecer\b/.test(value)
+      && /\bimoveis da bossa\b/.test(value));
 }
 
 export function detectForeignLead(history: ChatMessage[]) {
@@ -169,7 +181,8 @@ export async function loadNaraForeignContext(
   now = new Date(),
 ): Promise<NaraForeignContext | null> {
   const detected = detectForeignLead(history);
-  if (!detected.livesAbroad && !detected.requestedCurrency) return null;
+  const usCampaignLead = isUsCampaignLead(history);
+  if (!detected.livesAbroad && !detected.requestedCurrency && !usCampaignLead) return null;
   const currency = detected.requestedCurrency
     ?? (detected.location === 'Portugal' || detected.location === 'Dinamarca' ? 'EUR' : 'USD');
   const fx = await getDailyFx(client, currency, now);
@@ -181,18 +194,40 @@ export async function loadNaraForeignContext(
       }))
     : [];
 
+  const campaignRules = usCampaignLead ? [
+    'CAMPANHA EUA — CONDUÇÃO OBRIGATÓRIA:',
+    '- A frase “Olá! Moro nos EUA e quero conhecer os imóveis da Bossa em SC.” é texto pré-preenchido do anúncio. Não trate essa frase como uma confidência espontânea e não responda “que legal que você mora nos EUA”.',
+    '- PRIMEIRA RESPOSTA: não envie imagem, vídeo, folder, planta, tabela, localização nem condição de pagamento. Apresente-se brevemente e faça UMA pergunta: se busca investimento ou imóvel para usar com a família.',
+    '- Abertura de referência: “Oi! 😊 Que bom falar com você. Temos imóveis em Porto Belo, no litoral de Santa Catarina, com opções em diferentes fases de obra e perfis. Pra eu te mostrar primeiro o que mais combina com você: está buscando mais como investimento ou para ter um imóvel aqui no Brasil para usar com a família?”',
+    '- Se o lead já acrescentou pergunta objetiva (preço, pagamento, empreendimento, faixa etc.), responda primeiro o que ele perguntou e só depois faça a próxima pergunta útil. Nunca ignore informação já fornecida.',
+    '- Se responder investimento: pergunte se prefere entrega mais próxima ou pode esperar alguns anos pensando em valorização. Entrega mais próxima direciona primeiro ao Flow; prazo maior direciona primeiro ao Alma.',
+    '- Se responder uso próprio/família: pergunte se imagina férias/temporadas ou possibilidade de voltar a morar no Brasil. Depois refine compacto/praticidade versus 3 suítes/mais espaço.',
+    '- Depois que houver interesse definido, envie no máximo UMA imagem principal do empreendimento indicado e faça UMA pergunta curta. Mais materiais entram progressivamente conforme a conversa.',
+    '- Sequência de materiais: interesse → 1 imagem → conversa → planta quando fizer sentido → conversa → vídeo → conversa → proposta/tabela. Nunca despeje catálogo no primeiro contato.',
+    '- Pergunte faixa de investimento somente se ela ainda não foi informada. Se o lead já der valor em USD ou BRL, use esse dado e avance.',
+    '- Pergunte cidade/região nos EUA apenas depois que a conversa estiver fluindo; não use isso na primeira resposta.',
+    '- Nunca faça interrogatório. Uma pergunta por mensagem. Prioridade de descoberta: objetivo, prazo, empreendimento, faixa, forma de pagamento, cidade, uso, objeção e timing.',
+    '- Nunca repita pergunta já respondida no histórico.',
+    '- Para Flow: entrega prevista para novembro de 2027, aproximadamente 800 m do mar, apartamentos aproximadamente 62–80 m²; parcelamento pode chegar a 60x conforme condição aplicável.',
+    '- Para Alma Sea Houses: entrega prevista para julho de 2030, aproximadamente 350 m do mar, 2 apartamentos por andar, 3 suítes + lavabo e 2 vagas; parcelamento pode chegar a 100x conforme composição.',
+    '- Se perguntarem “qual é o melhor?”, compare conforme prazo, tamanho e perfil, sem declarar um vencedor absoluto.',
+    '- Se disser que está só pesquisando, não pressione; ofereça uma comparação curta entre Flow e Alma.',
+    '- Handoff para Taís somente quando houver intenção real (proposta, unidade, simulação, reserva, desconto, contrato, escolha de planta ou pedido de corretor). Preserve e repasse o contexto para o lead não precisar repetir.',
+    '- Tom: humano, simples, consultivo, seguro e sem pressão; mensagens curtas, poucos emojis e sem promessas de valorização/rentabilidade.',
+  ] : [];
+
   const lines = [
     'CLIENTE NO EXTERIOR — DADOS OPERACIONAIS:',
     `- Mora fora do Brasil: ${detected.livesAbroad ? 'sim' : 'não confirmado'}.`,
     detected.location ? `- Local informado: ${detected.location}.` : '',
-    '- É possível comprar morando fora; o contrato pode ser assinado eletronicamente e não exige presença física no Brasil para assinatura.',
-    '- O pagamento pode ser feito do exterior em reais, dólar ou moeda local, conforme o fluxo comercial aplicável.',
-    '- A Bossa já tem clientes residentes nos Estados Unidos, Dinamarca, Portugal e Chile que compraram à distância.',
+    '- É possível conduzir grande parte da negociação à distância. Quando houver unidade específica, o comercial confirma a documentação e a assinatura aplicáveis.',
+    '- O contrato e os valores dos imóveis são trabalhados em reais. Não afirme espontaneamente que o contrato é em dólar.',
+    '- Se o cliente pedir referência em moeda estrangeira, apresente-a apenas como conversão aproximada do dia e mantenha também o valor em reais.',
+    ...campaignRules,
     fx
       ? `- Cotação de referência do dia: 1 ${currency} = R$ ${fx.brl_per_currency.toFixed(4).replace('.', ',')} (BCB PTAX, referência aproximada).`
       : `- A cotação ${currency} não pôde ser obtida agora. Não calcule nem estime conversão por conta própria.`,
     ...conversions.map((item) => `- ${item.development}: a partir de R$ ${Math.round(item.brl).toLocaleString('pt-BR')} ≈ ${currency} ${Math.round(item.foreign).toLocaleString('pt-BR')} pela PTAX de hoje.`),
-    '- Sempre informe também o valor em reais quando houver preço confirmado. Qualquer valor em moeda estrangeira é uma referência cambial aproximada do dia.',
     '- Nunca calcule câmbio mentalmente. Use somente as conversões prontas deste bloco.',
   ].filter(Boolean);
 
@@ -200,6 +235,7 @@ export async function loadNaraForeignContext(
     requested_currency: currency,
     lives_abroad: detected.livesAbroad,
     location: detected.location,
+    us_campaign_lead: usCampaignLead,
     fx,
     conversions,
     source_text: lines.join('\n'),
