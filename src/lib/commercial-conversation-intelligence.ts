@@ -77,7 +77,7 @@ type TeamMember = {
   full_name: string;
 };
 
-const SIGNAL_RE = /\bproposta\b|\bcontraproposta\b|\bfluxo\b|\bdesconto\b|\bentrada\b|\bparcela(?:s)?\b|\bbal(?:a|ã)o(?:es)?\b|\breforço(?:s)?\b|\bato\b|\bchaves?\b|\bunidade\s*\d+|\bcliente\b|R\$\s*[\d.]|\breuni[aã]o\b|\bvisita\b|\bcall\b|\bvideochamada\b|\bamanh[aã]\b|\bagenda\b|\bhor[aá]rio\b|\bàs\s*\d{1,2}(?::\d{2})?\b|\bas\s*\d{1,2}(?::\d{2})?\b/iu;
+const SIGNAL_RE = /\bproposta\b|\bcontraproposta\b|\bfluxo\b|\bdesconto\b|\bentrada\b|\bparcela(?:s)?\b|\bbal(?:a|ã)o(?:es)?\b|\breforço(?:s)?\b|\bato\b|\bchaves?\b|\bunidade\s*\d+|\bcliente\b|R\$\s*[\d.]|\breuni[aã]o\b|\bvisita\b|\bcall\b|\bvideochamada\b|\bamanh[aã]\b|\bagenda\b|\bhor[aá]rio\b|\bendere[cç]o\b|\blocal\b|\brua\b|\bàs\s*\d{1,2}(?::\d{2})?\b|\bas\s*\d{1,2}(?::\d{2})?\b/iu;
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object' && !Array.isArray(value)
@@ -455,7 +455,34 @@ async function saveConfirmedMeeting(args: {
     .limit(1)
     .maybeSingle();
   if (existingError) throw existingError;
-  if (existing) return existing;
+  if (existing) {
+    if (args.analysis.meeting_location || args.analysis.meeting_notes) {
+      const { data: refreshed, error: refreshError } = await args.admin
+        .from('agenda_events')
+        .update({
+          location: args.analysis.meeting_location || undefined,
+          description: [
+            args.analysis.meeting_notes,
+            args.analysis.summary,
+            'Agendamento detectado automaticamente na conversa do WhatsApp.',
+          ].filter(Boolean).join('\n\n'),
+          metadata: {
+            source: 'whatsapp_commercial_intelligence',
+            auto_signature: signature,
+            confidence: args.analysis.meeting_confidence,
+            responsible_name: args.analysis.meeting_responsible_name || null,
+            source_message_id: args.source.id,
+            source_message_ids: args.messages.map((message) => message.id),
+          },
+        })
+        .eq('id', existing.id)
+        .select('id,title,starts_at,ends_at')
+        .single();
+      if (refreshError) throw refreshError;
+      return refreshed;
+    }
+    return existing;
+  }
 
   const { data: overlaps } = await args.admin
     .from('agenda_events')
