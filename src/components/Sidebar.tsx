@@ -4,6 +4,7 @@ import Image from "next/image";
 import { usePathname } from "next/navigation";
 import {
   CalendarDays,
+  CalendarRange,
   MessageCircle,
   UsersRound,
   Handshake,
@@ -52,7 +53,13 @@ const links = [
     href: "/tarefas",
     label: "Tarefas",
     icon: CheckSquare,
-    paths: ["/tarefas", "/agenda"],
+    paths: ["/tarefas"],
+  },
+  {
+    href: "/agenda",
+    label: "Agenda",
+    icon: CalendarRange,
+    paths: ["/agenda"],
   },
   {
     href: "/propostas",
