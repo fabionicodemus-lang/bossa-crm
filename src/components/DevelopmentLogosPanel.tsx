@@ -115,7 +115,7 @@ export function DevelopmentLogosPanel({ organizationId, canEdit, initialDevelopm
         <div className="grid grid-3">
           {developments.map((item) => <div className="card" key={item.id} style={{ boxShadow: 'none' }}>
             <div className="card-body" style={{ display: 'grid', gap: 10 }}>
-              <div style={{ height: 90, border: '1px solid var(--line)', borderRadius: 8, display: 'grid', placeItems: 'center', background: '#fff', overflow: 'hidden' }}>
+              <div style={{ height: 90, border: '1px solid var(--line)', borderRadius: 8, display: 'grid', placeItems: 'center', background: 'var(--panel)', overflow: 'hidden' }}>
                 {signedUrls[item.id]
                   ? <img src={signedUrls[item.id]} alt={`Logo ${item.name}`} style={{ maxWidth: '92%', maxHeight: 76, objectFit: 'contain' }} />
                   : <span className="faint">Logo não cadastrado</span>}

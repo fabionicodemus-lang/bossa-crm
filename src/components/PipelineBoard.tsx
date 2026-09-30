@@ -9,6 +9,7 @@ import { displayPhone, normalizePhone } from '@/lib/format';
 import { createClient } from '@/lib/supabase/client';
 import { usePipelineLeadsFeed } from '@/lib/use-pipeline-leads-feed';
 import { metaAdSourceLabel, readMetaAdAttribution } from '@/lib/meta-ad-attribution';
+import { useCrmUI } from './CrmUI';
 
 function updatedAtTime(value: string | null | undefined) {
   const time = value ? new Date(value).getTime() : NaN;
@@ -53,6 +54,7 @@ function dueLabel(value?: string | null) {
 
 export function PipelineBoard({ initialLeads, kind, organizationId, canEdit }: { initialLeads: Lead[]; kind: LeadKind; organizationId: string; canEdit: boolean }) {
   const router = useRouter();
+  const ui = useCrmUI();
   const [leads, setLeads] = useState(initialLeads);
   const [dragId, setDragId] = useState<string | null>(null);
   const [overStage, setOverStage] = useState<string | null>(null);
@@ -386,12 +388,22 @@ export function PipelineBoard({ initialLeads, kind, organizationId, canEdit }: {
                 const readableSource = kind === 'cliente' ? metaAdSourceLabel(lead.metadata) || lead.source : lead.group_name;
                 const selected = selectedIds.has(lead.id);
                 return <div key={lead.id} style={{ position: 'relative' }}>
-                  {selectMode && <label style={{ position: 'absolute', top: 10, right: 10, zIndex: 3, width: 24, height: 24, borderRadius: 7, background: '#fff', border: '1px solid #cfc8bf', display: 'grid', placeItems: 'center', cursor: 'pointer' }}>
+                  {selectMode && <label style={{ position: 'absolute', top: 10, right: 10, zIndex: 3, width: 24, height: 24, borderRadius: 7, background: 'var(--panel)', border: '1px solid #cfc8bf', display: 'grid', placeItems: 'center', cursor: 'pointer' }}>
                     <input type="checkbox" checked={selected} onChange={() => toggleSelection(lead.id)} style={{ width: 15, height: 15 }} />
                   </label>}
-                  <Link href={`/leads/${lead.id}`} className="lead-card" draggable={canEdit && !selectMode}
-                    style={selected ? { outline: '2px solid #1f6b52', background: '#f2f8f5', paddingRight: selectMode ? 42 : undefined } : selectMode ? { paddingRight: 42 } : undefined}
-                    onClick={(event) => { if (selectMode) { event.preventDefault(); toggleSelection(lead.id); } }}
+                  <div
+                    className="lead-card"
+                    role="button"
+                    tabIndex={0}
+                    draggable={canEdit && !selectMode}
+                    style={selected ? { outline: '2px solid var(--green)', background: 'var(--green-soft)', paddingRight: selectMode ? 42 : undefined } : selectMode ? { paddingRight: 42 } : undefined}
+                    onClick={() => selectMode ? toggleSelection(lead.id) : ui.openLead(lead.id, 'dados')}
+                    onKeyDown={(event) => {
+                      if (event.key !== 'Enter' && event.key !== ' ') return;
+                      event.preventDefault();
+                      if (selectMode) toggleSelection(lead.id);
+                      else ui.openLead(lead.id, 'dados');
+                    }}
                     onDragStart={(event) => { if (selectMode) return; setDragId(lead.id); event.dataTransfer.effectAllowed = 'move'; }}
                     onDragEnd={() => { setDragId(null); setOverStage(null); }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
@@ -401,14 +413,14 @@ export function PipelineBoard({ initialLeads, kind, organizationId, canEdit }: {
                     <div className="lead-sub">{kind === 'cliente' ? lead.enterprise || 'Empreendimento não informado' : lead.company || 'Autônomo'}</div>
                     <div className="lead-meta">
                       <span className="chip">{readableSource || (kind === 'cliente' ? 'Sem origem' : 'Sem grupo')}</span>
-                      <span className={`chip ${lead.owner_mode === 'human' ? '' : 'chip-orange'}`}>{lead.owner_mode === 'human' ? '👤 Humano' : lead.owner_mode === 'none' ? 'Encerrado' : `🤖 ${kind === 'cliente' ? 'Nara' : 'Plantão'}`}</span>
+                      <span className={`chip ${lead.owner_mode === 'human' ? 'chip-green' : lead.owner_mode === 'ai' ? 'chip-blue' : 'chip-neutral'}`}>{lead.owner_mode === 'human' ? 'Humano' : lead.owner_mode === 'none' ? 'Encerrado' : kind === 'cliente' ? '✦ Nara' : '✦ Plantão'}</span>
                       {lead.ai_classification && <span className="chip">{lead.ai_classification}</span>}
                     </div>
                     {lead.next_action && <div className="muted" style={{ fontSize: 10, marginBottom: 5 }}><strong>Próxima:</strong> {lead.next_action}</div>}
                     {due && <div style={{ fontSize: 10, marginBottom: 7, fontWeight: 700, color: overdue ? 'var(--red)' : 'var(--ink-soft)' }}>{due}</div>}
                     <div className="muted" style={{ fontSize: 10, marginBottom: 7 }}>{displayPhone(lead.phone)}</div>
                     <div className="temp-row"><div className="temp-track"><div className="temp-fill" style={{ width: `${lead.temperature}%`, background: temperatureColor(lead.temperature) }} /></div><span className="temp-label" style={{ color: temperatureColor(lead.temperature) }}>{lead.ai_classification?.toUpperCase() || temperatureName(lead.temperature)} {lead.temperature}/100</span></div>
-                  </Link>
+                  </div>
                 </div>;
               })}
               {stageLeads.length === 0 && <div className="empty-state">Nenhum registro</div>}

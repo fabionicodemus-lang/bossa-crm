@@ -1,22 +1,56 @@
-'use client';
+"use client";
 
-import { FormEvent, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import type { Activity, Lead, LeadTask, Message, TeamMember } from '@/lib/types';
-import { displayPhone, formatDateTime, initials, normalizePhone } from '@/lib/format';
-import { createClient } from '@/lib/supabase/client';
-import { stageLabel, stagesFor } from '@/lib/stages';
-import { useLeadLiveFeed } from '@/lib/use-lead-live-feed';
-import { MessageContent } from '@/components/MessageContent';
-import { metaAdSourceLabel, readMetaAdAttribution } from '@/lib/meta-ad-attribution';
+import {
+  FormEvent,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
+import {
+  Phone,
+  MessageCircle,
+  Plus,
+  FileText,
+  ChevronLeft,
+  ChevronRight,
+} from "lucide-react";
+import { useCrmUI } from "./CrmUI";
+import type {
+  Activity,
+  Lead,
+  LeadTask,
+  Message,
+  TeamMember,
+} from "@/lib/types";
+import {
+  displayPhone,
+  formatDateTime,
+  initials,
+  normalizePhone,
+} from "@/lib/format";
+import { createClient } from "@/lib/supabase/client";
+import { stageLabel, stagesFor } from "@/lib/stages";
+import { locationOf } from "@/lib/hoje-model";
+import { useLeadLiveFeed } from "@/lib/use-lead-live-feed";
+import { MessageContent } from "@/components/MessageContent";
+import {
+  metaAdSourceLabel,
+  readMetaAdAttribution,
+} from "@/lib/meta-ad-attribution";
 import {
   isCustomerServiceWindowOpen,
   leadWindowExpiresAt,
   OUTSIDE_WINDOW_MESSAGE,
   windowExpiresFromInbound,
-} from '@/lib/whatsapp/window';
+} from "@/lib/whatsapp/window";
 
-type Tab = 'whatsapp' | 'historico' | 'tarefas' | 'dados';
+type Tab =
+  "whatsapp" | "historico" | "tarefas" | "dados" | "negociacao" | "arquivos";
 
 // Margem em que a conversa ainda conta como "no fim": o usuário pode estar
 // alguns pixels acima sem que a mensagem nova deixe de acompanhá-lo.
@@ -33,21 +67,26 @@ type AiUsageSummary = {
 };
 
 function messageClass(message: Message) {
-  if (message.direction === 'system' || message.sender_kind === 'sistema') return 'system';
-  return message.direction === 'in' ? 'in' : 'out';
+  if (message.direction === "system" || message.sender_kind === "sistema")
+    return "system";
+  return message.direction === "in"
+    ? "in"
+    : message.sender_kind === "ia"
+      ? "out nara"
+      : "out";
 }
 
-function senderLabel(message: Message) {
-  if (message.sender_kind === 'ia') return 'IA';
-  if (message.sender_kind === 'humano') return 'Comercial Bossa';
-  if (message.sender_kind === 'sistema') return 'Sistema';
-  return 'Contato';
+function senderLabel(message: Message, persona: string) {
+  if (message.sender_kind === "ia") return `✦ ${persona}`;
+  if (message.sender_kind === "humano") return "Comercial Bossa";
+  if (message.sender_kind === "sistema") return "Sistema";
+  return "Contato";
 }
 
 function scoreLabel(value: number) {
-  if (value >= 75) return 'Quente';
-  if (value >= 40) return 'Morno';
-  return 'Frio';
+  if (value >= 75) return "Quente";
+  if (value >= 40) return "Morno";
+  return "Frio";
 }
 
 function numberValue(value: unknown): number {
@@ -55,9 +94,11 @@ function numberValue(value: unknown): number {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
-function readAiUsage(metadata: Record<string, unknown> | null | undefined): AiUsageSummary | null {
+function readAiUsage(
+  metadata: Record<string, unknown> | null | undefined,
+): AiUsageSummary | null {
   const raw = metadata?.ai_usage;
-  if (!raw || typeof raw !== 'object') return null;
+  if (!raw || typeof raw !== "object") return null;
   const value = raw as Record<string, unknown>;
   return {
     calls: numberValue(value.calls),
@@ -65,15 +106,15 @@ function readAiUsage(metadata: Record<string, unknown> | null | undefined): AiUs
     cached_tokens: numberValue(value.cached_tokens),
     output_tokens: numberValue(value.output_tokens),
     estimated_cost_usd: numberValue(value.estimated_cost_usd),
-    last_model: typeof value.last_model === 'string' ? value.last_model : null,
-    last_at: typeof value.last_at === 'string' ? value.last_at : null,
+    last_model: typeof value.last_model === "string" ? value.last_model : null,
+    last_at: typeof value.last_at === "string" ? value.last_at : null,
   };
 }
 
 // Uma mensagem também muda quando a Meta confirma entrega/leitura, então o
 // controle de duplicidade precisa considerar o corpo e o status, não só o id.
 function messageSignature(message: Message) {
-  return `${message.created_at}|${message.status ?? ''}|${message.body}`;
+  return `${message.created_at}|${message.status ?? ""}|${message.body}`;
 }
 
 function byCreatedAt(a: { created_at: string }, b: { created_at: string }) {
@@ -99,11 +140,15 @@ function localToIso(value: string): string | null {
 }
 
 function dueStatus(value: string | null) {
-  if (!value) return { label: 'Sem prazo', overdue: false };
+  if (!value) return { label: "Sem prazo", overdue: false };
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return { label: 'Prazo inválido', overdue: false };
+  if (Number.isNaN(date.getTime()))
+    return { label: "Prazo inválido", overdue: false };
   const overdue = date.getTime() < Date.now();
-  return { label: `${overdue ? 'Vencida · ' : ''}${formatDateTime(value)}`, overdue };
+  return {
+    label: `${overdue ? "Vencida · " : ""}${formatDateTime(value)}`,
+    overdue,
+  };
 }
 
 export function LeadDetail({
@@ -114,6 +159,8 @@ export function LeadDetail({
   teamMembers,
   whatsappConnected,
   canEdit,
+  initialTab = "whatsapp",
+  drawerMode = false,
 }: {
   initialLead: Lead;
   initialMessages: Message[];
@@ -122,29 +169,32 @@ export function LeadDetail({
   teamMembers: TeamMember[];
   whatsappConnected: boolean;
   canEdit: boolean;
+  initialTab?: Tab;
+  drawerMode?: boolean;
 }) {
   const router = useRouter();
+  const ui = useCrmUI();
   const [lead, setLead] = useState(initialLead);
   const [messages, setMessages] = useState(initialMessages);
   const [activities, setActivities] = useState(initialActivities);
   const [tasks, setTasks] = useState(initialTasks);
-  const [tab, setTab] = useState<Tab>('whatsapp');
-  const [text, setText] = useState('');
-  const [note, setNote] = useState('');
-  const [nextAction, setNextAction] = useState('');
-  const [nextActionDue, setNextActionDue] = useState('');
-  const [taskTitle, setTaskTitle] = useState('');
-  const [taskDescription, setTaskDescription] = useState('');
-  const [taskDue, setTaskDue] = useState('');
-  const [taskPriority, setTaskPriority] = useState('normal');
-  const [transferOwnerId, setTransferOwnerId] = useState('');
-  const [aiInstruction, setAiInstruction] = useState('');
+  const [tab, setTab] = useState<Tab>(initialTab);
+  const [text, setText] = useState("");
+  const [note, setNote] = useState("");
+  const [nextAction, setNextAction] = useState("");
+  const [nextActionDue, setNextActionDue] = useState("");
+  const [taskTitle, setTaskTitle] = useState("");
+  const [taskDescription, setTaskDescription] = useState("");
+  const [taskDue, setTaskDue] = useState("");
+  const [taskPriority, setTaskPriority] = useState("normal");
+  const [transferOwnerId, setTransferOwnerId] = useState("");
+  const [aiInstruction, setAiInstruction] = useState("");
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError] = useState("");
   const [clock, setClock] = useState(0);
   const [editingData, setEditingData] = useState(false);
   const [savingData, setSavingData] = useState(false);
-  const [dataNotice, setDataNotice] = useState('');
+  const [dataNotice, setDataNotice] = useState("");
 
   useEffect(() => {
     const updateClock = () => setClock(Date.now());
@@ -175,35 +225,57 @@ export function LeadDetail({
   const handleMessagesScroll = useCallback(() => {
     const node = messagesRef.current;
     if (!node) return;
-    const distanceFromBottom = node.scrollHeight - node.scrollTop - node.clientHeight;
+    const distanceFromBottom =
+      node.scrollHeight - node.scrollTop - node.clientHeight;
     pinnedToBottom.current = distanceFromBottom <= BOTTOM_THRESHOLD_PX;
     if (pinnedToBottom.current) setUnseenCount(0);
   }, []);
 
   // Guarda o que já está na tela para que Realtime, sincronização incremental e
   // respostas otimistas do próprio usuário nunca dupliquem nem reprocessem.
-  const knownMessages = useRef(new Map(initialMessages.map((message) => [message.id, messageSignature(message)])));
-  const knownActivities = useRef(new Map(initialActivities.map((activity) => [activity.id, activity.created_at])));
+  const knownMessages = useRef(
+    new Map(
+      initialMessages.map((message) => [message.id, messageSignature(message)]),
+    ),
+  );
+  const knownActivities = useRef(
+    new Map(
+      initialActivities.map((activity) => [activity.id, activity.created_at]),
+    ),
+  );
   const knownTasks = useRef(new Set(initialTasks.map((task) => task.id)));
   const latestMessageAt = useRef(newestCreatedAt(initialMessages));
   const latestActivityAt = useRef(newestCreatedAt(initialActivities));
 
   const applyMessages = useCallback((incoming: Message[]) => {
-    const fresh = incoming.filter((message) => knownMessages.current.get(message.id) !== messageSignature(message));
+    const fresh = incoming.filter(
+      (message) =>
+        knownMessages.current.get(message.id) !== messageSignature(message),
+    );
     if (!fresh.length) return;
     // `fresh` também traz confirmação de entrega de mensagem já visível. Só as
     // linhas realmente novas contam para a rolagem e para o aviso de não lidas.
-    const added = fresh.filter((message) => !knownMessages.current.has(message.id));
-    fresh.forEach((message) => knownMessages.current.set(message.id, messageSignature(message)));
+    const added = fresh.filter(
+      (message) => !knownMessages.current.has(message.id),
+    );
+    fresh.forEach((message) =>
+      knownMessages.current.set(message.id, messageSignature(message)),
+    );
 
     if (added.length) {
       pendingScroll.current = true;
-      const unread = added.filter((message) => message.direction === 'in').length;
-      if (unread && !pinnedToBottom.current) setUnseenCount((current) => current + unread);
+      const unread = added.filter(
+        (message) => message.direction === "in",
+      ).length;
+      if (unread && !pinnedToBottom.current)
+        setUnseenCount((current) => current + unread);
     }
 
     const newest = newestCreatedAt(fresh);
-    if (newest && (!latestMessageAt.current || newest > latestMessageAt.current)) {
+    if (
+      newest &&
+      (!latestMessageAt.current || newest > latestMessageAt.current)
+    ) {
       latestMessageAt.current = newest;
     }
 
@@ -217,10 +289,14 @@ export function LeadDetail({
       return merged.sort(byCreatedAt);
     });
 
-    const newestInbound = newestCreatedAt(fresh.filter((message) => message.direction === 'in'));
+    const newestInbound = newestCreatedAt(
+      fresh.filter((message) => message.direction === "in"),
+    );
     if (!newestInbound) return;
     setLead((current) => {
-      const known = current.last_inbound_at ? new Date(current.last_inbound_at).getTime() : Number.NEGATIVE_INFINITY;
+      const known = current.last_inbound_at
+        ? new Date(current.last_inbound_at).getTime()
+        : Number.NEGATIVE_INFINITY;
       if (known >= new Date(newestInbound).getTime()) return current;
       return {
         ...current,
@@ -235,16 +311,25 @@ export function LeadDetail({
   }, []);
 
   const applyActivities = useCallback((incoming: Activity[]) => {
-    const fresh = incoming.filter((activity) => !knownActivities.current.has(activity.id));
+    const fresh = incoming.filter(
+      (activity) => !knownActivities.current.has(activity.id),
+    );
     if (!fresh.length) return;
-    fresh.forEach((activity) => knownActivities.current.set(activity.id, activity.created_at));
+    fresh.forEach((activity) =>
+      knownActivities.current.set(activity.id, activity.created_at),
+    );
 
     const newest = newestCreatedAt(fresh);
-    if (newest && (!latestActivityAt.current || newest > latestActivityAt.current)) {
+    if (
+      newest &&
+      (!latestActivityAt.current || newest > latestActivityAt.current)
+    ) {
       latestActivityAt.current = newest;
     }
 
-    setActivities((current) => [...fresh, ...current].sort((a, b) => byCreatedAt(b, a)));
+    setActivities((current) =>
+      [...fresh, ...current].sort((a, b) => byCreatedAt(b, a)),
+    );
   }, []);
 
   const applyTaskInsert = useCallback((task: LeadTask) => {
@@ -255,31 +340,33 @@ export function LeadDetail({
 
   const applyTaskUpdate = useCallback((task: LeadTask) => {
     knownTasks.current.add(task.id);
-    setTasks((current) => current.some((item) => item.id === task.id)
-      ? current.map((item) => item.id === task.id ? task : item)
-      : [task, ...current]);
+    setTasks((current) =>
+      current.some((item) => item.id === task.id)
+        ? current.map((item) => (item.id === task.id ? task : item))
+        : [task, ...current],
+    );
   }, []);
 
   // A rolagem acontece depois da pintura, com `useLayoutEffect`, para a
   // mensagem nova nunca chegar a piscar fora da área visível.
   useLayoutEffect(() => {
-    if (tab !== 'whatsapp') return;
+    if (tab !== "whatsapp") return;
     const node = messagesRef.current;
     if (!node) return;
     if (!openedConversation.current) {
       // Primeira pintura da aba: cai direto na última mensagem, sem animação.
       openedConversation.current = true;
-      scrollToBottom('auto');
+      scrollToBottom("auto");
       pendingScroll.current = false;
       return;
     }
     if (!pendingScroll.current) return;
     pendingScroll.current = false;
-    if (pinnedToBottom.current) scrollToBottom('smooth');
+    if (pinnedToBottom.current) scrollToBottom("smooth");
   }, [tab, messages, scrollToBottom]);
 
   useEffect(() => {
-    if (tab !== 'whatsapp') openedConversation.current = false;
+    if (tab !== "whatsapp") openedConversation.current = false;
   }, [tab]);
 
   const feedStatus = useLeadLiveFeed(lead.id, {
@@ -291,35 +378,65 @@ export function LeadDetail({
     latestActivityAt: () => latestActivityAt.current,
   });
 
-  const persona = lead.kind === 'cliente' ? 'Nara' : 'Plantão';
-  const humanMembers = teamMembers.filter((member) => member.role !== 'viewer');
+  const persona = lead.kind === "cliente" ? "Nara" : "Plantão";
+  const location = locationOf(lead);
+  const humanMembers = teamMembers.filter((member) => member.role !== "viewer");
   const owner = teamMembers.find((member) => member.user_id === lead.owner_id);
-  const backup = teamMembers.find((member) => member.user_id === lead.backup_owner_id);
-  const pendingTasks = tasks.filter((task) => task.status === 'pending' || task.status === 'overdue');
-  const completedTasks = tasks.filter((task) => task.status === 'completed');
+  const backup = teamMembers.find(
+    (member) => member.user_id === lead.backup_owner_id,
+  );
+  const pendingTasks = tasks.filter(
+    (task) => task.status === "pending" || task.status === "overdue",
+  );
+  const completedTasks = tasks.filter((task) => task.status === "completed");
   const usage = useMemo(() => readAiUsage(lead.metadata), [lead.metadata]);
-  const adAttribution = useMemo(() => readMetaAdAttribution(lead.metadata), [lead.metadata]);
-  const sourceLabel = useMemo(() => metaAdSourceLabel(lead.metadata) || lead.source || 'Origem não informada', [lead.metadata, lead.source]);
-  const metaEntries = useMemo(() => Object.entries(lead.metadata || {}).filter(([key, value]) => ![
-    'ad',
-    'ad_history',
-    'ai_usage',
-    'hybrid_last_decision',
-    'whatsapp_channel_id',
-    'whatsapp_conversation_id',
-    'whatsapp_window_expires_at',
-  ].includes(key) && value !== null && value !== ''), [lead.metadata]);
-  const lastContact = messages.length ? formatDateTime(messages[messages.length - 1].created_at) : '—';
-  const canReactivateAi = !['fechado_ganho', 'encerrado'].includes(lead.stage) && !lead.opt_out;
+  const adAttribution = useMemo(
+    () => readMetaAdAttribution(lead.metadata),
+    [lead.metadata],
+  );
+  const sourceLabel = useMemo(
+    () =>
+      metaAdSourceLabel(lead.metadata) || lead.source || "Origem não informada",
+    [lead.metadata, lead.source],
+  );
+  const metaEntries = useMemo(
+    () =>
+      Object.entries(lead.metadata || {}).filter(
+        ([key, value]) =>
+          ![
+            "ad",
+            "ad_history",
+            "ai_usage",
+            "hybrid_last_decision",
+            "whatsapp_channel_id",
+            "whatsapp_conversation_id",
+            "whatsapp_window_expires_at",
+          ].includes(key) &&
+          value !== null &&
+          value !== "",
+      ),
+    [lead.metadata],
+  );
+  const lastContact = messages.length
+    ? formatDateTime(messages[messages.length - 1].created_at)
+    : "—";
+  const canReactivateAi =
+    !["fechado_ganho", "encerrado"].includes(lead.stage) && !lead.opt_out;
   const windowExpiresAt = useMemo(() => leadWindowExpiresAt(lead), [lead]);
-  const windowOpen = clock === 0
-    ? Boolean(windowExpiresAt)
-    : isCustomerServiceWindowOpen(windowExpiresAt, clock);
+  const windowOpen =
+    clock === 0
+      ? Boolean(windowExpiresAt)
+      : isCustomerServiceWindowOpen(windowExpiresAt, clock);
 
   async function requestJson(url: string, method: string, body: unknown) {
-    const response = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const response = await fetch(url, {
+      method,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
     const payload = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(payload.error || 'Não foi possível concluir a ação.');
+    if (!response.ok)
+      throw new Error(payload.error || "Não foi possível concluir a ação.");
     return payload;
   }
 
@@ -327,49 +444,54 @@ export function LeadDetail({
     event.preventDefault();
     if (!canEdit || savingData) return;
     setSavingData(true);
-    setError('');
-    setDataNotice('');
+    setError("");
+    setDataNotice("");
     try {
       const form = new FormData(event.currentTarget);
-      const firstName = String(form.get('first_name') || '').trim();
-      const lastName = String(form.get('last_name') || '').trim();
-      const fullNameInput = String(form.get('name') || '').trim();
-      const fullName = fullNameInput || [firstName, lastName].filter(Boolean).join(' ').trim();
-      if (!fullName) throw new Error('Informe o nome do lead.');
+      const firstName = String(form.get("first_name") || "").trim();
+      const lastName = String(form.get("last_name") || "").trim();
+      const fullNameInput = String(form.get("name") || "").trim();
+      const fullName =
+        fullNameInput || [firstName, lastName].filter(Boolean).join(" ").trim();
+      if (!fullName) throw new Error("Informe o nome do lead.");
 
-      const kind = String(form.get('kind') || lead.kind) as Lead['kind'];
-      const phone = normalizePhone(form.get('phone'));
+      const kind = String(form.get("kind") || lead.kind) as Lead["kind"];
+      const phone = normalizePhone(form.get("phone"));
       const payload = {
         name: fullName,
         first_name: firstName || null,
         last_name: lastName || null,
         phone: phone || null,
-        email: String(form.get('email') || '').trim() || null,
+        email: String(form.get("email") || "").trim() || null,
         kind,
-        company: String(form.get('company') || '').trim() || null,
-        creci: String(form.get('creci') || '').trim() || null,
-        enterprise: String(form.get('enterprise') || '').trim() || null,
-        source: String(form.get('source') || '').trim() || null,
-        group_name: String(form.get('group_name') || '').trim() || null,
+        company: String(form.get("company") || "").trim() || null,
+        creci: String(form.get("creci") || "").trim() || null,
+        enterprise: String(form.get("enterprise") || "").trim() || null,
+        source: String(form.get("source") || "").trim() || null,
+        group_name: String(form.get("group_name") || "").trim() || null,
         updated_at: new Date().toISOString(),
       };
 
       const supabase = createClient();
       const { data, error: updateError } = await supabase
-        .from('leads')
+        .from("leads")
         .update(payload)
-        .eq('id', lead.id)
-        .eq('organization_id', lead.organization_id)
-        .select('*')
+        .eq("id", lead.id)
+        .eq("organization_id", lead.organization_id)
+        .select("*")
         .single();
 
       if (updateError) throw updateError;
       setLead(data as Lead);
       setEditingData(false);
-      setDataNotice('Informações do lead atualizadas.');
+      setDataNotice("Informações do lead atualizadas.");
       router.refresh();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Não foi possível atualizar as informações do lead.');
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "Não foi possível atualizar as informações do lead.",
+      );
     } finally {
       setSavingData(false);
     }
@@ -377,69 +499,129 @@ export function LeadDetail({
 
   async function changeStage(stage: string) {
     if (!canEdit) return;
-    setError('');
+    setError("");
     try {
-      const payload = await requestJson(`/api/leads/${lead.id}/stage`, 'POST', { stage });
-      setLead((current) => ({ ...current, stage, owner_mode: payload.owner_mode ?? current.owner_mode, ai_enabled: payload.ai_enabled ?? current.ai_enabled }));
+      const payload = await requestJson(`/api/leads/${lead.id}/stage`, "POST", {
+        stage,
+      });
+      setLead((current) => ({
+        ...current,
+        stage,
+        owner_mode: payload.owner_mode ?? current.owner_mode,
+        ai_enabled: payload.ai_enabled ?? current.ai_enabled,
+      }));
       router.refresh();
-    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Não foi possível alterar a etapa.'); }
+    } catch (cause) {
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "Não foi possível alterar a etapa.",
+      );
+    }
   }
 
   async function toggleAi(enabled: boolean) {
     if (!canEdit) return;
-    setError('');
+    setError("");
     try {
-      const payload = await requestJson(`/api/leads/${lead.id}/ai`, 'POST', { enabled });
+      const payload = await requestJson(`/api/leads/${lead.id}/ai`, "POST", {
+        enabled,
+      });
       setLead((current) => ({ ...current, ...payload, id: current.id }));
       router.refresh();
-    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Não foi possível alterar o atendimento.'); }
+    } catch (cause) {
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "Não foi possível alterar o atendimento.",
+      );
+    }
   }
 
   async function acceptHandoff() {
     if (!canEdit) return;
     setLoading(true);
-    setError('');
+    setError("");
     try {
-      const payload = await requestJson(`/api/leads/${lead.id}/handoff`, 'POST', { action: 'accept' });
-      setLead((current) => ({ ...current, owner_id: payload.owner_id, owner_mode: 'human', ai_enabled: false, stage: 'humano_ativo', next_action_due_at: payload.due_at }));
+      const payload = await requestJson(
+        `/api/leads/${lead.id}/handoff`,
+        "POST",
+        { action: "accept" },
+      );
+      setLead((current) => ({
+        ...current,
+        owner_id: payload.owner_id,
+        owner_mode: "human",
+        ai_enabled: false,
+        stage: "humano_ativo",
+        next_action_due_at: payload.due_at,
+      }));
       router.refresh();
-    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Não foi possível aceitar a passagem.'); }
+    } catch (cause) {
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "Não foi possível aceitar a passagem.",
+      );
+    }
     setLoading(false);
   }
 
   async function releaseToAi() {
     if (!canEdit) return;
     setLoading(true);
-    setError('');
+    setError("");
     try {
-      await requestJson(`/api/leads/${lead.id}/handoff`, 'POST', { action: 'release' });
-      setLead((current) => ({ ...current, owner_id: null, owner_mode: 'ai', ai_enabled: true, stage: 'nutricao_ativa' }));
-      router.refresh();
-    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Não foi possível devolver para a IA.'); }
-    setLoading(false);
-  }
-
-  async function transferToHuman() {
-    if (!canEdit || !transferOwnerId) return;
-    setLoading(true);
-    setError('');
-    try {
-      const payload = await requestJson(`/api/leads/${lead.id}/handoff`, 'POST', {
-        action: 'transfer',
-        ownerId: transferOwnerId,
+      await requestJson(`/api/leads/${lead.id}/handoff`, "POST", {
+        action: "release",
       });
       setLead((current) => ({
         ...current,
-        owner_id: payload.owner_id,
-        owner_mode: 'human',
-        ai_enabled: false,
-        stage: payload.stage ?? 'humano_ativo',
-        next_action_due_at: payload.due_at,
+        owner_id: null,
+        owner_mode: "ai",
+        ai_enabled: true,
+        stage: "nutricao_ativa",
       }));
-      setTransferOwnerId('');
       router.refresh();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Não foi possível transferir o atendimento.');
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "Não foi possível devolver para a IA.",
+      );
+    }
+    setLoading(false);
+  }
+
+  async function transferToHuman(ownerId = transferOwnerId) {
+    if (!canEdit || !ownerId) return;
+    setLoading(true);
+    setError("");
+    try {
+      const payload = await requestJson(
+        `/api/leads/${lead.id}/handoff`,
+        "POST",
+        {
+          action: "transfer",
+          ownerId,
+        },
+      );
+      setLead((current) => ({
+        ...current,
+        owner_id: payload.owner_id,
+        owner_mode: "human",
+        ai_enabled: false,
+        stage: payload.stage ?? "humano_ativo",
+        next_action_due_at: payload.due_at,
+      }));
+      setTransferOwnerId("");
+      router.refresh();
+    } catch (cause) {
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "Não foi possível transferir o atendimento.",
+      );
     }
     setLoading(false);
   }
@@ -453,14 +635,22 @@ export function LeadDetail({
       return;
     }
     setLoading(true);
-    setError('');
+    setError("");
     try {
-      const payload = await requestJson(`/api/leads/${lead.id}/ai-guidance`, 'POST', { instruction });
-      setAiInstruction('');
+      const payload = await requestJson(
+        `/api/leads/${lead.id}/ai-guidance`,
+        "POST",
+        { instruction },
+      );
+      setAiInstruction("");
       if (payload.message) applyMessages([payload.message]);
       router.refresh();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Não foi possível orientar a Nara.');
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "Não foi possível orientar a Nara.",
+      );
     }
     setLoading(false);
   }
@@ -474,12 +664,19 @@ export function LeadDetail({
       return;
     }
     setLoading(true);
-    setError('');
+    setError("");
     try {
-      const payload = await requestJson('/api/whatsapp/send', 'POST', { leadId: lead.id, body });
-      setText('');
+      const payload = await requestJson("/api/whatsapp/send", "POST", {
+        leadId: lead.id,
+        body,
+      });
+      setText("");
       if (payload.message) applyMessages([payload.message]);
-    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Falha ao enviar mensagem.'); }
+    } catch (cause) {
+      setError(
+        cause instanceof Error ? cause.message : "Falha ao enviar mensagem.",
+      );
+    }
     setLoading(false);
   }
 
@@ -488,23 +685,33 @@ export function LeadDetail({
     const description = note.trim();
     if (!canEdit || !description) return;
     setLoading(true);
-    setError('');
+    setError("");
     try {
-      const payload = await requestJson('/api/activities', 'POST', {
+      const payload = await requestJson("/api/activities", "POST", {
         leadId: lead.id,
-        title: 'Registro do atendimento comercial',
+        title: "Registro do atendimento comercial",
         description,
         nextAction: nextAction.trim(),
-        nextActionType: 'followup_humano',
+        nextActionType: "followup_humano",
         nextActionDueAt: localToIso(nextActionDue),
       });
-      setNote('');
-      setNextAction('');
-      setNextActionDue('');
+      setNote("");
+      setNextAction("");
+      setNextActionDue("");
       if (payload.activity) applyActivities([payload.activity]);
       if (payload.task) applyTaskInsert(payload.task);
-      setLead((current) => ({ ...current, next_action: payload.task?.title ?? current.next_action, next_action_due_at: payload.task?.due_at ?? current.next_action_due_at }));
-    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Não foi possível salvar o registro.'); }
+      setLead((current) => ({
+        ...current,
+        next_action: payload.task?.title ?? current.next_action,
+        next_action_due_at: payload.task?.due_at ?? current.next_action_due_at,
+      }));
+    } catch (cause) {
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "Não foi possível salvar o registro.",
+      );
+    }
     setLoading(false);
   }
 
@@ -512,123 +719,1278 @@ export function LeadDetail({
     event.preventDefault();
     if (!canEdit || !taskTitle.trim()) return;
     setLoading(true);
-    setError('');
+    setError("");
     try {
-      const payload = await requestJson(`/api/leads/${lead.id}/tasks`, 'POST', { title: taskTitle.trim(), description: taskDescription.trim(), dueAt: localToIso(taskDue), priority: taskPriority });
-      setTaskTitle(''); setTaskDescription(''); setTaskDue(''); setTaskPriority('normal');
+      const payload = await requestJson(`/api/leads/${lead.id}/tasks`, "POST", {
+        title: taskTitle.trim(),
+        description: taskDescription.trim(),
+        dueAt: localToIso(taskDue),
+        priority: taskPriority,
+      });
+      setTaskTitle("");
+      setTaskDescription("");
+      setTaskDue("");
+      setTaskPriority("normal");
       if (payload.task) applyTaskInsert(payload.task);
-    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Não foi possível criar a tarefa.'); }
+    } catch (cause) {
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "Não foi possível criar a tarefa.",
+      );
+    }
     setLoading(false);
   }
 
   async function completeTask(taskId: string) {
     if (!canEdit) return;
-    setError('');
+    setError("");
     try {
-      const payload = await requestJson(`/api/leads/${lead.id}/tasks`, 'PATCH', { taskId, action: 'complete' });
+      const payload = await requestJson(
+        `/api/leads/${lead.id}/tasks`,
+        "PATCH",
+        { taskId, action: "complete" },
+      );
       if (payload.task) applyTaskUpdate(payload.task);
-    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Não foi possível concluir a tarefa.'); }
+      window.dispatchEvent(new Event("crm:data-changed"));
+      ui.notify({
+        message: "Tarefa concluída.",
+        undo: async () => {
+          const result = await requestJson(
+            `/api/leads/${lead.id}/tasks`,
+            "PATCH",
+            { taskId, action: "reopen" },
+          );
+          if (result.task) applyTaskUpdate(result.task);
+          window.dispatchEvent(new Event("crm:data-changed"));
+        },
+        next: () =>
+          ui.openTask({
+            id: lead.id,
+            name: lead.name,
+            kind: lead.kind,
+            owner_id: lead.owner_id,
+          }),
+      });
+    } catch (cause) {
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "Não foi possível concluir a tarefa.",
+      );
+    }
   }
 
-  return <>
-    {error && <div className="error-box">{error}</div>}
-    <section className="detail-top">
-      <div className="profile-head">
-        <div className="profile-avatar">{initials(lead.name)}</div>
-        <div><div className="profile-name">{lead.name}</div><div className="profile-meta">{displayPhone(lead.phone)}{lead.email ? ` · ${lead.email}` : ''}<br />{lead.kind === 'cliente' ? `${lead.enterprise || 'Empreendimento não informado'} · ${sourceLabel}` : `${lead.company || 'Autônomo'} · ${lead.group_name || 'Sem grupo'}`}</div></div>
-        <div className="profile-actions">
-          <select className="select" style={{ width: 230 }} value={lead.stage} disabled={!canEdit} onChange={(event) => void changeStage(event.target.value)}>{stagesFor(lead.kind).map((stage) => <option value={stage.id} key={stage.id}>{stage.label}</option>)}</select>
-          {canEdit && <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <select className="select" style={{ width: 190 }} value={transferOwnerId} disabled={loading} onChange={(event) => setTransferOwnerId(event.target.value)}>
-              <option value="">Transferir para…</option>
-              {humanMembers.map((member) => <option value={member.user_id} key={member.user_id}>{member.full_name}</option>)}
+  const stages = stagesFor(lead.kind);
+  const stageIndex = stages.findIndex((item) => item.id === lead.stage);
+  const nextTask = [...pendingTasks].sort(
+    (a, b) =>
+      Date.parse(a.due_at || "9999-01-01") -
+      Date.parse(b.due_at || "9999-01-01"),
+  )[0];
+  const nextOverdue = nextTask?.due_at
+    ? Date.parse(nextTask.due_at) < clock
+    : false;
+  const mediaMessages = messages.filter(
+    (message) =>
+      /\[(Imagem|Documento|Vídeo|Áudio)|📎/.test(message.body) ||
+      ["image", "document", "video", "audio"].includes(
+        String(message.raw_payload?.type),
+      ),
+  );
+  return (
+    <>
+      {error && <div className="error-box">{error}</div>}
+      <section className="detail-top">
+        <div className="profile-head">
+          <div className="profile-avatar">{initials(lead.name)}</div>
+          <div>
+            <div className="profile-name">
+              {lead.name}{" "}
+              <span
+                className={`temperature-pill ${lead.temperature >= 75 ? "hot" : lead.temperature >= 40 ? "warm" : "cold"}`}
+              >
+                {scoreLabel(lead.temperature)}
+              </span>
+            </div>
+            <div className="profile-meta">
+              <strong>
+                {lead.kind === "cliente"
+                  ? `${location || "Localização não informada"} · ${lead.enterprise || "Empreendimento não informado"}`
+                  : `Corretor · ${lead.company || "Autônomo"}${location ? ` · ${location}` : ""}`}
+              </strong>
+              {(lead.phone || lead.email) && (
+                <span className="profile-contact">
+                  {displayPhone(lead.phone)}
+                  {lead.email ? ` · ${lead.email}` : ""}
+                </span>
+              )}
+            </div>
+          </div>
+          {!drawerMode && (
+            <div className="profile-actions">
+            <select
+              className="select"
+              style={{ width: 230 }}
+              value={lead.stage}
+              disabled={!canEdit}
+              onChange={(event) => void changeStage(event.target.value)}
+            >
+              {stagesFor(lead.kind).map((stage) => (
+                <option value={stage.id} key={stage.id}>
+                  {stage.label}
+                </option>
+              ))}
             </select>
-            <button type="button" className="btn btn-secondary btn-sm" disabled={loading || !transferOwnerId} onClick={() => void transferToHuman()}>Transferir</button>
-          </div>}
-          {canEdit && lead.stage === 'passagem_pendente' && <button className="btn btn-primary btn-sm" disabled={loading} onClick={() => void acceptHandoff()}>✅ Aceitar lead</button>}
-          {canEdit && lead.owner_mode === 'human' && <button className="btn btn-ghost btn-sm" disabled={loading} onClick={() => void releaseToAi()}>🤖 Devolver para {persona}</button>}
-          {canEdit && lead.owner_mode !== 'human' && !lead.ai_enabled && canReactivateAi && <button className="btn btn-primary btn-sm" onClick={() => void toggleAi(true)}>🤖 Reativar {persona}</button>}
+            {canEdit && (
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <select
+                  className="select"
+                  style={{ width: 190 }}
+                  value={transferOwnerId}
+                  disabled={loading}
+                  onChange={(event) => setTransferOwnerId(event.target.value)}
+                >
+                  <option value="">Transferir para…</option>
+                  {humanMembers.map((member) => (
+                    <option value={member.user_id} key={member.user_id}>
+                      {member.full_name}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  disabled={loading || !transferOwnerId}
+                  onClick={() => void transferToHuman()}
+                >
+                  Transferir
+                </button>
+              </div>
+            )}
+            {canEdit && lead.stage === "passagem_pendente" && (
+              <button
+                className="btn btn-primary btn-sm"
+                disabled={loading}
+                onClick={() => void acceptHandoff()}
+              >
+                ✅ Aceitar lead
+              </button>
+            )}
+            {canEdit && lead.owner_mode === "human" && (
+              <button
+                className="btn btn-ghost btn-sm"
+                disabled={loading}
+                onClick={() => void releaseToAi()}
+              >
+                🤖 Devolver para {persona}
+              </button>
+            )}
+            {canEdit &&
+              lead.owner_mode !== "human" &&
+              !lead.ai_enabled &&
+              canReactivateAi && (
+                <button
+                  className="btn btn-primary btn-sm"
+                  onClick={() => void toggleAi(true)}
+                >
+                  🤖 Reativar {persona}
+                </button>
+              )}
+            </div>
+          )}
         </div>
-      </div>
-      <div className="tabs"><button className={`tab ${tab === 'whatsapp' ? 'on' : ''}`} onClick={() => setTab('whatsapp')}>💬 WhatsApp</button><button className={`tab ${tab === 'historico' ? 'on' : ''}`} onClick={() => setTab('historico')}>🕘 Histórico</button><button className={`tab ${tab === 'tarefas' ? 'on' : ''}`} onClick={() => setTab('tarefas')}>✅ Tarefas ({pendingTasks.length})</button><button className={`tab ${tab === 'dados' ? 'on' : ''}`} onClick={() => setTab('dados')}>👤 Dados</button></div>
-    </section>
-
-    <div className="detail-grid">
-      <section className="card">
-        {tab === 'whatsapp' && <div className="whatsapp-panel"><div className="wa-head"><div className="wa-icon">☏</div><div><strong>Conversa no WhatsApp</strong><div className="faint" style={{ fontSize: 11 }}>IA e humano compartilham o histórico</div></div><span className={`connection-pill ${whatsappConnected ? '' : 'off'}`}>{whatsappConnected ? 'Canal conectado' : 'Aguardando integração'}</span><span className={`connection-pill ${windowOpen ? '' : 'off'}`}>{windowOpen ? 'Janela de 24h aberta' : 'Janela fechada'}</span><span className={`connection-pill ${feedStatus === 'live' ? '' : 'off'}`} title="Mensagens recebidas aparecem sozinhas, sem recarregar a página.">{feedStatus === 'live' ? 'Tempo real ativo' : feedStatus === 'connecting' ? 'Conectando…' : 'Reconectando…'}</span></div><div className="messages-wrap"><div className="messages" ref={messagesRef} onScroll={handleMessagesScroll}>{messages.length === 0 ? <div className="empty-state">As mensagens aparecerão aqui.</div> : messages.map((message) => <div className={`message ${messageClass(message)}`} key={message.id}><small style={{ fontWeight: 700, display: 'block', marginBottom: 3 }}>{senderLabel(message)}</small><MessageContent message={message} /><span className="message-meta">{formatDateTime(message.created_at)}{message.status ? ` · ${message.status}` : ''}</span></div>)}</div>{unseenCount > 0 && <button type="button" className="btn btn-primary btn-sm new-messages-jump" onClick={() => scrollToBottom('smooth')}>↓ {unseenCount} {unseenCount === 1 ? 'nova mensagem' : 'novas mensagens'}</button>}</div>{!canEdit ? <div className="blocked"><span><strong>Acesso somente para consulta.</strong></span></div> : lead.owner_mode === 'ai' && lead.ai_enabled ? <div className="blocked" style={{ display: 'block' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', marginBottom: 12 }}>
-            <span><strong>{persona} é a dona deste contato.</strong><br />Você pode orientar a próxima fala da IA sem assumir a conversa, ou transferir o atendimento acima.</span>
-            <button className="btn btn-primary btn-sm" onClick={() => void toggleAi(false)}>Assumir conversa</button>
+        <div className="lead-quick-actions">
+          <button
+            className="btn btn-primary btn-sm"
+            onClick={() => setTab("whatsapp")}
+          >
+            <MessageCircle size={14} />
+            WhatsApp
+          </button>
+          {lead.phone && (
+            <a
+              className="btn btn-ghost btn-sm"
+              href={`tel:+${lead.phone.replace(/\D/g, "")}`}
+            >
+              <Phone size={14} />
+              Ligar
+            </a>
+          )}
+          {canEdit && (
+            <>
+              <button
+                className="btn btn-ghost btn-sm"
+                onClick={() =>
+                  ui.openTask({
+                    id: lead.id,
+                    name: lead.name,
+                    kind: lead.kind,
+                    owner_id: lead.owner_id,
+                  })
+                }
+              >
+                <Plus size={14} />
+                Tarefa
+              </button>
+              {lead.kind !== "geral" && (
+                <Link
+                  className="btn btn-ghost btn-sm"
+                  href={`/propostas?lead=${lead.id}`}
+                >
+                  <FileText size={14} />
+                  Criar proposta
+                </Link>
+              )}
+            </>
+          )}
+          {drawerMode && canEdit && (
+            <label className="lead-owner-inline">
+              Responsável
+              <select
+                value={
+                  lead.owner_mode === "human" && lead.owner_id
+                    ? lead.owner_id
+                    : "__ai__"
+                }
+                disabled={loading}
+                onChange={(event) => {
+                  const ownerId = event.target.value;
+                  if (ownerId === "__ai__") {
+                    if (lead.owner_mode === "human") void releaseToAi();
+                    return;
+                  }
+                  if (ownerId !== lead.owner_id) void transferToHuman(ownerId);
+                }}
+              >
+                <option value="__ai__">{persona}</option>
+                {humanMembers.map((member) => (
+                  <option value={member.user_id} key={member.user_id}>
+                    {member.full_name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+        </div>
+        <div className="lead-stage-progress">
+          <div>
+            <strong>{stageLabel(lead.kind, lead.stage)}</strong>
+            <span>
+              {stageIndex >= 0
+                ? `${stageIndex + 1} de ${stages.length}`
+                : "Etapa anterior"}
+            </span>
+            <button
+              className="icon-button"
+              aria-label="Etapa anterior"
+              disabled={!canEdit || stageIndex <= 0}
+              onClick={() => void changeStage(stages[stageIndex - 1].id)}
+            >
+              <ChevronLeft size={14} />
+            </button>
+            <button
+              className="btn btn-ghost btn-sm"
+              disabled={
+                !canEdit || stageIndex < 0 || stageIndex >= stages.length - 1
+              }
+              onClick={() => void changeStage(stages[stageIndex + 1].id)}
+            >
+              Avançar
+              <ChevronRight size={14} />
+            </button>
           </div>
-          <form onSubmit={sendAiGuidance} style={{ display: 'flex', gap: 10, alignItems: 'flex-end' }}>
-            <div className="field" style={{ flex: 1, marginBottom: 0 }}>
-              <label>Orientar a {persona}</label>
-              <textarea className="textarea" value={aiInstruction} onChange={(event) => setAiInstruction(event.target.value)} placeholder="Ex.: Fale um pouco dos nossos empreendimentos e mande a foto da fachada de cada um." />
-              <small className="faint">A instrução é interna. O cliente recebe somente a resposta escrita pela {persona} e os materiais escolhidos por ela.</small>
-            </div>
-            <button className="btn btn-secondary" disabled={loading || !aiInstruction.trim() || !whatsappConnected || !windowOpen}>{loading ? 'Gerando…' : `Pedir para ${persona} enviar`}</button>
-          </form>
-        </div> : !whatsappConnected ? <div className="blocked"><span><strong>WhatsApp ainda não conectado.</strong></span></div> : !windowOpen ? <div className="blocked"><span><strong>{OUTSIDE_WINDOW_MESSAGE}</strong><br />Aguarde uma mensagem do contato ou envie um template pela área de Transmissões.</span></div> : <form className="composer" onSubmit={sendMessage}><textarea value={text} onChange={(event) => setText(event.target.value)} placeholder="Escreva uma mensagem…" onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} /><button className="btn btn-primary" disabled={loading}>{loading ? 'Enviando…' : 'Enviar'}</button></form>}</div>}
-
-        {tab === 'historico' && <div><div className="card-head"><h3>Histórico e próxima ação</h3></div><div className="card-body">{canEdit && <form onSubmit={addNote} style={{ marginBottom: 20 }}><div className="field"><label>O que aconteceu</label><textarea className="textarea" value={note} onChange={(event) => setNote(event.target.value)} placeholder="Ex.: avaliou o fluxo, vai conversar com a esposa e pediu retorno na sexta." /></div><div className="grid grid-2"><div className="field"><label>Próxima ação {lead.owner_mode === 'human' ? '(obrigatória)' : ''}</label><input className="input" value={nextAction} onChange={(event) => setNextAction(event.target.value)} /></div><div className="field"><label>Data e hora</label><input className="input" type="datetime-local" value={nextActionDue} onChange={(event) => setNextActionDue(event.target.value)} /></div></div><button className="btn btn-secondary btn-sm" disabled={loading}>Salvar registro e tarefa</button></form>}<div className="timeline">{activities.length === 0 ? <div className="empty-state">Nenhum histórico registrado.</div> : activities.map((item) => <div className="timeline-item" key={item.id}><div className="timeline-icon">•</div><div><div className="timeline-title">{item.title}</div>{item.description && <div className="timeline-desc">{item.description}</div>}<div className="timeline-time">{formatDateTime(item.created_at)}</div></div></div>)}</div></div></div>}
-
-        {tab === 'tarefas' && <div><div className="card-head"><h3>Próximas ações e SLAs</h3></div><div className="card-body">{canEdit && <form onSubmit={createTask} className="grid grid-2" style={{ marginBottom: 22 }}><div className="field"><label>Tarefa</label><input className="input" value={taskTitle} onChange={(event) => setTaskTitle(event.target.value)} /></div><div className="field"><label>Prazo</label><input className="input" type="datetime-local" value={taskDue} onChange={(event) => setTaskDue(event.target.value)} /></div><div className="field"><label>Descrição</label><textarea className="textarea" value={taskDescription} onChange={(event) => setTaskDescription(event.target.value)} /></div><div className="field"><label>Prioridade</label><select className="select" value={taskPriority} onChange={(event) => setTaskPriority(event.target.value)}><option value="urgent">Urgente</option><option value="high">Alta</option><option value="normal">Normal</option><option value="low">Baixa</option></select><button className="btn btn-primary btn-sm" style={{ marginTop: 12 }} disabled={loading}>Criar tarefa</button></div></form>}<h4>Pendentes</h4><div className="info-list">{pendingTasks.length === 0 && <div className="empty-state">Nenhuma tarefa pendente.</div>}{pendingTasks.map((task) => { const due = dueStatus(task.due_at); return <div className="info-row" key={task.id} style={{ alignItems: 'flex-start' }}><span><strong>{task.priority === 'urgent' ? '🚨 ' : task.priority === 'high' ? '⚡ ' : ''}{task.title}</strong><br /><small>{task.description || 'Sem descrição'} · <span style={{ color: due.overdue ? 'var(--red)' : undefined }}>{due.label}</span></small></span>{canEdit && <button className="btn btn-primary btn-sm" onClick={() => void completeTask(task.id)}>Concluir</button>}</div>; })}</div>{completedTasks.length > 0 && <><h4 style={{ marginTop: 22 }}>Concluídas</h4><div className="info-list">{completedTasks.slice(0, 10).map((task) => <div className="info-row" key={task.id}><span>✓ {task.title}</span><strong>{task.completed_at ? formatDateTime(task.completed_at) : 'Concluída'}</strong></div>)}</div></>}</div></div>}
-
-        {tab === 'dados' && <div>
-          <div className="card-head">
-            <h3>Dados e qualificação</h3>
-            {canEdit && <button className="btn btn-ghost btn-sm" onClick={() => { setEditingData((value) => !value); setDataNotice(''); }}>{editingData ? 'Cancelar edição' : '✏️ Editar informações'}</button>}
+          <div className="stage-segments">
+            {stages.map((stage, index) => (
+              <button
+                className={index <= stageIndex ? "filled" : ""}
+                title={stage.label}
+                aria-label={stage.label}
+                key={stage.id}
+                disabled={!canEdit}
+                onClick={() => void changeStage(stage.id)}
+              />
+            ))}
           </div>
-          {dataNotice && <div className="success-box" style={{ margin: 12 }}>{dataNotice}</div>}
-          {editingData ? <form className="card-body" onSubmit={saveLeadData}>
-            <div className="grid grid-2">
-              <div className="field"><label>Nome completo</label><input name="name" className="input" defaultValue={lead.name || ''} /></div>
-              <div className="field"><label>Tipo do lead</label><select name="kind" className="select" defaultValue={lead.kind}><option value="cliente">Cliente</option><option value="corretor">Corretor</option><option value="geral">Contato geral</option></select></div>
-              <div className="field"><label>Primeiro nome</label><input name="first_name" className="input" defaultValue={lead.first_name || ''} placeholder="Ex.: João" /></div>
-              <div className="field"><label>Sobrenome</label><input name="last_name" className="input" defaultValue={lead.last_name || ''} placeholder="Ex.: da Silva" /></div>
-              <div className="field"><label>WhatsApp</label><input name="phone" className="input" defaultValue={lead.phone || ''} placeholder="(47) 99999-9999" /></div>
-              <div className="field"><label>E-mail</label><input name="email" type="email" className="input" defaultValue={lead.email || ''} /></div>
-              <div className="field"><label>Imobiliária / empresa</label><input name="company" className="input" defaultValue={lead.company || ''} placeholder="Ex.: Ricardo Imóveis ou Autônomo" /></div>
-              <div className="field"><label>CRECI</label><input name="creci" className="input" defaultValue={lead.creci || ''} /></div>
-              <div className="field"><label>Empreendimento</label><input name="enterprise" className="input" defaultValue={lead.enterprise || ''} placeholder="Flow, Alma, Soul..." /></div>
-              <div className="field"><label>Origem</label><input name="source" className="input" defaultValue={lead.source || ''} /></div>
-              <div className="field"><label>Grupo</label><input name="group_name" className="input" defaultValue={lead.group_name || ''} /></div>
-            </div>
-            <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-              <button className="btn btn-primary" disabled={savingData}>{savingData ? 'Salvando…' : 'Salvar alterações'}</button>
-              <button type="button" className="btn btn-ghost" onClick={() => setEditingData(false)}>Cancelar</button>
-            </div>
-          </form> : <div className="card-body grid grid-2">
-            <div className="info-list">
-              <div className="info-row"><span>Nome</span><strong>{lead.name}</strong></div>
-              <div className="info-row"><span>Primeiro nome</span><strong>{lead.first_name || '—'}</strong></div>
-              <div className="info-row"><span>Sobrenome</span><strong>{lead.last_name || '—'}</strong></div>
-              <div className="info-row"><span>WhatsApp</span><strong>{displayPhone(lead.phone)}</strong></div>
-              <div className="info-row"><span>E-mail</span><strong>{lead.email || '—'}</strong></div>
-              <div className="info-row"><span>Etapa</span><strong>{stageLabel(lead.kind, lead.stage)}</strong></div>
-            </div>
-            <div className="info-list">
-              <div className="info-row"><span>Tipo</span><strong>{lead.kind === 'cliente' ? 'Cliente' : lead.kind === 'corretor' ? 'Corretor' : 'Contato geral'}</strong></div>
-              <div className="info-row"><span>Imobiliária / empresa</span><strong>{lead.company || '—'}</strong></div>
-              <div className="info-row"><span>Empreendimento</span><strong>{lead.enterprise || '—'}</strong></div>
-              <div className="info-row"><span>CRECI</span><strong>{lead.creci || '—'}</strong></div>
-              <div className="info-row"><span>Origem</span><strong>{lead.source || '—'}</strong></div>
-              <div className="info-row"><span>Grupo</span><strong>{lead.group_name || '—'}</strong></div>
-              <div className="info-row"><span>Score</span><strong>{lead.temperature}/100</strong></div>
-              <div className="info-row"><span>Criado em</span><strong>{formatDateTime(lead.created_at)}</strong></div>
-            </div>
-            {adAttribution && <div style={{ gridColumn: '1 / -1' }}><h4>Origem do anúncio Meta</h4><div className="info-list"><div className="info-row"><span>Origem</span><strong>{sourceLabel}</strong></div><div className="info-row"><span>ID do anúncio</span><strong>{adAttribution.source_id || '—'}</strong></div><div className="info-row"><span>Tipo</span><strong>{adAttribution.source_type || '—'}</strong></div><div className="info-row"><span>URL</span><strong style={{ overflowWrap: 'anywhere' }}>{adAttribution.source_url || '—'}</strong></div><div className="info-row"><span>Título</span><strong>{adAttribution.headline || '—'}</strong></div><div className="info-row"><span>Texto</span><strong>{adAttribution.body || '—'}</strong></div><div className="info-row"><span>Capturado em</span><strong>{formatDateTime(adAttribution.captured_at)}</strong></div></div></div>}
-            {metaEntries.length > 0 && <div style={{ gridColumn: '1 / -1' }}><h4>Campos identificados</h4><div className="table-wrap"><table><tbody>{metaEntries.map(([key, value]) => <tr key={key}><td className="faint">{key}</td><td>{typeof value === 'object' ? JSON.stringify(value) : String(value)}</td></tr>)}</tbody></table></div></div>}
-          </div>}
-        </div>}
+        </div>
+        <div
+          className={`lead-next-activity ${nextOverdue ? "overdue" : !nextTask ? "missing" : ""}`}
+        >
+          <div>
+            <span>Próxima atividade</span>
+            <strong>{nextTask?.title || "Nenhuma atividade agendada"}</strong>
+            {nextTask?.due_at && (
+              <small>{formatDateTime(nextTask.due_at)}</small>
+            )}
+          </div>
+          {canEdit &&
+            (nextTask ? (
+              <button
+                className="btn btn-ghost btn-sm"
+                onClick={() => void completeTask(nextTask.id)}
+              >
+                Concluir
+              </button>
+            ) : (
+              <button
+                className="btn btn-ghost btn-sm"
+                onClick={() =>
+                  ui.openTask({
+                    id: lead.id,
+                    name: lead.name,
+                    kind: lead.kind,
+                    owner_id: lead.owner_id,
+                  })
+                }
+              >
+                Criar tarefa
+              </button>
+            ))}
+        </div>
+        <div className="tabs">
+          {(
+            [
+              { id: "dados", label: "Visão geral" },
+              { id: "whatsapp", label: "Conversas" },
+              { id: "tarefas", label: `Tarefas (${pendingTasks.length})` },
+              { id: "negociacao", label: "Negociação" },
+              { id: "arquivos", label: "Arquivos" },
+              { id: "historico", label: "Histórico" },
+            ] as Array<{ id: Tab; label: string }>
+          ).map((item) => (
+            <button
+              className={`tab ${tab === item.id ? "on" : ""}`}
+              key={item.id}
+              onClick={() => setTab(item.id)}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
       </section>
 
-      <aside className="side-stack">
-        <section className="card"><div className="card-head"><h3>Dono do lead</h3></div><div className="card-body">{lead.owner_mode === 'human' ? <div className="ai-state off"><strong>👤 {owner?.full_name || 'Comercial humano'}</strong><br />A IA está em silêncio e continua analisando.</div> : lead.owner_mode === 'none' ? <div className="ai-state off"><strong>Encerrado</strong></div> : <div className="ai-state on"><strong>🤖 {persona}</strong><br />A IA responde até a passagem ser aceita.</div>}{backup && <div className="faint" style={{ marginTop: 9 }}>Backup: {backup.full_name}</div>}</div></section>
-        <section className="card"><div className="card-head"><h3>Controle comercial</h3></div><div className="card-body info-list"><div className="info-row"><span>Classe</span><strong>{lead.priority_class || '—'}</strong></div><div className="info-row"><span>Classificação IA</span><strong>{lead.ai_classification || '—'}</strong></div><div className="info-row"><span>Score</span><strong>{scoreLabel(lead.temperature)} · {lead.temperature}/100</strong></div><div className="info-row"><span>Próxima ação</span><strong>{lead.next_action || lead.ai_next_action || '—'}</strong></div><div className="info-row"><span>Prazo</span><strong>{lead.next_action_due_at ? formatDateTime(lead.next_action_due_at) : '—'}</strong></div><div className="info-row"><span>Resumo</span><strong>{lead.ai_summary || '—'}</strong></div></div></section>
-        <section className="card"><div className="card-head"><h3>Consumo da IA</h3></div><div className="card-body info-list">{usage ? <><div className="info-row"><span>Custo estimado</span><strong>US$ {usage.estimated_cost_usd.toFixed(4)}</strong></div><div className="info-row"><span>Chamadas</span><strong>{usage.calls}</strong></div><div className="info-row"><span>Entrada / cache</span><strong>{usage.input_tokens} / {usage.cached_tokens}</strong></div><div className="info-row"><span>Saída</span><strong>{usage.output_tokens}</strong></div><div className="info-row"><span>Último modelo</span><strong>{usage.last_model || '—'}</strong></div><div className="info-row"><span>Última análise</span><strong>{usage.last_at ? formatDateTime(usage.last_at) : '—'}</strong></div></> : <div className="empty-state">Ainda sem consumo registrado.</div>}</div></section>
-        <section className="card"><div className="card-head"><h3>Resumo</h3></div><div className="card-body info-list"><div className="info-row"><span>Etapa</span><strong>{stageLabel(lead.kind, lead.stage)}</strong></div><div className="info-row"><span>Mensagens</span><strong>{messages.filter((message) => message.direction !== 'system').length}</strong></div><div className="info-row"><span>Tarefas pendentes</span><strong>{pendingTasks.length}</strong></div><div className="info-row"><span>Último contato</span><strong>{lastContact}</strong></div><div className="info-row"><span>WhatsApp</span><strong>{whatsappConnected ? 'Conectado' : 'Não conectado'}</strong></div><div className="info-row"><span>Janela 24h</span><strong>{windowOpen ? `Aberta até ${windowExpiresAt ? formatDateTime(windowExpiresAt) : '—'}` : 'Fechada'}</strong></div></div></section>
-      </aside>
-    </div>
-  </>;
+      <div className="detail-grid">
+        <section className="card">
+          {tab === "negociacao" && (
+            <div className="card-body">
+              <h3>Negociação</h3>
+              <div className="info-list">
+                <div className="info-row">
+                  <span>Empreendimento</span>
+                  <strong>{lead.enterprise || "—"}</strong>
+                </div>
+                <div className="info-row">
+                  <span>Etapa</span>
+                  <strong>{stageLabel(lead.kind, lead.stage)}</strong>
+                </div>
+                <div className="info-row">
+                  <span>Próxima ação</span>
+                  <strong>{lead.next_action || "—"}</strong>
+                </div>
+              </div>
+              {lead.kind !== "geral" && (
+                <Link
+                  className="btn btn-primary btn-sm"
+                  style={{ marginTop: 16 }}
+                  href={`/propostas?lead=${lead.id}`}
+                >
+                  {canEdit ? "Criar proposta" : "Consultar propostas"}
+                </Link>
+              )}
+            </div>
+          )}
+          {tab === "arquivos" && (
+            <div className="card-body">
+              <h3>Arquivos da conversa</h3>
+              {mediaMessages.length ? (
+                mediaMessages.map((message) => (
+                  <div className="lead-file" key={message.id}>
+                    <MessageContent message={message} />
+                    <small className="faint">
+                      {formatDateTime(message.created_at)}
+                    </small>
+                  </div>
+                ))
+              ) : (
+                <div className="empty-state">
+                  Nenhum arquivo identificado no histórico carregado.
+                </div>
+              )}
+            </div>
+          )}
+          {tab === "whatsapp" && (
+            <div className="whatsapp-panel">
+              <div
+                className={`conversation-owner-state ${
+                  lead.stage === "passagem_pendente"
+                    ? "handoff"
+                    : lead.owner_mode === "human"
+                      ? "human"
+                      : lead.owner_mode === "ai" && lead.ai_enabled
+                        ? "ai"
+                        : "paused"
+                }`}
+              >
+                <i aria-hidden="true" />
+                <strong>
+                  {lead.stage === "passagem_pendente"
+                    ? "Handoff pendente"
+                    : lead.owner_mode === "human"
+                      ? `Humano atendendo · ${owner?.full_name || "Comercial"}`
+                      : lead.owner_mode === "ai" && lead.ai_enabled
+                        ? `${persona} atendendo`
+                        : "Atendimento pausado"}
+                </strong>
+              </div>
+              <div className="wa-head">
+                <div className="wa-icon">☏</div>
+                <div>
+                  <strong>Conversa no WhatsApp</strong>
+                  <div className="faint" style={{ fontSize: 11 }}>
+                    IA e humano compartilham o histórico
+                  </div>
+                </div>
+                <span
+                  className={`connection-pill ${whatsappConnected ? "" : "off"}`}
+                >
+                  {whatsappConnected
+                    ? "Canal conectado"
+                    : "Aguardando integração"}
+                </span>
+                <span className={`connection-pill ${windowOpen ? "" : "off"}`}>
+                  {windowOpen ? "Janela de 24h aberta" : "Janela fechada"}
+                </span>
+                <span
+                  className={`connection-pill ${feedStatus === "live" ? "" : "off"}`}
+                  title="Mensagens recebidas aparecem sozinhas, sem recarregar a página."
+                >
+                  {feedStatus === "live"
+                    ? "Tempo real ativo"
+                    : feedStatus === "connecting"
+                      ? "Conectando…"
+                      : "Reconectando…"}
+                </span>
+              </div>
+              <div className="messages-wrap">
+                <div
+                  className="messages"
+                  ref={messagesRef}
+                  onScroll={handleMessagesScroll}
+                >
+                  {messages.length === 0 ? (
+                    <div className="empty-state">
+                      As mensagens aparecerão aqui.
+                    </div>
+                  ) : (
+                    messages.map((message) => (
+                      <div
+                        className={`message ${messageClass(message)}`}
+                        key={message.id}
+                      >
+                        <small
+                          style={{
+                            fontWeight: 700,
+                            display: "block",
+                            marginBottom: 3,
+                          }}
+                        >
+                          {senderLabel(message, persona)}
+                        </small>
+                        <MessageContent message={message} />
+                        <span className="message-meta">
+                          {formatDateTime(message.created_at)}
+                          {message.status ? ` · ${message.status}` : ""}
+                        </span>
+                      </div>
+                    ))
+                  )}
+                </div>
+                {unseenCount > 0 && (
+                  <button
+                    type="button"
+                    className="btn btn-primary btn-sm new-messages-jump"
+                    onClick={() => scrollToBottom("smooth")}
+                  >
+                    ↓ {unseenCount}{" "}
+                    {unseenCount === 1 ? "nova mensagem" : "novas mensagens"}
+                  </button>
+                )}
+              </div>
+              {!canEdit ? (
+                <div className="blocked">
+                  <span>
+                    <strong>Acesso somente para consulta.</strong>
+                  </span>
+                </div>
+              ) : lead.owner_mode === "ai" && lead.ai_enabled ? (
+                <div className="blocked" style={{ display: "block" }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      gap: 12,
+                      alignItems: "center",
+                      marginBottom: 12,
+                    }}
+                  >
+                    <span>
+                      <strong>{persona} é a dona deste contato.</strong>
+                      <br />
+                      Você pode orientar a próxima fala da IA sem assumir a
+                      conversa, ou transferir o atendimento acima.
+                    </span>
+                    <button
+                      className="btn btn-primary btn-sm"
+                      onClick={() => void toggleAi(false)}
+                    >
+                      Assumir conversa
+                    </button>
+                  </div>
+                  <form
+                    onSubmit={sendAiGuidance}
+                    style={{ display: "flex", gap: 10, alignItems: "flex-end" }}
+                  >
+                    <div className="field" style={{ flex: 1, marginBottom: 0 }}>
+                      <label>Orientar a {persona}</label>
+                      <textarea
+                        className="textarea"
+                        value={aiInstruction}
+                        onChange={(event) =>
+                          setAiInstruction(event.target.value)
+                        }
+                        placeholder="Ex.: Fale um pouco dos nossos empreendimentos e mande a foto da fachada de cada um."
+                      />
+                      <small className="faint">
+                        A instrução é interna. O cliente recebe somente a
+                        resposta escrita pela {persona} e os materiais
+                        escolhidos por ela.
+                      </small>
+                    </div>
+                    <button
+                      className="btn btn-secondary"
+                      disabled={
+                        loading ||
+                        !aiInstruction.trim() ||
+                        !whatsappConnected ||
+                        !windowOpen
+                      }
+                    >
+                      {loading ? "Gerando…" : `Pedir para ${persona} enviar`}
+                    </button>
+                  </form>
+                </div>
+              ) : !whatsappConnected ? (
+                <div className="blocked">
+                  <span>
+                    <strong>WhatsApp ainda não conectado.</strong>
+                  </span>
+                </div>
+              ) : !windowOpen ? (
+                <div className="blocked">
+                  <span>
+                    <strong>{OUTSIDE_WINDOW_MESSAGE}</strong>
+                    <br />
+                    Aguarde uma mensagem do contato ou envie um template pela
+                    área de Transmissões.
+                  </span>
+                </div>
+              ) : (
+                <form className="composer" onSubmit={sendMessage}>
+                  <textarea
+                    value={text}
+                    onChange={(event) => setText(event.target.value)}
+                    placeholder="Escreva uma mensagem…"
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" && !event.shiftKey) {
+                        event.preventDefault();
+                        event.currentTarget.form?.requestSubmit();
+                      }
+                    }}
+                  />
+                  <button className="btn btn-primary" disabled={loading}>
+                    {loading ? "Enviando…" : "Enviar"}
+                  </button>
+                </form>
+              )}
+            </div>
+          )}
+
+          {tab === "historico" && (
+            <div>
+              <div className="card-head">
+                <h3>Histórico e próxima ação</h3>
+              </div>
+              <div className="card-body">
+                {canEdit && (
+                  <form onSubmit={addNote} style={{ marginBottom: 20 }}>
+                    <div className="field">
+                      <label>O que aconteceu</label>
+                      <textarea
+                        className="textarea"
+                        value={note}
+                        onChange={(event) => setNote(event.target.value)}
+                        placeholder="Ex.: avaliou o fluxo, vai conversar com a esposa e pediu retorno na sexta."
+                      />
+                    </div>
+                    <div className="grid grid-2">
+                      <div className="field">
+                        <label>
+                          Próxima ação{" "}
+                          {lead.owner_mode === "human" ? "(obrigatória)" : ""}
+                        </label>
+                        <input
+                          className="input"
+                          value={nextAction}
+                          onChange={(event) =>
+                            setNextAction(event.target.value)
+                          }
+                        />
+                      </div>
+                      <div className="field">
+                        <label>Data e hora</label>
+                        <input
+                          className="input"
+                          type="datetime-local"
+                          value={nextActionDue}
+                          onChange={(event) =>
+                            setNextActionDue(event.target.value)
+                          }
+                        />
+                      </div>
+                    </div>
+                    <button
+                      className="btn btn-secondary btn-sm"
+                      disabled={loading}
+                    >
+                      Salvar registro e tarefa
+                    </button>
+                  </form>
+                )}
+                <div className="timeline">
+                  {activities.length === 0 ? (
+                    <div className="empty-state">
+                      Nenhum histórico registrado.
+                    </div>
+                  ) : (
+                    activities.map((item) => (
+                      <div className="timeline-item" key={item.id}>
+                        <div className="timeline-icon">•</div>
+                        <div>
+                          <div className="timeline-title">{item.title}</div>
+                          {item.description && (
+                            <div className="timeline-desc">
+                              {item.description}
+                            </div>
+                          )}
+                          <div className="timeline-time">
+                            {formatDateTime(item.created_at)}
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {tab === "tarefas" && (
+            <div>
+              <div className="card-head">
+                <h3>Próximas ações e SLAs</h3>
+              </div>
+              <div className="card-body">
+                {canEdit && (
+                  <form
+                    onSubmit={createTask}
+                    className="grid grid-2"
+                    style={{ marginBottom: 22 }}
+                  >
+                    <div className="field">
+                      <label>Tarefa</label>
+                      <input
+                        className="input"
+                        value={taskTitle}
+                        onChange={(event) => setTaskTitle(event.target.value)}
+                      />
+                    </div>
+                    <div className="field">
+                      <label>Prazo</label>
+                      <input
+                        className="input"
+                        type="datetime-local"
+                        value={taskDue}
+                        onChange={(event) => setTaskDue(event.target.value)}
+                      />
+                    </div>
+                    <div className="field">
+                      <label>Descrição</label>
+                      <textarea
+                        className="textarea"
+                        value={taskDescription}
+                        onChange={(event) =>
+                          setTaskDescription(event.target.value)
+                        }
+                      />
+                    </div>
+                    <div className="field">
+                      <label>Prioridade</label>
+                      <select
+                        className="select"
+                        value={taskPriority}
+                        onChange={(event) =>
+                          setTaskPriority(event.target.value)
+                        }
+                      >
+                        <option value="urgent">Urgente</option>
+                        <option value="high">Alta</option>
+                        <option value="normal">Normal</option>
+                        <option value="low">Baixa</option>
+                      </select>
+                      <button
+                        className="btn btn-primary btn-sm"
+                        style={{ marginTop: 12 }}
+                        disabled={loading}
+                      >
+                        Criar tarefa
+                      </button>
+                    </div>
+                  </form>
+                )}
+                <h4>Pendentes</h4>
+                <div className="info-list">
+                  {pendingTasks.length === 0 && (
+                    <div className="empty-state">Nenhuma tarefa pendente.</div>
+                  )}
+                  {pendingTasks.map((task) => {
+                    const due = dueStatus(task.due_at);
+                    return (
+                      <div
+                        className="info-row"
+                        key={task.id}
+                        style={{ alignItems: "flex-start" }}
+                      >
+                        <span>
+                          <strong>
+                            {task.priority === "urgent"
+                              ? "🚨 "
+                              : task.priority === "high"
+                                ? "⚡ "
+                                : ""}
+                            {task.title}
+                          </strong>
+                          <br />
+                          <small>
+                            {task.description || "Sem descrição"} ·{" "}
+                            <span
+                              style={{
+                                color: due.overdue ? "var(--red)" : undefined,
+                              }}
+                            >
+                              {due.label}
+                            </span>
+                          </small>
+                        </span>
+                        {canEdit && (
+                          <button
+                            className="btn btn-primary btn-sm"
+                            onClick={() => void completeTask(task.id)}
+                          >
+                            Concluir
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+                {completedTasks.length > 0 && (
+                  <>
+                    <h4 style={{ marginTop: 22 }}>Concluídas</h4>
+                    <div className="info-list">
+                      {completedTasks.slice(0, 10).map((task) => (
+                        <div className="info-row" key={task.id}>
+                          <span>✓ {task.title}</span>
+                          <strong>
+                            {task.completed_at
+                              ? formatDateTime(task.completed_at)
+                              : "Concluída"}
+                          </strong>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          )}
+
+          {tab === "dados" && drawerMode && (
+            <div className="drawer-overview">
+              <div className="drawer-overview-grid">
+                <section className="overview-block">
+                  <h3>Perfil</h3>
+                  <div><span>WhatsApp</span><strong>{displayPhone(lead.phone)}</strong></div>
+                  <div><span>E-mail</span><strong>{lead.email || "—"}</strong></div>
+                  <div><span>Localização</span><strong>{location || "—"}</strong></div>
+                </section>
+                <section className="overview-block">
+                  <h3>Interesse</h3>
+                  <div><span>Empreendimento</span><strong>{lead.enterprise || "—"}</strong></div>
+                  <div><span>Origem</span><strong>{sourceLabel}</strong></div>
+                  <div><span>Temperatura</span><strong>{scoreLabel(lead.temperature)} · {lead.temperature}/100</strong></div>
+                </section>
+                <section className="overview-block">
+                  <h3>Negociação</h3>
+                  <div><span>Etapa</span><strong>{stageLabel(lead.kind, lead.stage)}</strong></div>
+                  <div><span>Próxima ação</span><strong>{lead.next_action || lead.ai_next_action || "—"}</strong></div>
+                  <div><span>Prazo</span><strong>{lead.next_action_due_at ? formatDateTime(lead.next_action_due_at) : "—"}</strong></div>
+                </section>
+                <section className="overview-block">
+                  <h3>{lead.kind === "corretor" ? "Parceria" : "Comercial"}</h3>
+                  {lead.kind === "corretor" ? (
+                    <>
+                      <div><span>Imobiliária</span><strong>{lead.company || "Autônomo"}</strong></div>
+                      <div><span>CRECI</span><strong>{lead.creci || "—"}</strong></div>
+                      <div><span>Grupo</span><strong>{lead.group_name || "—"}</strong></div>
+                    </>
+                  ) : (
+                    <>
+                      <div><span>Responsável</span><strong>{owner?.full_name || persona}</strong></div>
+                      <div><span>Atendimento</span><strong>{lead.owner_mode === "human" ? "Humano" : lead.owner_mode === "ai" ? persona : "Encerrado"}</strong></div>
+                      <div><span>Criado em</span><strong>{formatDateTime(lead.created_at)}</strong></div>
+                    </>
+                  )}
+                </section>
+              </div>
+              <div className="nara-summary-card">
+                <strong>✦ Resumo {lead.kind === "corretor" ? "do Plantão" : "da Nara"}</strong>
+                <p>{lead.ai_summary || "Ainda não há resumo da IA para este contato."}</p>
+              </div>
+            </div>
+          )}
+
+          {tab === "dados" && !drawerMode && (
+            <div>
+              <div className="card-head">
+                <h3>Dados e qualificação</h3>
+                {canEdit && (
+                  <button
+                    className="btn btn-ghost btn-sm"
+                    onClick={() => {
+                      setEditingData((value) => !value);
+                      setDataNotice("");
+                    }}
+                  >
+                    {editingData ? "Cancelar edição" : "✏️ Editar informações"}
+                  </button>
+                )}
+              </div>
+              {dataNotice && (
+                <div className="success-box" style={{ margin: 12 }}>
+                  {dataNotice}
+                </div>
+              )}
+              {editingData ? (
+                <form className="card-body" onSubmit={saveLeadData}>
+                  <div className="grid grid-2">
+                    <div className="field">
+                      <label>Nome completo</label>
+                      <input
+                        name="name"
+                        className="input"
+                        defaultValue={lead.name || ""}
+                      />
+                    </div>
+                    <div className="field">
+                      <label>Tipo do lead</label>
+                      <select
+                        name="kind"
+                        className="select"
+                        defaultValue={lead.kind}
+                      >
+                        <option value="cliente">Cliente</option>
+                        <option value="corretor">Corretor</option>
+                        <option value="geral">Contato geral</option>
+                      </select>
+                    </div>
+                    <div className="field">
+                      <label>Primeiro nome</label>
+                      <input
+                        name="first_name"
+                        className="input"
+                        defaultValue={lead.first_name || ""}
+                        placeholder="Ex.: João"
+                      />
+                    </div>
+                    <div className="field">
+                      <label>Sobrenome</label>
+                      <input
+                        name="last_name"
+                        className="input"
+                        defaultValue={lead.last_name || ""}
+                        placeholder="Ex.: da Silva"
+                      />
+                    </div>
+                    <div className="field">
+                      <label>WhatsApp</label>
+                      <input
+                        name="phone"
+                        className="input"
+                        defaultValue={lead.phone || ""}
+                        placeholder="(47) 99999-9999"
+                      />
+                    </div>
+                    <div className="field">
+                      <label>E-mail</label>
+                      <input
+                        name="email"
+                        type="email"
+                        className="input"
+                        defaultValue={lead.email || ""}
+                      />
+                    </div>
+                    <div className="field">
+                      <label>Imobiliária / empresa</label>
+                      <input
+                        name="company"
+                        className="input"
+                        defaultValue={lead.company || ""}
+                        placeholder="Ex.: Ricardo Imóveis ou Autônomo"
+                      />
+                    </div>
+                    <div className="field">
+                      <label>CRECI</label>
+                      <input
+                        name="creci"
+                        className="input"
+                        defaultValue={lead.creci || ""}
+                      />
+                    </div>
+                    <div className="field">
+                      <label>Empreendimento</label>
+                      <input
+                        name="enterprise"
+                        className="input"
+                        defaultValue={lead.enterprise || ""}
+                        placeholder="Flow, Alma, Soul..."
+                      />
+                    </div>
+                    <div className="field">
+                      <label>Origem</label>
+                      <input
+                        name="source"
+                        className="input"
+                        defaultValue={lead.source || ""}
+                      />
+                    </div>
+                    <div className="field">
+                      <label>Grupo</label>
+                      <input
+                        name="group_name"
+                        className="input"
+                        defaultValue={lead.group_name || ""}
+                      />
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                    <button className="btn btn-primary" disabled={savingData}>
+                      {savingData ? "Salvando…" : "Salvar alterações"}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-ghost"
+                      onClick={() => setEditingData(false)}
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                </form>
+              ) : (
+                <div className="card-body grid grid-2">
+                  <div className="info-list">
+                    <div className="info-row">
+                      <span>Nome</span>
+                      <strong>{lead.name}</strong>
+                    </div>
+                    <div className="info-row">
+                      <span>Primeiro nome</span>
+                      <strong>{lead.first_name || "—"}</strong>
+                    </div>
+                    <div className="info-row">
+                      <span>Sobrenome</span>
+                      <strong>{lead.last_name || "—"}</strong>
+                    </div>
+                    <div className="info-row">
+                      <span>WhatsApp</span>
+                      <strong>{displayPhone(lead.phone)}</strong>
+                    </div>
+                    <div className="info-row">
+                      <span>E-mail</span>
+                      <strong>{lead.email || "—"}</strong>
+                    </div>
+                    <div className="info-row">
+                      <span>Etapa</span>
+                      <strong>{stageLabel(lead.kind, lead.stage)}</strong>
+                    </div>
+                  </div>
+                  <div className="info-list">
+                    <div className="info-row">
+                      <span>Tipo</span>
+                      <strong>
+                        {lead.kind === "cliente"
+                          ? "Cliente"
+                          : lead.kind === "corretor"
+                            ? "Corretor"
+                            : "Contato geral"}
+                      </strong>
+                    </div>
+                    <div className="info-row">
+                      <span>Imobiliária / empresa</span>
+                      <strong>{lead.company || "—"}</strong>
+                    </div>
+                    <div className="info-row">
+                      <span>Empreendimento</span>
+                      <strong>{lead.enterprise || "—"}</strong>
+                    </div>
+                    <div className="info-row">
+                      <span>CRECI</span>
+                      <strong>{lead.creci || "—"}</strong>
+                    </div>
+                    <div className="info-row">
+                      <span>Origem</span>
+                      <strong>{lead.source || "—"}</strong>
+                    </div>
+                    <div className="info-row">
+                      <span>Grupo</span>
+                      <strong>{lead.group_name || "—"}</strong>
+                    </div>
+                    <div className="info-row">
+                      <span>Score</span>
+                      <strong>{lead.temperature}/100</strong>
+                    </div>
+                    <div className="info-row">
+                      <span>Criado em</span>
+                      <strong>{formatDateTime(lead.created_at)}</strong>
+                    </div>
+                  </div>
+                  {adAttribution && (
+                    <div style={{ gridColumn: "1 / -1" }}>
+                      <h4>Origem do anúncio Meta</h4>
+                      <div className="info-list">
+                        <div className="info-row">
+                          <span>Origem</span>
+                          <strong>{sourceLabel}</strong>
+                        </div>
+                        <div className="info-row">
+                          <span>ID do anúncio</span>
+                          <strong>{adAttribution.source_id || "—"}</strong>
+                        </div>
+                        <div className="info-row">
+                          <span>Tipo</span>
+                          <strong>{adAttribution.source_type || "—"}</strong>
+                        </div>
+                        <div className="info-row">
+                          <span>URL</span>
+                          <strong style={{ overflowWrap: "anywhere" }}>
+                            {adAttribution.source_url || "—"}
+                          </strong>
+                        </div>
+                        <div className="info-row">
+                          <span>Título</span>
+                          <strong>{adAttribution.headline || "—"}</strong>
+                        </div>
+                        <div className="info-row">
+                          <span>Texto</span>
+                          <strong>{adAttribution.body || "—"}</strong>
+                        </div>
+                        <div className="info-row">
+                          <span>Capturado em</span>
+                          <strong>
+                            {formatDateTime(adAttribution.captured_at)}
+                          </strong>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  {metaEntries.length > 0 && (
+                    <div style={{ gridColumn: "1 / -1" }}>
+                      <h4>Campos identificados</h4>
+                      <div className="table-wrap">
+                        <table>
+                          <tbody>
+                            {metaEntries.map(([key, value]) => (
+                              <tr key={key}>
+                                <td className="faint">{key}</td>
+                                <td>
+                                  {typeof value === "object"
+                                    ? JSON.stringify(value)
+                                    : String(value)}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </section>
+
+        <aside className="side-stack">
+          <section className="card">
+            <div className="card-head">
+              <h3>Dono do lead</h3>
+            </div>
+            <div className="card-body">
+              {lead.owner_mode === "human" ? (
+                <div className="ai-state off">
+                  <strong>👤 {owner?.full_name || "Comercial humano"}</strong>
+                  <br />A IA está em silêncio e continua analisando.
+                </div>
+              ) : lead.owner_mode === "none" ? (
+                <div className="ai-state off">
+                  <strong>Encerrado</strong>
+                </div>
+              ) : (
+                <div className="ai-state on">
+                  <strong>🤖 {persona}</strong>
+                  <br />A IA responde até a passagem ser aceita.
+                </div>
+              )}
+              {backup && (
+                <div className="faint" style={{ marginTop: 9 }}>
+                  Backup: {backup.full_name}
+                </div>
+              )}
+            </div>
+          </section>
+          <section className="card">
+            <div className="card-head">
+              <h3>Controle comercial</h3>
+            </div>
+            <div className="card-body info-list">
+              <div className="info-row">
+                <span>Classe</span>
+                <strong>{lead.priority_class || "—"}</strong>
+              </div>
+              <div className="info-row">
+                <span>Classificação IA</span>
+                <strong>{lead.ai_classification || "—"}</strong>
+              </div>
+              <div className="info-row">
+                <span>Score</span>
+                <strong>
+                  {scoreLabel(lead.temperature)} · {lead.temperature}/100
+                </strong>
+              </div>
+              <div className="info-row">
+                <span>Próxima ação</span>
+                <strong>
+                  {lead.next_action || lead.ai_next_action || "—"}
+                </strong>
+              </div>
+              <div className="info-row">
+                <span>Prazo</span>
+                <strong>
+                  {lead.next_action_due_at
+                    ? formatDateTime(lead.next_action_due_at)
+                    : "—"}
+                </strong>
+              </div>
+              <div className="info-row">
+                <span>Resumo</span>
+                <strong>{lead.ai_summary || "—"}</strong>
+              </div>
+            </div>
+          </section>
+          <section className="card">
+            <div className="card-head">
+              <h3>Consumo da IA</h3>
+            </div>
+            <div className="card-body info-list">
+              {usage ? (
+                <>
+                  <div className="info-row">
+                    <span>Custo estimado</span>
+                    <strong>US$ {usage.estimated_cost_usd.toFixed(4)}</strong>
+                  </div>
+                  <div className="info-row">
+                    <span>Chamadas</span>
+                    <strong>{usage.calls}</strong>
+                  </div>
+                  <div className="info-row">
+                    <span>Entrada / cache</span>
+                    <strong>
+                      {usage.input_tokens} / {usage.cached_tokens}
+                    </strong>
+                  </div>
+                  <div className="info-row">
+                    <span>Saída</span>
+                    <strong>{usage.output_tokens}</strong>
+                  </div>
+                  <div className="info-row">
+                    <span>Último modelo</span>
+                    <strong>{usage.last_model || "—"}</strong>
+                  </div>
+                  <div className="info-row">
+                    <span>Última análise</span>
+                    <strong>
+                      {usage.last_at ? formatDateTime(usage.last_at) : "—"}
+                    </strong>
+                  </div>
+                </>
+              ) : (
+                <div className="empty-state">Ainda sem consumo registrado.</div>
+              )}
+            </div>
+          </section>
+          <section className="card">
+            <div className="card-head">
+              <h3>Resumo</h3>
+            </div>
+            <div className="card-body info-list">
+              <div className="info-row">
+                <span>Etapa</span>
+                <strong>{stageLabel(lead.kind, lead.stage)}</strong>
+              </div>
+              <div className="info-row">
+                <span>Mensagens</span>
+                <strong>
+                  {
+                    messages.filter((message) => message.direction !== "system")
+                      .length
+                  }
+                </strong>
+              </div>
+              <div className="info-row">
+                <span>Tarefas pendentes</span>
+                <strong>{pendingTasks.length}</strong>
+              </div>
+              <div className="info-row">
+                <span>Último contato</span>
+                <strong>{lastContact}</strong>
+              </div>
+              <div className="info-row">
+                <span>WhatsApp</span>
+                <strong>
+                  {whatsappConnected ? "Conectado" : "Não conectado"}
+                </strong>
+              </div>
+              <div className="info-row">
+                <span>Janela 24h</span>
+                <strong>
+                  {windowOpen
+                    ? `Aberta até ${windowExpiresAt ? formatDateTime(windowExpiresAt) : "—"}`
+                    : "Fechada"}
+                </strong>
+              </div>
+            </div>
+          </section>
+        </aside>
+      </div>
+    </>
+  );
 }

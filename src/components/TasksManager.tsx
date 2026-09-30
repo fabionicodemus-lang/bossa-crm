@@ -1,9 +1,9 @@
 'use client';
 
-import Link from 'next/link';
 import { useMemo, useState } from 'react';
 import { formatDateTime } from '@/lib/format';
 import type { LeadTask } from '@/lib/types';
+import { useCrmUI } from './CrmUI';
 
 type TaskLead = {
   id: string;
@@ -80,6 +80,7 @@ export function TasksManager({
   initialAssigneeMode?: AssigneeMode;
 }) {
   const nowMs = new Date(referenceNow).getTime();
+  const ui = useCrmUI();
   const [tasks, setTasks] = useState(initialTasks);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>(initialStatus);
   const [assigneeMode, setAssigneeMode] = useState<AssigneeMode>(isAdmin ? initialAssigneeMode : 'mine');
@@ -250,7 +251,7 @@ export function TasksManager({
                 </div>
                 {task.description && <div className="muted" style={{ fontSize: 12, lineHeight: 1.45, marginBottom: 5 }}>{task.description}</div>}
                 <div className="faint" style={{ fontSize: 11 }}>
-                  {task.lead ? <Link className="link" href={`/leads/${task.lead.id}`}>{task.lead.name}</Link> : 'Lead indisponível'}
+                  {task.lead ? <button type="button" className="link inline-link-button" onClick={() => ui.openLead(task.lead!.id, 'dados')}>{task.lead.name}</button> : 'Lead indisponível'}
                   {' · '}{task.lead?.kind === 'corretor' ? 'Corretor' : 'Cliente'}
                 </div>
               </div>
@@ -263,7 +264,7 @@ export function TasksManager({
                 <strong style={{ fontSize: 12, color: status === 'overdue' ? 'var(--red)' : undefined }}>{task.due_at ? formatDateTime(task.due_at) : 'Sem prazo'}</strong>
               </div>
               <div style={{ display: 'flex', gap: 7, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
-                {task.lead && <Link className="btn btn-ghost btn-sm" href={`/leads/${task.lead.id}`}>Abrir lead</Link>}
+                {task.lead && <button type="button" className="btn btn-ghost btn-sm" onClick={() => ui.openLead(task.lead!.id, 'dados')}>Abrir lead</button>}
                 {(status === 'pending' || status === 'overdue') && <>
                   <button type="button" className="btn btn-primary btn-sm" disabled={busy} onClick={() => void actOnTask(task, 'complete')}>{busy ? 'Salvando…' : 'Concluir'}</button>
                   <button type="button" className="btn btn-ghost btn-sm" disabled={busy} onClick={() => void actOnTask(task, 'cancel')}>Cancelar</button>

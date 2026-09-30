@@ -1,59 +1,160 @@
-'use client';
+"use client";
+import Link from "next/link";
+import Image from "next/image";
+import { usePathname } from "next/navigation";
+import {
+  CalendarDays,
+  MessageCircle,
+  Columns3,
+  Users,
+  CheckSquare,
+  ChartNoAxesCombined,
+  Sparkles,
+  Settings,
+  Moon,
+  Sun,
+} from "lucide-react";
+import type { UserContext } from "@/lib/types";
+import { initials } from "@/lib/format";
+import { SignOutButton } from "./SignOutButton";
+import { useCrmUI } from "./CrmUI";
 
-import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import type { AppRole, UserContext } from '@/lib/types';
-import { initials } from '@/lib/format';
-import { SignOutButton } from './SignOutButton';
-
-type NavItem = { section: string; roles?: AppRole[] } | { href: string; icon: string; label: string; roles?: AppRole[] };
-
-const links: NavItem[] = [
-  { href: '/dashboard', icon: '📊', label: 'Dashboard' },
-  { section: 'Clientes finais' },
-  { href: '/clientes', icon: '🧲', label: 'Pipeline de Leads' },
-  { href: '/ia', icon: '🤖', label: 'Atendimento IA' },
-  { href: '/importar?tipo=cliente', icon: '📥', label: 'Importar XLSX', roles: ['admin', 'comercial'] },
-  { section: 'Corretores' },
-  { href: '/corretores', icon: '🤝', label: 'Pipeline Corretores' },
-  { href: '/mensagens-corretores', icon: '💬', label: 'WhatsApp Corretores', roles: ['admin'] },
-  { href: '/plantao-corretores', icon: '🌙', label: 'Plantão IA', roles: ['admin'] },
-  { href: '/importar?tipo=corretor', icon: '📥', label: 'Importar corretores', roles: ['admin', 'comercial'] },
-  { section: 'Outros contatos' },
-  { href: '/geral', icon: '📇', label: 'Pipeline Geral' },
-  { section: 'Comercial' },
-  { href: '/agenda', icon: '📅', label: 'Agenda' },
-  { href: '/tarefas', icon: '✅', label: 'Tarefas' },
-  { href: '/empreendimentos', icon: '🏢', label: 'Empreendimentos' },
-  { href: '/configuracoes/arquivos-ia', icon: '🗂️', label: 'Arquivos da IA', roles: ['admin', 'comercial'] },
-  { href: '/propostas', icon: '🧾', label: 'Propostas' },
-  { href: '/transmissoes', icon: '📣', label: 'Transmissões' },
-  { href: '/arquivados', icon: '🗄️', label: 'Leads arquivados' },
-  { section: 'Sistema', roles: ['admin'] },
-  { href: '/treinamento/nara', icon: '🎓', label: 'Treinar a Nara', roles: ['admin'] },
-  { href: '/treinamento/plantao', icon: '🌙', label: 'Treinar o Plantão', roles: ['admin'] },
-  { href: '/configuracoes/whatsapp', icon: '📱', label: 'Canais WhatsApp', roles: ['admin'] },
-  // Modelos da Meta virou aba de Transmissões: um caminho só para a mesma coisa.
-  { href: '/usuarios', icon: '👥', label: 'Usuários', roles: ['admin'] },
+const links = [
+  { href: "/hoje", label: "Hoje", icon: CalendarDays, paths: ["/hoje"] },
+  {
+    href: "/conversas",
+    label: "Conversas",
+    icon: MessageCircle,
+    paths: ["/conversas", "/ia", "/mensagens-corretores", "/transmissoes"],
+  },
+  {
+    href: "/pipeline",
+    label: "Pipeline",
+    icon: Columns3,
+    paths: ["/pipeline", "/clientes", "/corretores", "/geral"],
+  },
+  {
+    href: "/leads",
+    label: "Leads",
+    icon: Users,
+    paths: ["/leads", "/arquivados", "/importar"],
+  },
+  {
+    href: "/tarefas",
+    label: "Tarefas",
+    icon: CheckSquare,
+    paths: ["/tarefas", "/agenda"],
+  },
+  {
+    href: "/gestao",
+    label: "Gestão",
+    icon: ChartNoAxesCombined,
+    paths: ["/gestao", "/dashboard", "/propostas"],
+  },
+  {
+    href: "/nara",
+    label: "Nara",
+    icon: Sparkles,
+    paths: [
+      "/nara",
+      "/treinamento",
+      "/plantao-corretores",
+      "/configuracoes/arquivos-ia",
+    ],
+    restricted: true,
+  },
+  {
+    href: "/configuracoes",
+    label: "Configurações",
+    icon: Settings,
+    paths: ["/configuracoes", "/empreendimentos", "/usuarios", "/minha-conta"],
+  },
 ];
-
-export function Sidebar({ context, aiCount, overdueTaskCount }: { context: UserContext; aiCount: number; overdueTaskCount: number }) {
+export function Sidebar({
+  context,
+  aiCount,
+  overdueTaskCount,
+}: {
+  context: UserContext;
+  aiCount: number;
+  overdueTaskCount: number;
+}) {
   const pathname = usePathname();
+  const { theme, toggleTheme } = useCrmUI();
+  const active = links.find((item) =>
+    item.paths.some(
+      (path) => pathname === path || pathname.startsWith(path + "/"),
+    ),
+  );
   return (
     <aside className="sidebar">
-      <div className="logo"><div className="logo-title">bossa<span>.</span>crm</div><div className="logo-sub">CONSTRUIR COM BOSSA</div></div>
-      <nav className="sidebar-nav">
-        {links.map((item, index) => {
-          if ('section' in item) return item.roles && !item.roles.includes(context.role) ? null : <div className="nav-label" key={`${item.section}-${index}`}>{item.section}</div>;
-          if (item.roles && !item.roles.includes(context.role)) return null;
-          const active = pathname === item.href.split('?')[0] || (item.href.startsWith('/leads/') && pathname.startsWith('/leads/'));
-          return <Link className={`nav-link ${active ? 'active' : ''}`} href={item.href} key={item.href}><span>{item.icon}</span><span className="nav-text">{item.label}</span>{item.href === '/ia' && aiCount > 0 && <span className="nav-badge">{aiCount}</span>}{item.href === '/tarefas' && overdueTaskCount > 0 && <span className="nav-badge">{overdueTaskCount}</span>}</Link>;
-        })}
+      <Link className="logo" href="/hoje" aria-label="Bossa CRM, início">
+        <Image
+          src="/bossa-logo.png"
+          alt="Bossa"
+          width={98}
+          height={17}
+          priority
+        />
+        <span>CRM</span>
+      </Link>
+      <nav className="sidebar-nav" aria-label="Navegação principal">
+        {links
+          .filter((item) => !item.restricted || context.role !== "viewer")
+          .map((item) => {
+            const count =
+              item.href === "/hoje"
+                ? overdueTaskCount
+                : item.href === "/nara"
+                  ? aiCount
+                  : 0;
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                title={item.label}
+                aria-current={active === item ? "page" : undefined}
+                className={`nav-link ${active === item ? "active" : ""}`}
+              >
+                <item.icon size={16} strokeWidth={1.7} />
+                <span className="nav-text">{item.label}</span>
+                {count > 0 && (
+                  <span
+                    className={`nav-badge ${item.href === "/hoje" ? "overdue" : ""}`}
+                  >
+                    {count}
+                  </span>
+                )}
+              </Link>
+            );
+          })}
       </nav>
       <div className="sidebar-user">
-        <div style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '0.08em', color: '#8a8178', marginBottom: '6px', textTransform: 'uppercase' }}>Versão 1.2.0</div>
-        <div className="user-chip"><div className="avatar">{initials(context.fullName)}</div><div className="user-info"><div className="user-name">{context.fullName}</div><div className="user-role">{context.role}</div></div></div>
-        <Link className={`btn btn-ghost btn-block btn-sm ${pathname === '/minha-conta' ? 'active' : ''}`} href="/minha-conta">⚙️ Minha conta e senha</Link>
+        <div className="user-chip">
+          <Link href="/minha-conta" className="avatar" title="Minha conta">
+            {initials(context.fullName)}
+          </Link>
+          <Link href="/minha-conta" className="user-info">
+            <div className="user-name">{context.fullName.split(" ")[0]}</div>
+            <div className="user-role">
+              {context.role === "admin"
+                ? "Gestor comercial"
+                : context.role === "comercial"
+                  ? "Comercial"
+                  : "Consulta"}
+            </div>
+          </Link>
+          <button
+            type="button"
+            className="icon-button"
+            onClick={toggleTheme}
+            aria-label={
+              theme === "dark" ? "Ativar tema claro" : "Ativar tema escuro"
+            }
+          >
+            {theme === "dark" ? <Sun size={14} /> : <Moon size={14} />}
+          </button>
+        </div>
         <SignOutButton />
       </div>
     </aside>

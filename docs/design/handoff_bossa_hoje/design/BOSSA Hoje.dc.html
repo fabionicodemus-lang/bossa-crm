@@ -1,0 +1,782 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<title>BOSSA CRM · Hoje</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap">
+<style>
+[data-theme="light"]{--bg:#F4F3EF;--panel:#FFFFFF;--sunken:#F2F1ED;--hover:#F8F7F4;--line:#E8E5DF;--line-2:#D8D4CC;--ink:#19181B;--ink-2:#57534E;--ink-3:#8A857E;--red:#BF3A29;--red-soft:#FCF0ED;--red-line:#F1D5CE;--orange:#A8650F;--orange-soft:#FAF1E3;--green:#2B7549;--green-soft:#E8F2EC;--blue:#2E58CC;--blue-soft:#EDF1FC;--nara-soft:#F1F4FC;--btn:#19181B;--btn-ink:#FFFFFF;--shadow:0 1px 2px rgba(25,24,27,.04),0 12px 32px rgba(25,24,27,.08);--overlay:rgba(25,24,27,.22);--logo:none}
+[data-theme="dark"]{--bg:#0E0E10;--panel:#161619;--sunken:#1D1D21;--hover:#1B1B1F;--line:#25252A;--line-2:#34343B;--ink:#EDECE8;--ink-2:#A9A6A0;--ink-3:#77746E;--red:#F08470;--red-soft:rgba(240,132,112,.09);--red-line:rgba(240,132,112,.24);--orange:#E2A758;--orange-soft:rgba(226,167,88,.10);--green:#6CC291;--green-soft:rgba(108,194,145,.10);--blue:#86A2F6;--blue-soft:rgba(134,162,246,.12);--nara-soft:rgba(134,162,246,.08);--btn:#EDECE8;--btn-ink:#111113;--shadow:0 12px 40px rgba(0,0,0,.5);--overlay:rgba(0,0,0,.55);--logo:invert(1)}
+body{margin:0;background:#F4F3EF;-webkit-font-smoothing:antialiased}
+*{box-sizing:border-box}
+a{color:var(--blue);text-decoration:none}a:hover{text-decoration:underline}
+input,select,textarea,button{font:inherit;color:inherit}
+@keyframes drawerIn{from{transform:translateX(24px);opacity:0}to{transform:none;opacity:1}}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+@keyframes popIn{from{transform:translateY(8px) scale(.98);opacity:0}to{transform:none;opacity:1}}
+</style>
+</helmet>
+<div data-theme="{{ theme }}" style="min-height:100vh;display:flex;background:var(--bg);color:var(--ink);font-family:Geist,system-ui,sans-serif;font-size:14px;line-height:1.4;font-feature-settings:'tnum' 1">
+
+<aside style="width:224px;flex:none;height:100vh;position:sticky;top:0;display:flex;flex-direction:column;padding:18px 12px 12px">
+  <div style="display:flex;align-items:baseline;gap:8px;padding:4px 10px 22px">
+    <img src="assets/bossa-logo.png" alt="BOSSA" style="height:17px;width:auto;filter:var(--logo)">
+    <span style="font-size:10.5px;font-weight:600;letter-spacing:.18em;color:var(--ink-3)">CRM</span>
+  </div>
+  <nav style="display:flex;flex-direction:column;gap:2px">
+    <sc-for list="{{ nav }}" as="n" hint-placeholder-count="8">
+      <div onClick="{{ n.go }}" style="display:flex;align-items:center;gap:10px;height:32px;padding:0 10px;border-radius:7px;cursor:pointer;font-size:13.5px;font-weight:500;color:{{ n.color }};background:{{ n.bg }}" style-hover="background:var(--panel)">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="{{ n.icon }}"></path></svg>
+        <span style="flex:1">{{ n.label }}</span>
+        <sc-if value="{{ n.badge }}" hint-placeholder-val="{{ false }}"><span style="font-size:11px;font-weight:600;min-width:20px;height:18px;padding:0 6px;border-radius:9px;display:grid;place-items:center;color:{{ n.badgeInk }};background:{{ n.badgeBg }}">{{ n.badge }}</span></sc-if>
+      </div>
+    </sc-for>
+  </nav>
+  <div style="flex:1"></div>
+  <div style="display:flex;align-items:center;gap:10px;padding:10px;border-radius:9px" style-hover="background:var(--panel)">
+    <div style="width:30px;height:30px;border-radius:8px;background:var(--btn);color:var(--btn-ink);display:grid;place-items:center;font-size:12px;font-weight:600">FA</div>
+    <div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600">Fábio</div><div style="font-size:11.5px;color:var(--ink-3)">Gestor comercial</div></div>
+    <button onClick="{{ toggleTheme }}" title="Alternar tema claro/escuro" style="width:28px;height:28px;border-radius:7px;border:1px solid var(--line);background:var(--panel);display:grid;place-items:center;cursor:pointer;color:var(--ink-2)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"></path></svg></button>
+  </div>
+</aside>
+
+<main style="flex:1;min-width:0;margin:8px 8px 8px 0;background:var(--panel);border:1px solid var(--line);border-radius:14px;display:flex;flex-direction:column;min-height:calc(100vh - 16px)">
+  <header style="height:54px;flex:none;display:flex;align-items:center;gap:14px;padding:0 20px 0 28px;border-bottom:1px solid var(--line)">
+    <div style="font-size:13.5px;font-weight:600">Hoje</div>
+    <div style="flex:1"></div>
+    <div style="display:flex;align-items:center;gap:8px;height:32px;padding:0 10px;width:min(340px,40vw);border:1px solid var(--line);border-radius:8px;color:var(--ink-3);font-size:13px;background:var(--bg)">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14zM20 20l-3.5-3.5"></path></svg>
+      <span style="flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Buscar lead, telefone, unidade…</span>
+      <span style="font-family:'Geist Mono',monospace;font-size:11px;border:1px solid var(--line);border-radius:4px;padding:1px 5px">⌘K</span>
+    </div>
+    <button onClick="{{ openNewTask }}" style="height:32px;padding:0 12px 0 10px;border:0;border-radius:8px;background:var(--btn);color:var(--btn-ink);font-size:13px;font-weight:600;display:flex;align-items:center;gap:6px;cursor:pointer;white-space:nowrap" style-hover="opacity:.88">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg>Nova tarefa<span style="font-family:'Geist Mono',monospace;font-size:11px;opacity:.55;margin-left:2px">N</span>
+    </button>
+  </header>
+
+  <div style="flex:1;padding:36px 40px 56px;max-width:1360px;width:100%">
+    <div style="font-size:13px;color:var(--ink-3);margin-bottom:6px">Quarta-feira, 30 de setembro · 10:40</div>
+    <h1 style="margin:0;font-size:30px;font-weight:600;letter-spacing:-.025em">Bom dia, Fábio</h1>
+    <p style="margin:8px 0 0;font-size:15px;color:var(--ink-2);text-wrap:pretty">
+      <span style="color:var(--red);font-weight:600">{{ counts.overdueLabel }}</span> e {{ counts.todayLabel }}. {{ counts.aiLine }} <span style="color:var(--ink);font-weight:600">{{ counts.handoffLabel }}</span> para a equipe.
+    </p>
+
+    <div style="margin-top:26px;display:flex;gap:4px;border-bottom:1px solid var(--line)">
+      <sc-for list="{{ kinds }}" as="kd" hint-placeholder-count="3">
+        <button onClick="{{ kd.pick }}" style="height:40px;padding:0 12px;border:0;background:none;cursor:pointer;display:flex;align-items:center;gap:8px;font-size:14px;font-weight:500;white-space:nowrap;color:{{ kd.color }};box-shadow:{{ kd.line }}">{{ kd.label }}<span style="font-size:11.5px;font-weight:600;min-width:20px;height:18px;padding:0 6px;border-radius:9px;display:grid;place-items:center;background:{{ kd.badgeBg }};color:{{ kd.badgeInk }}">{{ kd.count }}</span></button>
+      </sc-for>
+    </div>
+
+    <div style="margin-top:16px;display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:0;background:var(--panel);border:1px solid var(--line);border-radius:11px;overflow:hidden">
+      <sc-for list="{{ kpis }}" as="k" hint-placeholder-count="6">
+        <div style="background:var(--panel);padding:14px 16px 13px;box-shadow:-1px 0 0 var(--line),0 -1px 0 var(--line)">
+          <div style="font-size:12.5px;color:var(--ink-3);display:flex;align-items:center;gap:6px"><span style="width:6px;height:6px;border-radius:3px;background:{{ k.dot }}"></span>{{ k.label }}</div>
+          <div style="font-size:24px;font-weight:600;letter-spacing:-.02em;margin-top:6px;color:{{ k.color }}">{{ k.value }}</div>
+        </div>
+      </sc-for>
+    </div>
+
+    <div style="display:flex;flex-wrap:wrap;gap:32px;margin-top:36px;align-items:flex-start">
+
+      <section style="flex:1 1 640px;min-width:0;display:flex;flex-direction:column;gap:16px">
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+          <h2 style="margin:0;font-size:16px;font-weight:600;letter-spacing:-.01em">Agenda</h2>
+          <div style="display:flex;padding:2px;background:var(--sunken);border-radius:8px;gap:2px">
+            <sc-for list="{{ scopes }}" as="s" hint-placeholder-count="2">
+              <button onClick="{{ s.pick }}" style="height:26px;padding:0 10px;border:0;border-radius:6px;font-size:12.5px;font-weight:500;cursor:pointer;background:{{ s.bg }};color:{{ s.color }};box-shadow:{{ s.shadow }}">{{ s.label }}</button>
+            </sc-for>
+          </div>
+          <div style="flex:1"></div>
+          <a href="#" style="font-size:13px;font-weight:500;white-space:nowrap">Abrir em Tarefas →</a>
+        </div>
+
+        <sc-for list="{{ sections }}" as="sec" hint-placeholder-count="3">
+          <div style="border:1px solid {{ sec.border }};border-radius:12px;overflow:hidden;background:var(--panel)">
+            <div style="display:flex;align-items:center;gap:8px;padding:11px 16px;background:{{ sec.headBg }}">
+              <span style="width:7px;height:7px;border-radius:4px;background:{{ sec.dot }}"></span>
+              <span style="font-size:13.5px;font-weight:600;color:{{ sec.titleColor }}">{{ sec.title }}</span>
+              <span style="font-size:12.5px;color:var(--ink-3)">{{ sec.count }}</span>
+              <div style="flex:1"></div>
+              <span style="font-size:12px;color:var(--ink-3)">{{ sec.hint }}</span>
+            </div>
+            <sc-if value="{{ sec.empty }}" hint-placeholder-val="{{ false }}">
+              <div style="padding:18px 16px;border-top:1px solid var(--line);font-size:13px;color:var(--ink-3)">{{ sec.emptyText }}</div>
+            </sc-if>
+            <sc-for list="{{ sec.rows }}" as="r" hint-placeholder-count="4">
+              <div style="display:flex;align-items:center;gap:14px;padding:{{ rowPad }};border-top:1px solid var(--line);flex-wrap:wrap" style-hover="background:var(--hover)">
+                <div style="width:32px;height:32px;flex:none;border-radius:8px;background:var(--sunken);color:var(--ink-2);display:grid;place-items:center" title="{{ r.typeLabel }}">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="{{ r.icon }}"></path></svg>
+                </div>
+                <div style="width:58px;flex:none">
+                  <div style="font-family:'Geist Mono',monospace;font-size:13px;font-weight:500;color:{{ r.timeColor }}">{{ r.time }}</div>
+                  <div style="font-size:11.5px;color:{{ r.subColor }};margin-top:1px">{{ r.day }}</div>
+                </div>
+                <div onClick="{{ r.open }}" style="flex:1 1 240px;min-width:0;cursor:pointer">
+                  <div style="display:flex;align-items:center;gap:8px;min-width:0">
+                    <span style="font-size:14px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ r.title }}</span>
+                    <sc-if value="{{ r.isBroker }}" hint-placeholder-val="{{ false }}"><span title="Corretor parceiro" style="flex:none;font-size:11px;font-weight:500;color:var(--ink-2);background:var(--sunken);border:1px solid var(--line);padding:0 6px;border-radius:5px">Corretor</span></sc-if>
+                    <sc-if value="{{ r.byNara }}" hint-placeholder-val="{{ false }}"><span title="Tarefa criada pela Nara" style="flex:none;display:flex;align-items:center;gap:3px;font-size:11px;font-weight:500;color:var(--blue);background:var(--blue-soft);padding:1px 6px;border-radius:5px"><svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.2 7.8L22 12l-7.8 2.2L12 22l-2.2-7.8L2 12l7.8-2.2z"></path></svg>{{ r.aiName }}</span></sc-if>
+                  </div>
+                  <div style="font-size:12.5px;color:var(--ink-3);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ r.dev }} · {{ r.place }}</div>
+                </div>
+                <div style="display:flex;align-items:center;gap:14px;flex:none">
+                  <div title="Responsável" style="display:flex;align-items:center;gap:6px;width:78px">
+                    <span style="width:20px;height:20px;border-radius:6px;background:var(--sunken);border:1px solid var(--line);font-size:10px;font-weight:600;display:grid;place-items:center;color:var(--ink-2)">{{ r.ownerInitial }}</span>
+                    <span style="font-size:12.5px;color:var(--ink-2)">{{ r.owner }}</span>
+                  </div>
+                  <div title="Tempo desde a última interação" style="display:flex;align-items:center;gap:5px;width:64px;font-size:12.5px;color:{{ r.lastColor }}">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 7v5l3 2M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z"></path></svg>{{ r.last }}
+                  </div>
+                  <div style="display:flex;gap:6px">
+                    <button onClick="{{ r.wa }}" title="WhatsApp" style="width:30px;height:30px;border:1px solid var(--line);border-radius:7px;background:var(--panel);display:grid;place-items:center;cursor:pointer;color:var(--ink-2)" style-hover="border-color:var(--line-2);color:var(--ink)">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M21 11.5a8.4 8.4 0 0 1-12.4 7.4L3 21l2.1-5.4A8.4 8.4 0 1 1 21 11.5z"></path></svg>
+                    </button>
+                    <button onClick="{{ r.open }}" style="height:30px;padding:0 10px;border:1px solid var(--line);border-radius:7px;background:var(--panel);font-size:12.5px;font-weight:500;cursor:pointer;color:var(--ink-2)" style-hover="border-color:var(--line-2);color:var(--ink)">Abrir lead</button>
+                    <button onClick="{{ r.done }}" style="height:30px;padding:0 10px 0 8px;border:1px solid var(--line);border-radius:7px;background:var(--panel);font-size:12.5px;font-weight:500;cursor:pointer;color:var(--ink);display:flex;align-items:center;gap:5px" style-hover="background:var(--green-soft);border-color:var(--green);color:var(--green)">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"></path></svg>Concluir
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </sc-for>
+
+        <sc-if value="{{ hasDone }}" hint-placeholder-val="{{ false }}">
+          <div style="border:1px solid var(--line);border-radius:12px;overflow:hidden">
+            <div onClick="{{ toggleDone }}" style="display:flex;align-items:center;gap:8px;padding:11px 16px;cursor:pointer" style-hover="background:var(--hover)">
+              <span style="width:7px;height:7px;border-radius:4px;background:var(--green)"></span>
+              <span style="font-size:13.5px;font-weight:600">Concluídas hoje</span>
+              <span style="font-size:12.5px;color:var(--ink-3)">{{ doneRows.length }}</span>
+              <div style="flex:1"></div>
+              <span style="font-size:12px;color:var(--ink-3)">{{ doneToggleLabel }}</span>
+            </div>
+            <sc-if value="{{ showDone }}" hint-placeholder-val="{{ false }}">
+              <sc-for list="{{ doneRows }}" as="d" hint-placeholder-count="1">
+                <div style="display:flex;align-items:center;gap:12px;padding:10px 16px;border-top:1px solid var(--line)">
+                  <span style="width:18px;height:18px;border-radius:9px;background:var(--green);color:#fff;display:grid;place-items:center"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"></path></svg></span>
+                  <span style="font-size:13.5px;color:var(--ink-3);text-decoration:line-through;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ d.title }}</span>
+                  <button onClick="{{ d.undo }}" style="border:0;background:none;color:var(--blue);font-size:12.5px;font-weight:500;cursor:pointer">Reabrir</button>
+                </div>
+              </sc-for>
+            </sc-if>
+          </div>
+        </sc-if>
+      </section>
+
+      <aside style="flex:1 1 320px;max-width:420px;min-width:0;display:flex;flex-direction:column;gap:28px">
+        <div>
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+            <h2 style="margin:0;font-size:16px;font-weight:600;letter-spacing:-.01em">Precisam de atenção</h2>
+            <span style="font-size:12.5px;color:var(--ink-3)">{{ alerts.length }}</span>
+            <div style="flex:1"></div>
+            <span title="Regras automáticas, recalculadas a cada 15 min" style="font-size:12px;color:var(--ink-3)">Automático</span>
+          </div>
+          <div style="border:1px solid var(--line);border-radius:12px;overflow:hidden">
+            <sc-for list="{{ alerts }}" as="a" hint-placeholder-count="6">
+              <div style="display:flex;align-items:center;gap:12px;padding:12px 14px;border-top:{{ a.border }}" style-hover="background:var(--hover)">
+                <div onClick="{{ a.open }}" style="flex:1;min-width:0;cursor:pointer">
+                  <div style="font-size:12px;font-weight:500;color:{{ a.color }};display:flex;align-items:center;gap:6px"><span style="width:6px;height:6px;border-radius:3px;background:{{ a.color }}"></span>{{ a.rule }}</div>
+                  <div style="font-size:13.5px;font-weight:500;margin-top:3px">{{ a.name }}</div>
+                  <div style="font-size:12px;color:var(--ink-3);margin-top:1px">{{ a.sub }}</div>
+                </div>
+                <button onClick="{{ a.act }}" style="flex:none;height:28px;padding:0 10px;border:1px solid var(--line);border-radius:7px;background:var(--panel);font-size:12px;font-weight:500;cursor:pointer;color:var(--ink-2)" style-hover="border-color:var(--line-2);color:var(--ink)">{{ a.actLabel }}</button>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+
+        <div>
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="var(--blue)"><path d="M12 2l2.2 7.8L22 12l-7.8 2.2L12 22l-2.2-7.8L2 12l7.8-2.2z"></path></svg>
+            <h2 style="margin:0;font-size:16px;font-weight:600;letter-spacing:-.01em">{{ aiName }}</h2>
+            <span style="font-size:12px;color:var(--ink-3)">{{ aiRole }}</span>
+            <div style="flex:1"></div><span style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--green)"><span style="width:6px;height:6px;border-radius:3px;background:var(--green)"></span>Ativa</span>
+          </div>
+          <div style="border:1px solid var(--line);border-radius:12px;overflow:hidden">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--line)">
+              <sc-for list="{{ naraStats }}" as="ns" hint-placeholder-count="4">
+                <div style="background:var(--panel);padding:12px 14px">
+                  <div style="font-size:20px;font-weight:600;letter-spacing:-.02em">{{ ns.value }}</div>
+                  <div style="font-size:12px;color:var(--ink-3);margin-top:2px">{{ ns.label }}</div>
+                </div>
+              </sc-for>
+            </div>
+            <div style="padding:12px 14px 4px;border-top:1px solid var(--line);font-size:12px;font-weight:500;color:var(--ink-3)">Handoffs para a equipe</div>
+            <sc-for list="{{ handoffs }}" as="h" hint-placeholder-count="2">
+              <div style="display:flex;align-items:center;gap:12px;padding:10px 14px 12px">
+                <div onClick="{{ h.open }}" style="flex:1;min-width:0;cursor:pointer">
+                  <div style="font-size:13.5px;font-weight:500">{{ h.name }}</div>
+                  <div style="font-size:12px;color:var(--ink-3);margin-top:1px">{{ h.reason }} · {{ h.ago }}</div>
+                </div>
+                <sc-if value="{{ h.pending }}" hint-placeholder-val="{{ true }}">
+                  <button onClick="{{ h.take }}" style="flex:none;height:28px;padding:0 11px;border:0;border-radius:7px;background:var(--btn);color:var(--btn-ink);font-size:12px;font-weight:600;cursor:pointer">Assumir</button>
+                </sc-if>
+                <sc-if value="{{ h.taken }}" hint-placeholder-val="{{ false }}">
+                  <span style="flex:none;font-size:12px;color:var(--green);display:flex;align-items:center;gap:4px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"></path></svg>{{ h.takenBy }}</span>
+                </sc-if>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </aside>
+    </div>
+  </div>
+</main>
+
+<sc-if value="{{ drawerOpen }}" hint-placeholder-val="{{ false }}">
+  <div onClick="{{ closeDrawer }}" style="position:fixed;inset:0;background:var(--overlay);z-index:40;animation:fadeIn .15s ease"></div>
+  <div style="position:fixed;top:8px;right:8px;bottom:8px;width:min(640px,calc(100vw - 16px));background:var(--panel);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);z-index:41;display:flex;flex-direction:column;animation:drawerIn .2s cubic-bezier(.2,.8,.2,1)">
+    <div style="height:48px;flex:none;display:flex;align-items:center;gap:8px;padding:0 12px 0 20px;border-bottom:1px solid var(--line);font-size:12.5px;color:var(--ink-3)">
+      <span>Leads</span><span>/</span><span style="color:var(--ink-2)">{{ lead.name }}</span>
+      <div style="flex:1"></div>
+      <button title="Abrir em página inteira" style="width:28px;height:28px;border:0;border-radius:7px;background:none;cursor:pointer;color:var(--ink-3);display:grid;place-items:center" style-hover="background:var(--sunken)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M21 3l-8 8M19 14v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h5"></path></svg></button>
+      <button onClick="{{ closeDrawer }}" title="Fechar (Esc)" style="width:28px;height:28px;border:0;border-radius:7px;background:none;cursor:pointer;color:var(--ink-3);display:grid;place-items:center" style-hover="background:var(--sunken)"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"></path></svg></button>
+    </div>
+
+    <div style="flex:1;overflow-y:auto">
+      <div style="padding:22px 24px 0">
+        <div style="display:flex;gap:14px;align-items:center">
+          <div style="width:48px;height:48px;border-radius:12px;background:var(--sunken);border:1px solid var(--line);display:grid;place-items:center;font-size:16px;font-weight:600;color:var(--ink-2);flex:none">{{ lead.initials }}</div>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:21px;font-weight:600;letter-spacing:-.02em">{{ lead.name }}</div>
+            <div style="font-size:13px;color:var(--ink-3);margin-top:2px">{{ lead.headerSub }}</div>
+          </div>
+          <span style="font-size:12px;font-weight:500;padding:3px 8px;border-radius:6px;color:{{ lead.tempColor }};background:{{ lead.tempBg }}">{{ lead.temp }}</span>
+        </div>
+
+        <div style="display:flex;gap:8px;margin-top:18px;flex-wrap:wrap">
+          <button onClick="{{ goConversas }}" style="height:32px;padding:0 12px;border:0;border-radius:8px;background:var(--btn);color:var(--btn-ink);font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M21 11.5a8.4 8.4 0 0 1-12.4 7.4L3 21l2.1-5.4A8.4 8.4 0 1 1 21 11.5z"></path></svg>WhatsApp</button>
+          <button onClick="{{ callLead }}" style="height:32px;padding:0 12px;border:1px solid var(--line);border-radius:8px;background:var(--panel);font-size:13px;font-weight:500;cursor:pointer" style-hover="border-color:var(--line-2)">Ligar</button>
+          <button onClick="{{ newTaskForLead }}" style="height:32px;padding:0 12px;border:1px solid var(--line);border-radius:8px;background:var(--panel);font-size:13px;font-weight:500;cursor:pointer" style-hover="border-color:var(--line-2)">+ Tarefa</button>
+          <button onClick="{{ proposalLead }}" style="height:32px;padding:0 12px;border:1px solid var(--line);border-radius:8px;background:var(--panel);font-size:13px;font-weight:500;cursor:pointer" style-hover="border-color:var(--line-2)">Criar proposta</button>
+          <div style="flex:1"></div>
+          <label style="display:flex;align-items:center;gap:6px;height:32px;padding:0 4px 0 10px;border:1px solid var(--line);border-radius:8px;font-size:12.5px;color:var(--ink-3)">Responsável
+            <select key="{{ lead.id }}" value="{{ lead.owner }}" onChange="{{ changeOwner }}" style="border:0;background:transparent;font-size:13px;font-weight:500;color:var(--ink);cursor:pointer;outline:none">
+              <sc-for list="{{ leadOwnerOpts }}" as="o" hint-placeholder-count="4"><option value="{{ o.id }}" selected="{{ o.sel }}">{{ o.label }}</option></sc-for>
+            </select>
+          </label>
+        </div>
+
+        <div style="margin-top:20px;padding:14px 16px;border:1px solid var(--line);border-radius:11px">
+          <div style="display:flex;align-items:center;gap:10px">
+            <span style="font-size:12px;color:var(--ink-3)">Etapa</span>
+            <span style="font-size:13px;font-weight:600;white-space:nowrap">{{ lead.stageLabel }}</span>
+            <span style="font-size:12px;color:var(--ink-3)">{{ lead.stagePos }}</span>
+            <div style="flex:1"></div>
+            <button onClick="{{ stagePrev }}" title="Etapa anterior" style="width:26px;height:26px;border:1px solid var(--line);border-radius:6px;background:var(--panel);cursor:pointer;color:var(--ink-2)">‹</button>
+            <button onClick="{{ stageNext }}" title="Avançar etapa" style="height:26px;padding:0 10px;border:1px solid var(--line);border-radius:6px;background:var(--panel);cursor:pointer;font-size:12.5px;font-weight:500">Avançar ›</button>
+          </div>
+          <div style="display:flex;gap:3px;margin-top:12px">
+            <sc-for list="{{ lead.stages }}" as="st" hint-placeholder-count="9">
+              <div onClick="{{ st.pick }}" title="{{ st.label }}" style="flex:1;height:6px;border-radius:3px;cursor:pointer;background:{{ st.bg }}" style-hover="opacity:.7"></div>
+            </sc-for>
+          </div>
+        </div>
+
+        <div style="margin-top:10px;display:flex;align-items:center;gap:12px;padding:12px 16px;border-radius:11px;background:{{ lead.nextBg }}">
+          <div style="flex:1;min-width:0">
+            <div style="font-size:12px;color:var(--ink-3)">Próxima atividade</div>
+            <div style="font-size:14px;font-weight:500;margin-top:2px;color:{{ lead.nextColor }}">{{ lead.nextLabel }}</div>
+          </div>
+          <sc-if value="{{ lead.hasNext }}" hint-placeholder-val="{{ true }}">
+            <button onClick="{{ lead.nextDone }}" style="height:30px;padding:0 10px;border:1px solid var(--line);border-radius:7px;background:var(--panel);font-size:12.5px;font-weight:500;cursor:pointer" style-hover="border-color:var(--green);color:var(--green)">Concluir</button>
+          </sc-if>
+          <sc-if value="{{ lead.noNext }}" hint-placeholder-val="{{ false }}">
+            <button onClick="{{ newTaskForLead }}" style="height:30px;padding:0 10px;border:0;border-radius:7px;background:var(--btn);color:var(--btn-ink);font-size:12.5px;font-weight:600;cursor:pointer">Criar tarefa</button>
+          </sc-if>
+        </div>
+
+        <div style="display:flex;gap:2px;margin-top:22px;border-bottom:1px solid var(--line);overflow-x:auto">
+          <sc-for list="{{ tabs }}" as="tb" hint-placeholder-count="6">
+            <button onClick="{{ tb.pick }}" style="height:36px;padding:0 10px;border:0;background:none;font-size:13px;font-weight:500;cursor:pointer;white-space:nowrap;color:{{ tb.color }};box-shadow:{{ tb.line }}">{{ tb.label }}</button>
+          </sc-for>
+        </div>
+      </div>
+
+      <div style="padding:20px 24px 28px">
+        <sc-if value="{{ tab.overview }}" hint-placeholder-val="{{ true }}">
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:12px">
+            <sc-for list="{{ lead.blocks }}" as="b" hint-placeholder-count="4">
+              <div style="border:1px solid var(--line);border-radius:11px;padding:14px 16px">
+                <div style="font-size:12.5px;font-weight:600;margin-bottom:10px">{{ b.title }}</div>
+                <div style="display:flex;flex-direction:column;gap:8px">
+                  <sc-for list="{{ b.rows }}" as="kv" hint-placeholder-count="4">
+                    <div style="display:flex;gap:12px;font-size:13px">
+                      <span style="width:104px;flex:none;color:var(--ink-3)">{{ kv.k }}</span>
+                      <span style="flex:1;min-width:0;color:var(--ink);overflow-wrap:anywhere">{{ kv.v }}</span>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+          <div style="margin-top:12px;padding:14px 16px;border-radius:11px;background:var(--nara-soft)">
+            <div style="display:flex;align-items:center;gap:6px;font-size:12.5px;font-weight:600;color:var(--blue)"><svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.2 7.8L22 12l-7.8 2.2L12 22l-2.2-7.8L2 12l7.8-2.2z"></path></svg>Resumo da Nara</div>
+            <div style="font-size:13.5px;color:var(--ink-2);margin-top:6px;line-height:1.55;text-wrap:pretty">{{ lead.summary }}</div>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ tab.conversas }}" hint-placeholder-val="{{ false }}">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;font-size:12.5px;color:var(--ink-2)">
+            <span style="width:7px;height:7px;border-radius:4px;background:{{ lead.aiDot }}"></span>{{ lead.aiState }}
+          </div>
+          <div style="display:flex;flex-direction:column;gap:10px">
+            <sc-for list="{{ msgs }}" as="m" hint-placeholder-count="4">
+              <sc-if value="{{ m.isEvent }}" hint-placeholder-val="{{ false }}">
+                <div style="align-self:center;font-size:11.5px;color:var(--ink-3);padding:4px 10px;border:1px dashed var(--line-2);border-radius:20px">{{ m.text }}</div>
+              </sc-if>
+              <sc-if value="{{ m.isMsg }}" hint-placeholder-val="{{ true }}">
+                <div style="align-self:{{ m.align }};max-width:82%;display:flex;flex-direction:column;align-items:{{ m.align }}">
+                  <div style="font-size:11.5px;color:{{ m.whoColor }};margin-bottom:3px;display:flex;gap:6px;font-weight:500">{{ m.who }}<span style="color:var(--ink-3);font-weight:400">{{ m.time }}</span></div>
+                  <div style="padding:9px 12px;border-radius:11px;font-size:13.5px;line-height:1.5;background:{{ m.bg }};border:1px solid {{ m.border }};text-wrap:pretty">{{ m.text }}</div>
+                </div>
+              </sc-if>
+            </sc-for>
+          </div>
+          <div style="display:flex;gap:8px;margin-top:16px;padding:6px;border:1px solid var(--line-2);border-radius:11px">
+            <input value="{{ draft }}" onChange="{{ onDraft }}" onKeyDown="{{ onDraftKey }}" placeholder="Responder como Fábio…" style="flex:1;border:0;outline:none;background:transparent;padding:0 8px;font-size:13.5px">
+            <button onClick="{{ sendMsg }}" style="height:30px;padding:0 12px;border:0;border-radius:7px;background:var(--btn);color:var(--btn-ink);font-size:12.5px;font-weight:600;cursor:pointer">Enviar</button>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ tab.tarefas }}" hint-placeholder-val="{{ false }}">
+          <div style="border:1px solid var(--line);border-radius:11px;overflow:hidden">
+            <sc-for list="{{ leadTasks }}" as="lt" hint-placeholder-count="2">
+              <div style="display:flex;align-items:center;gap:12px;padding:11px 14px;border-top:{{ lt.border }}">
+                <span style="font-family:'Geist Mono',monospace;font-size:12.5px;width:96px;color:{{ lt.color }}">{{ lt.when }}</span>
+                <span style="flex:1;font-size:13.5px;text-decoration:{{ lt.deco }};color:{{ lt.ink }}">{{ lt.title }}</span>
+                <span style="font-size:12px;color:var(--ink-3)">{{ lt.owner }}</span>
+                <button onClick="{{ lt.toggle }}" style="height:26px;padding:0 9px;border:1px solid var(--line);border-radius:6px;background:var(--panel);font-size:12px;cursor:pointer">{{ lt.action }}</button>
+              </div>
+            </sc-for>
+          </div>
+          <button onClick="{{ newTaskForLead }}" style="margin-top:12px;height:30px;padding:0 12px;border:1px dashed var(--line-2);border-radius:8px;background:none;font-size:12.5px;cursor:pointer;color:var(--ink-2)">+ Nova tarefa para {{ lead.first }}</button>
+        </sc-if>
+
+        <sc-if value="{{ tab.negociacao }}" hint-placeholder-val="{{ false }}">
+          <div style="border:1px solid var(--line);border-radius:11px;padding:14px 16px;display:flex;flex-direction:column;gap:9px">
+            <sc-for list="{{ lead.negRows }}" as="kv" hint-placeholder-count="6">
+              <div style="display:flex;gap:12px;font-size:13px"><span style="width:130px;flex:none;color:var(--ink-3)">{{ kv.k }}</span><span style="flex:1;min-width:0;overflow-wrap:anywhere">{{ kv.v }}</span></div>
+            </sc-for>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ tab.arquivos }}" hint-placeholder-val="{{ false }}">
+          <div style="border:1px solid var(--line);border-radius:11px;overflow:hidden">
+            <sc-for list="{{ lead.files }}" as="f" hint-placeholder-count="3">
+              <div style="display:flex;align-items:center;gap:12px;padding:11px 14px;border-top:{{ f.border }}">
+                <span style="font-family:'Geist Mono',monospace;font-size:10.5px;font-weight:500;width:34px;height:22px;border-radius:5px;background:var(--sunken);display:grid;place-items:center;color:var(--ink-2)">{{ f.ext }}</span>
+                <span style="flex:1;font-size:13.5px">{{ f.name }}</span>
+                <span style="font-size:12px;color:var(--ink-3)">{{ f.meta }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ tab.historico }}" hint-placeholder-val="{{ false }}">
+          <div style="display:flex;flex-direction:column">
+            <sc-for list="{{ lead.history }}" as="hi" hint-placeholder-count="4">
+              <div style="display:flex;gap:12px;padding-bottom:14px">
+                <span style="width:7px;height:7px;border-radius:4px;margin-top:6px;flex:none;background:{{ hi.dot }}"></span>
+                <div style="flex:1"><div style="font-size:13.5px">{{ hi.text }}</div><div style="font-size:12px;color:var(--ink-3);margin-top:2px">{{ hi.when }}</div></div>
+              </div>
+            </sc-for>
+          </div>
+        </sc-if>
+      </div>
+    </div>
+  </div>
+</sc-if>
+
+<sc-if value="{{ modal.open }}" hint-placeholder-val="{{ false }}">
+  <div onClick="{{ closeModal }}" style="position:fixed;inset:0;background:var(--overlay);z-index:50;animation:fadeIn .15s ease"></div>
+  <div style="position:fixed;left:50%;top:14vh;transform:translateX(-50%);width:min(520px,calc(100vw - 24px));z-index:51">
+    <div style="background:var(--panel);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);animation:popIn .18s cubic-bezier(.2,.8,.2,1)">
+      <div style="padding:18px 20px 0;display:flex;align-items:center">
+        <div style="font-size:15px;font-weight:600">Nova tarefa</div>
+        <div style="flex:1"></div>
+        <span style="font-size:12px;color:var(--ink-3)">Enter para criar · Esc para fechar</span>
+      </div>
+      <div style="padding:16px 20px;display:flex;flex-direction:column;gap:16px">
+        <div style="display:flex;flex-wrap:wrap;gap:6px">
+          <sc-for list="{{ typeChips }}" as="tc" hint-placeholder-count="8">
+            <button onClick="{{ tc.pick }}" style="height:30px;padding:0 10px 0 8px;border-radius:7px;font-size:12.5px;font-weight:500;cursor:pointer;display:flex;align-items:center;gap:6px;border:1px solid {{ tc.border }};background:{{ tc.bg }};color:{{ tc.color }}">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="{{ tc.icon }}"></path></svg>{{ tc.label }}
+            </button>
+          </sc-for>
+        </div>
+        <label style="display:flex;flex-direction:column;gap:6px;font-size:12px;color:var(--ink-3)">Lead
+          <select value="{{ modal.lead }}" onChange="{{ modalLead }}" style="height:36px;border:1px solid var(--line-2);border-radius:8px;padding:0 10px;font-size:13.5px;background:var(--panel);color:var(--ink);outline:none">
+            <sc-for list="{{ leadOptions }}" as="lo" hint-placeholder-count="4"><option value="{{ lo.id }}" selected="{{ lo.sel }}">{{ lo.label }}</option></sc-for>
+          </select>
+        </label>
+        <div style="display:flex;gap:12px;flex-wrap:wrap">
+          <div style="display:flex;flex-direction:column;gap:6px;font-size:12px;color:var(--ink-3);flex:1 1 200px">Quando
+            <div style="display:flex;gap:6px">
+              <sc-for list="{{ dayChips }}" as="dc" hint-placeholder-count="2">
+                <button onClick="{{ dc.pick }}" style="height:36px;flex:1;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer;border:1px solid {{ dc.border }};background:{{ dc.bg }};color:{{ dc.color }}">{{ dc.label }}</button>
+              </sc-for>
+              <input type="time" value="{{ modal.time }}" onChange="{{ modalTime }}" style="height:36px;width:104px;border:1px solid var(--line-2);border-radius:8px;padding:0 8px;font-family:'Geist Mono',monospace;font-size:13px;background:var(--panel);color:var(--ink)">
+            </div>
+          </div>
+          <label style="display:flex;flex-direction:column;gap:6px;font-size:12px;color:var(--ink-3);flex:0 1 150px">Responsável
+            <select key="{{ modal.owner }}" value="{{ modal.owner }}" onChange="{{ modalOwner }}" style="height:36px;border:1px solid var(--line-2);border-radius:8px;padding:0 10px;font-size:13.5px;background:var(--panel);color:var(--ink);outline:none">
+              <sc-for list="{{ modalOwnerOpts }}" as="o" hint-placeholder-count="4"><option value="{{ o.id }}" selected="{{ o.sel }}">{{ o.label }}</option></sc-for>
+            </select>
+          </label>
+        </div>
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;padding:12px 20px 18px">
+        <button onClick="{{ closeModal }}" style="height:34px;padding:0 14px;border:1px solid var(--line);border-radius:8px;background:var(--panel);font-size:13px;font-weight:500;cursor:pointer">Cancelar</button>
+        <button onClick="{{ createTask }}" style="height:34px;padding:0 14px;border:0;border-radius:8px;background:var(--btn);color:var(--btn-ink);font-size:13px;font-weight:600;cursor:pointer">Criar tarefa</button>
+      </div>
+    </div>
+  </div>
+</sc-if>
+
+<sc-if value="{{ toast }}" hint-placeholder-val="{{ false }}">
+  <div style="position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:60;animation:fadeIn .15s ease">
+    <div style="display:flex;align-items:center;gap:14px;padding:10px 10px 10px 16px;border-radius:11px;background:var(--btn);color:var(--btn-ink);box-shadow:var(--shadow);font-size:13.5px;white-space:nowrap">
+      <span>{{ toast.text }}</span>
+      <sc-if value="{{ toast.undo }}" hint-placeholder-val="{{ false }}"><button onClick="{{ toast.undo }}" style="border:0;background:none;color:inherit;opacity:.65;font-weight:600;cursor:pointer">Desfazer</button></sc-if>
+      <sc-if value="{{ toast.next }}" hint-placeholder-val="{{ false }}"><button onClick="{{ toast.next }}" style="height:28px;padding:0 10px;border:0;border-radius:7px;background:var(--panel);color:var(--ink);font-size:12.5px;font-weight:600;cursor:pointer">Agendar próxima</button></sc-if>
+    </div>
+  </div>
+</sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;theme&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;Claro&quot;,&quot;Escuro&quot;],&quot;default&quot;:&quot;Claro&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;kind&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;Clientes diretos&quot;,&quot;Corretores&quot;,&quot;Tudo&quot;],&quot;default&quot;:&quot;Clientes diretos&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;density&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;Confortável&quot;,&quot;Compacto&quot;],&quot;default&quot;:&quot;Confortável&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;scope&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;Equipe&quot;,&quot;Minhas&quot;],&quot;default&quot;:&quot;Equipe&quot;,&quot;tsType&quot;:&quot;string&quot;}}">
+const P={
+  today:'M12 3v2M12 19v2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M3 12h2M19 12h2M5.6 18.4L7 17M17 7l1.4-1.4M12 16a4 4 0 1 0 0-8 4 4 0 0 0 0 8z',
+  chat:'M21 11.5a8.4 8.4 0 0 1-12.4 7.4L3 21l2.1-5.4A8.4 8.4 0 1 1 21 11.5z',
+  pipe:'M4 4h4v16H4zM10 4h4v11h-4zM16 4h4v7h-4z',
+  users:'M16 20v-1a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v1M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM22 20v-1a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8',
+  tasks:'M9 11l3 3 8-8M20 12v7a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h11',
+  chart:'M4 20V11M10 20V5M16 20v-6M21 20H3',
+  nara:'M12 3l1.8 6.2L20 11l-6.2 1.8L12 19l-1.8-6.2L4 11l6.2-1.8z',
+  cog:'M4 7h9M17 7h3M4 17h3M11 17h9M15 5v4M9 15v4',
+  phone:'M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2z',
+  video:'M15 10l6-3.5v11L15 14M3 6h12v12H3z',
+  home:'M3 10.5L12 3l9 7.5M5 9v12h14V9M10 21v-6h4v6',
+  file:'M14 3H6v18h12V7zM14 3v4h4M9 13h6M9 17h6',
+  send:'M22 2L11 13M22 2l-7 20-4-9-9-4z',
+  follow:'M3 12a9 9 0 1 0 3-6.7M3 3v5h5M12 8v4l3 2',
+  dot:'M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8z'
+};
+const TYPES={
+  ligacao:{label:'Ligação',icon:P.phone,verb:'Ligar para'},
+  whatsapp:{label:'WhatsApp',icon:P.chat,verb:'WhatsApp para'},
+  reuniao:{label:'Reunião',icon:P.video,verb:'Reunião com'},
+  visita:{label:'Visita',icon:P.home,verb:'Visita com'},
+  proposta:{label:'Enviar proposta',icon:P.file,verb:'Enviar proposta para'},
+  material:{label:'Enviar material',icon:P.send,verb:'Enviar material para'},
+  followup:{label:'Follow-up',icon:P.follow,verb:'Follow-up com'},
+  outro:{label:'Outro',icon:P.dot,verb:'Tarefa ·'}
+};
+const TEAM={fabio:'Fábio',tais:'Taís',bruno:'Bruno',renata:'Renata'};
+const STAGES=['Lead novo','Primeiro contato','Qualificado','Material enviado','Corretor atendendo','Visita','Proposta','Negociação','Fechado'];
+const DEVS={flow:'Flow Residence',alma:'Alma Sea Houses',soul:'Soul Residence'};
+const BROKER_STAGES=['Cadastro','Primeiro contato','Material enviado','Parceiro ativo','Cliente em negociação','Venda realizada'];
+
+function mk(id,o){
+  const br=o.country==='Brasil';
+  const d=Object.assign({lang:'Português',origin:'Meta Ads',campaign:'—',agency:'—',typology:'—',budget:'—',goal:'Investimento',deadline:'Até 12 meses',unit:'—',value:'—',condition:'Tabela vigente',entrada:'—',parcelas:'—',reforcos:'—',permuta:'Não',entered:'—',temp:'Morno',ai:'human',summary:'Sem resumo gerado ainda.',msgs:null,history:null},o);
+  d.id=id;d.place=br?`${o.city}, ${o.uf}`:`${o.city}, ${o.country}`;
+  d.initials=o.name.split(' ').filter(w=>w.length>2||w===o.name.split(' ')[0]).slice(0,2).map(w=>w[0]).join('').toUpperCase();
+  d.first=o.name.split(' ')[0];
+  d.kind=o.kind||'cliente';d.devName=DEVS[o.dev]||'Todos os empreendimentos';
+  if(!d.msgs)d.msgs=[
+    {who:'cliente',text:'Olá! Vi o anúncio do '+d.devName+' e queria mais informações.',time:'—'},
+    {who:'nara',text:`Olá, ${d.first}! Sou a Nara, da BOSSA. Posso te enviar o book e a tabela atualizada do ${d.devName}?`,time:'—'}
+  ];
+  if(!d.history)d.history=[{text:'Lead criado via '+d.origin,when:d.entered,dot:'var(--ink-3)'}];
+  return d;
+}
+const LEADS={
+  juliana:mk('juliana',{name:'Juliana Freitas',city:'Orlando',uf:'FL',country:'EUA',dev:'alma',stage:4,owner:'tais',phone:'+1 407 555 0182',email:'juliana.freitas@gmail.com',lang:'Português, Inglês',origin:'Meta Ads',campaign:'Alma · Brasileiros nos EUA',typology:'Casa 3 suítes · 186 m²',budget:'R$ 1,2 – 1,6 mi',goal:'Temporada',deadline:'Até 6 meses',unit:'Casa 07',value:'R$ 1.420.000',condition:'Tabela Ago/26',entrada:'20% · R$ 284.000',parcelas:'36× R$ 15.780',reforcos:'3 anuais de R$ 94.000',permuta:'Não',entered:'12 set 2026',temp:'Quente',ai:'human',
+    summary:'Brasileira morando em Orlando, busca casa para temporada com renda de aluguel. Prefere unidades de frente para o mar e decide com o marido. Pediu simulação com entrada de 20% e ligação após as 9h (horário da Flórida).',
+    msgs:[
+      {who:'cliente',text:'Oi! Vocês têm casa com 3 suítes ainda disponível no Alma?',time:'28 set 13:48'},
+      {who:'nara',text:'Oi, Juliana! Temos sim — a Casa 07 e a Casa 11, ambas com 3 suítes e 186 m². Quer que eu envie a planta e a tabela?',time:'28 set 13:49'},
+      {who:'cliente',text:'Quero. E gostaria de falar com alguém sobre as condições de pagamento.',time:'28 set 13:55'},
+      {event:true,text:'Handoff · Nara → Taís · 28 set 14:02'},
+      {who:'corretor',name:'Taís',text:'Juliana, aqui é a Taís. Te mandei a simulação da Casa 07 com 20% de entrada. Posso te ligar amanhã às 9h30?',time:'29 set 16:40'},
+      {who:'cliente',text:'Pode sim, obrigada!',time:'29 set 16:52'}
+    ],
+    history:[
+      {text:'Taís enviou simulação · Casa 07',when:'29 set, 16:40',dot:'var(--blue)'},
+      {text:'Handoff da Nara para Taís — pediu condições de pagamento',when:'28 set, 14:02',dot:'var(--blue)'},
+      {text:'Etapa → Corretor atendendo',when:'28 set, 14:02',dot:'var(--ink-3)'},
+      {text:'Nara enviou book e tabela do Alma',when:'28 set, 13:50',dot:'var(--ink-3)'},
+      {text:'Lead criado via Meta Ads · Alma · Brasileiros nos EUA',when:'12 set, 09:14',dot:'var(--ink-3)'}
+    ]}),
+  rodrigo:mk('rodrigo',{name:'Rodrigo Martins',city:'Curitiba',uf:'PR',country:'Brasil',dev:'flow',stage:5,owner:'fabio',phone:'+55 41 99812 4410',email:'rodrigo.martins@outlook.com',origin:'Site BOSSA',campaign:'Flow · Google Search',typology:'Apto 2 suítes · 94 m²',budget:'R$ 900 mil – 1,1 mi',goal:'Moradia',deadline:'Até 3 meses',unit:'Apto 1204',value:'R$ 1.080.000',condition:'Tabela Mai/26',entrada:'30% · R$ 324.000',parcelas:'48× R$ 11.250',reforcos:'2 anuais de R$ 108.000',permuta:'Apartamento em Curitiba',entered:'3 set 2026',temp:'Quente',ai:'handoff',
+    summary:'Engenheiro, muda-se para o litoral em 2027. Interessado no Apto 1204 (vista mar). Pediu para visitar o decorado do Flow e avaliar permuta de um apartamento em Curitiba.',
+    msgs:[
+      {who:'cliente',text:'Consigo visitar o decorado do Flow esta semana?',time:'10:28'},
+      {who:'nara',text:'Consegue sim, Rodrigo! Vou pedir para o Fábio confirmar o melhor horário com você.',time:'10:28'},
+      {event:true,text:'Handoff pendente · Nara → equipe · há 12 min'}
+    ]}),
+  matias:mk('matias',{name:'Matías González',city:'Santiago',uf:'',country:'Chile',dev:'alma',stage:3,owner:'tais',phone:'+56 9 8841 2207',email:'mgonzalez@gmail.com',lang:'Espanhol',origin:'Meta Ads',campaign:'Alma · LatAm Espanhol',typology:'Casa 4 suítes · 232 m²',budget:'US$ 350 – 420 mil',goal:'Temporada',deadline:'Até 12 meses',unit:'Casa 14',value:'R$ 1.960.000',entered:'18 set 2026',temp:'Morno',ai:'nara',
+    summary:'Chileno, já veraneia em Santa Catarina. Recebeu material em espanhol há 2 dias e não respondeu. Pergunta recorrente: pagamento em dólar e gestão de aluguel.',
+    msgs:[
+      {who:'cliente',text:'Hola, ¿tienen material en español del Alma?',time:'27 set 19:02'},
+      {who:'nara',text:'¡Hola, Matías! Sí, te envío el book y la tabla en español. ¿Prefieres casa de 3 o 4 suites?',time:'27 set 19:02'},
+      {who:'nara',text:'Matías, ¿pudiste ver el material? Puedo agendar una llamada con Taís cuando te quede bien.',time:'28 set 10:00'}
+    ]}),
+  carlos:mk('carlos',{name:'Carlos Mendes',city:'São Paulo',uf:'SP',country:'Brasil',dev:'flow',stage:6,owner:'fabio',phone:'+55 11 98120 3355',email:'carlos@mendesadv.com.br',origin:'Indicação',campaign:'—',agency:'—',typology:'Cobertura · 168 m²',budget:'R$ 2 – 2,5 mi',goal:'Investimento',deadline:'Este mês',unit:'Cobertura 1801',value:'R$ 2.340.000',condition:'Proposta 26 set',entrada:'25% · R$ 585.000',parcelas:'30× R$ 38.600',reforcos:'2 semestrais de R$ 246.000',permuta:'Não',entered:'22 ago 2026',temp:'Quente',ai:'human',
+    summary:'Advogado, compra para investimento. Recebeu proposta da Cobertura 1801 em 26 set e pediu revisão do fluxo de reforços. Sem resposta há 4 dias.',
+    msgs:[
+      {who:'corretor',name:'Fábio',text:'Carlos, segue a proposta da Cobertura 1801. Fico à disposição para ajustar o fluxo.',time:'26 set 11:20'},
+      {who:'cliente',text:'Recebi. Vou analisar com meu contador e retorno.',time:'26 set 18:05'}
+    ]}),
+  helena:mk('helena',{name:'Helena Duarte',city:'Florianópolis',uf:'SC',country:'Brasil',dev:'soul',stage:3,owner:'bruno',entered:'2 set 2026',temp:'Frio',ai:'nara'}),
+  pedro:mk('pedro',{name:'Pedro Albuquerque',city:'Balneário Camboriú',uf:'SC',country:'Brasil',dev:'flow',stage:2,owner:'fabio',entered:'25 set 2026',ai:'human'}),
+  ana:mk('ana',{name:'Ana Beatriz Lima',city:'Porto Alegre',uf:'RS',country:'Brasil',dev:'soul',stage:1,owner:'renata',entered:'29 set 2026',ai:'nara'}),
+  okada:mk('okada',{name:'Renato Okada',city:'São Paulo',uf:'SP',country:'Brasil',dev:'alma',stage:5,owner:'tais',entered:'10 set 2026',temp:'Quente'}),
+  lucas:mk('lucas',{name:'Lucas Ferraz',city:'Lisboa',uf:'',country:'Portugal',dev:'soul',stage:2,owner:'bruno',entered:'30 set 2026',ai:'handoff'}),
+  mariana:mk('mariana',{name:'Mariana Costa',city:'Miami',uf:'FL',country:'EUA',dev:'alma',stage:3,owner:'tais',lang:'Português, Inglês',entered:'21 set 2026'}),
+  gustavo:mk('gustavo',{name:'Gustavo Reis',city:'Joinville',uf:'SC',country:'Brasil',dev:'flow',stage:2,owner:'fabio',entered:'14 set 2026'}),
+  camila:mk('camila',{name:'Camila Serrano',city:'Buenos Aires',uf:'',country:'Argentina',dev:'alma',stage:4,owner:'renata',lang:'Espanhol',entered:'16 set 2026'}),
+  marcelo:mk('marcelo',{kind:'corretor',name:'Marcelo Tavares',city:'Balneário Camboriú',uf:'SC',country:'Brasil',dev:'alma',agency:'Tavares Imóveis',creci:'CRECI 28.114-F',stage:3,owner:'fabio',phone:'+55 47 99130 8821',email:'marcelo@tavaresimoveis.com.br',origin:'Plantão de corretores',entered:'4 ago 2026',temp:'Quente',ai:'human',referred:'4 clientes',visits:'2 este mês',sales:'1 · R$ 1,38 mi',
+    summary:'Parceiro ativo em Balneário Camboriú, foco no Alma. Tem dois clientes em fase de visita e pediu a tabela de agosto para fechar uma proposta esta semana.',
+    msgs:[{who:'cliente',text:'Fábio, consegue me mandar a tabela nova do Alma? Tenho cliente querendo fechar a Casa 03.',time:'29 set 09:12'},{who:'nara',name:'Plantão',text:'Oi, Marcelo! Já avisei o Fábio. A tabela de agosto sai hoje pela manhã.',time:'29 set 09:12'}]}),
+  patricia:mk('patricia',{kind:'corretor',name:'Patrícia Lemos',city:'Curitiba',uf:'PR',country:'Brasil',dev:'flow',agency:'Lemos & Co. Imóveis',creci:'CRECI 19.402-F',stage:2,owner:'fabio',origin:'Indicação',entered:'17 set 2026',temp:'Morno',ai:'human',referred:'1 cliente',visits:'—',sales:'—',
+    summary:'Imobiliária de Curitiba com carteira de clientes que buscam o litoral. Quer apresentar o Flow para a equipe dela.',
+    msgs:[{who:'cliente',text:'Podemos marcar uma conversa para eu apresentar o Flow ao meu time?',time:'28 set 17:40'}]}),
+  andre:mk('andre',{kind:'corretor',name:'André Kim',city:'São Paulo',uf:'SP',country:'Brasil',dev:'flow',agency:'Kim Negócios Imobiliários',creci:'CRECI 201.337-F',stage:4,owner:'tais',origin:'Plantão de corretores',entered:'22 jul 2026',temp:'Quente',ai:'handoff',referred:'6 clientes',visits:'3 este mês',sales:'2 · R$ 2,1 mi',
+    summary:'Parceiro de São Paulo com o maior número de indicações. Pediu reserva do Apto 804 do Flow para um cliente que visita hoje.',
+    msgs:[{who:'cliente',text:'Consegue segurar o 804 do Flow até amanhã? Meu cliente visita hoje à tarde.',time:'10:21'},{who:'nara',name:'Plantão',text:'André, reservas precisam de aprovação da equipe. Já passei para a Taís.',time:'10:21'},{event:true,text:'Handoff pendente · Plantão → equipe · há 19 min'}]}),
+  luiza:mk('luiza',{kind:'corretor',name:'Luiza Prado',city:'Florianópolis',uf:'SC',country:'Brasil',dev:null,agency:'Prado Imóveis',creci:'CRECI 31.905-F',stage:0,owner:'bruno',origin:'Cadastro no site',entered:'30 set 2026',temp:'Morno',ai:'nara',referred:'—',visits:'—',sales:'—',
+    msgs:[{who:'cliente',text:'Olá, sou corretora em Florianópolis e gostaria de trabalhar com os empreendimentos da BOSSA.',time:'09:05'}]}),
+  beatriz:mk('beatriz',{name:'Beatriz Nogueira',city:'São Paulo',uf:'SP',country:'Brasil',dev:'soul',stage:0,owner:'renata',entered:'30 set 2026',origin:'Meta Lead Ads',ai:'nara'})
+};
+const T0=[
+  {id:1,lead:'carlos',type:'proposta',title:'Revisar proposta com Carlos Mendes',when:'overdue',time:'17:30',day:'Ontem',owner:'fabio',last:'4d',lastH:96},
+  {id:2,lead:'matias',type:'ligacao',when:'overdue',time:'08:30',day:'há 2h10',owner:'tais',last:'2d',lastH:50},
+  {id:3,lead:'helena',type:'followup',when:'overdue',time:'09:00',day:'há 1h40',owner:'bruno',last:'3d',lastH:72,nara:true},
+  {id:4,lead:'juliana',type:'ligacao',when:'overdue',time:'09:30',day:'há 1h10',owner:'tais',last:'18h',lastH:18},
+  {id:5,lead:'pedro',type:'whatsapp',when:'overdue',time:'10:00',day:'há 40 min',owner:'fabio',last:'26h',lastH:26},
+  {id:6,lead:'rodrigo',type:'reuniao',title:'Videochamada com Rodrigo Martins',when:'today',time:'11:00',owner:'fabio',last:'12 min',lastH:0},
+  {id:7,lead:'ana',type:'whatsapp',when:'today',time:'11:30',owner:'renata',last:'5h',lastH:5},
+  {id:8,lead:'okada',type:'visita',title:'Visita ao decorado · Renato Okada',when:'today',time:'14:00',owner:'tais',last:'1d',lastH:24},
+  {id:9,lead:'lucas',type:'material',when:'today',time:'15:00',owner:'bruno',last:'40 min',lastH:0,nara:true},
+  {id:10,lead:'juliana',type:'whatsapp',when:'today',time:'16:00',owner:'tais',last:'18h',lastH:18},
+  {id:11,lead:'gustavo',type:'ligacao',when:'today',time:'16:30',owner:'fabio',last:'3d',lastH:72},
+  {id:12,lead:'camila',type:'followup',when:'today',time:'17:30',owner:'renata',last:'2d',lastH:48,nara:true},
+  {id:13,lead:'mariana',type:'whatsapp',when:'today',time:'18:00',owner:'tais',last:'6h',lastH:6},
+  {id:14,lead:'rodrigo',type:'visita',title:'Visita ao decorado · Rodrigo Martins',when:'upcoming',time:'09:00',day:'Amanhã',owner:'fabio',last:'12 min',lastH:0},
+  {id:15,lead:'matias',type:'proposta',when:'upcoming',time:'10:30',day:'Amanhã',owner:'tais',last:'2d',lastH:50},
+  {id:16,lead:'helena',type:'reuniao',when:'upcoming',time:'14:00',day:'Sex, 2 out',owner:'bruno',last:'3d',lastH:72},
+  {id:17,lead:'carlos',type:'reuniao',when:'upcoming',time:'10:00',day:'Seg, 5 out',owner:'fabio',last:'4d',lastH:96},
+  {id:18,lead:'marcelo',type:'material',title:'Enviar tabela Ago/26 do Alma · Marcelo Tavares',when:'overdue',time:'09:15',day:'há 1h25',owner:'fabio',last:'1d',lastH:25},
+  {id:19,lead:'patricia',type:'reuniao',title:'Apresentar o Flow à equipe · Patrícia Lemos',when:'today',time:'13:30',owner:'fabio',last:'2d',lastH:48},
+  {id:20,lead:'andre',type:'visita',title:'Visita do cliente do André Kim · Flow',when:'today',time:'15:30',owner:'tais',last:'19 min',lastH:0},
+  {id:21,lead:'luiza',type:'ligacao',title:'Boas-vindas · Luiza Prado',when:'today',time:'17:00',owner:'bruno',last:'1h',lastH:1,nara:true},
+  {id:22,lead:'patricia',type:'material',title:'Enviar book do Flow · Patrícia Lemos',when:'upcoming',time:'11:00',day:'Amanhã',owner:'fabio',last:'2d',lastH:48}
+];
+const plural=(n,s,p)=>`${n} ${n===1?s:p}`;
+
+class Component extends DCLogic {
+  state={theme:null,scope:null,tasks:T0.map(t=>({...t,done:false})),showDone:true,drawer:null,tab:'overview',stages:{},owners:{},extraMsgs:{},draft:'',modal:{open:false},toast:null,handoffs:{rodrigo:null,lucas:'Bruno',andre:null},kind:null};
+
+  componentDidMount(){
+    this.onKey=e=>{
+      const tag=(e.target.tagName||'').toLowerCase();
+      if(e.key==='Escape'){ if(this.state.modal.open)this.setState({modal:{open:false}}); else if(this.state.drawer)this.setState({drawer:null}); }
+      else if(e.key==='Enter'&&this.state.modal.open&&tag!=='textarea'){ e.preventDefault(); this.createTask(); }
+      else if((e.key==='n'||e.key==='N')&&!['input','select','textarea'].includes(tag)&&!this.state.modal.open){ e.preventDefault(); this.openModal(); }
+    };
+    window.addEventListener('keydown',this.onKey);
+  }
+  componentWillUnmount(){ window.removeEventListener('keydown',this.onKey); clearTimeout(this.tt); }
+
+  flash(toast){ clearTimeout(this.tt); this.setState({toast}); this.tt=setTimeout(()=>this.setState({toast:null}),6000); }
+  lead(id){ const b=LEADS[id]; return {...b,stage:this.state.stages[id]??b.stage,owner:this.state.owners[id]??b.owner}; }
+  titleOf(t){ if(t.title)return t.title; const L=LEADS[t.lead]; return `${TYPES[t.type].verb} ${L.name}`; }
+  complete(id){
+    const t=this.state.tasks.find(x=>x.id===id);
+    this.setState(s=>({tasks:s.tasks.map(x=>x.id===id?{...x,done:true}:x)}));
+    this.flash({text:'Concluída · '+this.titleOf(t),undo:()=>{this.reopen(id);this.setState({toast:null});},next:()=>{this.setState({toast:null});this.openModal(t.lead);}});
+  }
+  reopen(id){ this.setState(s=>({tasks:s.tasks.map(x=>x.id===id?{...x,done:false}:x)})); }
+  openLead(id,tab){ this.setState({drawer:id,tab:tab||'overview',draft:''}); }
+  openModal(leadId){ const L=leadId?this.lead(leadId):null; this.setState({modal:{open:true,type:'whatsapp',lead:leadId||'juliana',day:'Hoje',time:'15:00',owner:L?L.owner:'fabio'}}); }
+  createTask(){
+    const m=this.state.modal; if(!m.open)return;
+    const id=Date.now(); const L=LEADS[m.lead];
+    const t={id,lead:m.lead,type:m.type,when:m.day==='Hoje'?'today':'upcoming',time:m.time||'09:00',day:m.day==='Hoje'?undefined:'Amanhã',owner:m.owner,last:'agora',lastH:0};
+    this.setState(s=>({tasks:[...s.tasks,t],modal:{open:false}}));
+    this.flash({text:`Tarefa criada · ${m.day} ${t.time} · ${TEAM[m.owner]}`,undo:()=>{this.setState(s=>({tasks:s.tasks.filter(x=>x.id!==id),toast:null}));}});
+  }
+  setStage(id,i){ const SG=LEADS[id].kind==='corretor'?BROKER_STAGES:STAGES; i=Math.max(0,Math.min(SG.length-1,i)); this.setState(s=>({stages:{...s.stages,[id]:i}})); this.flash({text:'Etapa alterada para '+SG[i]}); }
+
+  renderVals(){
+    const s=this.state;
+    const theme=s.theme||(this.props.theme==='Escuro'?'dark':'light');
+    const scope=s.scope||(this.props.scope==='Minhas'?'Minhas':'Equipe');
+    const compact=this.props.density==='Compacto';
+    const kind=s.kind||({'Corretores':'corretor','Tudo':'tudo'}[this.props.kind]||'cliente');
+    const kindOk=id=>kind==='tudo'||LEADS[id].kind===kind;
+    const ownerOk=t=>scope==='Equipe'||t.owner==='fabio';
+    const inScope=t=>ownerOk(t)&&kindOk(t.lead);
+    const open=s.tasks.filter(t=>!t.done&&inScope(t));
+    const sortT=(a,b)=>((a.day==='Ontem')-(b.day==='Ontem'))*-1||(a.time>b.time?1:-1);
+    const row=t=>{const L=this.lead(t.lead);const ty=TYPES[t.type];const od=t.when==='overdue';
+      return {id:t.id,icon:ty.icon,typeLabel:ty.label,time:t.time,day:t.day||'',timeColor:od?'var(--red)':'var(--ink)',subColor:od?'var(--red)':'var(--ink-3)',
+        title:this.titleOf(t),byNara:!!t.nara,isBroker:L.kind==='corretor'&&kind==='tudo',aiName:L.kind==='corretor'?'Plantão':'Nara',dev:L.kind==='corretor'?L.agency:L.devName,place:L.place,owner:TEAM[t.owner],ownerInitial:TEAM[t.owner][0],
+        last:t.last,lastColor:t.lastH>=48?'var(--orange)':'var(--ink-3)',
+        open:()=>this.openLead(t.lead),wa:()=>this.openLead(t.lead,'conversas'),done:()=>this.complete(t.id)};};
+    const by=w=>open.filter(t=>t.when===w).sort(sortT);
+    const od=by('overdue'),td=by('today'),up=by('upcoming');
+    const sections=[
+      {title:'Atrasadas',list:od,dot:'var(--red)',titleColor:'var(--red)',headBg:'var(--red-soft)',border:'var(--red-line)',hint:'Resolva primeiro',emptyText:'Nada atrasado. Bom trabalho.'},
+      {title:'Hoje',list:td,dot:'var(--blue)',titleColor:'var(--ink)',headBg:'var(--panel)',border:'var(--line)',hint:'Quarta, 30 set',emptyText:'Nenhuma tarefa para hoje.'},
+      {title:'Próximas',list:up,dot:'var(--ink-3)',titleColor:'var(--ink)',headBg:'var(--panel)',border:'var(--line)',hint:'Próximos 7 dias',emptyText:'Nada agendado.'}
+    ].map(x=>({...x,count:x.list.length,empty:x.list.length===0,rows:x.list.map(row)}));
+    const doneList=s.tasks.filter(t=>t.done&&inScope(t));
+    const pendingHandoffs=Object.values(s.handoffs).filter(v=>!v).length;
+    const aiName=kind==='corretor'?'Plantão':kind==='tudo'?'Nara + Plantão':'Nara';
+
+    const navDef=[['Hoje',P.today],['Conversas',P.chat],['Pipeline',P.pipe],['Leads',P.users],['Tarefas',P.tasks],['Gestão',P.chart],['Nara',P.nara],['Configurações',P.cog]];
+    const nav=navDef.map(([label,icon])=>{const on=label==='Hoje';
+      const badge=label==='Hoje'?(od.length||''):label==='Conversas'?'3':label==='Nara'?(pendingHandoffs||''):'';
+      return {label,icon,color:on?'var(--ink)':'var(--ink-2)',bg:on?'var(--panel)':'transparent',badge,
+        badgeBg:label==='Hoje'?'var(--red-soft)':'var(--sunken)',badgeInk:label==='Hoje'?'var(--red)':'var(--ink-2)',
+        go:()=>{ if(!on)this.flash({text:label+' · desenhada na próxima etapa'}); }};});
+
+    const allOpen=s.tasks.filter(t=>!t.done&&kindOk(t.lead));
+    const kindCount=k=>s.tasks.filter(t=>!t.done&&ownerOk(t)&&(k==='tudo'||LEADS[t.lead].kind===k)&&t.when!=='upcoming').length;
+    const kinds=[['cliente','Clientes diretos'],['corretor','Corretores'],['tudo','Tudo']].map(([k,label])=>{const on=kind===k;return {label,count:kindCount(k),
+      color:on?'var(--ink)':'var(--ink-3)',line:on?'inset 0 -2px 0 var(--ink)':'none',badgeBg:on?'var(--btn)':'var(--sunken)',badgeInk:on?'var(--btn-ink)':'var(--ink-2)',
+      pick:()=>this.setState({kind:k})};});
+    const nOd=allOpen.filter(t=>t.when==='overdue').length, nTd=allOpen.filter(t=>t.when==='today').length;
+    const kpis=kind==='corretor'?[
+      {label:'Corretores novos',value:'2',dot:'var(--blue)',color:'var(--ink)'},
+      {label:'Atrasadas',value:String(nOd),dot:'var(--red)',color:nOd?'var(--red)':'var(--ink)'},
+      {label:'Para hoje',value:String(nTd),dot:'var(--ink-3)',color:'var(--ink)'},
+      {label:'Sem resposta',value:'1',dot:'var(--orange)',color:'var(--orange)'},
+      {label:'Clientes indicados no mês',value:'11',dot:'var(--ink-3)',color:'var(--ink)'},
+      {label:'Vendas via corretor',value:'R$ 3,5 mi',dot:'var(--green)',color:'var(--ink)'}
+    ]:[
+      {label:'Leads novos hoje',value:'8',dot:'var(--blue)',color:'var(--ink)'},
+      {label:'Atrasadas',value:String(nOd),dot:'var(--red)',color:nOd?'var(--red)':'var(--ink)'},
+      {label:'Para hoje',value:String(nTd),dot:'var(--ink-3)',color:'var(--ink)'},
+      {label:'Sem resposta',value:'6',dot:'var(--orange)',color:'var(--orange)'},
+      {label:'Negociações paradas',value:'4',dot:'var(--orange)',color:'var(--ink)'},
+      {label:'Propostas abertas',value:'R$ 6,8 mi',dot:'var(--green)',color:'var(--ink)'}
+    ];
+    const alertDef=[
+      {lead:'beatriz',rule:'Lead novo sem primeiro contato',sub:'Soul Residence · entrou há 35 min · Nara atendendo',color:'var(--red)',act:'WhatsApp'},
+      {lead:'matias',rule:'Sem resposta há 2 dias',sub:'Alma Sea Houses · material enviado',color:'var(--orange)',act:'WhatsApp'},
+      {lead:'carlos',rule:'Proposta enviada há 4 dias',sub:'Flow Residence · Cobertura 1801 · R$ 2,34 mi',color:'var(--orange)',act:'Ligar'},
+      {lead:'gustavo',rule:'Sem próxima atividade',sub:'Flow Residence · Qualificado',color:'var(--orange)',act:'Criar tarefa'},
+      {lead:'camila',rule:'Aguardando follow-up',sub:'Alma Sea Houses · há 2 dias',color:'var(--ink-3)',act:'WhatsApp'},
+      {lead:'helena',rule:'Parada em Material enviado há 9 dias',sub:'Soul Residence · Bruno',color:'var(--ink-3)',act:'Abrir'},
+      {lead:'luiza',rule:'Corretora nova sem boas-vindas',sub:'Prado Imóveis · cadastrou-se há 1h',color:'var(--red)',act:'WhatsApp'},
+      {lead:'marcelo',rule:'Aguardando tabela atualizada',sub:'Tavares Imóveis · cliente pronto para proposta',color:'var(--orange)',act:'WhatsApp'},
+      {lead:'patricia',rule:'Sem próxima atividade após reunião',sub:'Lemos & Co. Imóveis · Curitiba',color:'var(--ink-3)',act:'Criar tarefa'}
+    ].filter(a=>kindOk(a.lead));
+    const alerts=alertDef.map((a,i)=>({...a,name:LEADS[a.lead].name,border:i?'1px solid var(--line)':'0',actLabel:a.act,
+      open:()=>this.openLead(a.lead),
+      act:()=>a.act==='Criar tarefa'?this.openModal(a.lead):a.act==='Ligar'?this.flash({text:'Ligando para '+LEADS[a.lead].name+'…'}):this.openLead(a.lead,a.act==='WhatsApp'?'conversas':'overview')}));
+    const handoffs=[['rodrigo','Pediu visita ao decorado','há 12 min'],['andre','Pediu reserva do Apto 804','há 19 min'],['lucas','Quer falar com corretor em Lisboa','há 40 min']].filter(([id])=>kindOk(id)).map(([id,reason,ago])=>{const by=s.handoffs[id];
+      return {name:LEADS[id].name,reason,ago,pending:!by,taken:!!by,takenBy:by||'',open:()=>this.openLead(id,'conversas'),
+        take:()=>{this.setState(st=>({handoffs:{...st.handoffs,[id]:'Fábio'},owners:{...st.owners,[id]:'fabio'}}));this.flash({text:'Você assumiu '+LEADS[id].name+' · a Nara fica em silêncio'});}};});
+
+    // drawer
+    let lead={},msgs=[],leadTasks=[],tabObj={};
+    if(s.drawer){
+      const L=this.lead(s.drawer);
+      const lt=s.tasks.filter(t=>t.lead===L.id);
+      const nxt=lt.filter(t=>!t.done).sort((a,b)=>({overdue:0,today:1,upcoming:2}[a.when]-{overdue:0,today:1,upcoming:2}[b.when])||(a.time>b.time?1:-1))[0];
+      const an=L.kind==='corretor'?'Plantão':'Nara';
+      const aiMap={human:['Humano atendendo · '+TEAM[L.owner],'var(--green)'],nara:[an+' atendendo · aguardando resposta','var(--blue)'],handoff:['Handoff pendente · '+an+' aguardando a equipe','var(--orange)']};
+      const ai=s.handoffs[L.id]?aiMap.human:aiMap[L.ai];
+      const tempC={Quente:['var(--red)','var(--red-soft)'],Morno:['var(--orange)','var(--orange-soft)'],Frio:['var(--ink-2)','var(--sunken)']}[L.temp];
+      const SG=L.kind==='corretor'?BROKER_STAGES:STAGES;
+      lead={...L,headerSub:L.kind==='corretor'?`Corretor · ${L.agency} · ${L.place}`:`${L.place} · ${L.devName}`,stageLabel:SG[L.stage],stagePos:`${L.stage+1} de ${SG.length}`,temp:L.temp,tempColor:tempC[0],tempBg:tempC[1],
+        stages:SG.map((lb,i)=>({label:lb,bg:i<=L.stage?'var(--ink)':'var(--line)',pick:()=>this.setStage(L.id,i)})),
+        hasNext:!!nxt,noNext:!nxt,
+        nextLabel:nxt?`${TYPES[nxt.type].label} · ${nxt.when==='today'?'hoje':nxt.when==='overdue'?'atrasada, '+(nxt.day==='Ontem'?'ontem':'hoje'):nxt.day} ${nxt.time}`:'Nenhuma atividade agendada',
+        nextColor:nxt&&nxt.when==='overdue'?'var(--red)':nxt?'var(--ink)':'var(--orange)',
+        nextBg:nxt&&nxt.when==='overdue'?'var(--red-soft)':nxt?'var(--sunken)':'var(--orange-soft)',
+        nextDone:()=>nxt&&this.complete(nxt.id),
+        aiState:ai[0],aiDot:ai[1],
+        blocks:L.kind==='corretor'?[
+          {title:'Perfil',rows:[{k:'Telefone',v:L.phone||'—'},{k:'E-mail',v:L.email||'—'},{k:'Imobiliária',v:L.agency},{k:'CRECI',v:L.creci},{k:'Localização',v:L.place}]},
+          {title:'Parceria',rows:[{k:'Foco',v:L.devName},{k:'Clientes indicados',v:L.referred},{k:'Visitas',v:L.visits},{k:'Vendas BOSSA',v:L.sales}]},
+          {title:'Comercial',rows:[{k:'Responsável',v:TEAM[L.owner]},{k:'Origem',v:L.origin},{k:'Entrada no CRM',v:L.entered},{k:'Temperatura',v:L.temp}]}
+        ]:[
+          {title:'Perfil',rows:[{k:'Telefone',v:L.phone||'—'},{k:'E-mail',v:L.email||'—'},{k:'Localização',v:L.place},{k:'Idioma',v:L.lang},{k:'Origem',v:L.origin},{k:'Campanha',v:L.campaign}]},
+          {title:'Interesse',rows:[{k:'Empreendimento',v:L.devName},{k:'Tipologia',v:L.typology},{k:'Investimento',v:L.budget},{k:'Objetivo',v:L.goal},{k:'Prazo de compra',v:L.deadline}]},
+          {title:'Negociação',rows:[{k:'Unidade',v:L.unit},{k:'Valor',v:L.value},{k:'Condição',v:L.condition},{k:'Entrada',v:L.entrada}]},
+          {title:'Comercial',rows:[{k:'Responsável',v:TEAM[L.owner]},{k:'Imobiliária',v:L.agency},{k:'Entrada no CRM',v:L.entered},{k:'Temperatura',v:L.temp}]}
+        ],
+        negRows:[{k:'Unidade de interesse',v:L.unit},{k:'Valor',v:L.value},{k:'Condição comercial',v:L.condition},{k:'Entrada',v:L.entrada},{k:'Parcelas',v:L.parcelas},{k:'Reforços',v:L.reforcos},{k:'Permuta',v:L.permuta}],
+        files:[['PDF','Book '+L.devName,'4,2 MB · Nara · 28 set'],['PDF','Tabela de vendas','680 KB · Nara · 28 set'],['XLS','Simulação '+(L.unit!=='—'?L.unit:''),'92 KB · '+TEAM[L.owner]+' · 29 set']].map((f,i)=>({ext:f[0],name:f[1],meta:f[2],border:i?'1px solid var(--line)':'0'}))
+      };
+      const all=[...L.msgs,...(s.extraMsgs[L.id]||[])];
+      msgs=all.map(m=>m.event?{isEvent:true,isMsg:false,text:m.text}:{isEvent:false,isMsg:true,text:m.text,time:m.time,
+        who:m.who==='cliente'?L.first:m.who==='nara'?'✦ '+(L.kind==='corretor'?'Plantão':'Nara'):(m.name||TEAM[L.owner]),
+        whoColor:m.who==='nara'?'var(--blue)':'var(--ink-2)',
+        align:m.who==='cliente'?'flex-start':'flex-end',
+        bg:m.who==='cliente'?'var(--panel)':m.who==='nara'?'var(--nara-soft)':'var(--sunken)',
+        border:m.who==='cliente'?'var(--line)':'transparent'});
+      leadTasks=lt.map((t,i)=>({title:this.titleOf(t),owner:TEAM[t.owner],when:(t.when==='today'?'Hoje':t.day||'Hoje')+' '+t.time,
+        color:t.when==='overdue'&&!t.done?'var(--red)':'var(--ink-2)',deco:t.done?'line-through':'none',ink:t.done?'var(--ink-3)':'var(--ink)',
+        border:i?'1px solid var(--line)':'0',action:t.done?'Reabrir':'Concluir',toggle:()=>t.done?this.reopen(t.id):this.complete(t.id)}));
+      tabObj={overview:s.tab==='overview',conversas:s.tab==='conversas',tarefas:s.tab==='tarefas',negociacao:s.tab==='negociacao',arquivos:s.tab==='arquivos',historico:s.tab==='historico'};
+    }
+    const tabs=[['overview','Visão geral'],['conversas','Conversas'],['tarefas','Tarefas'],['negociacao','Negociação'],['arquivos','Arquivos'],['historico','Histórico']].map(([k,label])=>({label,
+      color:s.tab===k?'var(--ink)':'var(--ink-3)',line:s.tab===k?'inset 0 -2px 0 var(--ink)':'none',pick:()=>this.setState({tab:k})}));
+    const send=()=>{const txt=s.draft.trim(); if(!txt)return; const id=s.drawer;
+      this.setState(st=>({draft:'',extraMsgs:{...st.extraMsgs,[id]:[...(st.extraMsgs[id]||[]),{who:'corretor',name:'Fábio',text:txt,time:'agora'}]}}));};
+
+    const m=s.modal;
+    const chip=(on)=>({border:on?'var(--ink)':'var(--line)',bg:on?'var(--ink)':'var(--panel)',color:on?'var(--panel)':'var(--ink-2)'});
+
+    return {
+      theme, rowPad:compact?'8px 16px':'12px 16px', nav, kpis, sections, alerts, handoffs,
+      counts:{overdueLabel:plural(od.length,'tarefa atrasada','tarefas atrasadas'),todayLabel:plural(td.length,'para hoje','para hoje'),handoffLabel:plural(handoffs.length,'conversa','conversas'),aiLine:kind==='corretor'?'O Plantão passou':kind==='tudo'?'A IA passou':'A Nara passou'},
+      naraStats:kind==='corretor'?[{value:'3',label:'Atendendo agora'},{value:'2',label:'Aguardando corretor'},{value:'1',label:'Tarefas criadas hoje'},{value:'6',label:'Mensagens automáticas'}]:[{value:'7',label:'Atendendo agora'},{value:'4',label:'Aguardando cliente'},{value:'3',label:'Tarefas criadas hoje'},{value:'18',label:'Mensagens automáticas'}],
+      scopes:['Equipe','Minhas'].map(l=>({label:l,bg:scope===l?'var(--panel)':'transparent',color:scope===l?'var(--ink)':'var(--ink-3)',shadow:scope===l?'0 1px 2px rgba(0,0,0,.08)':'none',pick:()=>this.setState({scope:l})})),
+      hasDone:doneList.length>0, showDone:s.showDone, doneToggleLabel:s.showDone?'Ocultar':'Mostrar',
+      doneRows:doneList.map(t=>({title:this.titleOf(t),undo:()=>this.reopen(t.id)})),
+      toggleDone:()=>this.setState({showDone:!s.showDone}),
+      toggleTheme:()=>this.setState({theme:theme==='dark'?'light':'dark'}),
+      openNewTask:()=>this.openModal(),
+      drawerOpen:!!s.drawer, lead, msgs, leadTasks, tab:tabObj, tabs,
+      closeDrawer:()=>this.setState({drawer:null}),
+      goConversas:()=>this.setState({tab:'conversas'}),
+      callLead:()=>this.flash({text:'Ligando para '+(lead.phone||lead.name)+'…'}),
+      newTaskForLead:()=>this.openModal(s.drawer),
+      proposalLead:()=>this.flash({text:'Proposta criada em rascunho · '+(lead.unit||'')}),
+      changeOwner:e=>{const v=e.target.value;this.setState(st=>({owners:{...st.owners,[st.drawer]:v}}));this.flash({text:'Responsável alterado para '+TEAM[v]});},
+      stagePrev:()=>this.setStage(s.drawer,lead.stage-1), stageNext:()=>this.setStage(s.drawer,lead.stage+1),
+      kinds, aiName, aiRole:kind==='corretor'?'atende corretores':kind==='tudo'?'':'atende clientes',
+      draft:s.draft, onDraft:e=>this.setState({draft:e.target.value}), onDraftKey:e=>{if(e.key==='Enter'){e.preventDefault();send();}}, sendMsg:send,
+      toast:s.toast,
+      modal:m, closeModal:()=>this.setState({modal:{open:false}}), createTask:()=>this.createTask(),
+      typeChips:Object.entries(TYPES).map(([k,t])=>({label:t.label,icon:t.icon,...chip(m.type===k),pick:()=>this.setState(st=>({modal:{...st.modal,type:k}}))})),
+      dayChips:['Hoje','Amanhã'].map(d=>({label:d,...chip(m.day===d),pick:()=>this.setState(st=>({modal:{...st.modal,day:d}}))})),
+      leadOptions:Object.values(LEADS).map(L=>({id:L.id,sel:m.lead===L.id,label:L.kind==='corretor'?`${L.name} · Corretor, ${L.agency}`:`${L.name} · ${L.devName}`})),
+      leadOwnerOpts:Object.entries(TEAM).map(([id,label])=>({id,label,sel:lead.owner===id})),
+      modalOwnerOpts:Object.entries(TEAM).map(([id,label])=>({id,label,sel:m.owner===id})),
+      modalLead:e=>{const v=e.target.value;this.setState(st=>({modal:{...st.modal,lead:v,owner:this.lead(v).owner}}));},
+      modalTime:e=>{const v=e.target.value;this.setState(st=>({modal:{...st.modal,time:v}}));},
+      modalOwner:e=>{const v=e.target.value;this.setState(st=>({modal:{...st.modal,owner:v}}));}
+    };
+  }
+}
+</script>
+</body>
+</html>

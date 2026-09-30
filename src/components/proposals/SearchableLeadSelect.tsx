@@ -178,17 +178,17 @@ export function SearchableLeadSelect({
         overscrollBehavior: 'contain',
         border: '1px solid #d8d2c8',
         borderRadius: 10,
-        backgroundColor: '#ffffff',
+        backgroundColor: 'var(--panel)',
         color: '#2c2925',
         boxShadow: '0 16px 36px rgba(36, 30, 24, 0.22)',
       }}
     >
       {!canSearch && !showingSelectedValue
-        ? <div className="faint" style={{ padding: 12, backgroundColor: '#ffffff' }}>Digite ao menos 2 letras para buscar.</div>
+        ? <div className="faint" style={{ padding: 12, backgroundColor: 'var(--panel)' }}>Digite ao menos 2 letras para buscar.</div>
         : loading && filteredLeads.length === 0
-          ? <div className="faint" style={{ padding: 12, backgroundColor: '#ffffff' }}>Buscando…</div>
+          ? <div className="faint" style={{ padding: 12, backgroundColor: 'var(--panel)' }}>Buscando…</div>
           : filteredLeads.length === 0
-            ? <div className="faint" style={{ padding: 12, backgroundColor: '#ffffff' }}>Nenhum resultado encontrado.</div>
+            ? <div className="faint" style={{ padding: 12, backgroundColor: 'var(--panel)' }}>Nenhum resultado encontrado.</div>
             : filteredLeads.map((lead, index) => <button
                 key={lead.id}
                 type="button"
@@ -210,7 +210,7 @@ export function SearchableLeadSelect({
                   padding: '10px 12px',
                   textAlign: 'left',
                   cursor: 'pointer',
-                  backgroundColor: index === activeIndex ? '#f3efe9' : '#ffffff',
+                  backgroundColor: index === activeIndex ? 'var(--hover)' : 'var(--panel)',
                   color: '#2c2925',
                   font: 'inherit',
                   lineHeight: 1.3,
