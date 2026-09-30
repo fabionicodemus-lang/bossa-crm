@@ -64,6 +64,8 @@ jobs:
       - name: Test Nara score and classification vocabulary
         run: npm run test:nara-phase9
       - name: Test Nara final acceptance matrix
+        id: nara_final
+        continue-on-error: true
         run: npm run test:nara-phase10
       - name: Validate environment
         run: npm run check-env
@@ -73,3 +75,8 @@ jobs:
         run: npm run typecheck
       - name: Build
         run: npm run build
+      - name: Preserve Nara acceptance failure
+        if: always() && steps.nara_final.outcome == 'failure'
+        run: |
+          echo "test:nara-phase10/test:nara-2409 falhou antes das validações finais."
+          exit 1
