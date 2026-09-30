@@ -36,6 +36,14 @@ function assigneeModeFromQuery(value: string | string[] | undefined) {
   return 'all' as const;
 }
 
+function toTaskList(rows: TaskQueryRow[] | null | undefined): TaskListItem[] {
+  return (rows ?? []).map((task) => {
+    const relatedLead = Array.isArray(task.leads) ? (task.leads[0] ?? null) : task.leads;
+    const { leads: _leads, ...base } = task;
+    return { ...base, lead: relatedLead } as TaskListItem;
+  });
+}
+
 export default async function TasksPage({
   searchParams,
 }: {
@@ -47,18 +55,33 @@ export default async function TasksPage({
   const orgId = context!.organization.id;
   const isAdmin = context!.role === 'admin';
 
-  let tasksQuery = supabase
+  // As abertas são carregadas separadamente para nunca ficarem escondidas atrás
+  // do grande histórico de canceladas. O histórico vem depois, mais recente primeiro.
+  let activeTasksQuery = supabase
     .from('lead_tasks')
     .select('*,leads(id,name,kind)')
     .eq('organization_id', orgId)
+    .in('status', ['pending', 'overdue'])
     .order('due_at', { ascending: true, nullsFirst: false })
     .order('created_at', { ascending: false })
+    .limit(5000);
+
+  let historyTasksQuery = supabase
+    .from('lead_tasks')
+    .select('*,leads(id,name,kind)')
+    .eq('organization_id', orgId)
+    .in('status', ['completed', 'cancelled'])
+    .order('updated_at', { ascending: false })
     .limit(1000);
 
-  if (!isAdmin) tasksQuery = tasksQuery.eq('assigned_to', context!.userId);
+  if (!isAdmin) {
+    activeTasksQuery = activeTasksQuery.eq('assigned_to', context!.userId);
+    historyTasksQuery = historyTasksQuery.eq('assigned_to', context!.userId);
+  }
 
-  const [{ data: tasksData }, { data: memberships }] = await Promise.all([
-    tasksQuery,
+  const [{ data: activeTasksData }, { data: historyTasksData }, { data: memberships }] = await Promise.all([
+    activeTasksQuery,
+    historyTasksQuery,
     supabase
       .from('memberships')
       .select('user_id,role,profiles(full_name,email)')
@@ -66,11 +89,10 @@ export default async function TasksPage({
       .order('created_at'),
   ]);
 
-  const tasks: TaskListItem[] = ((tasksData ?? []) as TaskQueryRow[]).map((task) => {
-    const relatedLead = Array.isArray(task.leads) ? (task.leads[0] ?? null) : task.leads;
-    const { leads: _leads, ...base } = task;
-    return { ...base, lead: relatedLead } as TaskListItem;
-  });
+  const tasks: TaskListItem[] = [
+    ...toTaskList(activeTasksData as TaskQueryRow[] | null),
+    ...toTaskList(historyTasksData as TaskQueryRow[] | null),
+  ];
 
   const members = ((memberships ?? []) as MembershipRow[]).map((item) => {
     const profile = Array.isArray(item.profiles) ? item.profiles[0] : item.profiles;
