@@ -206,7 +206,13 @@ async function handleGeneral(args: {
   const autoOperationalReason = metadata.auto_kind_triage_status === 'operational_non_broker'
     ? String(metadata.auto_kind_triage_reason || 'Fornecedor/prestador identificado automaticamente')
     : '';
-  const operationalReason = autoOperationalReason || clearlyOperationalNonBrokerReason(text) || '';
+  const cleanup = metadata.pipeline_kind_cleanup_2026_09_30 && typeof metadata.pipeline_kind_cleanup_2026_09_30 === 'object'
+    ? metadata.pipeline_kind_cleanup_2026_09_30 as Record<string, unknown>
+    : null;
+  const cleanupReason = cleanup?.new_kind === 'geral'
+    ? String(cleanup.reason || 'Contato já classificado como Geral')
+    : '';
+  const operationalReason = autoOperationalReason || cleanupReason || clearlyOperationalNonBrokerReason(text) || '';
 
   if (isBrokerYes(text, awaiting)) {
     const { error } = await args.admin.from('leads').update({
@@ -253,18 +259,23 @@ async function handleGeneral(args: {
         plantao_triage_answer: text,
         plantao_triage_reason: operationalReason || null,
         plantao_triage_classified_at: now,
+        plantao_non_broker_ack_at: isRecent(metadata.plantao_non_broker_ack_at, 24)
+          ? metadata.plantao_non_broker_ack_at
+          : now,
       },
       updated_at: now,
     }).eq('id', args.lead.id);
     if (error) throw error;
-    await sendRoutingText({
-      admin: args.admin,
-      channel: args.channel,
-      conversation: args.conversation,
-      lead: args.lead,
-      text: NON_BROKER_REPLY,
-      reason: 'general_not_broker',
-    });
+    if (!isRecent(metadata.plantao_non_broker_ack_at, 24)) {
+      await sendRoutingText({
+        admin: args.admin,
+        channel: args.channel,
+        conversation: args.conversation,
+        lead: args.lead,
+        text: NON_BROKER_REPLY,
+        reason: 'general_not_broker',
+      });
+    }
     await ensureHumanTask({
       admin: args.admin,
       lead: args.lead,
