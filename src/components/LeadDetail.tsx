@@ -35,6 +35,7 @@ import {
 } from "@/lib/format";
 import { createClient } from "@/lib/supabase/client";
 import { stageLabel, stagesFor } from "@/lib/stages";
+import { locationOf } from "@/lib/hoje-model";
 import { useLeadLiveFeed } from "@/lib/use-lead-live-feed";
 import { MessageContent } from "@/components/MessageContent";
 import {
@@ -75,8 +76,8 @@ function messageClass(message: Message) {
       : "out";
 }
 
-function senderLabel(message: Message) {
-  if (message.sender_kind === "ia") return "IA";
+function senderLabel(message: Message, persona: string) {
+  if (message.sender_kind === "ia") return `✦ ${persona}`;
   if (message.sender_kind === "humano") return "Comercial Bossa";
   if (message.sender_kind === "sistema") return "Sistema";
   return "Contato";
@@ -376,6 +377,7 @@ export function LeadDetail({
   });
 
   const persona = lead.kind === "cliente" ? "Nara" : "Plantão";
+  const location = locationOf(lead);
   const humanMembers = teamMembers.filter((member) => member.role !== "viewer");
   const owner = teamMembers.find((member) => member.user_id === lead.owner_id);
   const backup = teamMembers.find(
@@ -810,12 +812,17 @@ export function LeadDetail({
               </span>
             </div>
             <div className="profile-meta">
-              {displayPhone(lead.phone)}
-              {lead.email ? ` · ${lead.email}` : ""}
-              <br />
-              {lead.kind === "cliente"
-                ? `${lead.enterprise || "Empreendimento não informado"} · ${sourceLabel}`
-                : `${lead.company || "Autônomo"} · ${lead.group_name || "Sem grupo"}`}
+              <strong>
+                {lead.kind === "cliente"
+                  ? `${location || "Localização não informada"} · ${lead.enterprise || "Empreendimento não informado"}`
+                  : `Corretor · ${lead.company || "Autônomo"}${location ? ` · ${location}` : ""}`}
+              </strong>
+              {(lead.phone || lead.email) && (
+                <span className="profile-contact">
+                  {displayPhone(lead.phone)}
+                  {lead.email ? ` · ${lead.email}` : ""}
+                </span>
+              )}
             </div>
           </div>
           <div className="profile-actions">
@@ -1081,6 +1088,28 @@ export function LeadDetail({
           )}
           {tab === "whatsapp" && (
             <div className="whatsapp-panel">
+              <div
+                className={`conversation-owner-state ${
+                  lead.stage === "passagem_pendente"
+                    ? "handoff"
+                    : lead.owner_mode === "human"
+                      ? "human"
+                      : lead.owner_mode === "ai" && lead.ai_enabled
+                        ? "ai"
+                        : "paused"
+                }`}
+              >
+                <i aria-hidden="true" />
+                <strong>
+                  {lead.stage === "passagem_pendente"
+                    ? "Handoff pendente"
+                    : lead.owner_mode === "human"
+                      ? `Humano atendendo · ${owner?.full_name || "Comercial"}`
+                      : lead.owner_mode === "ai" && lead.ai_enabled
+                        ? `${persona} atendendo`
+                        : "Atendimento pausado"}
+                </strong>
+              </div>
               <div className="wa-head">
                 <div className="wa-icon">☏</div>
                 <div>
@@ -1133,7 +1162,7 @@ export function LeadDetail({
                             marginBottom: 3,
                           }}
                         >
-                          {senderLabel(message)}
+                          {senderLabel(message, persona)}
                         </small>
                         <MessageContent message={message} />
                         <span className="message-meta">
