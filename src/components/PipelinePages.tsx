@@ -8,7 +8,7 @@ import {
   toPipelineLeads,
 } from "@/lib/pipeline-lead-select";
 
-export async function ClientsPage() {
+export async function ClientsPage({ embedded = false }: { embedded?: boolean } = {}) {
   const context = await getCurrentContext();
   const supabase = await createClient();
   const { data } = await supabase
@@ -21,10 +21,12 @@ export async function ClientsPage() {
     .limit(5000);
   return (
     <>
-      <PageTopbar
-        title="Clientes finais"
-        subtitle="Pipeline comercial e histórico unificado"
-      />
+      {!embedded && (
+        <PageTopbar
+          title="Clientes finais"
+          subtitle="Pipeline comercial e histórico unificado"
+        />
+      )}
       <div className="page-content">
         <PipelineBoard
           initialLeads={toPipelineLeads(data)}
@@ -37,7 +39,7 @@ export async function ClientsPage() {
   );
 }
 
-export async function BrokersPage() {
+export async function BrokersPage({ embedded = false }: { embedded?: boolean } = {}) {
   const context = await getCurrentContext();
   const supabase = await createClient();
   const { data } = await supabase
@@ -50,10 +52,12 @@ export async function BrokersPage() {
     .limit(5000);
   return (
     <>
-      <PageTopbar
-        title="Corretores"
-        subtitle="Relacionamento com imobiliárias e parceiros"
-      />
+      {!embedded && (
+        <PageTopbar
+          title="Corretores"
+          subtitle="Relacionamento com imobiliárias e parceiros"
+        />
+      )}
       <div className="page-content">
         <PipelineBoard
           initialLeads={toPipelineLeads(data)}
@@ -66,7 +70,7 @@ export async function BrokersPage() {
   );
 }
 
-export async function GeneralContactsPage() {
+export async function GeneralContactsPage({ embedded = false }: { embedded?: boolean } = {}) {
   const context = await getCurrentContext();
   const supabase = await createClient();
   const { data } = await supabase
@@ -80,10 +84,12 @@ export async function GeneralContactsPage() {
 
   return (
     <>
-      <PageTopbar
-        title="Contatos gerais"
-        subtitle="Números do WhatsApp que ainda não são clientes nem corretores"
-      />
+      {!embedded && (
+        <PageTopbar
+          title="Contatos gerais"
+          subtitle="Números do WhatsApp que ainda não são clientes nem corretores"
+        />
+      )}
       <div className="page-content">
         <GeneralPipelineBoard
           initialLeads={toPipelineLeads(data)}
