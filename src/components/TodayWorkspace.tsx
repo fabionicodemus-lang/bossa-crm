@@ -761,45 +761,49 @@ export function TodayWorkspace({
           </section>
           <aside className="today-aside">
             <section className="attention">
-              <div className="aside-heading">
-                <h2>Precisam de atenção</h2>
-                <span>{alerts.length}</span>
+              <div className="aside-heading attention-heading">
+                <h2>
+                  Precisam de atenção <span>{alerts.length}</span>
+                </h2>
+                <span title="Regras automáticas, recalculadas a cada 15 min">
+                  Automático
+                </span>
               </div>
-              {alerts.length ? (
-                alerts.slice(0, 8).map((a) => (
-                  <div key={a.lead.id} className={`attention-row ${a.tone}`}>
-                    <div>
-                      <small>{a.label}</small>
-                      <button onClick={() => ui.openLead(a.lead.id)}>
-                        {a.lead.name}
+              <div className="attention-list">
+                {alerts.length ? (
+                  alerts.slice(0, 8).map((a) => (
+                    <div key={a.lead.id} className={`attention-row ${a.tone}`}>
+                      <button
+                        type="button"
+                        className="attention-copy"
+                        onClick={() => ui.openLead(a.lead.id)}
+                      >
+                        <small>
+                          <i aria-hidden="true" />
+                          {a.label}
+                        </small>
+                        <strong>{a.lead.name}</strong>
+                        <p>{a.detail}</p>
                       </button>
-                      <p>{a.detail}</p>
+                      <button
+                        className="btn btn-ghost btn-sm attention-action"
+                        onClick={() =>
+                          a.action === "task" && a.lead.kind !== "geral"
+                            ? ui.openTask({
+                                ...a.lead,
+                                kind: a.lead.kind as "cliente" | "corretor",
+                              })
+                            : ui.openLead(a.lead.id, "whatsapp")
+                        }
+                      >
+                        {a.action === "task" ? "Criar tarefa" : "Conversar"}
+                      </button>
                     </div>
-                    <button
-                      className="icon-button"
-                      title={
-                        a.action === "task" ? "Criar tarefa" : "Abrir conversa"
-                      }
-                      onClick={() =>
-                        a.action === "task" && a.lead.kind !== "geral"
-                          ? ui.openTask({
-                              ...a.lead,
-                              kind: a.lead.kind as "cliente" | "corretor",
-                            })
-                          : ui.openLead(a.lead.id, "whatsapp")
-                      }
-                    >
-                      {a.action === "task" ? (
-                        <Clock3 size={14} />
-                      ) : (
-                        <MessageCircle size={14} />
-                      )}
-                    </button>
-                  </div>
-                ))
-              ) : (
-                <div className="agenda-empty">Nenhum alerta neste recorte.</div>
-              )}
+                  ))
+                ) : (
+                  <div className="agenda-empty">Nenhum alerta neste recorte.</div>
+                )}
+              </div>
               {alerts.length > 8 && (
                 <Link className="aside-more" href="/leads">
                   Ver todos os leads
@@ -807,88 +811,106 @@ export function TodayWorkspace({
               )}
             </section>
             <section className="nara-panel">
-              <div className="aside-heading">
+              <div className="aside-heading nara-heading">
                 <h2>
                   <Sparkles size={15} />
                   {persona}
+                  <small>
+                    {kind === "corretor"
+                      ? "parceiros"
+                      : kind === "all"
+                        ? "clientes e parceiros"
+                        : "clientes"}
+                  </small>
                 </h2>
-                <Link href="/conversas">Ver conversas</Link>
+                <span className="ai-live">
+                  <i aria-hidden="true" />
+                  Ativa
+                </span>
               </div>
-              <div className="nara-stats">
-                {[
-                  {
-                    label: "Atendendo agora",
-                    value: leads.filter(
-                      (l) =>
-                        l.owner_mode === "ai" &&
-                        l.ai_enabled &&
-                        !l.automation_paused &&
-                        !l.opt_out,
-                    ).length,
-                  },
-                  {
-                    label: "Aguardando cliente",
-                    value: leads.filter(
-                      (l) =>
-                        l.owner_mode === "ai" &&
-                        l.last_outbound_at &&
-                        (!l.last_inbound_at ||
-                          Date.parse(l.last_outbound_at) >
-                            Date.parse(l.last_inbound_at)),
-                    ).length,
-                  },
-                  {
-                    label: "Tarefas criadas hoje",
-                    value: countFor("aiToday"),
-                  },
-                  {
-                    label: "Mensagens automáticas",
-                    value: leads.reduce(
-                      (s, l) => s + (data.automaticMessages[l.id] || 0),
-                      0,
-                    ),
-                  },
-                ].map((stat) => (
-                  <div key={stat.label}>
-                    <strong>{stat.value}</strong>
-                    <span>{stat.label}</span>
-                  </div>
-                ))}
-              </div>
-              <h3>
-                Passagens para a equipe <span>{handoffs.length}</span>
-              </h3>
-              {handoffs.length ? (
-                handoffs.slice(0, 8).map((l) => (
-                  <div className="handoff-row" key={l.id}>
-                    <div>
-                      <button
-                        className="plain-name"
-                        onClick={() => ui.openLead(l.id)}
-                      >
-                        {l.name}
-                      </button>
-                      <p>
-                        {l.next_action ||
-                          l.enterprise ||
-                          l.company ||
-                          "Atendimento aguardando aceite"}
-                      </p>
+              <div className="nara-card">
+                <div className="nara-stats">
+                  {[
+                    {
+                      label: "Atendendo agora",
+                      value: leads.filter(
+                        (l) =>
+                          l.owner_mode === "ai" &&
+                          l.ai_enabled &&
+                          !l.automation_paused &&
+                          !l.opt_out,
+                      ).length,
+                    },
+                    {
+                      label:
+                        kind === "corretor"
+                          ? "Aguardando corretor"
+                          : "Aguardando cliente",
+                      value: leads.filter(
+                        (l) =>
+                          l.owner_mode === "ai" &&
+                          l.last_outbound_at &&
+                          (!l.last_inbound_at ||
+                            Date.parse(l.last_outbound_at) >
+                              Date.parse(l.last_inbound_at)),
+                      ).length,
+                    },
+                    {
+                      label: "Tarefas criadas hoje",
+                      value: countFor("aiToday"),
+                    },
+                    {
+                      label: "Mensagens automáticas",
+                      value: leads.reduce(
+                        (s, l) => s + (data.automaticMessages[l.id] || 0),
+                        0,
+                      ),
+                    },
+                  ].map((stat) => (
+                    <div key={stat.label}>
+                      <strong>{stat.value}</strong>
+                      <span>{stat.label}</span>
                     </div>
-                    {context.role !== "viewer" && (
-                      <button
-                        className="btn btn-primary btn-sm"
-                        disabled={busy === l.id}
-                        onClick={() => void assume(l)}
-                      >
-                        Assumir
-                      </button>
-                    )}
-                  </div>
-                ))
-              ) : (
-                <div className="agenda-empty">Nenhuma passagem pendente.</div>
-              )}
+                  ))}
+                </div>
+                <h3>
+                  Handoffs para a equipe <span>{handoffs.length}</span>
+                </h3>
+                {handoffs.length ? (
+                  handoffs.slice(0, 8).map((l) => (
+                    <div className="handoff-row" key={l.id}>
+                      <div>
+                        <button
+                          className="plain-name"
+                          onClick={() => ui.openLead(l.id)}
+                        >
+                          {l.name}
+                        </button>
+                        <p>
+                          {l.next_action ||
+                            l.enterprise ||
+                            l.company ||
+                            "Atendimento aguardando aceite"}
+                        </p>
+                      </div>
+                      {context.role !== "viewer" && (
+                        <button
+                          className="btn btn-primary btn-sm"
+                          disabled={busy === l.id}
+                          onClick={() => void assume(l)}
+                        >
+                          Assumir
+                        </button>
+                      )}
+                    </div>
+                  ))
+                ) : (
+                  <div className="agenda-empty">Nenhuma passagem pendente.</div>
+                )}
+              </div>
+              <Link className="aside-more" href="/conversas">
+                Ver conversas
+              </Link>
             </section>
           </aside>
         </div>
