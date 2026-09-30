@@ -5,7 +5,8 @@ import { usePathname } from "next/navigation";
 import {
   CalendarDays,
   MessageCircle,
-  Columns3,
+  UsersRound,
+  Handshake,
   Users,
   CheckSquare,
   ChartNoAxesCombined,
@@ -28,16 +29,22 @@ const links = [
     paths: ["/conversas", "/ia", "/mensagens-corretores", "/transmissoes"],
   },
   {
-    href: "/pipeline",
-    label: "Pipeline",
-    icon: Columns3,
-    paths: ["/pipeline", "/clientes", "/corretores", "/geral"],
+    href: "/clientes",
+    label: "Pipeline Clientes",
+    icon: UsersRound,
+    paths: ["/clientes"],
+  },
+  {
+    href: "/corretores",
+    label: "Pipeline Corretores",
+    icon: Handshake,
+    paths: ["/corretores"],
   },
   {
     href: "/leads",
     label: "Leads",
     icon: Users,
-    paths: ["/leads", "/arquivados", "/importar"],
+    paths: ["/leads", "/arquivados", "/importar", "/geral"],
   },
   {
     href: "/tarefas",

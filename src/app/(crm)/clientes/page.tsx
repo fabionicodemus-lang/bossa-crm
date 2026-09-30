@@ -1,2 +1,14 @@
-import { redirect } from 'next/navigation';
-export default function LegacyPipelinePage() { redirect('/pipeline?tipo=cliente'); }
+import { PageTopbar } from "@/components/PageTopbar";
+import { ClientsPage } from "@/components/PipelinePages";
+
+export default function ClientesPipelinePage() {
+  return (
+    <>
+      <PageTopbar
+        title="Pipeline Clientes"
+        subtitle="Clientes finais e oportunidades comerciais"
+      />
+      <ClientsPage embedded />
+    </>
+  );
+}

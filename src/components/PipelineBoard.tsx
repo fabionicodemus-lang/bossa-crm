@@ -8,6 +8,7 @@ import { defaultStage, isAiStage, isHumanStage, stagesFor } from '@/lib/stages';
 import { displayPhone, normalizePhone } from '@/lib/format';
 import { createClient } from '@/lib/supabase/client';
 import { usePipelineLeadsFeed } from '@/lib/use-pipeline-leads-feed';
+import { dedupePipelineLeads } from '@/lib/pipeline-lead-select';
 import { metaAdSourceLabel, readMetaAdAttribution } from '@/lib/meta-ad-attribution';
 import { useCrmUI } from './CrmUI';
 
@@ -91,7 +92,7 @@ export function PipelineBoard({ initialLeads, kind, organizationId, canEdit }: {
         if (lead.archived_at || lead.kind !== kind) map.delete(lead.id);
         else map.set(lead.id, lead);
       }
-      return [...map.values()];
+      return dedupePipelineLeads([...map.values()]);
     });
     setSelectedIds((current) => {
       const next = new Set(current);
