@@ -717,7 +717,7 @@ export function LeadDetail({
 
   async function createTask(event: FormEvent) {
     event.preventDefault();
-    if (!canEdit || !taskTitle.trim()) return;
+    if (!canEdit || !taskTitle.trim() || !taskDue) return;
     setLoading(true);
     setError("");
     try {
@@ -1415,10 +1415,11 @@ export function LeadDetail({
                       />
                     </div>
                     <div className="field">
-                      <label>Prazo</label>
+                      <label>Data e horário</label>
                       <input
                         className="input"
                         type="datetime-local"
+                        required
                         value={taskDue}
                         onChange={(event) => setTaskDue(event.target.value)}
                       />
