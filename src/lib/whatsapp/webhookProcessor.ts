@@ -35,6 +35,7 @@ import {
   type WhatsAppChannelRecord,
   type WhatsAppConversationRecord,
 } from '@/lib/whatsapp/channelService';
+import { autoRouteEarlyOperationalBroker } from '@/lib/whatsapp/contactKindAutoRouting';
 import { handleMixedPlantaoConversation } from '@/lib/whatsapp/plantaoMixedRouting';
 import {
   clientBroadcastBrokerSignal,
@@ -424,6 +425,17 @@ export async function processConversation(args: {
     .maybeSingle();
   let lead = leadData as Lead | null;
   if (!lead || lead.opt_out) return;
+
+  const autoKindRouting = await autoRouteEarlyOperationalBroker({
+    admin: args.admin,
+    lead,
+    sourceMessageId: args.sourceMessageId,
+  });
+  if (autoKindRouting.routedToGeneral) {
+    const { data: rerouted } = await args.admin.from('leads').select('*').eq('id', lead.id).maybeSingle();
+    lead = rerouted as Lead | null;
+    if (!lead) return;
+  }
 
   const pendingBrokerPortfolio = await completePendingBrokerPortfolio({
     admin: args.admin,
@@ -956,18 +968,36 @@ async function findOrCreateLead(args: {
       ? 'corretor'
       : 'geral';
 
-  if (args.channel.role === 'cliente' || directRoleRouting) {
+  if (args.channel.role === 'cliente') {
     const { data, error } = await args.admin
       .from('leads')
       .select('*')
       .eq('organization_id', args.channel.organization_id)
-      .eq('kind', expectedKind)
+      .eq('kind', 'cliente')
       .in('phone', phoneMatchVariants(args.waId))
       .is('archived_at', null)
       .order('updated_at', { ascending: false })
       .limit(1);
     if (error) throw error;
     leadData = ((data?.[0] ?? null) as Lead | null);
+  } else if (directRoleRouting) {
+    const { data, error } = await args.admin
+      .from('leads')
+      .select('*')
+      .eq('organization_id', args.channel.organization_id)
+      .in('kind', ['corretor', 'geral'])
+      .in('phone', phoneMatchVariants(args.waId))
+      .is('archived_at', null)
+      .order('updated_at', { ascending: false })
+      .limit(10);
+    if (error) throw error;
+    const matches = (data ?? []) as Lead[];
+    leadData = matches.find((item) =>
+      item.kind === 'geral'
+      && item.metadata?.auto_kind_triage_status === 'operational_non_broker'
+    ) ?? matches.find((item) => item.kind === 'corretor')
+      ?? matches.find((item) => item.kind === 'geral')
+      ?? null;
   } else {
     // O número principal do Plantão continua compartilhado. CLIENTE tem
     // prioridade absoluta; contatos novos passam pela triagem geral antes de
