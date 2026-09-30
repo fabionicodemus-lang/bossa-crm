@@ -9,6 +9,8 @@ import {
   Handshake,
   Users,
   CheckSquare,
+  FileText,
+  Building2,
   ChartNoAxesCombined,
   Sparkles,
   Settings,
@@ -53,10 +55,22 @@ const links = [
     paths: ["/tarefas", "/agenda"],
   },
   {
+    href: "/propostas",
+    label: "Propostas",
+    icon: FileText,
+    paths: ["/propostas"],
+  },
+  {
+    href: "/empreendimentos",
+    label: "Empreendimentos",
+    icon: Building2,
+    paths: ["/empreendimentos"],
+  },
+  {
     href: "/gestao",
     label: "Gestão",
     icon: ChartNoAxesCombined,
-    paths: ["/gestao", "/dashboard", "/propostas"],
+    paths: ["/gestao", "/dashboard"],
   },
   {
     href: "/nara",
@@ -74,7 +88,7 @@ const links = [
     href: "/configuracoes",
     label: "Configurações",
     icon: Settings,
-    paths: ["/configuracoes", "/empreendimentos", "/usuarios", "/minha-conta"],
+    paths: ["/configuracoes", "/usuarios", "/minha-conta"],
   },
 ];
 export function Sidebar({
