@@ -1,6 +1,5 @@
 'use client';
 
-import Link from 'next/link';
 import { FormEvent, useCallback, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
@@ -8,6 +7,7 @@ import { displayPhone, normalizePhone } from '@/lib/format';
 import { usePipelineLeadsFeed } from '@/lib/use-pipeline-leads-feed';
 import type { Lead } from '@/lib/types';
 import { GENERAL_STAGES } from '@/lib/stages';
+import { useCrmUI } from './CrmUI';
 
 function updatedAtTime(value: string | null | undefined) {
   const time = value ? new Date(value).getTime() : NaN;
@@ -37,6 +37,7 @@ export function GeneralPipelineBoard({
   canEdit: boolean;
 }) {
   const router = useRouter();
+  const ui = useCrmUI();
   const [leads, setLeads] = useState(initialLeads);
   const [query, setQuery] = useState('');
   const [dragId, setDragId] = useState<string | null>(null);
@@ -316,15 +317,24 @@ export function GeneralPipelineBoard({
                   onDragStart={(event) => { if (selectMode) return; setDragId(lead.id); event.dataTransfer.effectAllowed = 'move'; }}
                   onDragEnd={() => { setDragId(null); setOverStage(null); }}
                 >
-                  <Link href={`/leads/${lead.id}`} onClick={(event) => { if (selectMode) event.preventDefault(); }} style={{ color: 'inherit', textDecoration: 'none', display: 'block', paddingRight: selectMode ? 30 : 0 }}>
-                    <div className="lead-name">{lead.name}</div>
-                    <div className="lead-sub">{lead.company || 'Contato geral'}</div>
-                    <div className="lead-meta">
+                  <button
+                    type="button"
+                    className="pipeline-card-main"
+                    style={{ paddingRight: selectMode ? 30 : 0 }}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      if (selectMode) toggleSelection(lead.id);
+                      else ui.openLead(lead.id, 'dados');
+                    }}
+                  >
+                    <span className="lead-name">{lead.name}</span>
+                    <span className="lead-sub">{lead.company || 'Contato geral'}</span>
+                    <span className="lead-meta">
                       <span className="chip">{lead.source || 'WhatsApp'}</span>
-                      <span className="chip">👤 Aguardando classificação</span>
-                    </div>
-                    <div className="muted" style={{ fontSize: 10 }}>{displayPhone(lead.phone)}</div>
-                  </Link>
+                      <span className="chip">Aguardando classificação</span>
+                    </span>
+                    <span className="muted" style={{ fontSize: 10 }}>{displayPhone(lead.phone)}</span>
+                  </button>
                   {canEdit && !selectMode && <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
                     <button className="btn btn-ghost btn-sm" style={{ flex: 1, fontSize: 10 }} disabled={classifyingId === lead.id} onClick={() => void classify(lead, 'cliente')}>✓ Cliente</button>
                     <button className="btn btn-ghost btn-sm" style={{ flex: 1, fontSize: 10 }} disabled={classifyingId === lead.id} onClick={() => void classify(lead, 'corretor')}>🤝 Corretor</button>
