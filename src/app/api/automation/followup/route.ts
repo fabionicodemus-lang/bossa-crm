@@ -39,6 +39,12 @@ function timestampMs(value: string | null | undefined): number | null {
   return Number.isNaN(time) ? null : time;
 }
 
+function sameMoment(a: string | null | undefined, b: string | null | undefined): boolean {
+  const aMs = timestampMs(a);
+  const bMs = timestampMs(b);
+  return aMs !== null && bMs !== null && aMs === bMs;
+}
+
 function normalizeName(value: string | null | undefined): string {
   return (value || '')
     .normalize('NFD')
@@ -159,23 +165,44 @@ async function runFollowupWorker() {
     if (lead.stage === 'passagem_pendente') {
       const elapsed = ageMs(lead.handoff_requested_at || lead.updated_at, now);
       if (elapsed >= 10 * 60_000) {
-        const { data: managerTask } = await admin.from('lead_tasks').select('id')
-          .eq('lead_id', lead.id).eq('status', 'pending').eq('dedupe_key', 'manager:handoff-overdue').maybeSingle();
+        const handoffReferenceAt = lead.handoff_requested_at || lead.updated_at;
+        const { data: managerTask } = await admin.from('lead_tasks')
+          .select('id,status,metadata')
+          .eq('lead_id', lead.id)
+          .eq('dedupe_key', 'manager:handoff-overdue')
+          .order('updated_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        const taskReferenceAt = typeof managerTask?.metadata?.handoff_reference_at === 'string'
+          ? managerTask.metadata.handoff_reference_at
+          : typeof managerTask?.metadata?.handoff_requested_at === 'string'
+            ? managerTask.metadata.handoff_requested_at
+            : null;
+        const sameReference = sameMoment(taskReferenceAt, handoffReferenceAt);
+        const taskIsOpen = Boolean(managerTask?.id && ['pending', 'overdue'].includes(managerTask.status));
+        const payload = {
+          organization_id: lead.organization_id,
+          lead_id: lead.id,
+          assigned_mode: 'manager',
+          type: 'sla_passagem',
+          title: 'Passagem sem aceite no prazo',
+          description: `Lead ${lead.priority_class || 'sem classe'} aguardando aceite do comercial.`,
+          priority: lead.priority_class === 'A1' ? 'urgent' : 'high',
+          status: 'pending',
+          due_at: nowIso,
+          created_by_kind: 'system',
+          dedupe_key: 'manager:handoff-overdue',
+          metadata: {
+            handoff_requested_at: lead.handoff_requested_at,
+            handoff_reference_at: handoffReferenceAt,
+          },
+        };
         if (!managerTask?.id) {
-          await admin.from('lead_tasks').insert({
-            organization_id: lead.organization_id,
-            lead_id: lead.id,
-            assigned_mode: 'manager',
-            type: 'sla_passagem',
-            title: 'Passagem sem aceite no prazo',
-            description: `Lead ${lead.priority_class || 'sem classe'} aguardando aceite do comercial.`,
-            priority: lead.priority_class === 'A1' ? 'urgent' : 'high',
-            status: 'pending',
-            due_at: nowIso,
-            created_by_kind: 'system',
-            dedupe_key: 'manager:handoff-overdue',
-            metadata: { handoff_requested_at: lead.handoff_requested_at },
-          });
+          await admin.from('lead_tasks').insert(payload);
+        } else if (!sameReference && taskIsOpen) {
+          await admin.from('lead_tasks').update(payload).eq('id', managerTask.id);
+        } else if (!sameReference && !taskIsOpen) {
+          await admin.from('lead_tasks').insert(payload);
         }
       }
       if (elapsed >= 60 * 60_000) {
@@ -332,24 +359,39 @@ async function runFollowupWorker() {
       const inactive = ageMs(reference, now);
       const dueExpired = lead.next_action_due_at && new Date(lead.next_action_due_at).getTime() <= now;
       if (dueExpired) {
-        const { data: alert } = await admin.from('lead_tasks').select('id')
-          .eq('lead_id', lead.id).eq('status', 'pending').eq('dedupe_key', 'manager:human-overdue').maybeSingle();
+        const { data: alert } = await admin.from('lead_tasks')
+          .select('id,status,metadata')
+          .eq('lead_id', lead.id)
+          .eq('dedupe_key', 'manager:human-overdue')
+          .order('updated_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        const previousDueAt = typeof alert?.metadata?.previous_due_at === 'string'
+          ? alert.metadata.previous_due_at
+          : null;
+        const sameDeadline = sameMoment(previousDueAt, lead.next_action_due_at);
+        const alertIsOpen = Boolean(alert?.id && ['pending', 'overdue'].includes(alert.status));
+        const payload = {
+          organization_id: lead.organization_id,
+          lead_id: lead.id,
+          assigned_to: lead.owner_id,
+          assigned_mode: 'human',
+          type: 'sla_humano',
+          title: 'Próxima ação do lead está vencida',
+          description: lead.next_action || 'Registrar nova ação e prazo.',
+          priority: lead.priority_class === 'A1' ? 'urgent' : 'high',
+          status: 'pending',
+          due_at: nowIso,
+          created_by_kind: 'system',
+          dedupe_key: 'manager:human-overdue',
+          metadata: { previous_due_at: lead.next_action_due_at },
+        };
         if (!alert?.id) {
-          await admin.from('lead_tasks').insert({
-            organization_id: lead.organization_id,
-            lead_id: lead.id,
-            assigned_to: lead.owner_id,
-            assigned_mode: 'human',
-            type: 'sla_humano',
-            title: 'Próxima ação do lead está vencida',
-            description: lead.next_action || 'Registrar nova ação e prazo.',
-            priority: lead.priority_class === 'A1' ? 'urgent' : 'high',
-            status: 'pending',
-            due_at: nowIso,
-            created_by_kind: 'system',
-            dedupe_key: 'manager:human-overdue',
-            metadata: { previous_due_at: lead.next_action_due_at },
-          });
+          await admin.from('lead_tasks').insert(payload);
+        } else if (!sameDeadline && alertIsOpen) {
+          await admin.from('lead_tasks').update(payload).eq('id', alert.id);
+        } else if (!sameDeadline && !alertIsOpen) {
+          await admin.from('lead_tasks').insert(payload);
         }
       }
       const protectedByFutureCommitment = lead.stage === 'agendado' && lead.next_action_due_at && new Date(lead.next_action_due_at).getTime() > now;
