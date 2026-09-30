@@ -449,6 +449,21 @@ export function ProposalsManager({
       });
       if (activityError) throw activityError;
 
+      if (!['recusada', 'expirada', 'convertida'].includes(form.workflowStatus)) {
+        const stageResponse = await fetch(`/api/leads/${form.leadId}/stage`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            stage: 'proposta_negociacao',
+            reason: `Proposta #${saved.proposal_number} salva no CRM.`,
+          }),
+        });
+        const stagePayload = await stageResponse.json().catch(() => ({})) as { error?: string };
+        if (!stageResponse.ok) {
+          throw new Error(stagePayload.error || 'A proposta foi salva, mas não foi possível mover o lead para Proposta / Negociação.');
+        }
+      }
+
       setProposals((current) => editingId
         ? current.map((proposal) => proposal.id === saved.id ? saved : proposal)
         : [saved, ...current]);
