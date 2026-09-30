@@ -272,7 +272,10 @@ export function LeadDetail({
   }, [lead.id, lead.kind, lead.organization_id]);
 
   useEffect(() => {
-    void loadNegotiations();
+    const timer = window.setTimeout(() => {
+      void loadNegotiations();
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, [loadNegotiations]);
 
   useEffect(() => {
