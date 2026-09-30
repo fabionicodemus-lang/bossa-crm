@@ -68,7 +68,7 @@ async function describeImage(bytes: ArrayBuffer, mimeType: string) {
         content: [
           {
             type: 'input_text',
-            text: 'Analise esta imagem enviada em uma conversa de WhatsApp com a Bossa Empreendimentos. Descreva de forma objetiva somente o conteúdo útil para responder ao contato: textos legíveis, imóvel/ambiente, dúvida aparente, documento ou informação comercial visível. Não invente detalhes, identidade de pessoas, valores ilegíveis nem conclusões não sustentadas. Responda em português brasileiro em até 120 palavras.',
+            text: 'Analise esta imagem enviada em uma conversa de WhatsApp com a Bossa Empreendimentos. Descreva de forma objetiva somente o conteúdo útil: textos legíveis, imóvel/ambiente, dúvida aparente, documento ou informação comercial visível. Se for proposta, simulação ou condição comercial, transcreva fielmente quando legíveis: empreendimento, unidade, valor total, entrada/ato, quantidade e valor de parcelas, reforços/balões, chaves e indexadores. Não invente detalhes, identidade de pessoas, valores ilegíveis nem conclusões não sustentadas. Responda em português brasileiro em até 160 palavras.',
           },
           { type: 'input_image', image_url: `data:${mimeType};base64,${base64}`, detail: 'low' },
         ],
