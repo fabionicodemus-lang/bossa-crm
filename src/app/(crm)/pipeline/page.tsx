@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { PageTopbar } from "@/components/PageTopbar";
 import {
   ClientsPage,
   BrokersPage,
@@ -12,6 +13,10 @@ export default async function PipelinePage({
   const { tipo = "cliente" } = await searchParams;
   return (
     <>
+      <PageTopbar
+        title="Pipeline"
+        subtitle="Clientes diretos, corretores e contatos gerais"
+      />
       <nav className="pipeline-tabs" aria-label="Pipeline">
         {[
           { id: "cliente", label: "Clientes diretos" },
@@ -28,11 +33,11 @@ export default async function PipelinePage({
         ))}
       </nav>
       {tipo === "corretor" ? (
-        <BrokersPage />
+        <BrokersPage embedded />
       ) : tipo === "geral" ? (
-        <GeneralPage />
+        <GeneralPage embedded />
       ) : (
-        <ClientsPage />
+        <ClientsPage embedded />
       )}
     </>
   );
