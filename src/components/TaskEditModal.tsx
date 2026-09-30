@@ -61,7 +61,7 @@ export function TaskEditModal({
   const [date, setDate] = useState(initial.date);
   const [time, setTime] = useState(initial.time || "09:00");
   const [priority, setPriority] = useState(task.priority);
-  const [assignedTo, setAssignedTo] = useState(task.assigned_to ?? currentUserId);
+  const [assignedTo, setAssignedTo] = useState(task.assigned_to ?? "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -215,10 +215,11 @@ export function TaskEditModal({
               disabled={!isAdmin}
               onChange={(event) => setAssignedTo(event.target.value)}
             >
+              {!assignedTo && <option value="">IA / sem responsável</option>}
               {members.map((member) => (
                 <option value={member.user_id} key={member.user_id}>{member.full_name}</option>
               ))}
-              {!members.some((member) => member.user_id === assignedTo) && (
+              {assignedTo && !members.some((member) => member.user_id === assignedTo) && (
                 <option value={assignedTo}>Responsável atual</option>
               )}
             </select>
