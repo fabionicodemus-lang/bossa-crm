@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import { formatDateTime } from '@/lib/format';
 import type { LeadTask } from '@/lib/types';
 import { useCrmUI } from './CrmUI';
+import { TaskEditModal } from './TaskEditModal';
 
 type TaskLead = {
   id: string;
@@ -87,6 +88,7 @@ export function TasksManager({
   const [selectedAssignees, setSelectedAssignees] = useState<string[]>([]);
   const [search, setSearch] = useState('');
   const [loadingTaskId, setLoadingTaskId] = useState<string | null>(null);
+  const [editingTask, setEditingTask] = useState<TaskListItem | null>(null);
   const [error, setError] = useState('');
 
   const memberMap = useMemo(
@@ -265,6 +267,7 @@ export function TasksManager({
               </div>
               <div style={{ display: 'flex', gap: 7, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
                 {task.lead && <button type="button" className="btn btn-ghost btn-sm" onClick={() => ui.openLead(task.lead!.id, 'dados')}>Abrir lead</button>}
+                {(isAdmin || task.assigned_to === currentUserId) && <button type="button" className="btn btn-ghost btn-sm" disabled={busy} onClick={() => setEditingTask(task)}>Editar</button>}
                 {(status === 'pending' || status === 'overdue') && <>
                   <button type="button" className="btn btn-primary btn-sm" disabled={busy} onClick={() => void actOnTask(task, 'complete')}>{busy ? 'Salvando…' : 'Concluir'}</button>
                   <button type="button" className="btn btn-ghost btn-sm" disabled={busy} onClick={() => void actOnTask(task, 'cancel')}>Cancelar</button>
@@ -276,5 +279,20 @@ export function TasksManager({
         </div>}
       </div>
     </section>
+    {editingTask && <TaskEditModal
+      task={editingTask}
+      members={members}
+      currentUserId={currentUserId}
+      isAdmin={isAdmin}
+      onClose={() => setEditingTask(null)}
+      onSaved={(updated) => {
+        setTasks((current) => current.map((item) => item.id === updated.id ? { ...item, ...updated } : item));
+        setEditingTask(null);
+      }}
+      onDeleted={(taskId) => {
+        setTasks((current) => current.filter((item) => item.id !== taskId));
+        setEditingTask(null);
+      }}
+    />}
   </div>;
 }
