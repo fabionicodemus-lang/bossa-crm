@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Lead } from '@/lib/types';
 import { isBrokerRoutingSignal, normalizeNaraRoutingText } from '@/lib/nara-contact-routing';
 import { channelAccess, type WhatsAppChannelRecord, type WhatsAppConversationRecord } from '@/lib/whatsapp/channelService';
+import { clearlyOperationalNonBrokerReason } from '@/lib/whatsapp/contactKindAutoRouting';
 import { plantaoCanReplyNow } from '@/lib/whatsapp/plantaoSchedule';
 import { normalizeWaId } from '@/lib/whatsapp/utils';
 
@@ -202,6 +203,10 @@ async function handleGeneral(args: {
   const metadata = metadataOf(args.lead);
   const awaiting = metadata.plantao_triage_status === 'awaiting_broker_answer';
   const now = new Date().toISOString();
+  const autoOperationalReason = metadata.auto_kind_triage_status === 'operational_non_broker'
+    ? String(metadata.auto_kind_triage_reason || 'Fornecedor/prestador identificado automaticamente')
+    : '';
+  const operationalReason = autoOperationalReason || clearlyOperationalNonBrokerReason(text) || '';
 
   if (isBrokerYes(text, awaiting)) {
     const { error } = await args.admin.from('leads').update({
@@ -235,16 +240,18 @@ async function handleGeneral(args: {
     return { handled: false, promotedToBroker: true };
   }
 
-  if (isBrokerNo(text, awaiting)) {
+  if (operationalReason || isBrokerNo(text, awaiting)) {
     const { error } = await args.admin.from('leads').update({
       stage: 'humano_ativo',
       ai_enabled: false,
       automation_paused: true,
       owner_mode: 'human',
+      priority_class: null,
       metadata: {
         ...metadata,
-        plantao_triage_status: 'not_broker',
+        plantao_triage_status: operationalReason ? 'operational_non_broker' : 'not_broker',
         plantao_triage_answer: text,
+        plantao_triage_reason: operationalReason || null,
         plantao_triage_classified_at: now,
       },
       updated_at: now,
@@ -262,7 +269,9 @@ async function handleGeneral(args: {
       admin: args.admin,
       lead: args.lead,
       title: 'Novo contato não corretor aguardando retorno',
-      description: 'O contato informou que não é corretor. Verificar se é cliente, fornecedor, prestador ou outro contato e classificar manualmente se necessário.',
+      description: operationalReason
+        ? `Contato identificado automaticamente como não corretor: ${operationalReason}. Verificar o retorno quando necessário.`
+        : 'O contato informou que não é corretor. Verificar se é cliente, fornecedor, prestador ou outro contato e classificar manualmente se necessário.',
       dedupeKey: 'plantao:geral:retorno',
     });
     return { handled: true };
@@ -304,7 +313,10 @@ export async function handleMixedPlantaoConversation(args: {
   lead: Lead;
   sourceMessageId: string;
 }): Promise<RoutingResult> {
-  if (args.channel.role !== 'corretor' || args.channel.routing_mode === 'direct_role') {
+  if (args.channel.role !== 'corretor') {
+    return { handled: false };
+  }
+  if (args.channel.routing_mode === 'direct_role' && args.lead.kind !== 'geral') {
     return { handled: false };
   }
   const activeNow = await plantaoCanReplyNow(args.admin, args.channel.organization_id);
