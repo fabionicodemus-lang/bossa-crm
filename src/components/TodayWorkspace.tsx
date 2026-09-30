@@ -584,7 +584,12 @@ export function TodayWorkspace({
           <strong className="text-red">
             {countFor("overdue")} tarefas atrasadas
           </strong>{" "}
-          e {countFor("today")} para hoje. {persona} tem{" "}
+          e {countFor("today")} para hoje.{" "}
+          {kind === "corretor"
+            ? "O Plantão passou"
+            : kind === "all"
+              ? "Nara e Plantão passaram"
+              : "A Nara passou"}{" "}
           <strong>{handoffs.length} conversas</strong> para a equipe.
         </p>
         {error && (
@@ -674,7 +679,7 @@ export function TodayWorkspace({
               >
                 <ListFilter size={14} />
               </button>
-              <Link href="/tarefas">Abrir em Tarefas</Link>
+              <Link href="/tarefas">Abrir em Tarefas →</Link>
             </div>
             {taskFilter !== "all" && (
               <div className="filter-notice">
@@ -807,7 +812,7 @@ export function TodayWorkspace({
                   <Sparkles size={15} />
                   {persona}
                 </h2>
-                <Link href="/ia">Ver conversas</Link>
+                <Link href="/conversas">Ver conversas</Link>
               </div>
               <div className="nara-stats">
                 {[
