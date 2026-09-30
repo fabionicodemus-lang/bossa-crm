@@ -15,7 +15,7 @@
     },
     {
       "path": "/api/automation/commercial-intelligence",
-      "schedule": "*/5 * * * *"
+      "schedule": "0 13,15,18,21 * * *"
     }
   ]
 }
