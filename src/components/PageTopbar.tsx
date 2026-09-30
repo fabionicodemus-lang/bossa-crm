@@ -1,4 +1,5 @@
 import { WorkspaceActions } from "./CrmUI";
+import { WorkspaceTabs } from "./WorkspaceTabs";
 export function PageTopbar({
   title,
   subtitle,
@@ -20,6 +21,7 @@ export function PageTopbar({
           <WorkspaceActions />
         </div>
       </header>
+      <WorkspaceTabs />
     </>
   );
 }
