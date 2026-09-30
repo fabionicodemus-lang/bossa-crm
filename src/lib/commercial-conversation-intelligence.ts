@@ -59,9 +59,25 @@ type ProposalAnalysis = {
   keys_amount: number;
   post_keys_adjustment: string;
   notes: string;
+  meeting_detected: boolean;
+  meeting_confidence: number;
+  meeting_event_type: 'reuniao_cliente' | 'apresentacao' | 'visita' | 'ligacao' | 'outro';
+  meeting_mode: 'presencial' | 'video' | 'telefone';
+  meeting_start_local: string;
+  meeting_end_local: string;
+  meeting_location: string;
+  meeting_responsible_name: string;
+  meeting_title: string;
+  meeting_notes: string;
 };
 
-const SIGNAL_RE = /\bproposta\b|\bcontraproposta\b|\bfluxo\b|\bdesconto\b|\bentrada\b|\bparcela(?:s)?\b|\bbal(?:a|ã)o(?:es)?\b|\breforço(?:s)?\b|\bato\b|\bchaves?\b|\bunidade\s*\d+|\bcliente\b|R\$\s*[\d.]/iu;
+type TeamMember = {
+  user_id: string;
+  role: string;
+  full_name: string;
+};
+
+const SIGNAL_RE = /\bproposta\b|\bcontraproposta\b|\bfluxo\b|\bdesconto\b|\bentrada\b|\bparcela(?:s)?\b|\bbal(?:a|ã)o(?:es)?\b|\breforço(?:s)?\b|\bato\b|\bchaves?\b|\bunidade\s*\d+|\bcliente\b|R\$\s*[\d.]|\breuni[aã]o\b|\bvisita\b|\bcall\b|\bvideochamada\b|\bamanh[aã]\b|\bagenda\b|\bhor[aá]rio\b|\bàs\s*\d{1,2}(?::\d{2})?\b|\bas\s*\d{1,2}(?::\d{2})?\b/iu;
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object' && !Array.isArray(value)
@@ -111,6 +127,35 @@ function brDate(value: string) {
   return `${day}/${month}/${year}`;
 }
 
+function localDateTimeLabel(value: string) {
+  return new Intl.DateTimeFormat('pt-BR', {
+    timeZone: 'America/Sao_Paulo',
+    dateStyle: 'short',
+    timeStyle: 'short',
+  }).format(new Date(value));
+}
+
+function saoPauloLocalToIso(value: string) {
+  const match = value.trim().match(/^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})$/);
+  if (!match) return null;
+  const parsed = new Date(`${match[1]}T${match[2]}:00-03:00`);
+  return Number.isFinite(parsed.getTime()) ? parsed.toISOString() : null;
+}
+
+function meetingEventType(value: unknown): ProposalAnalysis['meeting_event_type'] {
+  const raw = String(value ?? '');
+  return ['reuniao_cliente', 'apresentacao', 'visita', 'ligacao', 'outro'].includes(raw)
+    ? raw as ProposalAnalysis['meeting_event_type']
+    : 'reuniao_cliente';
+}
+
+function meetingMode(value: unknown): ProposalAnalysis['meeting_mode'] {
+  const raw = String(value ?? '');
+  return ['presencial', 'video', 'telefone'].includes(raw)
+    ? raw as ProposalAnalysis['meeting_mode']
+    : 'presencial';
+}
+
 function outputText(data: unknown) {
   const payload = asRecord(data);
   const output = Array.isArray(payload?.output) ? payload.output : [];
@@ -157,6 +202,16 @@ function parseAnalysis(text: string): ProposalAnalysis {
     keys_amount: numberValue(parsed.keys_amount),
     post_keys_adjustment: String(parsed.post_keys_adjustment ?? '').trim(),
     notes: String(parsed.notes ?? '').trim(),
+    meeting_detected: Boolean(parsed.meeting_detected),
+    meeting_confidence: Math.max(0, Math.min(1, numberValue(parsed.meeting_confidence))),
+    meeting_event_type: meetingEventType(parsed.meeting_event_type),
+    meeting_mode: meetingMode(parsed.meeting_mode),
+    meeting_start_local: String(parsed.meeting_start_local ?? '').trim(),
+    meeting_end_local: String(parsed.meeting_end_local ?? '').trim(),
+    meeting_location: String(parsed.meeting_location ?? '').trim(),
+    meeting_responsible_name: String(parsed.meeting_responsible_name ?? '').trim(),
+    meeting_title: String(parsed.meeting_title ?? '').trim(),
+    meeting_notes: String(parsed.meeting_notes ?? '').trim(),
   };
 }
 
@@ -181,6 +236,10 @@ async function analyzeConversation(args: {
     const who = message.direction === 'out' ? 'EQUIPE BOSSA' : args.lead.kind === 'corretor' ? 'CORRETOR' : 'CLIENTE';
     return `[${message.id}] [${message.created_at}] ${who}: ${message.intelligenceText}`;
   }).join('\n');
+  const referenceMessage = args.messages[args.messages.length - 1];
+  const referenceLocal = referenceMessage
+    ? localDateTimeLabel(referenceMessage.created_at)
+    : localDateTimeLabel(new Date().toISOString());
 
   const prompt = `Você analisa uma conversa comercial da Bossa Empreendimentos para manter o CRM atualizado.
 
@@ -188,6 +247,7 @@ Contato atual:
 - Nome: ${args.lead.name}
 - Tipo: ${args.lead.kind}
 - Imobiliária/empresa atual: ${args.lead.company || 'não informada'}
+- Data/hora de referência em America/Sao_Paulo: ${referenceLocal}
 
 Empreendimentos Bossa e unidades cadastradas:
 ${catalog}
@@ -204,7 +264,12 @@ Regras obrigatórias:
 6. O resumo deve ser factual e útil ao histórico: quem tinha cliente, qual empreendimento/unidade, o que foi enviado/recebido e o desfecho conhecido. Não invente nome do cliente se não apareceu.
 7. broker_company só deve ser preenchido se a conversa trouxer evidência clara.
 8. Valores numéricos devem ser números puros em reais. Campos desconhecidos = 0 ou string vazia.
-9. Responda SOMENTE JSON válido, sem markdown.
+9. Detecte também compromissos COM ESTE CONTATO. meeting_detected=true somente se data e horário estiverem suficientemente definidos e o encontro estiver confirmado pelas partes (ex.: contato propõe "amanhã às 13:30" e a Bossa confirma "perfeito, vou marcar na agenda"). "Vamos marcar", "qual horário?" ou uma reunião interna citada na conversa NÃO são agendamento confirmado.
+10. Interprete "hoje", "amanhã" e datas relativas usando a data/hora de referência em America/Sao_Paulo. meeting_start_local e meeting_end_local devem ser "YYYY-MM-DDTHH:MM", sem fuso. Se o fim não foi informado, use 60 minutos após o início.
+11. meeting_event_type: use "visita" para visita à obra/escritório, "apresentacao" para apresentação comercial agendada, "reuniao_cliente" para reunião, "ligacao" para chamada telefônica, "outro" se necessário.
+12. meeting_mode: "presencial", "video" ou "telefone". meeting_location somente se houver local explícito ou claramente combinado. meeting_responsible_name somente se a pessoa da Bossa estiver identificada na conversa.
+13. meeting_title deve ser curto e útil na agenda, por exemplo "Visita Flow · André e 2 corretores".
+14. Responda SOMENTE JSON válido, sem markdown.
 
 Formato:
 {
@@ -225,7 +290,17 @@ Formato:
   "reinforcement_amount": 0,
   "keys_amount": 0,
   "post_keys_adjustment": "",
-  "notes": ""
+  "notes": "",
+  "meeting_detected": false,
+  "meeting_confidence": 0,
+  "meeting_event_type": "reuniao_cliente",
+  "meeting_mode": "presencial",
+  "meeting_start_local": "",
+  "meeting_end_local": "",
+  "meeting_location": "",
+  "meeting_responsible_name": "",
+  "meeting_title": "",
+  "meeting_notes": ""
 }`;
 
   const response = await fetch('https://api.openai.com/v1/responses', {
@@ -238,7 +313,7 @@ Formato:
       model: 'gpt-5.6-luna',
       store: false,
       reasoning: { effort: 'low' },
-      max_output_tokens: 900,
+      max_output_tokens: 1200,
       text: { verbosity: 'low' },
       input: [{ role: 'user', content: [{ type: 'input_text', text: prompt }] }],
     }),
@@ -292,6 +367,182 @@ function proposalSignature(args: {
     Math.round(args.totalPrice),
     args.date,
   ].join(':');
+}
+
+async function teamMembers(admin: AdminClient, organizationId: string): Promise<TeamMember[]> {
+  const { data: memberships, error: membershipError } = await admin
+    .from('memberships')
+    .select('user_id,role')
+    .eq('organization_id', organizationId);
+  if (membershipError) throw membershipError;
+  const rows = memberships ?? [];
+  if (!rows.length) return [];
+  const { data: profiles, error: profileError } = await admin
+    .from('profiles')
+    .select('id,full_name')
+    .in('id', rows.map((row) => row.user_id));
+  if (profileError) throw profileError;
+  const names = new Map((profiles ?? []).map((profile) => [profile.id, String(profile.full_name ?? '')]));
+  return rows.map((row) => ({
+    user_id: row.user_id,
+    role: row.role,
+    full_name: names.get(row.user_id) || '',
+  }));
+}
+
+async function resolveMeetingAssignee(
+  admin: AdminClient,
+  lead: LeadRow,
+  responsibleName: string,
+) {
+  const members = await teamMembers(admin, lead.organization_id);
+  const target = normalize(responsibleName);
+  if (target) {
+    const named = members.find((member) => {
+      const candidate = normalize(member.full_name);
+      return candidate && (candidate === target || candidate.includes(target) || target.includes(candidate));
+    });
+    if (named) return named.user_id;
+  }
+  if (lead.owner_id && members.some((member) => member.user_id === lead.owner_id)) {
+    return lead.owner_id;
+  }
+  const commercial = members.filter((member) => member.role === 'comercial');
+  if (commercial.length === 1) return commercial[0].user_id;
+  return commercial[0]?.user_id
+    ?? members.find((member) => member.role === 'admin')?.user_id
+    ?? members[0]?.user_id
+    ?? null;
+}
+
+async function saveConfirmedMeeting(args: {
+  admin: AdminClient;
+  lead: LeadRow;
+  source: MessageRow;
+  analysis: ProposalAnalysis;
+  messages: Array<MessageRow & { intelligenceText: string }>;
+}) {
+  if (!args.analysis.meeting_detected || args.analysis.meeting_confidence < 0.9) return null;
+
+  const startsAt = saoPauloLocalToIso(args.analysis.meeting_start_local);
+  if (!startsAt) return null;
+  let endsAt = saoPauloLocalToIso(args.analysis.meeting_end_local);
+  if (!endsAt || new Date(endsAt).getTime() <= new Date(startsAt).getTime()) {
+    endsAt = new Date(new Date(startsAt).getTime() + 60 * 60_000).toISOString();
+  }
+  if (new Date(startsAt).getTime() < Date.now() - 15 * 60_000) return null;
+
+  const assignedTo = await resolveMeetingAssignee(
+    args.admin,
+    args.lead,
+    args.analysis.meeting_responsible_name,
+  );
+  if (!assignedTo) return null;
+
+  const signature = [
+    'whatsapp-meeting',
+    args.lead.id,
+    startsAt,
+    args.analysis.meeting_event_type,
+  ].join(':');
+
+  const { data: existing, error: existingError } = await args.admin
+    .from('agenda_events')
+    .select('id,title,starts_at,ends_at')
+    .eq('organization_id', args.lead.organization_id)
+    .eq('lead_id', args.lead.id)
+    .contains('metadata', { auto_signature: signature })
+    .limit(1)
+    .maybeSingle();
+  if (existingError) throw existingError;
+  if (existing) return existing;
+
+  const { data: overlaps } = await args.admin
+    .from('agenda_events')
+    .select('id,title')
+    .eq('organization_id', args.lead.organization_id)
+    .eq('assigned_to', assignedTo)
+    .eq('status', 'scheduled')
+    .lt('starts_at', endsAt)
+    .gt('ends_at', startsAt);
+
+  const title = args.analysis.meeting_title
+    || `${args.analysis.meeting_event_type === 'visita' ? 'Visita' : 'Reunião'} · ${args.lead.name}`;
+  const descriptionParts = [
+    args.analysis.meeting_notes,
+    args.analysis.summary,
+    'Agendamento detectado automaticamente na conversa do WhatsApp.',
+  ].filter(Boolean);
+
+  const { data: event, error: eventError } = await args.admin
+    .from('agenda_events')
+    .insert({
+      organization_id: args.lead.organization_id,
+      lead_id: args.lead.id,
+      assigned_to: assignedTo,
+      created_by_kind: 'ai',
+      agent: args.lead.kind === 'corretor' ? 'plantao' : 'nara',
+      title,
+      description: descriptionParts.join('\n\n'),
+      event_type: args.analysis.meeting_event_type,
+      meeting_mode: args.analysis.meeting_mode,
+      location: args.analysis.meeting_location || null,
+      starts_at: startsAt,
+      ends_at: endsAt,
+      status: 'scheduled',
+      metadata: {
+        source: 'whatsapp_commercial_intelligence',
+        auto_signature: signature,
+        confidence: args.analysis.meeting_confidence,
+        responsible_name: args.analysis.meeting_responsible_name || null,
+        source_message_id: args.source.id,
+        source_message_ids: args.messages.map((message) => message.id),
+        overlap_warning: (overlaps ?? []).length > 0,
+        overlapping_event_ids: (overlaps ?? []).map((row) => row.id),
+      },
+    })
+    .select('id,title,starts_at,ends_at')
+    .single();
+  if (eventError) throw eventError;
+
+  const nextAction = args.analysis.meeting_event_type === 'visita'
+    ? `Realizar visita agendada com ${args.lead.name}.`
+    : `Realizar compromisso agendado com ${args.lead.name}.`;
+  const { error: leadUpdateError } = await args.admin
+    .from('leads')
+    .update({
+      stage: 'agendado',
+      owner_mode: 'human',
+      owner_id: assignedTo,
+      ai_enabled: false,
+      automation_paused: true,
+      next_action: nextAction,
+      next_action_type: 'meeting',
+      next_action_due_at: startsAt,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', args.lead.id);
+  if (leadUpdateError) throw leadUpdateError;
+
+  await args.admin.from('activities').insert({
+    organization_id: args.lead.organization_id,
+    lead_id: args.lead.id,
+    type: 'agendamento_detectado_whatsapp',
+    title: `Agendamento criado · ${title}`,
+    description: `${localDateTimeLabel(startsAt)} · ${args.analysis.meeting_location || 'Local não informado'}`,
+    metadata: {
+      agenda_event_id: event.id,
+      starts_at: startsAt,
+      ends_at: endsAt,
+      assigned_to: assignedTo,
+      auto_signature: signature,
+      confidence: args.analysis.meeting_confidence,
+      overlap_warning: (overlaps ?? []).length > 0,
+      source: 'whatsapp_commercial_intelligence',
+    },
+  });
+
+  return event;
 }
 
 async function saveConversationSummary(args: {
@@ -660,6 +911,14 @@ export async function processCommercialConversationMessage(
     }
   }
 
+  const meeting = await saveConfirmedMeeting({
+    admin,
+    lead,
+    source,
+    analysis,
+    messages: enriched,
+  });
+
   await saveConversationSummary({
     admin,
     lead,
@@ -676,13 +935,17 @@ export async function processCommercialConversationMessage(
     confidence: analysis.proposal_confidence,
     development: development?.name ?? null,
     unit: (unit?.unit_code ?? analysis.unit_code) || null,
+    meeting_detected: Boolean(meeting),
+    agenda_event_id: meeting?.id ?? null,
+    meeting_confidence: analysis.meeting_confidence,
   });
 
   return {
     processed: true,
-    reason: proposalId ? 'proposal_saved' : 'summary_saved',
+    reason: proposalId ? 'proposal_saved' : meeting ? 'meeting_saved' : 'summary_saved',
     proposalId,
     proposalNumber,
+    agendaEventId: meeting?.id ?? null,
   };
 }
 
@@ -696,22 +959,40 @@ export async function processCommercialIntelligenceBatch(admin: AdminClient, lim
     .limit(250);
   if (error) throw error;
 
-  const pending = (data as MessageRow[] | null ?? [])
-    .filter((row) => !wasProcessed(row))
+  const unprocessed = (data as MessageRow[] | null ?? [])
+    .filter((row) => !wasProcessed(row));
+  const candidates = unprocessed
+    .filter((row) => SIGNAL_RE.test(row.body) || ['image', 'audio', 'document'].includes(messageType(row)))
     .slice(0, limit);
+  const noSignal = unprocessed
+    .filter((row) => !SIGNAL_RE.test(row.body) && !['image', 'audio', 'document'].includes(messageType(row)))
+    .slice(0, 180);
 
-  let processed = 0;
+  for (const row of noSignal) {
+    await markProcessed(admin, row, { relevant: false, reason: 'no_commercial_signal' });
+  }
+
+  let processed = noSignal.length;
   let proposals = 0;
+  let meetings = 0;
   let failed = 0;
-  for (const row of pending) {
+  for (const row of candidates) {
     try {
       const result = await processCommercialConversationMessage(admin, row.id);
       if (result.processed) processed++;
       if (result.proposalId) proposals++;
+      if (result.agendaEventId) meetings++;
     } catch (error) {
       failed++;
       console.error('[commercial intelligence]', row.id, error);
     }
   }
-  return { selected: pending.length, processed, proposals, failed };
+  return {
+    selected: candidates.length,
+    skipped_no_signal: noSignal.length,
+    processed,
+    proposals,
+    meetings,
+    failed,
+  };
 }
