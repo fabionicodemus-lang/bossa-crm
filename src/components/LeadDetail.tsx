@@ -520,6 +520,50 @@ export function LeadDetail({
     }
   }
 
+  async function markProposalNotClosed() {
+    if (!canEdit || loading) return;
+    const confirmed = window.confirm(
+      lead.kind === "corretor"
+        ? "Marcar a proposta como não fechada e devolver este corretor para a etapa adequada ao ranking?"
+        : "Marcar a proposta como não fechada e devolver este cliente para atendimento ativo?",
+    );
+    if (!confirmed) return;
+
+    setLoading(true);
+    setError("");
+    try {
+      const payload = await requestJson(
+        `/api/leads/${lead.id}/proposal-outcome`,
+        "POST",
+        { reason: "Proposta não evoluiu para fechamento." },
+      );
+      setLead((current) => ({
+        ...current,
+        stage: payload.stage ?? current.stage,
+        owner_mode: payload.owner_mode ?? current.owner_mode,
+        owner_id: payload.owner_id ?? current.owner_id,
+        ai_enabled: payload.ai_enabled ?? current.ai_enabled,
+        next_action: payload.next_action ?? current.next_action,
+        next_action_due_at:
+          payload.next_action_due_at ?? current.next_action_due_at,
+      }));
+      ui.notify({
+        message: payload.proposal_number
+          ? `Proposta #${payload.proposal_number} marcada como não fechada.`
+          : "Lead reposicionado após proposta não fechada.",
+      });
+      router.refresh();
+    } catch (cause) {
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "Não foi possível registrar que a proposta não fechou.",
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
+
   async function toggleAi(enabled: boolean) {
     if (!canEdit) return;
     setError("");
@@ -942,6 +986,17 @@ export function LeadDetail({
                   Criar proposta
                 </Link>
               )}
+              {lead.kind !== "geral" &&
+                lead.stage === "proposta_negociacao" && (
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    disabled={loading}
+                    onClick={() => void markProposalNotClosed()}
+                  >
+                    Proposta não fechou
+                  </button>
+                )}
             </>
           )}
           {drawerMode && canEdit && (
@@ -1089,13 +1144,31 @@ export function LeadDetail({
                 </div>
               </div>
               {lead.kind !== "geral" && (
-                <Link
-                  className="btn btn-primary btn-sm"
-                  style={{ marginTop: 16 }}
-                  href={`/propostas?lead=${lead.id}`}
+                <div
+                  style={{
+                    display: "flex",
+                    gap: 8,
+                    flexWrap: "wrap",
+                    marginTop: 16,
+                  }}
                 >
-                  {canEdit ? "Criar proposta" : "Consultar propostas"}
-                </Link>
+                  <Link
+                    className="btn btn-primary btn-sm"
+                    href={`/propostas?lead=${lead.id}`}
+                  >
+                    {canEdit ? "Criar proposta" : "Consultar propostas"}
+                  </Link>
+                  {canEdit && lead.stage === "proposta_negociacao" && (
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm"
+                      disabled={loading}
+                      onClick={() => void markProposalNotClosed()}
+                    >
+                      Proposta não fechou
+                    </button>
+                  )}
+                </div>
               )}
             </div>
           )}
