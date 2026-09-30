@@ -2102,6 +2102,63 @@ kbd {
 .lead-drawer .profile-actions > div {
   flex-wrap: wrap;
 }
+.lead-drawer .profile-actions > .select:first-child {
+  display: none;
+}
+.profile-meta {
+  display: grid;
+  gap: 3px;
+}
+.profile-meta strong {
+  color: var(--ink-2);
+  font-size: 12.5px;
+  font-weight: 500;
+}
+.profile-contact {
+  color: var(--ink-3);
+  font-size: 11.5px;
+}
+.conversation-owner-state {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 34px;
+  padding: 8px 12px;
+  margin: 0 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--sunken);
+  color: var(--ink-2);
+  font-size: 12.5px;
+}
+.conversation-owner-state i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--ink-3);
+  flex: none;
+}
+.conversation-owner-state.human {
+  background: var(--green-soft);
+  color: var(--green);
+}
+.conversation-owner-state.human i {
+  background: var(--green);
+}
+.conversation-owner-state.ai {
+  background: var(--nara-soft);
+  color: var(--blue);
+}
+.conversation-owner-state.ai i {
+  background: var(--blue);
+}
+.conversation-owner-state.handoff {
+  background: var(--orange-soft);
+  color: var(--orange);
+}
+.conversation-owner-state.handoff i {
+  background: var(--orange);
+}
 .lead-drawer .wa-head {
   flex-wrap: wrap;
 }
