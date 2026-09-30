@@ -25,3 +25,5 @@ A agenda usa contagens exatas e páginas de 50 registros. Foram encontrados 55.5
 ## Validação
 
 TypeScript, lint (somente avisos preexistentes), build de produção e 12 testes de datas/status passaram. Os campos consultados foram conferidos no schema de produção por consultas somente de leitura. A verificação visual automatizada no navegador local ficou indisponível: o daemon do navegador não iniciou e a instalação do navegador falhou por certificado do ambiente. A revisão visual no preview autenticado ainda deve ser feita antes do merge.
+
+A validação completa também executou os testes existentes. O teste de acesso comercial aos materiais foi adaptado à navegação Nara/Materiais. Os demais testes passaram até `test:nara-2409`, que falha na linha 257 ao exigir “investimento” na resposta da campanha EUA. A mesma falha foi confirmada no CI do commit original `4bcca0f` (job 109533957774, 29/09/2026), antes desta alteração. A lógica da Nara e seu teste não foram alterados neste PR.

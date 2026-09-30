@@ -1,21 +1,17 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
-const sidebar = readFileSync('src/components/Sidebar.tsx', 'utf8');
+const tabs = readFileSync('src/components/WorkspaceTabs.tsx', 'utf8');
+const nara = readFileSync('src/app/(crm)/nara/page.tsx', 'utf8');
 const page = readFileSync('src/app/(crm)/configuracoes/arquivos-ia/page.tsx', 'utf8');
 const migration = readFileSync('supabase/migrations/021_ai_files_commercial_access.sql', 'utf8');
 
-const aiFilesMenu = sidebar.match(/\{ href: '\/configuracoes\/arquivos-ia'[^\n]+/u)?.[0] ?? '';
-assert.match(
-  aiFilesMenu,
-  /roles: \['admin', 'comercial'\]/,
-  'O menu Arquivos da IA deve ser visível para admin e comercial.',
-);
-assert.doesNotMatch(
-  aiFilesMenu,
-  /viewer/,
-  'Usuários viewer não devem receber acesso ao menu Arquivos da IA.',
-);
+const aiFilesMenu = tabs.match(/\{ href: "\/configuracoes\/arquivos-ia"[^\n]+/u)?.[0] ?? '';
+assert.match(aiFilesMenu, /edit: true/, 'Materiais deve exigir permissão de edição.');
+assert.doesNotMatch(aiFilesMenu, /admin: true/, 'Materiais deve aceitar o perfil comercial.');
+assert.match(tabs, /"edit" in i && i.edit && role === "viewer"/, 'Viewer não deve receber acesso aos materiais.');
+assert.match(nara, /context.role === "viewer"\) redirect/, 'A área Nara deve impedir acesso de viewer.');
+assert.match(nara, /href: "\/configuracoes\/arquivos-ia"/, 'A área Nara deve oferecer acesso aos materiais.');
 
 assert.match(
   page,
