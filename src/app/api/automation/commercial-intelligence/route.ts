@@ -17,7 +17,7 @@ async function run(request: Request) {
     return NextResponse.json({ error: 'Não autorizado.' }, { status: 401 });
   }
   const admin = createAdminClient();
-  const result = await processCommercialIntelligenceBatch(admin, 12);
+  const result = await processCommercialIntelligenceBatch(admin, 20);
   return NextResponse.json({ ok: true, ...result });
 }
 
