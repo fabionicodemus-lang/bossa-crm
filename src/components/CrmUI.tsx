@@ -481,6 +481,7 @@ function LeadDrawer({
             whatsappConnected={data.whatsappConnected}
             canEdit={data.canEdit}
             initialTab={tab}
+            drawerMode
           />
         ) : (
           <div className="empty-state">Carregando ficha…</div>
