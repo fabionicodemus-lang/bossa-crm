@@ -675,7 +675,7 @@ export async function processCommercialConversationMessage(
     proposal_number: proposalNumber,
     confidence: analysis.proposal_confidence,
     development: development?.name ?? null,
-    unit: unit?.unit_code ?? analysis.unit_code || null,
+    unit: (unit?.unit_code ?? analysis.unit_code) || null,
   });
 
   return {
