@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { FormEvent, useCallback, useMemo, useRef, useState } from 'react';
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import type { Lead, LeadKind } from '@/lib/types';
 import { defaultStage, isAiStage, isHumanStage, stagesFor } from '@/lib/stages';
@@ -72,6 +72,7 @@ export function PipelineBoard({ initialLeads, kind, organizationId, canEdit }: {
   const [pipelineSaving, setPipelineSaving] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const pipelineRef = useRef<HTMLDivElement | null>(null);
 
   const knownLeads = useRef(new Map(initialLeads.map((lead) => [lead.id, lead.updated_at])));
   const latestUpdatedAt = useRef(maxUpdatedAt(initialLeads));
@@ -107,6 +108,34 @@ export function PipelineBoard({ initialLeads, kind, organizationId, canEdit }: {
     latestUpdatedAt: () => latestUpdatedAt.current,
     onLeads: applyLeads,
   });
+
+  useEffect(() => {
+    const pipeline = pipelineRef.current;
+    if (!pipeline) return;
+
+    let frame = 0;
+    const updateViewportHeight = () => {
+      window.cancelAnimationFrame(frame);
+      frame = window.requestAnimationFrame(() => {
+        const current = pipelineRef.current;
+        if (!current) return;
+        const top = current.getBoundingClientRect().top;
+        const viewportHeight = window.visualViewport?.height ?? window.innerHeight;
+        const available = Math.max(260, Math.floor(viewportHeight - top - 10));
+        current.style.setProperty('--pipeline-viewport-height', `${available}px`);
+      });
+    };
+
+    updateViewportHeight();
+    window.addEventListener('resize', updateViewportHeight);
+    window.visualViewport?.addEventListener('resize', updateViewportHeight);
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.removeEventListener('resize', updateViewportHeight);
+      window.visualViewport?.removeEventListener('resize', updateViewportHeight);
+    };
+  }, [showNew, showBulk, selectMode, error, notice]);
 
   const stages = stagesFor(kind);
   const filtered = useMemo(() => {
@@ -374,7 +403,7 @@ export function PipelineBoard({ initialLeads, kind, organizationId, canEdit }: {
         </form>
       </section>}
 
-      <div className="pipeline">
+      <div className="pipeline" ref={pipelineRef}>
         {stages.map((stage) => {
           const stageLeads = filtered.filter((lead) => lead.stage === stage.id);
           return <section key={stage.id} className={`pipeline-column ${overStage === stage.id ? 'dragover' : ''}`}
