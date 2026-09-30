@@ -983,7 +983,7 @@ export async function processCommercialIntelligenceBatch(admin: AdminClient, lim
     .select('id,organization_id,lead_id,whatsapp_channel_id,direction,sender_kind,body,raw_payload,created_at')
     .gte('created_at', since)
     .order('created_at', { ascending: false })
-    .limit(250);
+    .limit(1000);
   if (error) throw error;
 
   const unprocessed = (data as MessageRow[] | null ?? [])
@@ -991,15 +991,7 @@ export async function processCommercialIntelligenceBatch(admin: AdminClient, lim
   const candidates = unprocessed
     .filter((row) => SIGNAL_RE.test(row.body) || ['image', 'audio', 'document'].includes(messageType(row)))
     .slice(0, limit);
-  const noSignal = unprocessed
-    .filter((row) => !SIGNAL_RE.test(row.body) && !['image', 'audio', 'document'].includes(messageType(row)))
-    .slice(0, 180);
-
-  for (const row of noSignal) {
-    await markProcessed(admin, row, { relevant: false, reason: 'no_commercial_signal' });
-  }
-
-  let processed = noSignal.length;
+  let processed = 0;
   let proposals = 0;
   let meetings = 0;
   let failed = 0;
@@ -1016,7 +1008,6 @@ export async function processCommercialIntelligenceBatch(admin: AdminClient, lim
   }
   return {
     selected: candidates.length,
-    skipped_no_signal: noSignal.length,
     processed,
     proposals,
     meetings,
