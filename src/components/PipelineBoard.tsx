@@ -413,7 +413,7 @@ export function PipelineBoard({ initialLeads, kind, organizationId, canEdit }: {
                     <div className="lead-sub">{kind === 'cliente' ? lead.enterprise || 'Empreendimento não informado' : lead.company || 'Autônomo'}</div>
                     <div className="lead-meta">
                       <span className="chip">{readableSource || (kind === 'cliente' ? 'Sem origem' : 'Sem grupo')}</span>
-                      <span className={`chip ${lead.owner_mode === 'human' ? '' : 'chip-orange'}`}>{lead.owner_mode === 'human' ? '👤 Humano' : lead.owner_mode === 'none' ? 'Encerrado' : `🤖 ${kind === 'cliente' ? 'Nara' : 'Plantão'}`}</span>
+                      <span className={`chip ${lead.owner_mode === 'human' ? 'chip-green' : lead.owner_mode === 'ai' ? 'chip-blue' : 'chip-neutral'}`}>{lead.owner_mode === 'human' ? 'Humano' : lead.owner_mode === 'none' ? 'Encerrado' : kind === 'cliente' ? '✦ Nara' : '✦ Plantão'}</span>
                       {lead.ai_classification && <span className="chip">{lead.ai_classification}</span>}
                     </div>
                     {lead.next_action && <div className="muted" style={{ fontSize: 10, marginBottom: 5 }}><strong>Próxima:</strong> {lead.next_action}</div>}
