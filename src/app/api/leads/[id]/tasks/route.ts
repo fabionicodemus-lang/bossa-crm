@@ -154,7 +154,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const priority = ['urgent', 'high', 'normal', 'low'].includes(String(body.priority))
       ? String(body.priority)
       : existingTask.priority;
-    let assignedTo = existingTask.assigned_to ?? user.id;
+    let assignedTo = existingTask.assigned_to;
 
     if (!title) return NextResponse.json({ error: 'Informe o título da tarefa.' }, { status: 400 });
     if (!dueAt || !Number.isFinite(Date.parse(dueAt))) {
