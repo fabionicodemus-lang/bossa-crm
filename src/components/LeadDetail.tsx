@@ -160,6 +160,7 @@ export function LeadDetail({
   whatsappConnected,
   canEdit,
   initialTab = "whatsapp",
+  drawerMode = false,
 }: {
   initialLead: Lead;
   initialMessages: Message[];
@@ -169,6 +170,7 @@ export function LeadDetail({
   whatsappConnected: boolean;
   canEdit: boolean;
   initialTab?: Tab;
+  drawerMode?: boolean;
 }) {
   const router = useRouter();
   const ui = useCrmUI();
@@ -591,8 +593,8 @@ export function LeadDetail({
     setLoading(false);
   }
 
-  async function transferToHuman() {
-    if (!canEdit || !transferOwnerId) return;
+  async function transferToHuman(ownerId = transferOwnerId) {
+    if (!canEdit || !ownerId) return;
     setLoading(true);
     setError("");
     try {
@@ -601,7 +603,7 @@ export function LeadDetail({
         "POST",
         {
           action: "transfer",
-          ownerId: transferOwnerId,
+          ownerId,
         },
       );
       setLead((current) => ({
@@ -825,7 +827,8 @@ export function LeadDetail({
               )}
             </div>
           </div>
-          <div className="profile-actions">
+          {!drawerMode && (
+            <div className="profile-actions">
             <select
               className="select"
               style={{ width: 230 }}
@@ -894,7 +897,8 @@ export function LeadDetail({
                   🤖 Reativar {persona}
                 </button>
               )}
-          </div>
+            </div>
+          )}
         </div>
         <div className="lead-quick-actions">
           <button
@@ -939,6 +943,34 @@ export function LeadDetail({
                 </Link>
               )}
             </>
+          )}
+          {drawerMode && canEdit && (
+            <label className="lead-owner-inline">
+              Responsável
+              <select
+                value={
+                  lead.owner_mode === "human" && lead.owner_id
+                    ? lead.owner_id
+                    : "__ai__"
+                }
+                disabled={loading}
+                onChange={(event) => {
+                  const ownerId = event.target.value;
+                  if (ownerId === "__ai__") {
+                    if (lead.owner_mode === "human") void releaseToAi();
+                    return;
+                  }
+                  if (ownerId !== lead.owner_id) void transferToHuman(ownerId);
+                }}
+              >
+                <option value="__ai__">{persona}</option>
+                {humanMembers.map((member) => (
+                  <option value={member.user_id} key={member.user_id}>
+                    {member.full_name}
+                  </option>
+                ))}
+              </select>
+            </label>
           )}
         </div>
         <div className="lead-stage-progress">
@@ -1492,7 +1524,52 @@ export function LeadDetail({
             </div>
           )}
 
-          {tab === "dados" && (
+          {tab === "dados" && drawerMode && (
+            <div className="drawer-overview">
+              <div className="drawer-overview-grid">
+                <section className="overview-block">
+                  <h3>Perfil</h3>
+                  <div><span>WhatsApp</span><strong>{displayPhone(lead.phone)}</strong></div>
+                  <div><span>E-mail</span><strong>{lead.email || "—"}</strong></div>
+                  <div><span>Localização</span><strong>{location || "—"}</strong></div>
+                </section>
+                <section className="overview-block">
+                  <h3>Interesse</h3>
+                  <div><span>Empreendimento</span><strong>{lead.enterprise || "—"}</strong></div>
+                  <div><span>Origem</span><strong>{sourceLabel}</strong></div>
+                  <div><span>Temperatura</span><strong>{scoreLabel(lead.temperature)} · {lead.temperature}/100</strong></div>
+                </section>
+                <section className="overview-block">
+                  <h3>Negociação</h3>
+                  <div><span>Etapa</span><strong>{stageLabel(lead.kind, lead.stage)}</strong></div>
+                  <div><span>Próxima ação</span><strong>{lead.next_action || lead.ai_next_action || "—"}</strong></div>
+                  <div><span>Prazo</span><strong>{lead.next_action_due_at ? formatDateTime(lead.next_action_due_at) : "—"}</strong></div>
+                </section>
+                <section className="overview-block">
+                  <h3>{lead.kind === "corretor" ? "Parceria" : "Comercial"}</h3>
+                  {lead.kind === "corretor" ? (
+                    <>
+                      <div><span>Imobiliária</span><strong>{lead.company || "Autônomo"}</strong></div>
+                      <div><span>CRECI</span><strong>{lead.creci || "—"}</strong></div>
+                      <div><span>Grupo</span><strong>{lead.group_name || "—"}</strong></div>
+                    </>
+                  ) : (
+                    <>
+                      <div><span>Responsável</span><strong>{owner?.full_name || persona}</strong></div>
+                      <div><span>Atendimento</span><strong>{lead.owner_mode === "human" ? "Humano" : lead.owner_mode === "ai" ? persona : "Encerrado"}</strong></div>
+                      <div><span>Criado em</span><strong>{formatDateTime(lead.created_at)}</strong></div>
+                    </>
+                  )}
+                </section>
+              </div>
+              <div className="nara-summary-card">
+                <strong>✦ Resumo {lead.kind === "corretor" ? "do Plantão" : "da Nara"}</strong>
+                <p>{lead.ai_summary || "Ainda não há resumo da IA para este contato."}</p>
+              </div>
+            </div>
+          )}
+
+          {tab === "dados" && !drawerMode && (
             <div>
               <div className="card-head">
                 <h3>Dados e qualificação</h3>
