@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Lead } from '@/lib/types';
 import { isBrokerRoutingSignal, normalizeNaraRoutingText } from '@/lib/nara-contact-routing';
 import { channelAccess, type WhatsAppChannelRecord, type WhatsAppConversationRecord } from '@/lib/whatsapp/channelService';
+import { clearlyOperationalNonBrokerReason } from '@/lib/whatsapp/contactKindAutoRouting';
 import { plantaoCanReplyNow } from '@/lib/whatsapp/plantaoSchedule';
 import { normalizeWaId } from '@/lib/whatsapp/utils';
 
@@ -202,6 +203,16 @@ async function handleGeneral(args: {
   const metadata = metadataOf(args.lead);
   const awaiting = metadata.plantao_triage_status === 'awaiting_broker_answer';
   const now = new Date().toISOString();
+  const autoOperationalReason = metadata.auto_kind_triage_status === 'operational_non_broker'
+    ? String(metadata.auto_kind_triage_reason || 'Fornecedor/prestador identificado automaticamente')
+    : '';
+  const cleanup = metadata.pipeline_kind_cleanup_2026_09_30 && typeof metadata.pipeline_kind_cleanup_2026_09_30 === 'object'
+    ? metadata.pipeline_kind_cleanup_2026_09_30 as Record<string, unknown>
+    : null;
+  const cleanupReason = cleanup?.new_kind === 'geral'
+    ? String(cleanup.reason || 'Contato já classificado como Geral')
+    : '';
+  const operationalReason = autoOperationalReason || cleanupReason || clearlyOperationalNonBrokerReason(text) || '';
 
   if (isBrokerYes(text, awaiting)) {
     const { error } = await args.admin.from('leads').update({
@@ -235,34 +246,43 @@ async function handleGeneral(args: {
     return { handled: false, promotedToBroker: true };
   }
 
-  if (isBrokerNo(text, awaiting)) {
+  if (operationalReason || isBrokerNo(text, awaiting)) {
     const { error } = await args.admin.from('leads').update({
       stage: 'humano_ativo',
       ai_enabled: false,
       automation_paused: true,
       owner_mode: 'human',
+      priority_class: null,
       metadata: {
         ...metadata,
-        plantao_triage_status: 'not_broker',
+        plantao_triage_status: operationalReason ? 'operational_non_broker' : 'not_broker',
         plantao_triage_answer: text,
+        plantao_triage_reason: operationalReason || null,
         plantao_triage_classified_at: now,
+        plantao_non_broker_ack_at: isRecent(metadata.plantao_non_broker_ack_at, 24)
+          ? metadata.plantao_non_broker_ack_at
+          : now,
       },
       updated_at: now,
     }).eq('id', args.lead.id);
     if (error) throw error;
-    await sendRoutingText({
-      admin: args.admin,
-      channel: args.channel,
-      conversation: args.conversation,
-      lead: args.lead,
-      text: NON_BROKER_REPLY,
-      reason: 'general_not_broker',
-    });
+    if (!isRecent(metadata.plantao_non_broker_ack_at, 24)) {
+      await sendRoutingText({
+        admin: args.admin,
+        channel: args.channel,
+        conversation: args.conversation,
+        lead: args.lead,
+        text: NON_BROKER_REPLY,
+        reason: 'general_not_broker',
+      });
+    }
     await ensureHumanTask({
       admin: args.admin,
       lead: args.lead,
       title: 'Novo contato não corretor aguardando retorno',
-      description: 'O contato informou que não é corretor. Verificar se é cliente, fornecedor, prestador ou outro contato e classificar manualmente se necessário.',
+      description: operationalReason
+        ? `Contato identificado automaticamente como não corretor: ${operationalReason}. Verificar o retorno quando necessário.`
+        : 'O contato informou que não é corretor. Verificar se é cliente, fornecedor, prestador ou outro contato e classificar manualmente se necessário.',
       dedupeKey: 'plantao:geral:retorno',
     });
     return { handled: true };
@@ -304,7 +324,10 @@ export async function handleMixedPlantaoConversation(args: {
   lead: Lead;
   sourceMessageId: string;
 }): Promise<RoutingResult> {
-  if (args.channel.role !== 'corretor' || args.channel.routing_mode === 'direct_role') {
+  if (args.channel.role !== 'corretor') {
+    return { handled: false };
+  }
+  if (args.channel.routing_mode === 'direct_role' && args.lead.kind !== 'geral') {
     return { handled: false };
   }
   const activeNow = await plantaoCanReplyNow(args.admin, args.channel.organization_id);
