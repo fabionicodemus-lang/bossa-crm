@@ -25,6 +25,7 @@ import {
 import { stageLabel } from "@/lib/stages";
 import { initials } from "@/lib/format";
 import { taskAction, taskTypes, useCrmUI, WorkspaceActions } from "./CrmUI";
+import { TaskEditModal } from "./TaskEditModal";
 type TaskGroup = "overdue" | "today" | "upcoming" | "no-due" | "completed";
 type Kind = "cliente" | "corretor" | "all";
 type Alert = {
@@ -48,6 +49,7 @@ export function TodayWorkspace({
   const [compact, setCompact] = useState(false);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
+  const [editingTask, setEditingTask] = useState<LeadTask | null>(null);
   const [completedOpen, setCompletedOpen] = useState(false);
   const [taskFilter, setTaskFilter] = useState("all");
   const [clock, setClock] = useState(Date.parse(initialData.now));
@@ -510,6 +512,15 @@ export function TodayWorkspace({
           >
             Abrir lead
           </button>
+          {context.role !== "viewer" && (context.role === "admin" || task.assigned_to === context.userId) && (
+            <button
+              className="btn btn-ghost btn-sm"
+              disabled={busy === task.id}
+              onClick={() => setEditingTask(task)}
+            >
+              Editar
+            </button>
+          )}
           {context.role !== "viewer" && (
             <button
               className="btn btn-ghost btn-sm complete-button"
@@ -915,6 +926,23 @@ export function TodayWorkspace({
           </aside>
         </div>
       </div>
+      {editingTask && (
+        <TaskEditModal
+          task={editingTask}
+          members={data.members}
+          currentUserId={context.userId}
+          isAdmin={context.role === "admin"}
+          onClose={() => setEditingTask(null)}
+          onSaved={() => {
+            setEditingTask(null);
+            void refresh();
+          }}
+          onDeleted={() => {
+            setEditingTask(null);
+            void refresh();
+          }}
+        />
+      )}
     </>
   );
 }
