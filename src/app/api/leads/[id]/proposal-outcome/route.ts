@@ -32,11 +32,17 @@ export async function POST(
     .maybeSingle();
 
   if (!membership || membership.role === 'viewer') {
-    return NextResponse.json({ error: 'Você não possui permissão para encerrar a proposta.' }, { status: 403 });
+    return NextResponse.json({ error: 'Você não possui permissão para alterar o resultado da proposta.' }, { status: 403 });
   }
 
-  const body = await request.json().catch(() => ({})) as { reason?: unknown };
+  const body = await request.json().catch(() => ({})) as {
+    reason?: unknown;
+    proposal_id?: unknown;
+    outcome?: unknown;
+  };
   const reason = String(body.reason ?? '').trim();
+  const proposalId = String(body.proposal_id ?? '').trim();
+  const outcome = body.outcome === 'won' ? 'won' : 'lost';
 
   const { data: lead, error: leadError } = await supabase
     .from('leads')
@@ -55,58 +61,82 @@ export async function POST(
     .eq('organization_id', membership.organization_id)
     .eq('lead_id', id)
     .order('updated_at', { ascending: false })
-    .limit(20);
+    .limit(100);
 
   if (proposalsError) {
     return NextResponse.json({ error: proposalsError.message }, { status: 400 });
   }
 
-  const activeProposal = (proposalRows ?? []).find(
-    (proposal) => !CLOSED_WORKFLOWS.has(workflowStatusOf(proposal)),
-  ) ?? null;
+  const selectedProposal = proposalId
+    ? (proposalRows ?? []).find((proposal) => proposal.id === proposalId) ?? null
+    : (proposalRows ?? []).find(
+        (proposal) => !CLOSED_WORKFLOWS.has(workflowStatusOf(proposal)),
+      ) ?? null;
 
-  if (activeProposal) {
-    const snapshot = {
-      ...(activeProposal.snapshot ?? {}),
-      workflow_status: 'recusada',
-      not_closed_at: new Date().toISOString(),
-      not_closed_reason: reason || null,
-    };
+  if (!selectedProposal) {
+    return NextResponse.json({ error: 'Proposta não encontrada para este lead.' }, { status: 404 });
+  }
 
-    const { error: proposalError } = await supabase
-      .from('proposals')
-      .update({
-        status: 'recusada',
-        snapshot,
-        version: Number(activeProposal.version || 1) + 1,
-        updated_by: user.id,
-      })
-      .eq('id', activeProposal.id)
-      .eq('organization_id', membership.organization_id);
+  const previousWorkflow = workflowStatusOf(selectedProposal);
+  const now = new Date().toISOString();
+  const nextWorkflow = outcome === 'won' ? 'convertida' : 'recusada';
+  const snapshot = {
+    ...(selectedProposal.snapshot ?? {}),
+    workflow_status: nextWorkflow,
+    outcome,
+    outcome_at: now,
+    outcome_reason: reason || null,
+    ...(outcome === 'won'
+      ? { closed_won_at: now }
+      : { not_closed_at: now, not_closed_reason: reason || null }),
+  };
 
-    if (proposalError) {
-      return NextResponse.json({ error: proposalError.message }, { status: 400 });
-    }
+  const { error: proposalError } = await supabase
+    .from('proposals')
+    .update({
+      status: outcome === 'won' ? 'aprovada' : 'recusada',
+      snapshot,
+      version: Number(selectedProposal.version || 1) + 1,
+      updated_by: user.id,
+    })
+    .eq('id', selectedProposal.id)
+    .eq('organization_id', membership.organization_id);
+
+  if (proposalError) {
+    return NextResponse.json({ error: proposalError.message }, { status: 400 });
   }
 
   const rank = String(lead.priority_class ?? '').toUpperCase();
+  const brokerReturnStage = rank === 'A1' || rank === 'A2'
+    ? 'humano_ativo'
+    : 'nutricao_ativa';
   const returnStage = lead.kind === 'corretor'
-    ? (rank === 'A1' || rank === 'A2' ? 'humano_ativo' : 'nutricao_ativa')
-    : 'humano_ativo';
-  const now = new Date().toISOString();
+    ? brokerReturnStage
+    : outcome === 'won'
+      ? 'fechado_ganho'
+      : 'humano_ativo';
 
   const update: Record<string, unknown> = {
     stage: returnStage,
     updated_at: now,
   };
 
-  if (returnStage === 'humano_ativo') {
+  if (lead.kind !== 'corretor' && outcome === 'won') {
+    update.owner_mode = 'none';
+    update.ai_enabled = false;
+    update.automation_paused = true;
+    update.next_action = null;
+    update.next_action_type = null;
+    update.next_action_due_at = null;
+  } else if (returnStage === 'humano_ativo') {
     update.owner_mode = 'human';
     update.owner_id = lead.owner_id || user.id;
     update.ai_enabled = false;
     update.last_human_activity_at = now;
     update.next_action = lead.kind === 'corretor'
-      ? 'Retomar o contato comercial com o corretor após a proposta não evoluir.'
+      ? outcome === 'won'
+        ? 'Manter o relacionamento comercial após a venda fechada e buscar a próxima oportunidade.'
+        : 'Retomar o contato comercial com o corretor após a proposta não evoluir.'
       : 'Retomar o atendimento do cliente após a proposta não evoluir.';
     update.next_action_type = 'followup_humano';
     update.next_action_due_at = dueFromNow(1);
@@ -114,7 +144,9 @@ export async function POST(
     update.owner_mode = 'ai';
     update.owner_id = null;
     update.ai_enabled = !lead.opt_out && !lead.automation_paused;
-    update.next_action = 'Manter o relacionamento com o corretor e aguardar uma nova oportunidade.';
+    update.next_action = outcome === 'won'
+      ? 'Manter relacionamento com o corretor após a venda fechada e buscar uma nova oportunidade.'
+      : 'Manter o relacionamento com o corretor e aguardar uma nova oportunidade.';
     update.next_action_type = 'relacionamento_corretor';
     update.next_action_due_at = dueFromNow(7);
   }
@@ -129,38 +161,47 @@ export async function POST(
     return NextResponse.json({ error: updateLeadError.message }, { status: 400 });
   }
 
+  const won = outcome === 'won';
   await supabase.from('activities').insert({
     organization_id: membership.organization_id,
     lead_id: id,
     user_id: user.id,
-    type: 'proposta_nao_fechou',
-    title: activeProposal
-      ? `Proposta #${activeProposal.proposal_number} não fechou`
-      : 'Proposta não fechou',
+    type: won ? 'proposta_fechou' : 'proposta_nao_fechou',
+    title: won
+      ? `Proposta #${selectedProposal.proposal_number} fechou`
+      : `Proposta #${selectedProposal.proposal_number} não fechou`,
     description: reason || (
-      lead.kind === 'corretor'
-        ? `Corretor retornou para ${returnStage === 'humano_ativo' ? 'Comercial ativo' : 'Relacionamento ativo'} conforme o ranking ${rank || 'não informado'}.`
-        : 'Cliente retornou para atendimento humano.'
+      won
+        ? lead.kind === 'corretor'
+          ? `Venda fechada com cliente deste corretor. Corretor retornou para ${returnStage === 'humano_ativo' ? 'Comercial ativo' : 'Relacionamento ativo'}.`
+          : 'Proposta convertida em venda.'
+        : lead.kind === 'corretor'
+          ? `Negociação não fechou. Corretor retornou para ${returnStage === 'humano_ativo' ? 'Comercial ativo' : 'Relacionamento ativo'} conforme o ranking ${rank || 'não informado'}.`
+          : 'Negociação não fechou. Cliente retornou para atendimento humano.'
     ),
     metadata: {
-      proposal_id: activeProposal?.id ?? null,
-      proposal_number: activeProposal?.proposal_number ?? null,
+      proposal_id: selectedProposal.id,
+      proposal_number: selectedProposal.proposal_number,
+      previous_workflow: previousWorkflow,
+      workflow_status: nextWorkflow,
       previous_stage: lead.stage,
       next_stage: returnStage,
       broker_rank: lead.kind === 'corretor' ? rank || null : null,
-      outcome: 'not_closed',
+      outcome,
     },
   });
 
   return NextResponse.json({
     ok: true,
+    outcome,
+    workflow_status: nextWorkflow,
     stage: returnStage,
     owner_mode: update.owner_mode,
     owner_id: update.owner_id ?? null,
     ai_enabled: update.ai_enabled,
-    next_action: update.next_action,
-    next_action_due_at: update.next_action_due_at,
-    proposal_number: activeProposal?.proposal_number ?? null,
-    proposal_id: activeProposal?.id ?? null,
+    next_action: update.next_action ?? null,
+    next_action_due_at: update.next_action_due_at ?? null,
+    proposal_number: selectedProposal.proposal_number,
+    proposal_id: selectedProposal.id,
   });
 }

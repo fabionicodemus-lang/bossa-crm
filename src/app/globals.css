@@ -2843,3 +2843,143 @@ kbd {
   padding: 14px 0;
   border-bottom: 1px solid var(--line);
 }
+
+
+/* Histórico de negociações dentro do lead */
+.negotiation-tab {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.negotiation-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+.negotiation-heading h3 {
+  margin: 0;
+}
+.negotiation-heading p {
+  margin: 4px 0 0;
+  color: var(--ink-3);
+  font-size: 12px;
+}
+.negotiation-kpis {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(90px, 1fr));
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.negotiation-kpis > div {
+  padding: 10px 12px;
+  background: var(--sunken);
+  border-right: 1px solid var(--line);
+}
+.negotiation-kpis > div:last-child {
+  border-right: 0;
+}
+.negotiation-kpis span {
+  display: block;
+  color: var(--ink-3);
+  font-size: 10px;
+  margin-bottom: 3px;
+}
+.negotiation-kpis strong {
+  font-size: 17px;
+  font-weight: 700;
+}
+.negotiation-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.negotiation-proposal {
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  padding: 13px 14px;
+  background: var(--panel);
+}
+.negotiation-proposal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.negotiation-proposal-head > div {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.negotiation-value {
+  white-space: nowrap;
+  font-size: 14px;
+}
+.negotiation-status {
+  display: inline-flex;
+  align-items: center;
+  min-height: 21px;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: var(--sunken);
+  color: var(--ink-2);
+  font-size: 10px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.negotiation-status.convertida {
+  background: #edf7ef;
+  color: #2d6a3e;
+}
+.negotiation-status.recusada,
+.negotiation-status.expirada {
+  background: #fff0ed;
+  color: #a13e2d;
+}
+.negotiation-status.negociacao,
+.negotiation-status.contraproposta,
+.negotiation-status.enviada {
+  background: var(--orange-soft);
+  color: var(--orange);
+}
+.negotiation-meta {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
+.negotiation-meta span {
+  display: block;
+  color: var(--ink-3);
+  font-size: 10px;
+  margin-bottom: 2px;
+}
+.negotiation-meta strong {
+  display: block;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.negotiation-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+@media (max-width: 820px) {
+  .negotiation-heading {
+    flex-direction: column;
+  }
+  .negotiation-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .negotiation-kpis > div {
+    border-bottom: 1px solid var(--line);
+  }
+  .negotiation-meta {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+}

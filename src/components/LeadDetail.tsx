@@ -66,6 +66,47 @@ type AiUsageSummary = {
   last_at: string | null;
 };
 
+type LeadProposal = {
+  id: string;
+  proposal_number: number;
+  status: string;
+  proposed_price: number;
+  snapshot: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+};
+
+const negotiationMoney = new Intl.NumberFormat("pt-BR", {
+  style: "currency",
+  currency: "BRL",
+});
+
+function proposalWorkflow(proposal: LeadProposal) {
+  const value = proposal.snapshot?.workflow_status;
+  return typeof value === "string" ? value : proposal.status;
+}
+
+function proposalWorkflowLabel(proposal: LeadProposal) {
+  const workflow = proposalWorkflow(proposal);
+  const labels: Record<string, string> = {
+    rascunho: "Rascunho",
+    enviada: "Enviada",
+    negociacao: "Em negociação",
+    contraproposta: "Contraproposta",
+    aprovada: "Aprovada",
+    recusada: "Não fechou",
+    expirada: "Expirada",
+    convertida: "Fechou",
+  };
+  return labels[workflow] || workflow;
+}
+
+function openProposal(proposal: LeadProposal) {
+  return !["recusada", "expirada", "convertida"].includes(
+    proposalWorkflow(proposal),
+  );
+}
+
 function messageClass(message: Message) {
   if (message.direction === "system" || message.sender_kind === "sistema")
     return "system";
@@ -195,6 +236,47 @@ export function LeadDetail({
   const [editingData, setEditingData] = useState(false);
   const [savingData, setSavingData] = useState(false);
   const [dataNotice, setDataNotice] = useState("");
+  const [negotiations, setNegotiations] = useState<LeadProposal[]>([]);
+  const [negotiationsLoading, setNegotiationsLoading] = useState(false);
+  const [negotiationsError, setNegotiationsError] = useState("");
+
+  const loadNegotiations = useCallback(async () => {
+    if (lead.kind === "geral") {
+      setNegotiations([]);
+      return;
+    }
+    setNegotiationsLoading(true);
+    setNegotiationsError("");
+    try {
+      const supabase = createClient();
+      const { data, error: proposalError } = await supabase
+        .from("proposals")
+        .select(
+          "id,proposal_number,status,proposed_price,snapshot,created_at,updated_at",
+        )
+        .eq("organization_id", lead.organization_id)
+        .eq("lead_id", lead.id)
+        .order("created_at", { ascending: false })
+        .limit(200);
+      if (proposalError) throw proposalError;
+      setNegotiations((data ?? []) as LeadProposal[]);
+    } catch (cause) {
+      setNegotiationsError(
+        cause instanceof Error
+          ? cause.message
+          : "Não foi possível carregar as negociações.",
+      );
+    } finally {
+      setNegotiationsLoading(false);
+    }
+  }, [lead.id, lead.kind, lead.organization_id]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      void loadNegotiations();
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [loadNegotiations]);
 
   useEffect(() => {
     const updateClock = () => setClock(Date.now());
@@ -520,12 +602,16 @@ export function LeadDetail({
     }
   }
 
-  async function markProposalNotClosed() {
+  async function registerProposalOutcome(
+    proposal: LeadProposal,
+    outcome: "won" | "lost",
+  ) {
     if (!canEdit || loading) return;
+    const won = outcome === "won";
     const confirmed = window.confirm(
-      lead.kind === "corretor"
-        ? "Marcar a proposta como não fechada e devolver este corretor para a etapa adequada ao ranking?"
-        : "Marcar a proposta como não fechada e devolver este cliente para atendimento ativo?",
+      won
+        ? `Confirmar que a Proposta #${proposal.proposal_number} FECHOU?`
+        : `Confirmar que a Proposta #${proposal.proposal_number} NÃO FECHOU?`,
     );
     if (!confirmed) return;
 
@@ -535,7 +621,13 @@ export function LeadDetail({
       const payload = await requestJson(
         `/api/leads/${lead.id}/proposal-outcome`,
         "POST",
-        { reason: "Proposta não evoluiu para fechamento." },
+        {
+          proposal_id: proposal.id,
+          outcome,
+          reason: won
+            ? "Negociação fechada."
+            : "Proposta não evoluiu para fechamento.",
+        },
       );
       setLead((current) => ({
         ...current,
@@ -543,21 +635,27 @@ export function LeadDetail({
         owner_mode: payload.owner_mode ?? current.owner_mode,
         owner_id: payload.owner_id ?? current.owner_id,
         ai_enabled: payload.ai_enabled ?? current.ai_enabled,
-        next_action: payload.next_action ?? current.next_action,
+        next_action:
+          payload.next_action === null
+            ? null
+            : payload.next_action ?? current.next_action,
         next_action_due_at:
-          payload.next_action_due_at ?? current.next_action_due_at,
+          payload.next_action_due_at === null
+            ? null
+            : payload.next_action_due_at ?? current.next_action_due_at,
       }));
+      await loadNegotiations();
       ui.notify({
-        message: payload.proposal_number
-          ? `Proposta #${payload.proposal_number} marcada como não fechada.`
-          : "Lead reposicionado após proposta não fechada.",
+        message: won
+          ? `Proposta #${proposal.proposal_number} marcada como fechada.`
+          : `Proposta #${proposal.proposal_number} marcada como não fechada.`,
       });
       router.refresh();
     } catch (cause) {
       setError(
         cause instanceof Error
           ? cause.message
-          : "Não foi possível registrar que a proposta não fechou.",
+          : "Não foi possível registrar o resultado da proposta.",
       );
     } finally {
       setLoading(false);
@@ -986,17 +1084,6 @@ export function LeadDetail({
                   Criar proposta
                 </Link>
               )}
-              {lead.kind !== "geral" &&
-                lead.stage === "proposta_negociacao" && (
-                  <button
-                    type="button"
-                    className="btn btn-ghost btn-sm"
-                    disabled={loading}
-                    onClick={() => void markProposalNotClosed()}
-                  >
-                    Proposta não fechou
-                  </button>
-                )}
             </>
           )}
           {drawerMode && canEdit && (
@@ -1108,7 +1195,10 @@ export function LeadDetail({
               { id: "dados", label: "Visão geral" },
               { id: "whatsapp", label: "Conversas" },
               { id: "tarefas", label: `Tarefas (${pendingTasks.length})` },
-              { id: "negociacao", label: "Negociação" },
+              {
+                id: "negociacao",
+                label: `Negociação${negotiations.length ? ` (${negotiations.length})` : ""}`,
+              },
               { id: "arquivos", label: "Arquivos" },
               { id: "historico", label: "Histórico" },
             ] as Array<{ id: Tab; label: string }>
@@ -1127,47 +1217,132 @@ export function LeadDetail({
       <div className="detail-grid">
         <section className="card">
           {tab === "negociacao" && (
-            <div className="card-body">
-              <h3>Negociação</h3>
-              <div className="info-list">
-                <div className="info-row">
-                  <span>Empreendimento</span>
-                  <strong>{lead.enterprise || "—"}</strong>
+            <div className="card-body negotiation-tab">
+              <div className="negotiation-heading">
+                <div>
+                  <h3>Negociações</h3>
+                  <p>
+                    Histórico permanente das propostas deste {lead.kind === "corretor" ? "corretor" : "cliente"}.
+                  </p>
                 </div>
-                <div className="info-row">
-                  <span>Etapa</span>
-                  <strong>{stageLabel(lead.kind, lead.stage)}</strong>
-                </div>
-                <div className="info-row">
-                  <span>Próxima ação</span>
-                  <strong>{lead.next_action || "—"}</strong>
-                </div>
-              </div>
-              {lead.kind !== "geral" && (
-                <div
-                  style={{
-                    display: "flex",
-                    gap: 8,
-                    flexWrap: "wrap",
-                    marginTop: 16,
-                  }}
-                >
+                {lead.kind !== "geral" && (
                   <Link
                     className="btn btn-primary btn-sm"
                     href={`/propostas?lead=${lead.id}`}
                   >
                     {canEdit ? "Criar proposta" : "Consultar propostas"}
                   </Link>
-                  {canEdit && lead.stage === "proposta_negociacao" && (
-                    <button
-                      type="button"
-                      className="btn btn-ghost btn-sm"
-                      disabled={loading}
-                      onClick={() => void markProposalNotClosed()}
-                    >
-                      Proposta não fechou
-                    </button>
-                  )}
+                )}
+              </div>
+
+              {(() => {
+                const won = negotiations.filter(
+                  (proposal) => proposalWorkflow(proposal) === "convertida",
+                ).length;
+                const lost = negotiations.filter((proposal) =>
+                  ["recusada", "expirada"].includes(proposalWorkflow(proposal)),
+                ).length;
+                const open = negotiations.filter(openProposal).length;
+                const decided = won + lost;
+                const conversion = decided ? Math.round((won / decided) * 100) : 0;
+                return (
+                  <div className="negotiation-kpis">
+                    <div><span>Total</span><strong>{negotiations.length}</strong></div>
+                    <div><span>Em negociação</span><strong>{open}</strong></div>
+                    <div><span>Fechadas</span><strong>{won}</strong></div>
+                    <div><span>Não fechadas</span><strong>{lost}</strong></div>
+                    <div><span>Conversão</span><strong>{conversion}%</strong></div>
+                  </div>
+                );
+              })()}
+
+              {negotiationsError && (
+                <div className="error-box">{negotiationsError}</div>
+              )}
+              {negotiationsLoading ? (
+                <div className="empty-state">Carregando negociações…</div>
+              ) : negotiations.length ? (
+                <div className="negotiation-list">
+                  {negotiations.map((proposal) => {
+                    const snapshot = proposal.snapshot ?? {};
+                    const workflow = proposalWorkflow(proposal);
+                    const clientName =
+                      typeof snapshot.client_name === "string"
+                        ? snapshot.client_name
+                        : "";
+                    const development =
+                      typeof snapshot.development_name === "string"
+                        ? snapshot.development_name
+                        : lead.enterprise || "—";
+                    const unit =
+                      typeof snapshot.unit_code === "string"
+                        ? snapshot.unit_code
+                        : "";
+                    const proposalDate =
+                      typeof snapshot.proposal_date === "string"
+                        ? snapshot.proposal_date
+                        : proposal.created_at;
+                    const closed = !openProposal(proposal);
+                    return (
+                      <article className="negotiation-proposal" key={proposal.id}>
+                        <div className="negotiation-proposal-head">
+                          <div>
+                            <strong>Proposta #{proposal.proposal_number}</strong>
+                            <span className={`negotiation-status ${workflow}`}>
+                              {proposalWorkflowLabel(proposal)}
+                            </span>
+                          </div>
+                          <strong className="negotiation-value">
+                            {negotiationMoney.format(numberValue(proposal.proposed_price))}
+                          </strong>
+                        </div>
+                        <div className="negotiation-meta">
+                          <div>
+                            <span>Empreendimento</span>
+                            <strong>{development}{unit ? ` · ${unit}` : ""}</strong>
+                          </div>
+                          {lead.kind === "corretor" && (
+                            <div>
+                              <span>Cliente</span>
+                              <strong>{clientName || "Cliente não identificado"}</strong>
+                            </div>
+                          )}
+                          <div>
+                            <span>Data</span>
+                            <strong>{formatDateTime(proposalDate)}</strong>
+                          </div>
+                        </div>
+                        {canEdit && !closed && (
+                          <div className="negotiation-actions">
+                            <button
+                              type="button"
+                              className="btn btn-primary btn-sm"
+                              disabled={loading}
+                              onClick={() =>
+                                void registerProposalOutcome(proposal, "won")
+                              }
+                            >
+                              ✓ Fechou
+                            </button>
+                            <button
+                              type="button"
+                              className="btn btn-ghost btn-sm"
+                              disabled={loading}
+                              onClick={() =>
+                                void registerProposalOutcome(proposal, "lost")
+                              }
+                            >
+                              Não fechou
+                            </button>
+                          </div>
+                        )}
+                      </article>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="empty-state">
+                  Nenhuma proposta registrada para este lead ainda.
                 </div>
               )}
             </div>
