@@ -305,7 +305,7 @@ export function GeneralPipelineBoard({
             {stageLeads.map((lead) => {
               const selected = selectedIds.has(lead.id);
               return <div key={lead.id} style={{ position: 'relative' }}>
-                {selectMode && <label style={{ position: 'absolute', top: 10, right: 10, zIndex: 3, width: 24, height: 24, borderRadius: 7, background: '#fff', border: '1px solid #cfc8bf', display: 'grid', placeItems: 'center', cursor: 'pointer' }}>
+                {selectMode && <label style={{ position: 'absolute', top: 10, right: 10, zIndex: 3, width: 24, height: 24, borderRadius: 7, background: 'var(--panel)', border: '1px solid #cfc8bf', display: 'grid', placeItems: 'center', cursor: 'pointer' }}>
                   <input type="checkbox" checked={selected} onChange={() => toggleSelection(lead.id)} style={{ width: 15, height: 15 }} />
                 </label>}
                 <div

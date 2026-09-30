@@ -386,7 +386,7 @@ export function PipelineBoard({ initialLeads, kind, organizationId, canEdit }: {
                 const readableSource = kind === 'cliente' ? metaAdSourceLabel(lead.metadata) || lead.source : lead.group_name;
                 const selected = selectedIds.has(lead.id);
                 return <div key={lead.id} style={{ position: 'relative' }}>
-                  {selectMode && <label style={{ position: 'absolute', top: 10, right: 10, zIndex: 3, width: 24, height: 24, borderRadius: 7, background: '#fff', border: '1px solid #cfc8bf', display: 'grid', placeItems: 'center', cursor: 'pointer' }}>
+                  {selectMode && <label style={{ position: 'absolute', top: 10, right: 10, zIndex: 3, width: 24, height: 24, borderRadius: 7, background: 'var(--panel)', border: '1px solid #cfc8bf', display: 'grid', placeItems: 'center', cursor: 'pointer' }}>
                     <input type="checkbox" checked={selected} onChange={() => toggleSelection(lead.id)} style={{ width: 15, height: 15 }} />
                   </label>}
                   <Link href={`/leads/${lead.id}`} className="lead-card" draggable={canEdit && !selectMode}

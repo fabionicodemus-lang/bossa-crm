@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { getCurrentContext } from '@/lib/auth';
 import { createClient } from '@/lib/supabase/server';
 
-type LeadKind = 'cliente' | 'corretor';
+type LeadKind = 'cliente' | 'corretor' | 'geral';
 
 const SEARCH_COLUMNS = ['name', 'phone', 'enterprise', 'company', 'group_name'] as const;
 const FINAL_RESULT_LIMIT = 40;
@@ -15,7 +15,7 @@ export async function GET(request: Request) {
   const kind = searchParams.get('kind') as LeadKind | null;
   const query = searchParams.get('q')?.trim().slice(0, 100) ?? '';
 
-  if (!kind || !['cliente', 'corretor'].includes(kind)) {
+  if (!kind || !['cliente', 'corretor', 'geral'].includes(kind)) {
     return NextResponse.json({ error: 'Tipo de lead inválido.' }, { status: 400 });
   }
   if (query.length < 2) return NextResponse.json({ leads: [] });

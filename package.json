@@ -29,11 +29,14 @@
     "test:nara-broadcast": "node --experimental-strip-types --experimental-loader ./scripts/ts-extension-loader.mjs scripts/check-nara-broadcast-response.mjs",
     "test:lead-supervision": "node --experimental-strip-types --experimental-loader ./scripts/ts-extension-loader.mjs scripts/check-lead-supervision.mjs",
     "test:client-broker-transfer": "node --experimental-strip-types --experimental-loader ./scripts/ts-extension-loader.mjs scripts/check-client-broker-transfer.mjs",
-    "test:nara-round3": "node --experimental-strip-types --experimental-loader ./scripts/ts-extension-loader.mjs scripts/check-nara-round3.mjs"
+    "test:nara-round3": "node --experimental-strip-types --experimental-loader ./scripts/ts-extension-loader.mjs scripts/check-nara-round3.mjs",
+    "test:hoje-ui": "node --experimental-strip-types scripts/ui/check-hoje-model.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.3",
     "@supabase/supabase-js": "^2.110.8",
+    "geist": "1.7.2",
+    "lucide-react": "1.49.0",
     "next": "^16.2.11",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",

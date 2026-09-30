@@ -1,0 +1,16 @@
+import assert from 'node:assert/strict';
+import { brazilDay, brazilStart, DAY, isOpenTask, isOverdueTask, elapsed, lastInteraction } from '../../src/lib/hoje-model.ts';
+const now=Date.parse('2026-10-01T02:30:00Z');
+assert.equal(brazilDay(new Date(now)), '2026-09-30');
+assert.equal(brazilStart(new Date(now)),Date.parse('2026-09-30T03:00:00Z'));
+assert.equal(brazilDay(new Date(brazilStart(new Date(now))+DAY)),'2026-10-01');
+assert.equal(isOverdueTask({status:'pending',due_at:'2026-10-01T02:00:00Z'},now),true);
+assert.equal(isOverdueTask({status:'pending',due_at:'2026-10-01T03:00:00Z'},now),false);
+assert.equal(isOverdueTask({status:'completed',due_at:'2026-09-01T03:00:00Z'},now),false);
+assert.equal(isOverdueTask({status:'cancelled',due_at:'2026-09-01T03:00:00Z'},now),false);
+assert.equal(isOverdueTask({status:'overdue',due_at:null},now),true);
+assert.equal(isOpenTask({status:'pending'}),true);
+assert.equal(isOpenTask({status:'cancelled'}),false);
+assert.equal(lastInteraction({last_inbound_at:'2026-09-30T01:00:00Z',last_human_activity_at:'2026-09-30T02:00:00Z'}),Date.parse('2026-09-30T02:00:00Z'));
+assert.equal(elapsed(now-130*60000,now),'2h10');
+console.log('12 checks passed: Brasília dates, deadlines, completed/cancelled tasks, last interaction and elapsed time.');

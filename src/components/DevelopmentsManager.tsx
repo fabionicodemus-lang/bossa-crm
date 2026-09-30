@@ -557,7 +557,7 @@ export function DevelopmentsManager({
             const itemUnits = units.filter((unit) => unit.development_id === item.id);
             const available = itemUnits.filter((unit) => unit.status === 'disponivel').length;
             return <button key={item.id} type="button" className="btn btn-ghost" onClick={() => { setSelectedId(item.id); setShowNewDevelopment(false); clearMessages(); }}
-              style={{ justifyContent: 'flex-start', textAlign: 'left', background: item.id === selectedId && !showNewDevelopment ? 'var(--orange-soft)' : '#fff', color: item.id === selectedId && !showNewDevelopment ? 'var(--orange)' : undefined }}>
+              style={{ justifyContent: 'flex-start', textAlign: 'left', background: item.id === selectedId && !showNewDevelopment ? 'var(--orange-soft)' : 'var(--panel)', color: item.id === selectedId && !showNewDevelopment ? 'var(--orange)' : undefined }}>
               <span style={{ fontSize: 20 }}>🏢</span>
               <span><strong style={{ display: 'block' }}>{item.name}</strong><small>{available} disponíveis · {itemUnits.length} unidades</small></span>
             </button>;
