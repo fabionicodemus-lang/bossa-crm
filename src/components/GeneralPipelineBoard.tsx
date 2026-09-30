@@ -336,8 +336,8 @@ export function GeneralPipelineBoard({
                     <span className="muted" style={{ fontSize: 10 }}>{displayPhone(lead.phone)}</span>
                   </button>
                   {canEdit && !selectMode && <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
-                    <button className="btn btn-ghost btn-sm" style={{ flex: 1, fontSize: 10 }} disabled={classifyingId === lead.id} onClick={() => void classify(lead, 'cliente')}>✓ Cliente</button>
-                    <button className="btn btn-ghost btn-sm" style={{ flex: 1, fontSize: 10 }} disabled={classifyingId === lead.id} onClick={() => void classify(lead, 'corretor')}>🤝 Corretor</button>
+                    <button className="btn btn-ghost btn-sm" style={{ flex: 1, fontSize: 10 }} disabled={classifyingId === lead.id} onClick={() => void classify(lead, 'cliente')}>Cliente</button>
+                    <button className="btn btn-ghost btn-sm" style={{ flex: 1, fontSize: 10 }} disabled={classifyingId === lead.id} onClick={() => void classify(lead, 'corretor')}>Corretor</button>
                   </div>}
                 </div>
               </div>;
