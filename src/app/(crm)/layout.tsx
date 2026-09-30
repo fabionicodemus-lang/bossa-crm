@@ -1,6 +1,5 @@
 import { Suspense } from 'react';
 import { CrmUI } from '@/components/CrmUI';
-import { WorkspaceTabs } from '@/components/WorkspaceTabs';
 import { getCurrentContext } from '@/lib/auth';
 import { createClient } from '@/lib/supabase/server';
 import { Sidebar } from '@/components/Sidebar';
@@ -42,7 +41,7 @@ export default async function CrmLayout({ children }: { children: React.ReactNod
       <Suspense fallback={<Sidebar context={context!} aiCount={0} overdueTaskCount={0} />}>
         <SidebarWithCounts context={context!} />
       </Suspense>
-      <section className="crm-main"><WorkspaceTabs role={context!.role} />{children}</section>
+      <section className="crm-main">{children}</section>
     </main></CrmUI>
   );
 }
