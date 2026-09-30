@@ -584,6 +584,14 @@ button {
   background: var(--green-soft);
   color: var(--green);
 }
+.chip-blue {
+  background: var(--blue-soft);
+  color: var(--blue);
+}
+.chip-neutral {
+  background: var(--sunken);
+  color: var(--ink-3);
+}
 .temp-row {
   display: flex;
   gap: 7px;
@@ -2381,6 +2389,68 @@ kbd {
   justify-content: flex-end;
   margin-top: 16px;
   font-size: 13px;
+}
+.directory-status,
+.directory-kind {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 24px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: var(--sunken);
+  color: var(--ink-2);
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.directory-status i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--ink-3);
+}
+.directory-status.ai {
+  background: var(--blue-soft);
+  color: var(--blue);
+}
+.directory-status.ai i {
+  background: var(--blue);
+}
+.directory-status.human {
+  background: var(--green-soft);
+  color: var(--green);
+}
+.directory-status.human i {
+  background: var(--green);
+}
+.directory-status.handoff {
+  background: var(--orange-soft);
+  color: var(--orange);
+}
+.directory-status.handoff i {
+  background: var(--orange);
+}
+.pipeline-card-main {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+}
+.pipeline-card-main .lead-name,
+.pipeline-card-main .lead-sub,
+.pipeline-card-main .muted {
+  display: block;
+}
+.inline-link-button {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  cursor: pointer;
 }
 .hub-grid {
   display: grid;
