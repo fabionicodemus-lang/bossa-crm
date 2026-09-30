@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import type { AppRole } from "@/lib/types";
+import { useCrmUI } from "./CrmUI";
 const groups = [
   [
     { href: "/tarefas", label: "Tarefas" },
@@ -38,8 +38,10 @@ const groups = [
     { href: "/importar", label: "Importar", edit: true },
   ],
 ];
-export function WorkspaceTabs({ role }: { role: AppRole }) {
+export function WorkspaceTabs() {
   const pathname = usePathname();
+  const { context } = useCrmUI();
+  const role = context.role;
   const group = groups.find((g) => g.some((i) => i.href === pathname));
   if (!group) return null;
   return (
