@@ -81,19 +81,38 @@ export function LeadDirectory({
                   <div className="faint">{locationOf(l)}</div>
                 </td>
                 <td>
-                  {conversations
-                    ? l.stage === "passagem_pendente"
-                      ? "Passagem pendente"
-                      : l.owner_mode === "ai"
-                        ? l.kind === "corretor"
-                          ? "Plantão"
-                          : "Nara"
-                        : "Humano"
-                    : l.kind === "cliente"
-                      ? "Cliente"
-                      : l.kind === "corretor"
-                        ? "Corretor"
-                        : "Geral"}
+                  {conversations ? (
+                    <span
+                      className={`directory-status ${
+                        l.stage === "passagem_pendente"
+                          ? "handoff"
+                          : l.owner_mode === "ai"
+                            ? "ai"
+                            : l.owner_mode === "human"
+                              ? "human"
+                              : "neutral"
+                      }`}
+                    >
+                      <i aria-hidden="true" />
+                      {l.stage === "passagem_pendente"
+                        ? "Passagem pendente"
+                        : l.owner_mode === "ai"
+                          ? l.kind === "corretor"
+                            ? "Plantão"
+                            : "Nara"
+                          : l.owner_mode === "human"
+                            ? "Humano"
+                            : "Encerrado"}
+                    </span>
+                  ) : (
+                    <span className="directory-kind">
+                      {l.kind === "cliente"
+                        ? "Cliente"
+                        : l.kind === "corretor"
+                          ? "Corretor"
+                          : "Geral"}
+                    </span>
+                  )}
                 </td>
                 <td>
                   {l.kind === "corretor"
@@ -103,7 +122,9 @@ export function LeadDirectory({
                 <td>{stageLabel(l.kind, l.stage)}</td>
                 <td>
                   {l.owner_mode === "ai"
-                    ? "IA"
+                    ? l.kind === "corretor"
+                      ? "Plantão"
+                      : "Nara"
                     : l.owner_id
                       ? members.find((m) => m.user_id === l.owner_id)
                           ?.full_name || "Equipe"
