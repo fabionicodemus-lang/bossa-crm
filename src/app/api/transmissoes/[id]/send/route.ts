@@ -13,7 +13,12 @@ import type { LeadKind } from '@/lib/types';
 import { brokerBroadcastEligibility, type IdentityLead } from '@/lib/contact-identity';
 
 export const maxDuration = 60;
-const BATCH_SIZE = 15;
+// Para de pegar novos destinatários após este tempo, deixando folga até o limite de 60s.
+const TIME_BUDGET_MS = 25_000;
+// Tempo máximo de espera por resposta da Meta em cada envio.
+const META_TIMEOUT_MS = 15_000;
+// Quantos destinatários na fila são lidos por chamada; o orçamento de tempo decide quantos são enviados.
+const QUEUE_FETCH_LIMIT = 100;
 
 type VariableMapping = { source: 'name' | 'enterprise' | 'company' | 'stage' | 'fixed'; value?: string };
 type Recipient = {
@@ -53,6 +58,7 @@ function messageCategory(value: unknown): WhatsAppMessageCategory {
 }
 
 export async function POST(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const startedAt = Date.now();
   const { id } = await params;
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -81,7 +87,7 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
 
   const { data: queuedRows, error: queueError } = await admin.from('broadcast_recipients')
     .select('id,lead_id,lead_name,phone,stage,lead_snapshot')
-    .eq('broadcast_id', id).eq('status', 'queued').order('created_at').limit(BATCH_SIZE);
+    .eq('broadcast_id', id).eq('status', 'queued').order('created_at').limit(QUEUE_FETCH_LIMIT);
   if (queueError) return NextResponse.json({ error: queueError.message }, { status: 400 });
 
   const recipients = (queuedRows ?? []) as Recipient[];
@@ -123,8 +129,14 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
   const { provider, accessToken, phoneNumberId } = channelAccess(channel);
   const category = messageCategory(template.category);
 
+  let processed = 0;
   for (const recipient of recipients) {
-    await admin.from('broadcast_recipients').update({ status: 'sending' }).eq('id', recipient.id);
+    if (Date.now() - startedAt > TIME_BUDGET_MS) break;
+    // Reserva o destinatário somente se ele ainda estiver na fila, evitando envio duplicado.
+    const { data: claimed } = await admin.from('broadcast_recipients').update({ status: 'sending' })
+      .eq('id', recipient.id).eq('status', 'queued').select('id').maybeSingle();
+    if (!claimed) continue;
+    processed++;
     try {
       const destination = normalizeWaId(recipient.phone ?? '');
       if (!destination) throw new Error('Telefone inválido.');
@@ -162,16 +174,29 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
       }
       const snapshot = recipient.lead_snapshot || {};
       const values = mappings.map((mapping) => mappingValue(mapping, snapshot, kind));
-      const result = await provider.sendTemplate({
-        phoneNumberId,
-        accessToken,
-        to: destination,
-        name: broadcast.template_name,
-        language: broadcast.template_language,
-        bodyParameters: values,
-        headerType: broadcast.header_type,
-        headerMediaLink: mediaLink,
-      });
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), META_TIMEOUT_MS);
+      let result: Awaited<ReturnType<typeof provider.sendTemplate>>;
+      try {
+        result = await provider.sendTemplate({
+          phoneNumberId,
+          accessToken,
+          to: destination,
+          name: broadcast.template_name,
+          language: broadcast.template_language,
+          bodyParameters: values,
+          headerType: broadcast.header_type,
+          headerMediaLink: mediaLink,
+          signal: controller.signal,
+        });
+      } catch (error) {
+        if (controller.signal.aborted) {
+          throw new Error(`Tempo limite de ${META_TIMEOUT_MS / 1000}s excedido aguardando resposta da Meta.`);
+        }
+        throw error;
+      } finally {
+        clearTimeout(timeout);
+      }
       const wamid = result.messageId;
       const sentAt = new Date().toISOString();
       await admin.from('broadcast_recipients').update({
@@ -266,5 +291,5 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
     ...(done ? { completed_at: new Date().toISOString() } : {}),
   }).eq('id', id);
 
-  return NextResponse.json({ done, remaining: counts.queued, processed: recipients.length, counts });
+  return NextResponse.json({ done, remaining: counts.queued, processed, counts });
 }
