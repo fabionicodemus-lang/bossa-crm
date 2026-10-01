@@ -961,12 +961,7 @@ async function findOrCreateLead(args: {
   receivedAt: string;
   referral?: MetaWebhookMessage['referral'];
 }) {
-  const directRoleRouting = args.channel.routing_mode === 'direct_role';
-  const expectedKind: LeadKind = args.channel.role === 'cliente'
-    ? 'cliente'
-    : directRoleRouting
-      ? 'corretor'
-      : 'geral';
+  const expectedKind: LeadKind = args.channel.role === 'cliente' ? 'cliente' : 'geral';
 
   const { data: matches, error: readError } = await args.admin
     .from('leads')
@@ -992,7 +987,7 @@ async function findOrCreateLead(args: {
       whatsapp_channel_id: args.channel.id,
       whatsapp_routing_mode: args.channel.routing_mode,
       ...(kind === 'geral' ? {
-        general_pipeline_reason: 'Contato novo recebido no número compartilhado do Plantão',
+        general_pipeline_reason: 'Contato novo em canal comercial; aguardando identificação antes de entrar em Corretores',
         plantao_triage_status: 'new',
       } : {}),
     };
@@ -1003,7 +998,7 @@ async function findOrCreateLead(args: {
       phone: args.waId,
       stage: 'novo_triagem',
       source: attribution.sourceLabel || 'WhatsApp',
-      company: kind === 'corretor' ? 'Não informada' : null,
+      company: null,
       temperature: 0,
       ai_enabled: kind !== 'geral',
       automation_paused: kind === 'geral',

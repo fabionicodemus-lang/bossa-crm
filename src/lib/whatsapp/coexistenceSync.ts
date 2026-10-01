@@ -143,14 +143,15 @@ async function findOrCreateHistoricalLead(args: {
     return data as Lead;
   }
 
+  const newKind = args.channel.role === 'cliente' ? 'cliente' : 'geral';
   const { data, error } = await args.admin.from('leads').insert({
     organization_id: args.channel.organization_id,
-    kind: args.channel.role,
+    kind: newKind,
     name: args.name || args.contactWaId,
     phone: args.contactWaId,
     stage: stageForHistoricalContact(args.latestActivity),
     source: 'WhatsApp Business · histórico',
-    company: args.channel.role === 'corretor' ? 'Não informada' : null,
+    company: null,
     temperature: 0,
     ai_enabled: false,
     automation_paused: true,
@@ -164,6 +165,10 @@ async function findOrCreateHistoricalLead(args: {
       whatsapp_history_last_message_at: args.latestActivity,
       whatsapp_canonical_wa_id: args.contactWaId,
       historical_pipeline_seed: true,
+      ...(newKind === 'geral' ? {
+        general_pipeline_reason: 'Contato importado do histórico do WhatsApp; aguardando identificação',
+        plantao_triage_status: 'new',
+      } : {}),
     },
     created_at: args.latestActivity,
     updated_at: args.latestActivity,
@@ -407,8 +412,9 @@ export async function importStateSync(args: {
     const { data: leads } = await args.admin.from('leads')
       .select('id,name')
       .eq('organization_id', args.channel.organization_id)
-      .eq('kind', args.channel.role)
+      .in('kind', ['cliente', 'corretor', 'geral'])
       .in('phone', phoneMatchVariants(waId))
+      .is('archived_at', null)
       .limit(5);
     for (const lead of leads ?? []) {
       if (looksLikePhoneName(lead.name, waId)) {

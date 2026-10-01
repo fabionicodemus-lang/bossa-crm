@@ -71,7 +71,7 @@ export async function POST(request: Request) {
     if (!requestedLead) return NextResponse.json({ error: 'Contato não encontrado.' }, { status: 404 });
     if (!requestedLead.phone) return NextResponse.json({ error: 'O contato não possui telefone válido.' }, { status: 400 });
 
-    let lead = await findCanonicalLeadByPhone({
+    const lead = await findCanonicalLeadByPhone({
       admin,
       organizationId: membership.organization_id,
       phone: requestedLead.phone,
