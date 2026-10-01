@@ -29,7 +29,7 @@ export type Broadcast = {
   created_at: string; completed_at: string | null;
 };
 export type AudienceDiagnostics = {
-  total: number; withoutPhone: number; optOut: number; paused: number; duplicates: number; eligible: number;
+  total: number; withoutPhone: number; optOut: number; paused: number; duplicates: number; notBroker: number; eligible: number;
 };
 export type StageAudienceCount = AudienceDiagnostics;
 
@@ -44,7 +44,7 @@ const mappingLabels: Record<MappingSource, string> = {
 const dateTime = new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
 
 function emptyAudience(): AudienceDiagnostics {
-  return { total: 0, withoutPhone: 0, optOut: 0, paused: 0, duplicates: 0, eligible: 0 };
+  return { total: 0, withoutPhone: 0, optOut: 0, paused: 0, duplicates: 0, notBroker: 0, eligible: 0 };
 }
 function safeFileName(name: string) {
   return name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/-+/g, '-').slice(-160);
@@ -197,10 +197,10 @@ export function BroadcastsManager({
           mediaFilename: mediaRequired ? mediaFilename || null : null,
         }),
       });
-      const payload = await response.json().catch(() => ({}));
+      const payload = await response.json().catch(() => ({})) as { broadcast?: Broadcast; eligible?: number; skipped?: number; skippedNotBroker?: number; error?: string };
       if (!response.ok) throw new Error(payload.error || 'Não foi possível criar a transmissão.');
       setBroadcasts((current) => [payload.broadcast as Broadcast, ...current]);
-      setNotice(`Transmissão preparada para ${payload.eligible} contatos. ${payload.skipped ? `${payload.skipped} excluídos por opt-out, pausa, duplicidade ou telefone inválido.` : ''}`);
+      setNotice(`Transmissão preparada para ${payload.eligible} contatos. ${payload.skipped ? `${payload.skipped} excluídos${payload.skippedNotBroker ? ` (${payload.skippedNotBroker} por não serem corretores confirmados/sem conflito)` : ''}.` : ''}`);
       setMode('list'); resetForm(channel); router.refresh();
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Não foi possível criar a transmissão.'); }
     finally { setSaving(false); }
@@ -272,8 +272,8 @@ export function BroadcastsManager({
             <div className="grid grid-2"><div className="field"><label>Nome da transmissão</label><input className="input" value={name} onChange={(event) => setName(event.target.value)} placeholder="Ex.: Tabela atualizada · Flow" /></div><div className="field"><label>Público / número remetente</label><select className="select" value={channel} onChange={(event) => resetForm(event.target.value as Channel)}><option value="clientes">Clientes finais · WhatsApp Clientes</option><option value="corretores">Corretores · WhatsApp Corretores</option></select></div></div>
             <div className="field"><div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 9, marginBottom: 7 }}><label style={{ marginBottom: 0 }}>Etapas que receberão</label><button type="button" className="btn btn-ghost btn-sm" onClick={() => setSelectedStages(allStagesSelected ? [] : stages.map((item) => item.id))}>{allStagesSelected ? 'Limpar seleção' : 'Selecionar todas'}</button></div><div className="grid grid-3">{stages.map((stage) => { const count = stageCounts[`${kind}:${stage.id}`] ?? emptyAudience(); return <label key={stage.id} className="card" style={{ padding: 10, cursor: 'pointer', borderColor: selectedStages.includes(stage.id) ? 'var(--orange)' : undefined }}><input type="checkbox" checked={selectedStages.includes(stage.id)} onChange={() => setSelectedStages((current) => current.includes(stage.id) ? current.filter((item) => item !== stage.id) : [...current, stage.id])} /> <strong>{stage.label}</strong><br /><small className="faint">{count.eligible} elegíveis de {count.total}</small></label>; })}</div></div>
             {channel === 'corretores' && <div className="info-box" style={{ marginBottom: 10 }}><strong>⚠️ Número do Plantão:</strong> este canal é exclusivo para o pipeline de corretores. Para reativar clientes finais, use “Clientes finais · WhatsApp Clientes”.</div>}
-            <div className="info-box"><strong>{selectedDiagnostics.eligible} elegíveis</strong> em {selectedDiagnostics.total} registros · {selectedDiagnostics.withoutPhone} sem telefone · {selectedDiagnostics.optOut} opt-out · {selectedDiagnostics.paused} pausados · {selectedDiagnostics.duplicates} duplicados.</div>
-            <div className="info-box" style={{ marginTop: 10 }}><strong>Base completa:</strong> {baseDiagnostics.total} registros, {baseDiagnostics.eligible} elegíveis. Arquivados não participam. A campanha revalida os contatos antes do envio.</div>
+            <div className="info-box"><strong>{selectedDiagnostics.eligible} elegíveis</strong> em {selectedDiagnostics.total} registros · {selectedDiagnostics.withoutPhone} sem telefone · {selectedDiagnostics.optOut} opt-out · {selectedDiagnostics.paused} pausados · {selectedDiagnostics.duplicates} duplicados{channel === 'corretores' ? ` · ${selectedDiagnostics.notBroker} excluídos por conflito de identidade/não-corretor` : ''}.</div>
+            <div className="info-box" style={{ marginTop: 10 }}><strong>Base completa:</strong> {baseDiagnostics.total} registros, {baseDiagnostics.eligible} elegíveis{channel === 'corretores' ? `, ${baseDiagnostics.notBroker} bloqueados por não serem corretores confirmados/sem conflito` : ''}. Arquivados não participam. A campanha revalida o telefone antes de cada envio.</div>
           </div></section>
 
           <section className="card"><div className="card-head"><h3>2. Modelo aprovado pela Meta</h3><button className="btn btn-ghost btn-sm" disabled={syncing || !connection} onClick={() => void syncTemplates()}>{syncing ? 'Sincronizando…' : '↻ Sincronizar Meta'}</button></div><div className="card-body" style={{ display: 'grid', gap: 13 }}>

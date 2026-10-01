@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { chooseCanonicalLeadForWhatsApp } from '@/lib/contact-identity';
 import type { Lead } from '@/lib/types';
 import type { WhatsAppChannelRecord } from '@/lib/whatsapp/channelService';
 import { channelAccess } from '@/lib/whatsapp/channelService';
@@ -109,13 +110,17 @@ async function findOrCreateHistoricalLead(args: {
     .from('leads')
     .select('*')
     .eq('organization_id', args.channel.organization_id)
-    .eq('kind', args.channel.role)
+    .in('kind', ['cliente', 'corretor', 'geral'])
     .in('phone', phoneMatchVariants(args.contactWaId))
+    .is('archived_at', null)
     .order('updated_at', { ascending: false })
-    .limit(1);
+    .limit(30);
   if (readError) throw readError;
 
-  const existing = (matches?.[0] ?? null) as Lead | null;
+  const existing = chooseCanonicalLeadForWhatsApp(
+    (matches ?? []) as Lead[],
+    args.channel.role,
+  );
   const now = new Date().toISOString();
 
   if (existing) {

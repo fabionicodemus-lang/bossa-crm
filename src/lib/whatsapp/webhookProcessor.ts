@@ -24,6 +24,7 @@ import {
   shouldForceBroadcastReply,
 } from '@/lib/nara-broadcast-response';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { chooseCanonicalLeadForWhatsApp } from '@/lib/contact-identity';
 import type { Lead, LeadKind } from '@/lib/types';
 import { handleAiFailure as recordAiFailure, resolveAiChannelFailure } from '@/lib/whatsapp/aiFailure';
 import type { WhatsAppMediaType, WhatsAppMessageCategory } from '@/lib/whatsapp/channelProvider';
@@ -960,7 +961,6 @@ async function findOrCreateLead(args: {
   receivedAt: string;
   referral?: MetaWebhookMessage['referral'];
 }) {
-  let leadData: Lead | null = null;
   const directRoleRouting = args.channel.routing_mode === 'direct_role';
   const expectedKind: LeadKind = args.channel.role === 'cliente'
     ? 'cliente'
@@ -968,56 +968,21 @@ async function findOrCreateLead(args: {
       ? 'corretor'
       : 'geral';
 
-  if (args.channel.role === 'cliente') {
-    const { data, error } = await args.admin
-      .from('leads')
-      .select('*')
-      .eq('organization_id', args.channel.organization_id)
-      .eq('kind', 'cliente')
-      .in('phone', phoneMatchVariants(args.waId))
-      .is('archived_at', null)
-      .order('updated_at', { ascending: false })
-      .limit(1);
-    if (error) throw error;
-    leadData = ((data?.[0] ?? null) as Lead | null);
-  } else if (directRoleRouting) {
-    const { data, error } = await args.admin
-      .from('leads')
-      .select('*')
-      .eq('organization_id', args.channel.organization_id)
-      .in('kind', ['corretor', 'geral'])
-      .in('phone', phoneMatchVariants(args.waId))
-      .is('archived_at', null)
-      .order('updated_at', { ascending: false })
-      .limit(10);
-    if (error) throw error;
-    const matches = (data ?? []) as Lead[];
-    leadData = matches.find((item) =>
-      item.kind === 'geral'
-      && item.metadata?.auto_kind_triage_status === 'operational_non_broker'
-    ) ?? matches.find((item) => item.kind === 'corretor')
-      ?? matches.find((item) => item.kind === 'geral')
-      ?? null;
-  } else {
-    // O número principal do Plantão continua compartilhado. CLIENTE tem
-    // prioridade absoluta; contatos novos passam pela triagem geral antes de
-    // serem promovidos para o pipeline de corretores.
-    const { data, error } = await args.admin
-      .from('leads')
-      .select('*')
-      .eq('organization_id', args.channel.organization_id)
-      .in('phone', phoneMatchVariants(args.waId))
-      .in('kind', ['cliente', 'corretor', 'geral'])
-      .is('archived_at', null)
-      .order('updated_at', { ascending: false })
-      .limit(20);
-    if (error) throw error;
-    const matches = (data ?? []) as Lead[];
-    leadData = matches.find((item) => item.kind === 'cliente')
-      ?? matches.find((item) => item.kind === 'corretor')
-      ?? matches.find((item) => item.kind === 'geral')
-      ?? null;
-  }
+  const { data: matches, error: readError } = await args.admin
+    .from('leads')
+    .select('*')
+    .eq('organization_id', args.channel.organization_id)
+    .in('kind', ['cliente', 'corretor', 'geral'])
+    .in('phone', phoneMatchVariants(args.waId))
+    .is('archived_at', null)
+    .order('updated_at', { ascending: false })
+    .limit(30);
+  if (readError) throw readError;
+
+  let leadData = chooseCanonicalLeadForWhatsApp(
+    (matches ?? []) as Lead[],
+    args.channel.role,
+  );
 
   if (!leadData) {
     const kind = expectedKind;

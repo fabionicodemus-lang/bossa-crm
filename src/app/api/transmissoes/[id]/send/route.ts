@@ -10,6 +10,7 @@ import type { WhatsAppMessageCategory } from '@/lib/whatsapp/channelProvider';
 import { normalizeWaId, phoneMatchVariants } from '@/lib/whatsapp/utils';
 import { stageLabel } from '@/lib/stages';
 import type { LeadKind } from '@/lib/types';
+import { brokerBroadcastEligibility, type IdentityLead } from '@/lib/contact-identity';
 
 export const maxDuration = 60;
 const BATCH_SIZE = 15;
@@ -127,12 +128,36 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
     try {
       const destination = normalizeWaId(recipient.phone ?? '');
       if (!destination) throw new Error('Telefone inválido.');
-      const { data: optedOut, error: optOutError } = await admin.from('leads').select('id')
-        .eq('organization_id', membership.organization_id).in('phone', phoneMatchVariants(destination))
-        .eq('opt_out', true).limit(1).maybeSingle();
-      if (optOutError) throw optOutError;
-      if (optedOut) {
-        await admin.from('broadcast_recipients').update({ status: 'skipped', error_message: 'Número descadastrado.' }).eq('id', recipient.id);
+
+      const { data: identityRows, error: identityError } = await admin.from('leads')
+        .select('id,kind,phone,creci,metadata,updated_at,archived_at,opt_out,automation_paused')
+        .eq('organization_id', membership.organization_id)
+        .in('phone', phoneMatchVariants(destination))
+        .is('archived_at', null)
+        .limit(50);
+      if (identityError) throw identityError;
+
+      if (broadcast.channel === 'corretores') {
+        const eligibility = brokerBroadcastEligibility((identityRows ?? []) as IdentityLead[]);
+        const recipientLead = (identityRows ?? []).find((lead) => lead.id === recipient.lead_id);
+        if (!eligibility.eligible || (recipientLead && recipientLead.kind !== 'corretor')) {
+          await admin.from('broadcast_recipients').update({
+            status: 'skipped',
+            error_message: eligibility.eligible
+              ? 'A ficha selecionada deixou de ser corretor.'
+              : `Excluído da transmissão de corretores: ${eligibility.reason}`,
+          }).eq('id', recipient.id);
+          continue;
+        }
+      }
+
+      const optedOut = (identityRows ?? []).some((lead) => Boolean(lead.opt_out));
+      const paused = (identityRows ?? []).some((lead) => Boolean(lead.automation_paused) && lead.id === recipient.lead_id);
+      if (optedOut || paused) {
+        await admin.from('broadcast_recipients').update({
+          status: 'skipped',
+          error_message: optedOut ? 'Número descadastrado.' : 'Automação pausada para este contato.',
+        }).eq('id', recipient.id);
         continue;
       }
       const snapshot = recipient.lead_snapshot || {};
