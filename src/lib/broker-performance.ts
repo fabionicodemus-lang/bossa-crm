@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 export type BrokerCounts = {
- lead_id: string; interested_clients: number; proposals: number; visits_with_clients: number;
+ lead_id: string; interested_clients: number; interactions: number; proposals: number; visits_with_clients: number;
  visits_without_clients: number; units_sold: number; pending: number;
  review_status: string | null; scanned: number; message_count: number; unread_media?:number; reviewed_at: string | null;
 };
