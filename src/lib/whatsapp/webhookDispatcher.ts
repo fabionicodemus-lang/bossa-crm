@@ -1,4 +1,5 @@
 import { createAdminClient } from '@/lib/supabase/admin';
+import { chooseCanonicalLeadForWhatsApp } from '@/lib/contact-identity';
 import type { Lead, LeadKind } from '@/lib/types';
 import {
   ensureConversation,
@@ -107,20 +108,21 @@ async function findOrCreateLead(args: {
   contactName: string;
   sentAt: string;
 }) {
-  const kind: LeadKind = args.channel.role;
   const { data: matches, error: readError } = await args.admin
     .from('leads')
     .select('*')
     .eq('organization_id', args.channel.organization_id)
-    .eq('kind', kind)
+    .in('kind', ['cliente', 'corretor', 'geral'])
     .in('phone', phoneMatchVariants(args.contactWaId))
     .is('archived_at', null)
     .order('updated_at', { ascending: false })
-    .limit(1);
+    .limit(30);
   if (readError) throw readError;
-  const existing = (matches?.[0] ?? null) as Lead | null;
+
+  const existing = chooseCanonicalLeadForWhatsApp((matches ?? []) as Lead[], args.channel.role);
   if (existing) return existing;
 
+  const kind: LeadKind = args.channel.role;
   const { data, error } = await args.admin.from('leads').insert({
     organization_id: args.channel.organization_id,
     kind,
