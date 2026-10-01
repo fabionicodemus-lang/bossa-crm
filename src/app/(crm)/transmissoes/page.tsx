@@ -11,11 +11,11 @@ import { BroadcastsWorkspace } from '@/components/BroadcastsWorkspace';
 import { getCurrentContext } from '@/lib/auth';
 import { createClient } from '@/lib/supabase/server';
 import { normalizeWaId } from '@/lib/whatsapp';
+import { brokerBroadcastEligibility, groupLeadsByPhone, type IdentityLead } from '@/lib/contact-identity';
 
-type StageCountRow = {
+type StageCountRow = IdentityLead & {
   kind: 'cliente' | 'corretor' | 'geral';
   stage: string;
-  phone: string | null;
   opt_out: boolean | null;
   automation_paused: boolean | null;
 };
@@ -28,7 +28,7 @@ type BroadcastMessageRow = {
 const PAGE_SIZE = 100;
 
 function emptyDiagnostics(): AudienceDiagnostics {
-  return { total: 0, withoutPhone: 0, optOut: 0, paused: 0, duplicates: 0, eligible: 0 };
+  return { total: 0, withoutPhone: 0, optOut: 0, paused: 0, duplicates: 0, notBroker: 0, eligible: 0 };
 }
 
 async function fetchAllLeadRows(supabase: SupabaseClient, organizationId: string) {
@@ -37,9 +37,9 @@ async function fetchAllLeadRows(supabase: SupabaseClient, organizationId: string
   for (let from = 0; ; from += PAGE_SIZE) {
     const { data, error } = await supabase
       .from('leads')
-      .select('kind,stage,phone,opt_out,automation_paused')
+      .select('id,kind,stage,phone,creci,metadata,updated_at,archived_at,opt_out,automation_paused')
       .eq('organization_id', organizationId)
-      .in('kind', ['cliente', 'corretor'])
+      .in('kind', ['cliente', 'corretor', 'geral'])
       .is('archived_at', null)
       .order('id', { ascending: true })
       .range(from, from + PAGE_SIZE - 1);
@@ -81,6 +81,7 @@ export default async function BroadcastsPage({
     corretor: new Set<string>(),
   };
   const seenByStage = new Map<string, Set<string>>();
+  const identityByPhone = groupLeadsByPhone(leadsResult.data as StageCountRow[]);
 
   for (const lead of leadsResult.data) {
     // Transmissões segmenta somente clientes e corretores. Contatos ainda
@@ -100,6 +101,15 @@ export default async function BroadcastsPage({
       overall.withoutPhone++;
       stageCounts[key] = current;
       continue;
+    }
+    if (lead.kind === 'corretor') {
+      const eligibility = brokerBroadcastEligibility(identityByPhone.get(normalizedPhone) ?? []);
+      if (!eligibility.eligible) {
+        current.notBroker++;
+        overall.notBroker++;
+        stageCounts[key] = current;
+        continue;
+      }
     }
     if (lead.opt_out) {
       current.optOut++;
