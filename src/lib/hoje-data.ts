@@ -106,7 +106,7 @@ export async function loadToday(context: UserContext): Promise<TodayData> {
 export async function loadDirectory(context: UserContext) {
   const db = await createClient();
   const org = context.organization.id;
-  const [leads, members] = await Promise.all([
+  const [leads, members, brokerCounts] = await Promise.all([
     collect<TodayLead>((from, to) =>
       db
         .from("leads")
@@ -123,6 +123,7 @@ export async function loadDirectory(context: UserContext) {
       .select("user_id,role,profiles(full_name,email)")
       .eq("organization_id", org)
       .order("created_at"),
+    collect<import('./broker-performance').BrokerCounts>((from,to) => db.from('broker_performance_counts').select('*').eq('organization_id',org).order('lead_id').range(from,to)),
   ]);
   if (members.error) throw new Error(members.error.message);
   const team: TeamMember[] = (members.data ?? []).map((row) => {
@@ -137,5 +138,5 @@ export async function loadDirectory(context: UserContext) {
       email: p?.email ?? "",
     };
   });
-  return { leads, members: team };
+  return { leads, members: team, brokerCounts };
 }

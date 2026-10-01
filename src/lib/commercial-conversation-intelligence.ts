@@ -641,11 +641,19 @@ async function saveProposal(args: {
 
   const { data: recentProposals } = await args.admin
     .from('proposals')
-    .select('id,proposal_number,snapshot,version')
+    .select('id,proposal_number,snapshot,version,development_id,unit_id,proposed_price')
     .eq('lead_id', args.lead.id)
     .order('updated_at', { ascending: false })
     .limit(30);
 
+  const recovered = (recentProposals ?? []).find((proposal) => {
+    const snapshot = asRecord(proposal.snapshot);
+    return snapshot?.source === 'broker_performance'
+      && proposal.development_id === args.development.id
+      && Number(proposal.proposed_price) === args.analysis.total_price
+      && (args.unit ? proposal.unit_id === args.unit.id : Boolean(args.analysis.client_name) && normalize(String(snapshot.client_name ?? '')) === normalize(args.analysis.client_name));
+  });
+  if (recovered) return { proposalId: recovered.id, proposalNumber: Number(recovered.proposal_number) };
   const existing = (recentProposals ?? []).find((proposal) =>
     asRecord(proposal.snapshot)?.auto_signature === signature,
   ) ?? null;

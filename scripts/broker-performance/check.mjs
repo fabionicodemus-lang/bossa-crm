@@ -1,0 +1,10 @@
+import assert from 'node:assert/strict';
+import {validateBrokerEvent} from '../../src/lib/broker-performance.ts';
+const messages=[{id:'m1',body:'Obrigado pela visita de ontem com o cliente João.',direction:'in',sender_kind:'lead',created_at:'2026-10-01',raw_payload:null}];
+const event={event_type:'visit_with_client',status:'confirmed',summary:'Visita realizada',evidence:[{message_id:'m1',quote:'Obrigado pela visita de ontem'}]};
+assert.equal(validateBrokerEvent(event,messages),true);
+assert.equal(validateBrokerEvent({...event,evidence:[{message_id:'outra-conversa',quote:'Obrigado pela visita de ontem'}]},messages),false);
+assert.equal(validateBrokerEvent({...event,evidence:[{message_id:'m1',quote:'Contrato assinado, apartamento vendido'}]},messages),false);
+assert.equal(validateBrokerEvent({...event,event_type:'foo'},messages),false);
+assert.equal(validateBrokerEvent({...event,evidence:[]},messages),false);
+console.log('Evidências válidas, inexistentes, inventadas e tipos inválidos: OK');
