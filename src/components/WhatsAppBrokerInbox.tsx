@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import Image from 'next/image';
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { displayPhone, initials } from '@/lib/format';
@@ -47,6 +48,9 @@ type Conversation = {
   company: string | null;
   creci: string | null;
   stage: string | null;
+  kind: string | null;
+  ownerMode: string | null;
+  aiEnabled: boolean;
   lastInboundAt: string | null;
   windowExpiresAt: string | null;
   createdAt: string;
@@ -93,9 +97,9 @@ function messageTime(value: string) {
   return new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit' }).format(date);
 }
 
-function previewText(message: InboxMessage | null) {
+function previewText(message: InboxMessage | null, outgoingLabel = 'Você') {
   if (!message) return 'Conversa iniciada';
-  const prefix = message.direction === 'out' ? 'Você: ' : '';
+  const prefix = message.direction === 'out' ? `${outgoingLabel}: ` : '';
   const type = message.type.toLowerCase();
   if (type === 'image') return `${prefix}📷 ${message.body && message.body !== '[Imagem]' ? message.body : 'Imagem'}`;
   if (type === 'audio') return `${prefix}🎙️ Áudio`;
@@ -202,7 +206,7 @@ function mergeMessages(first: InboxMessage[], second: InboxMessage[]) {
   return [...map.values()].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 }
 
-export function WhatsAppBrokerInbox() {
+export function WhatsAppBrokerInbox({ mode = 'commercial' }: { mode?: 'commercial' | 'ai' }) {
   const [channels, setChannels] = useState<Channel[]>([]);
   const [channelFilter, setChannelFilter] = useState('all');
   const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -223,6 +227,8 @@ export function WhatsAppBrokerInbox() {
   const selectedIdRef = useRef<string | null>(null);
   const messageAbort = useRef<AbortController | null>(null);
   const messageCache = useRef(new Map<string, CachedMessages>());
+  const isAiMode = mode === 'ai';
+  const scope = isAiMode ? 'ai' : 'commercial';
 
   const putCache = useCallback((conversationId: string, value: CachedMessages) => {
     const cache = messageCache.current;
@@ -259,7 +265,7 @@ export function WhatsAppBrokerInbox() {
     }
 
     try {
-      const params = new URLSearchParams({ view: 'messages', conversationId });
+      const params = new URLSearchParams({ view: 'messages', conversationId, scope });
       if (options.before) params.set('before', options.before);
       const response = await fetch(`/api/whatsapp/corretores?${params.toString()}`, {
         cache: 'no-store',
@@ -296,17 +302,21 @@ export function WhatsAppBrokerInbox() {
     } finally {
       if (isCurrent && !options.prefetch && !isOlder) setLoadingMessages(false);
     }
-  }, [applyCachedToScreen, putCache]);
+  }, [applyCachedToScreen, putCache, scope]);
 
   const loadConversations = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
     try {
-      const params = new URLSearchParams({ view: 'conversations', channel: channelFilter });
+      const params = new URLSearchParams({ view: 'conversations', channel: channelFilter, scope });
       const response = await fetch(`/api/whatsapp/corretores?${params.toString()}`, { cache: 'no-store' });
       const payload = await response.json() as InboxPayload;
       if (!response.ok) throw new Error(payload.error || 'Não foi possível carregar as conversas.');
       setChannels(payload.channels ?? (payload.channel ? [payload.channel] : []));
-      const nextConversations = payload.conversations || [];
+      const nextConversations = [...(payload.conversations || [])].sort(
+        (a, b) =>
+          new Date(b.lastMessage?.createdAt || b.updatedAt).getTime()
+          - new Date(a.lastMessage?.createdAt || a.updatedAt).getTime(),
+      );
       setConversations(nextConversations);
 
       const current = selectedIdRef.current;
@@ -327,7 +337,7 @@ export function WhatsAppBrokerInbox() {
     } finally {
       if (!silent) setLoading(false);
     }
-  }, [channelFilter]);
+  }, [channelFilter, scope]);
 
   const selectConversation = useCallback((conversationId: string) => {
     if (selectedIdRef.current === conversationId) return;
@@ -476,14 +486,16 @@ export function WhatsAppBrokerInbox() {
   }
 
   if (loading && channels.length === 0) {
-    return <div className="broker-inbox-loading">Carregando WhatsApp dos corretores…</div>;
+    return <div className="broker-inbox-loading">{isAiMode ? 'Carregando atendimentos da IA…' : 'Carregando WhatsApp Comercial…'}</div>;
   }
 
   if (channels.length === 0) {
     return <div className="broker-inbox-empty">
       <div className="broker-empty-icon">💬</div>
-      <h3>Canal de corretores não conectado</h3>
-      <p>Conecte o número dos corretores em Configurações → Canais WhatsApp para começar a receber as conversas aqui.</p>
+      <h3>{isAiMode ? 'Nenhum canal de WhatsApp conectado' : 'WhatsApp Comercial não conectado'}</h3>
+      <p>{isAiMode
+        ? 'Conecte os canais de WhatsApp para acompanhar aqui as conversas atendidas por Nara e Plantão.'
+        : 'Conecte o número comercial em Configurações → Canais WhatsApp para começar a receber as conversas aqui.'}</p>
     </div>;
   }
 
@@ -511,7 +523,7 @@ export function WhatsAppBrokerInbox() {
     <aside className="broker-chat-list">
       <div className="broker-list-head">
         <div>
-          <strong>WhatsApp Corretores</strong>
+          <strong>{isAiMode ? 'Atendimento IA' : 'WhatsApp Comercial'}</strong>
           <span><i /> {channelSubtitle}</span>
         </div>
         <button className="broker-refresh" onClick={() => void loadConversations(false)} title="Atualizar">↻</button>
@@ -551,7 +563,14 @@ export function WhatsAppBrokerInbox() {
               <time>{compactTime(conversation.lastMessage?.createdAt || conversation.updatedAt)}</time>
             </div>
             <div className="broker-conversation-preview">
-              <span>{previewText(conversation.lastMessage)}</span>
+              <span>{previewText(
+                conversation.lastMessage,
+                isAiMode
+                  ? conversation.kind === 'corretor'
+                    ? 'Plantão'
+                    : 'Nara'
+                  : 'Você',
+              )}</span>
             </div>
             {(conversation.company || conversation.creci) && <small>{[conversation.company, conversation.creci].filter(Boolean).join(' · ')}</small>}
           </div>
@@ -562,9 +581,11 @@ export function WhatsAppBrokerInbox() {
     <section className="broker-chat-panel">
       {!selected ? <div className="broker-chat-placeholder">
         <div className="broker-placeholder-phone">💬</div>
-        <h2>Mensagens dos corretores</h2>
-        <p>As conversas recebidas e enviadas pelo WhatsApp Business aparecerão aqui.</p>
-        <small>Sincronização automática em segundo plano.</small>
+        <h2>{isAiMode ? 'Conversas atendidas pela IA' : 'WhatsApp Comercial'}</h2>
+        <p>{isAiMode
+          ? 'Selecione uma conversa para acompanhar o atendimento da Nara ou do Plantão no formato do WhatsApp.'
+          : 'As conversas recebidas e enviadas pelo WhatsApp Business aparecerão aqui.'}</p>
+        <small>{isAiMode ? 'Ordenadas pela mensagem mais recente.' : 'Sincronização automática em segundo plano.'}</small>
       </div> : <>
         <header className="broker-chat-head">
           <div className="broker-avatar">{initials(selected.name)}</div>
@@ -573,7 +594,13 @@ export function WhatsAppBrokerInbox() {
             <span>{displayPhone(selected.phone)}{selected.company ? ` · ${selected.company}` : ''}{selected.creci ? ` · ${selected.creci}` : ''}</span>
             <small>{selected.channelSlotLabel ?? selected.channelLabel} · {displayPhone(selected.channelDisplayPhone)}</small>
           </div>
-          <div className={`broker-window-pill ${windowOpen ? 'open' : ''}`}>{windowOpen ? 'Janela 24h aberta' : 'Janela 24h fechada'}</div>
+          {isAiMode ? (
+            <div className="broker-window-pill open">
+              🤖 {selected.kind === 'corretor' ? 'Plantão' : 'Nara'}
+            </div>
+          ) : (
+            <div className={`broker-window-pill ${windowOpen ? 'open' : ''}`}>{windowOpen ? 'Janela 24h aberta' : 'Janela 24h fechada'}</div>
+          )}
         </header>
 
         <div className="broker-messages" ref={messagesRef}>
@@ -592,23 +619,32 @@ export function WhatsAppBrokerInbox() {
         </div>
 
         {error && <div className="broker-chat-error">{error}</div>}
-        <form className="broker-composer" onSubmit={send}>
-          <textarea
-            value={text}
-            onChange={(event) => setText(event.target.value)}
-            placeholder={windowOpen ? 'Digite uma mensagem' : 'A janela de atendimento pela API está fechada'}
-            disabled={!windowOpen || !selected.leadId || sending}
-            rows={1}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter' && !event.shiftKey) {
-                event.preventDefault();
-                event.currentTarget.form?.requestSubmit();
-              }
-            }}
-          />
-          <button type="submit" disabled={!windowOpen || !selected.leadId || !text.trim() || sending}>{sending ? '…' : '➤'}</button>
-        </form>
-        {!windowOpen && <div className="broker-window-note">Para responder por aqui fora da janela de 24h, é necessário usar um modelo aprovado. Pelo aplicativo WhatsApp Business você continua podendo atender normalmente.</div>}
+        {isAiMode ? (
+          <div className="broker-ai-footer">
+            <span>🤖 Esta conversa está sob atendimento da {selected.kind === 'corretor' ? 'Plantão' : 'Nara'}.</span>
+            {selected.leadId && <Link href={`/leads/${selected.leadId}`}>Abrir lead</Link>}
+          </div>
+        ) : (
+          <>
+            <form className="broker-composer" onSubmit={send}>
+              <textarea
+                value={text}
+                onChange={(event) => setText(event.target.value)}
+                placeholder={windowOpen ? 'Digite uma mensagem' : 'A janela de atendimento pela API está fechada'}
+                disabled={!windowOpen || !selected.leadId || sending}
+                rows={1}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' && !event.shiftKey) {
+                    event.preventDefault();
+                    event.currentTarget.form?.requestSubmit();
+                  }
+                }}
+              />
+              <button type="submit" disabled={!windowOpen || !selected.leadId || !text.trim() || sending}>{sending ? '…' : '➤'}</button>
+            </form>
+            {!windowOpen && <div className="broker-window-note">Para responder por aqui fora da janela de 24h, é necessário usar um modelo aprovado. Pelo aplicativo WhatsApp Business você continua podendo atender normalmente.</div>}
+          </>
+        )}
       </>}
     </section>
 
@@ -623,6 +659,7 @@ export function WhatsAppBrokerInbox() {
       .broker-conversations{overflow:auto;flex:1;overscroll-behavior:contain}.broker-conversation{width:100%;display:flex;gap:11px;padding:12px 13px;border:0;border-bottom:1px solid var(--sunken);background:var(--panel);text-align:left;cursor:pointer;content-visibility:auto;contain-intrinsic-size:66px}.broker-conversation:hover,.broker-conversation.active{background:#f3f1ed}.broker-avatar{width:42px;height:42px;flex:0 0 42px;border-radius:50%;display:grid;place-items:center;background:#d9ddd5;color:#3d4d41;font-weight:800;font-size:13px}.broker-conversation-main{min-width:0;flex:1}.broker-conversation-title{display:flex;gap:8px;justify-content:space-between;align-items:center}.broker-conversation-title strong{font-size:13px;color:#28231f;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1}.broker-channel-badge{font-size:9px;font-weight:800;padding:2px 5px;border-radius:999px;background:#e6ecec;color:#174A52;white-space:nowrap}.broker-conversation-title time{font-size:10px;color:#8b837b;white-space:nowrap}.broker-conversation-preview{margin-top:4px;font-size:12px;color:var(--ink-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.broker-conversation-preview span{display:block;overflow:hidden;text-overflow:ellipsis}.broker-conversation small{display:block;margin-top:4px;font-size:10px;color:#a09890;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.broker-no-conversations{padding:28px 18px;color:#8b837b;font-size:12px;text-align:center}
       .broker-chat-panel{min-width:0;display:flex;flex-direction:column;background:#efeae2;position:relative}.broker-chat-panel:before{content:'';position:absolute;inset:0;opacity:.18;pointer-events:none;background-image:radial-gradient(#a79e92 1px,transparent 1px);background-size:22px 22px}.broker-chat-head{position:relative;z-index:1;height:68px;background:#f5f3ef;border-bottom:1px solid #dfdad3;display:flex;align-items:center;padding:0 16px;gap:11px}.broker-chat-contact{min-width:0;flex:1;display:flex;flex-direction:column}.broker-chat-contact strong{font-size:14px;color:#2e2924}.broker-chat-contact span{font-size:11px;color:#7b736b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.broker-chat-contact small{font-size:9px;color:#8b837b;margin-top:2px}.broker-window-pill{font-size:10px;padding:5px 8px;border-radius:999px;background:#eee2d0;color:#8b5b1d;font-weight:700}.broker-window-pill.open{background:#dff1e3;color:#28753b}
       .broker-messages{position:relative;z-index:1;flex:1;overflow:auto;padding:22px 6% 16px;overscroll-behavior:contain}.broker-message-row{display:flex;margin:3px 0}.broker-message-row.in{justify-content:flex-start}.broker-message-row.out{justify-content:flex-end}.broker-message-bubble{max-width:min(76%,720px);min-width:90px;padding:8px 9px 5px;border-radius:8px;background:var(--panel);box-shadow:0 1px 1px rgba(50,40,30,.12);color:var(--ink)}.broker-message-row.out .broker-message-bubble{background:var(--sunken)}.broker-message-body{font-size:13px;line-height:1.42;white-space:pre-wrap;overflow-wrap:anywhere;padding-right:14px}.broker-message-meta{display:flex;justify-content:flex-end;gap:4px;align-items:center;margin-top:4px;font-size:9px;color:var(--ink-3)}.broker-message-meta .read{color:#42a5c8}.broker-day-chip{width:max-content;max-width:80%;margin:20px auto;padding:6px 10px;border-radius:7px;background:#fff7e8;color:#7b6e5f;font-size:11px;box-shadow:0 1px 1px rgba(50,40,30,.08)}.broker-loading-chip{background:var(--panel);color:#777}.broker-load-older-wrap{display:flex;justify-content:center;margin:0 0 14px}.broker-load-older{border:0;border-radius:999px;padding:7px 12px;background:var(--panel);color:var(--ink-2);font-size:10px;font-weight:700;box-shadow:0 1px 3px rgba(50,40,30,.12);cursor:pointer}.broker-load-older:disabled{opacity:.6;cursor:wait}
+      .broker-ai-footer{position:relative;z-index:1;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 16px;background:#edf5ee;border-top:1px solid #d7e7da;color:#315b3a;font-size:11px}.broker-ai-footer a{color:#174A52;font-weight:800;text-decoration:none;white-space:nowrap}.broker-ai-footer a:hover{text-decoration:underline}
       .broker-composer{position:relative;z-index:1;display:flex;align-items:flex-end;gap:10px;padding:10px 14px;background:var(--sunken);border-top:1px solid #ddd7cf}.broker-composer textarea{resize:none;min-height:42px;max-height:110px;flex:1;border:1px solid #e0dbd4;border-radius:10px;background:var(--panel);padding:11px 13px;outline:0;font:inherit;font-size:13px;line-height:1.35}.broker-composer textarea:focus{border-color:#b6aca0}.broker-composer button{width:42px;height:42px;border-radius:50%;border:0;background:var(--btn);color:var(--btn-ink);font-size:18px;cursor:pointer}.broker-composer button:disabled{background:#aaa39a;cursor:not-allowed}.broker-window-note{position:relative;z-index:1;padding:7px 14px;background:#fff4df;color:#7e5a24;font-size:10px;text-align:center}.broker-chat-error{position:relative;z-index:2;margin:0 14px 8px;padding:8px 10px;border-radius:7px;background:#fde8e7;color:#9b322c;font-size:11px}
       .broker-chat-placeholder,.broker-inbox-empty,.broker-inbox-loading{display:grid;place-items:center;align-content:center;text-align:center;min-height:520px;padding:28px;color:#746c63}.broker-chat-placeholder{position:relative;z-index:1;flex:1}.broker-chat-placeholder h2,.broker-inbox-empty h3{margin:10px 0 4px;color:#413b35}.broker-chat-placeholder p,.broker-inbox-empty p{max-width:520px;margin:0;font-size:13px}.broker-chat-placeholder small{margin-top:8px;color:#978e84}.broker-placeholder-phone,.broker-empty-icon{font-size:48px;opacity:.55}
       @media(max-width:980px){.broker-inbox-shell{grid-template-columns:300px minmax(0,1fr)}.broker-window-pill{display:none}.broker-message-bubble{max-width:86%}}

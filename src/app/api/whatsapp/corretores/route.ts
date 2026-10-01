@@ -230,7 +230,7 @@ async function loadLeads(admin: AdminClient, leadIds: string[]) {
   for (let start = 0; start < leadIds.length; start += 100) {
     const ids = leadIds.slice(start, start + 100);
     const { data, error } = await admin.from('leads')
-      .select('id,name,phone,company,creci,stage,metadata,updated_at')
+      .select('id,name,phone,company,creci,stage,kind,owner_mode,ai_enabled,metadata,updated_at')
       .in('id', ids);
     if (error) throw error;
     rows.push(...(data ?? []));
@@ -244,6 +244,11 @@ export async function GET(request: Request) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: 'Sessão expirada.' }, { status: 401 });
 
+    const url = new URL(request.url);
+    const scope = url.searchParams.get('scope') === 'ai' ? 'ai' : 'commercial';
+    const view = url.searchParams.get('view') ?? 'conversations';
+    const channelFilter = url.searchParams.get('channel')?.trim() || 'all';
+
     const { data: membership } = await supabase
       .from('memberships')
       .select('organization_id,role')
@@ -251,21 +256,25 @@ export async function GET(request: Request) {
       .limit(1)
       .maybeSingle();
 
-    if (!membership || membership.role !== 'admin') {
-      return NextResponse.json({ error: 'Apenas administradores podem acessar as conversas dos corretores.' }, { status: 403 });
+    if (!membership) {
+      return NextResponse.json({ error: 'Acesso não autorizado.' }, { status: 403 });
+    }
+    if (scope === 'commercial' && membership.role !== 'admin') {
+      return NextResponse.json({ error: 'Apenas administradores podem acessar o WhatsApp Comercial.' }, { status: 403 });
     }
 
     const admin = createAdminClient();
-    const url = new URL(request.url);
-    const view = url.searchParams.get('view') ?? 'conversations';
-    const channelFilter = url.searchParams.get('channel')?.trim() || 'all';
-
-    const { data: internalChannels, error: channelError } = await admin
+    let channelQuery = admin
       .from('whatsapp_channels')
       .select('*')
       .eq('organization_id', membership.organization_id)
-      .eq('role', 'corretor')
-      .eq('status', 'connected')
+      .eq('status', 'connected');
+
+    if (scope === 'commercial') {
+      channelQuery = channelQuery.eq('role', 'corretor');
+    }
+
+    const { data: internalChannels, error: channelError } = await channelQuery
       .order('created_at', { ascending: true });
 
     if (channelError) throw channelError;
@@ -274,7 +283,14 @@ export async function GET(request: Request) {
       return NextResponse.json({ channels: [], channel: null, conversations: [], selectedConversationId: null, messages: [] });
     }
 
-    const publicChannels = channels.map((item, index) => publicChannel(item, `Canal ${index + 2}`));
+    const publicChannels = channels.map((item, index) =>
+      publicChannel(
+        item,
+        scope === 'ai'
+          ? (item.role === 'corretor' ? 'Corretores' : item.role === 'cliente' ? 'Clientes' : `Canal ${index + 1}`)
+          : `Canal ${index + 2}`,
+      ),
+    );
     const channelById = new Map(channels.map((item) => [item.id, item]));
     const publicChannelById = new Map(publicChannels.map((item) => [item.id, item]));
     const selectedChannels = channelFilter === 'all'
@@ -282,7 +298,7 @@ export async function GET(request: Request) {
       : channels.filter((item) => item.id === channelFilter);
 
     if (!selectedChannels.length) {
-      return NextResponse.json({ error: 'Canal de corretores inválido.' }, { status: 400 });
+      return NextResponse.json({ error: 'Canal do WhatsApp inválido.' }, { status: 400 });
     }
 
     // Trocar de conversa é o caminho crítico. Ele não deve reconsultar contatos,
@@ -295,13 +311,31 @@ export async function GET(request: Request) {
       }
       const { data: targetConversation, error: targetConversationError } = await admin
         .from('whatsapp_conversations')
-        .select('id,channel_id')
+        .select('id,channel_id,lead_id')
         .eq('id', conversationId)
         .eq('organization_id', membership.organization_id)
         .maybeSingle();
       if (targetConversationError) throw targetConversationError;
       if (!targetConversation) {
         return NextResponse.json({ error: 'Conversa não encontrada.' }, { status: 404 });
+      }
+      if (scope === 'ai') {
+        if (!targetConversation.lead_id) {
+          return NextResponse.json({ error: 'Esta conversa não está vinculada a um atendimento da IA.' }, { status: 404 });
+        }
+        const { data: aiLead, error: aiLeadError } = await admin
+          .from('leads')
+          .select('id')
+          .eq('id', targetConversation.lead_id)
+          .eq('organization_id', membership.organization_id)
+          .eq('owner_mode', 'ai')
+          .eq('ai_enabled', true)
+          .is('archived_at', null)
+          .maybeSingle();
+        if (aiLeadError) throw aiLeadError;
+        if (!aiLead) {
+          return NextResponse.json({ error: 'Este contato não está mais sob atendimento da IA.' }, { status: 409 });
+        }
       }
       const messageChannel = channelById.get(String(targetConversation.channel_id));
       if (!messageChannel) {
@@ -325,7 +359,9 @@ export async function GET(request: Request) {
 
     // O sync inicial só precisa ser verificado no refresh da lista, nunca em cada
     // clique de conversa. Com múltiplos canais, cada um é verificado de forma independente.
-    await Promise.allSettled(selectedChannels.map((item) => requestInitialSync(admin, item)));
+    if (membership.role === 'admin') {
+      await Promise.allSettled(selectedChannels.map((item) => requestInitialSync(admin, item)));
+    }
 
     const { data: conversationRows, error: conversationsError } = await admin
       .from('whatsapp_conversations')
@@ -358,6 +394,9 @@ export async function GET(request: Request) {
       const leadCompany = lead && typeof lead.company === 'string' ? lead.company : null;
       const leadCreci = lead && typeof lead.creci === 'string' ? lead.creci : null;
       const leadStage = lead && typeof lead.stage === 'string' ? lead.stage : null;
+      const leadKind = lead && typeof lead.kind === 'string' ? lead.kind : null;
+      const leadOwnerMode = lead && typeof lead.owner_mode === 'string' ? lead.owner_mode : null;
+      const leadAiEnabled = Boolean(lead?.ai_enabled);
       const lastAt = conversation.last_message_at ?? conversation.updated_at;
       const lastMessage = conversation.last_message_id ? {
         id: conversation.last_message_id,
@@ -385,6 +424,9 @@ export async function GET(request: Request) {
         company: leadCompany,
         creci: leadCreci,
         stage: leadStage,
+        kind: leadKind,
+        ownerMode: leadOwnerMode,
+        aiEnabled: leadAiEnabled,
         lastInboundAt: conversation.last_inbound_at,
         windowExpiresAt: conversation.window_expires_at,
         createdAt: conversation.created_at,
@@ -393,11 +435,21 @@ export async function GET(request: Request) {
       };
     });
 
+    const visibleConversations = conversations
+      .filter((conversation) =>
+        scope !== 'ai'
+        || (conversation.leadId && conversation.ownerMode === 'ai' && conversation.aiEnabled),
+      )
+      .sort((a, b) =>
+        new Date(b.lastMessage?.createdAt ?? b.updatedAt).getTime()
+        - new Date(a.lastMessage?.createdAt ?? a.updatedAt).getTime(),
+      );
+
     return NextResponse.json({
       channels: publicChannels,
       channel: selectedChannels.length === 1 ? publicChannelById.get(selectedChannels[0].id) ?? publicChannel(selectedChannels[0]) : null,
-      conversations,
-      selectedConversationId: conversations[0]?.id ?? null,
+      conversations: visibleConversations,
+      selectedConversationId: visibleConversations[0]?.id ?? null,
       messages: [],
     }, { headers: { 'Cache-Control': 'private, no-store' } });
   } catch (error) {
