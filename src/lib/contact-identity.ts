@@ -1,7 +1,15 @@
 import type { Lead, LeadKind } from '@/lib/types';
 import { normalizeWaId } from '@/lib/whatsapp/utils';
 
-type IdentityLead = Pick<Lead, 'id' | 'kind' | 'phone' | 'creci' | 'metadata' | 'updated_at' | 'archived_at'>;
+export type IdentityLead = {
+  id: string;
+  kind: LeadKind;
+  phone: string | null;
+  creci: string | null;
+  metadata: Record<string, unknown> | null;
+  updated_at: string;
+  archived_at?: string | null;
+};
 
 type ManualDecision = {
   kind: LeadKind;
