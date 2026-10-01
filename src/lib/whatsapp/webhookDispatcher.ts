@@ -1,5 +1,5 @@
 import { createAdminClient } from '@/lib/supabase/admin';
-import { chooseCanonicalLeadForWhatsApp } from '@/lib/contact-identity';
+import { chooseCanonicalLeadForWhatsApp, findCanonicalLeadByPhone } from '@/lib/contact-identity';
 import type { Lead, LeadKind } from '@/lib/types';
 import {
   ensureConversation,
@@ -122,7 +122,7 @@ async function findOrCreateLead(args: {
   const existing = chooseCanonicalLeadForWhatsApp((matches ?? []) as Lead[], args.channel.role);
   if (existing) return existing;
 
-  const kind: LeadKind = args.channel.role;
+  const kind: LeadKind = args.channel.role === 'cliente' ? 'cliente' : 'geral';
   const { data, error } = await args.admin.from('leads').insert({
     organization_id: args.channel.organization_id,
     kind,
@@ -130,7 +130,7 @@ async function findOrCreateLead(args: {
     phone: args.contactWaId,
     stage: 'novo_triagem',
     source: 'WhatsApp Business',
-    company: kind === 'corretor' ? 'Não informada' : null,
+    company: null,
     temperature: 0,
     ai_enabled: false,
     automation_paused: true,
@@ -141,9 +141,24 @@ async function findOrCreateLead(args: {
     metadata: {
       whatsapp_last_source: 'whatsapp_business_app',
       whatsapp_last_app_activity_at: args.sentAt,
+      ...(kind === 'geral' ? {
+        general_pipeline_reason: 'Contato novo iniciado pelo WhatsApp Business; aguardando identificação',
+        plantao_triage_status: 'new',
+      } : {}),
     },
   }).select('*').single();
-  if (error) throw error;
+  if (error) {
+    if (error.code === '23505') {
+      const canonical = await findCanonicalLeadByPhone({
+        admin: args.admin,
+        organizationId: args.channel.organization_id,
+        phone: args.contactWaId,
+        preferredKind: kind,
+      });
+      if (canonical) return canonical;
+    }
+    throw error;
+  }
   return data as Lead;
 }
 
