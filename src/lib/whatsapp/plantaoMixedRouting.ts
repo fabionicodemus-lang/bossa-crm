@@ -203,6 +203,18 @@ async function handleGeneral(args: {
   const metadata = metadataOf(args.lead);
   const awaiting = metadata.plantao_triage_status === 'awaiting_broker_answer';
   const now = new Date().toISOString();
+
+  // Uma decisão manual de que o contato não é corretor é soberana. O número
+  // compartilhado do Plantão não pode perguntar de novo nem promovê-lo sozinho.
+  if (metadata.contact_kind_manually_confirmed === 'geral' || metadata.contact_kind_manually_confirmed === 'cliente') {
+    await args.admin.from('leads').update({
+      ai_enabled: false,
+      automation_paused: true,
+      owner_mode: 'human',
+      updated_at: now,
+    }).eq('id', args.lead.id);
+    return { handled: true };
+  }
   const autoOperationalReason = metadata.auto_kind_triage_status === 'operational_non_broker'
     ? String(metadata.auto_kind_triage_reason || 'Fornecedor/prestador identificado automaticamente')
     : '';
