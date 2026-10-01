@@ -11,7 +11,7 @@ export default async function LeadsPage() {
         subtitle="Todos os contatos e suas informações"
       />
       <div className="page-content">
-        <LeadDirectory members={data.members} leads={data.leads} />
+        <LeadDirectory members={data.members} leads={data.leads} brokerCounts={data.brokerCounts} />
       </div>
     </>
   );

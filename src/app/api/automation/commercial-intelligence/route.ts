@@ -17,6 +17,8 @@ async function run(request: Request) {
     return NextResponse.json({ error: 'Não autorizado.' }, { status: 401 });
   }
   const admin = createAdminClient();
+  const {error: rankingError} = await admin.rpc('enqueue_broker_performance');
+  if (rankingError) throw new Error(rankingError.message);
   const result = await processCommercialIntelligenceBatch(admin, 20);
   return NextResponse.json({ ok: true, ...result });
 }

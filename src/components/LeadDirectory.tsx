@@ -1,5 +1,7 @@
 "use client";
 import { useState } from "react";
+import type { BrokerCounts } from "@/lib/broker-performance";
+import { BrokerPerformanceDetails } from "./BrokerPerformanceDetails";
 import { useCrmUI } from "./CrmUI";
 import type { TeamMember } from "@/lib/types";
 import { stageLabel } from "@/lib/stages";
@@ -8,15 +10,24 @@ export function LeadDirectory({
   leads,
   members,
   conversations = false,
+  brokerCounts = [],
 }: {
   leads: TodayLead[];
   members: TeamMember[];
   conversations?: boolean;
+  brokerCounts?: BrokerCounts[];
 }) {
   const ui = useCrmUI();
   const [query, setQuery] = useState("");
   const [kind, setKind] = useState("all");
   const [page, setPage] = useState(0);
+  const [ranking, setRanking] = useState('units_sold');
+  const [details, setDetails] = useState<string | null>(null);
+  const counts = new Map(brokerCounts.map(c=>[c.lead_id,c]));
+  const showRanking = kind === 'corretor' && !conversations;
+  const columns = [['interested_clients','Clientes interessados'],['proposals','Propostas'],['visits_with_clients','Visitas com clientes'],['visits_without_clients','Visitas sem clientes'],['units_sold','Unidades vendidas']] as const;
+  const unreadMedia = brokerCounts.reduce((sum,c)=>sum+Number(c.unread_media??0),0);
+  const completed = brokerCounts.filter(c=>c.review_status==='completed' || !c.review_status).length;
   const filtered = leads.filter(
     (l) =>
       (kind === "all" || l.kind === kind) &&
@@ -24,6 +35,11 @@ export function LeadDirectory({
         v?.toLowerCase().includes(query.toLowerCase()),
       ),
   );
+  if(showRanking) filtered.sort((a,b)=>{
+    const metric=ranking as keyof BrokerCounts;
+    const delta=Number(counts.get(b.id)?.[metric]??0)-Number(counts.get(a.id)?.[metric]??0);
+    return delta || a.name.localeCompare(b.name,'pt-BR');
+  });
   const size = 50;
   return (
     <>
@@ -54,21 +70,31 @@ export function LeadDirectory({
         </select>
         <span className="faint">{filtered.length} contatos</span>
       </div>
+      {showRanking && <div className="info-box" style={{marginBottom:12}}>
+        <strong>Ranking de corretores</strong> · Histórico conferido: {completed}/{brokerCounts.length} corretores.
+        {unreadMedia>0 && <div>{unreadMedia} mídias sem conteúdo legível no histórico; não usadas como comprovação.</div>}
+        <div>Contamos ocorrências distintas comprovadas. Visitas apenas agendadas e fatos incertos ficam pendentes. Clique nos números para conferir os registros.</div>
+        <label>Ordenar por <select className="select" value={ranking} onChange={e=>{setRanking(e.target.value);setPage(0);}}>{columns.map(([key,label])=><option key={key} value={key}>{label}</option>)}</select></label>
+      </div>}
+      {details && <BrokerPerformanceDetails key={details} leadId={details} name={leads.find(l=>l.id===details)?.name??'Corretor'} onClose={()=>setDetails(null)} />}
       <section className="card table-wrap">
         <table>
           <thead>
             <tr>
+              {showRanking && <th>Posição</th>}
               <th>Nome</th>
               <th>{conversations ? "Atendimento" : "Tipo"}</th>
               <th>Empreendimento / Imobiliária</th>
               <th>Etapa</th>
               <th>Responsável</th>
+              {showRanking && columns.map(([key,label])=><th key={key}>{label}</th>)}
               <th />
             </tr>
           </thead>
           <tbody>
-            {filtered.slice(page * size, (page + 1) * size).map((l) => (
+            {filtered.slice(page * size, (page + 1) * size).map((l,index) => (
               <tr key={l.id}>
+                {showRanking && <td>{page*size+index+1}º</td>}
                 <td>
                   <button
                     className="plain-name"
@@ -130,7 +156,9 @@ export function LeadDirectory({
                           ?.full_name || "Equipe"
                       : "Sem responsável"}
                 </td>
+                {showRanking && columns.map(([key,label])=><td key={key}><button className="btn btn-ghost btn-sm" aria-label={`${label} de ${l.name}`} onClick={()=>setDetails(l.id)}>{counts.get(l.id)?.[key]??0}</button></td>)}
                 <td>
+                  {showRanking && counts.get(l.id)?.review_status!=='completed' && <small className="faint">{counts.get(l.id)?.review_status==='error'?'Conferência pendente':'Histórico em análise'}<br/></small>}
                   <button
                     className="btn btn-ghost btn-sm"
                     onClick={() =>
