@@ -3,6 +3,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { normalizeWaId } from '@/lib/whatsapp';
+import { brokerBroadcastEligibility, groupLeadsByPhone } from '@/lib/contact-identity';
 import { stagesFor } from '@/lib/stages';
 import type { LeadKind } from '@/lib/types';
 
@@ -21,12 +22,41 @@ type BroadcastLeadRow = {
   automation_paused: boolean | null;
 };
 
+type IdentityLeadRow = {
+  id: string;
+  kind: LeadKind;
+  phone: string | null;
+  creci: string | null;
+  metadata: Record<string, unknown> | null;
+  updated_at: string;
+  archived_at: string | null;
+};
+
 const PAGE_SIZE = 100;
 
 function headerHasDynamicText(components: unknown) {
   if (!Array.isArray(components)) return false;
   const header = components.find((item) => item && typeof item === 'object' && String((item as { type?: unknown }).type).toUpperCase() === 'HEADER') as { text?: unknown } | undefined;
   return /\{\{\d+\}\}/.test(String(header?.text ?? ''));
+}
+
+async function fetchAllIdentityLeads(
+  admin: SupabaseClient,
+  organizationId: string,
+) {
+  const rows: IdentityLeadRow[] = [];
+  for (let from = 0; ; from += PAGE_SIZE) {
+    const { data, error } = await admin.from('leads')
+      .select('id,kind,phone,creci,metadata,updated_at,archived_at')
+      .eq('organization_id', organizationId)
+      .is('archived_at', null)
+      .order('id', { ascending: true })
+      .range(from, from + PAGE_SIZE - 1);
+    if (error) return { data: rows, error };
+    const batch = (data ?? []) as IdentityLeadRow[];
+    rows.push(...batch);
+    if (batch.length < PAGE_SIZE) return { data: rows, error: null };
+  }
 }
 
 async function fetchAllBroadcastLeads(
@@ -122,22 +152,33 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: `O modelo exige um anexo do tipo ${headerType.toLowerCase()}.` }, { status: 400 });
   }
 
-  const { data: leads, error: leadsError } = await fetchAllBroadcastLeads(
-    admin,
-    membership.organization_id,
-    kind,
-    stages,
-  );
+  const [{ data: leads, error: leadsError }, { data: identityLeads, error: identityError }] = await Promise.all([
+    fetchAllBroadcastLeads(admin, membership.organization_id, kind, stages),
+    kind === 'corretor'
+      ? fetchAllIdentityLeads(admin, membership.organization_id)
+      : Promise.resolve({ data: [] as IdentityLeadRow[], error: null }),
+  ]);
   if (leadsError) return NextResponse.json({ error: leadsError.message }, { status: 400 });
+  if (identityError) return NextResponse.json({ error: identityError.message }, { status: 400 });
 
+  const identityByPhone = groupLeadsByPhone(identityLeads);
   const recipients: Array<Record<string, unknown>> = [];
   const seenPhones = new Set<string>();
   let skipped = 0;
+  let skippedNotBroker = 0;
   for (const lead of leads) {
     const phone = normalizeWaId(String(lead.phone ?? ''));
     if (!phone || lead.opt_out || lead.automation_paused || seenPhones.has(phone)) {
       skipped++;
       continue;
+    }
+    if (kind === 'corretor') {
+      const eligibility = brokerBroadcastEligibility(identityByPhone.get(phone) ?? []);
+      if (!eligibility.eligible) {
+        skipped++;
+        skippedNotBroker++;
+        continue;
+      }
     }
     seenPhones.add(phone);
     recipients.push({
@@ -190,5 +231,5 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: recipientsError.message }, { status: 400 });
   }
 
-  return NextResponse.json({ broadcast, eligible: recipients.length, skipped });
+  return NextResponse.json({ broadcast, eligible: recipients.length, skipped, skippedNotBroker });
 }
