@@ -54,8 +54,9 @@ async function processJob(db:SupabaseClient,job:Job) {
  const relevant=messages.filter(m=>m.body?.trim() && m.sender_kind!=='ai' && m.sender_kind!=='nara' && !m.raw_payload?.broadcast_id);
  let events:Event[]=[];
  if(newCount>0 && hasInbound && relevant.length) events=await extract({broker:lead.name,messages:relevant.map(({raw_payload,...m})=>({...m,transcription:raw_payload?.bossa_transcription??null})),existing_events:existing,existing_proposals:proposals.map(p=>({id:p.id,status:p.status,price:p.proposed_price,unit_id:p.unit_id,snapshot:p.snapshot})),developments:developments.data});
- for(const item of events){
-  if(!validateBrokerEvent(item,relevant))throw new Error('Evidência inválida retornada pela análise');
+ const validEvents=events.filter(item=>validateBrokerEvent(item,relevant));
+ const rejectedEvents=events.length-validEvents.length;
+ for(const item of validEvents){
   const evidenceIds=item.evidence.map(e=>e.message_id);
   const old=existing.find(e=>e.id===item.existing_event_id)
    ?? existing.find(e=>e.event_type===item.event_type && e.evidence.some(x=>evidenceIds.includes(x.message_id)) && normalize(e.client_name??'')===normalize(item.client_name) && normalize(e.unit_code??'')===normalize(item.unit_code));
@@ -85,7 +86,7 @@ async function processJob(db:SupabaseClient,job:Job) {
  }
  const scanned=job.scanned+Math.max(0,newCount);
  check(await db.from('broker_performance_jobs').update({scanned,unread_media:(job.unread_media??0)+unread,status:scanned>=Number(job.message_count)||newCount===0?'completed':'pending',lease_until:null,attempts:0,last_error:null,updated_at:new Date().toISOString()}).eq('lead_id',job.lead_id).eq('lease_token',job.lease_token));
- return {lead:lead.name,scanned,events:events.length};
+ return {lead:lead.name,scanned,events:validEvents.length,rejected_events:rejectedEvents};
 }
 
 export async function runBrokerPerformance(db:SupabaseClient,enqueue=false){
