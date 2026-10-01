@@ -14,8 +14,8 @@ const groups = [
   ],
   [
     { href: "/conversas", label: "Conversas" },
-    { href: "/ia", label: "Sob atendimento da IA" },
-    { href: "/mensagens-corretores", label: "Caixa de entrada", admin: true },
+    { href: "/ia", label: "Atendimento IA" },
+    { href: "/mensagens-corretores", label: "WhatsApp Comercial", admin: true },
     { href: "/transmissoes", label: "Transmissões e modelos" },
   ],
   [
