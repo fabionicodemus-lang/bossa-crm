@@ -1,4 +1,4 @@
-import type { Lead, LeadKind } from '@/lib/types';
+import type { LeadKind } from '@/lib/types';
 import { normalizeWaId } from '@/lib/whatsapp/utils';
 
 export type IdentityLead = {
