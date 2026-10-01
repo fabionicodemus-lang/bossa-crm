@@ -223,11 +223,15 @@ export function BroadcastsManager({
     if (!continuing && !window.confirm(`Iniciar o envio de “${item.name}” para ${item.recipient_count} contatos?`)) return;
     stopRef.current = false; setRunningId(item.id); setError(''); setNotice('');
     let consecutiveFailures = 0;
+    const explicitResume = item.status !== 'running';
+    let firstRequest = true;
     try {
       while (!stopRef.current) {
         let response: Response | null = null;
         try {
-          response = await fetch(`/api/transmissoes/${item.id}/send`, { method: 'POST' });
+          const suffix = firstRequest && explicitResume ? '?resume=1' : '';
+          response = await fetch(`/api/transmissoes/${item.id}/send${suffix}`, { method: 'POST' });
+          if (response) firstRequest = false;
         } catch {
           // Erro de rede: tratado como instabilidade, igual a 5xx/504.
         }
@@ -269,6 +273,20 @@ export function BroadcastsManager({
     finally { setRunningId(null); }
   }
 
+  async function pauseBroadcast(id: string) {
+    stopRef.current = true;
+    try {
+      const response = await fetch(`/api/transmissoes/${id}/pause`, { method: 'POST' });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.error || 'Não foi possível pausar a transmissão.');
+      setBroadcasts((current) => current.map((item) => item.id === id ? { ...item, status: 'paused' } : item));
+      setNotice('Transmissão pausada no servidor. Clique em Continuar para retomar.');
+      router.refresh();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Não foi possível pausar a transmissão.');
+    }
+  }
+
   return <div className="page-content">
     {error && <div className="error-box">{error}</div>}
     {notice && <div className="success-box">{notice}</div>}
@@ -291,7 +309,7 @@ export function BroadcastsManager({
             <td><strong>{handled}/{item.recipient_count}</strong><br /><small className="faint">{item.queued_count} na fila · {item.failed_count} falhas</small></td>
             <td><strong>{item.delivered_count} entregues</strong><br /><small className="faint">{item.read_count} lidas</small></td>
             <td><span className={`chip ${item.status === 'completed' ? 'chip-green' : item.status === 'running' ? 'chip-orange' : ''}`}>{statusLabels[item.status] || item.status}</span></td>
-            <td>{canEdit && ['ready', 'running', 'paused'].includes(item.status) && <button className="btn btn-primary btn-sm" disabled={Boolean(runningId)} onClick={() => void runBroadcast(item)}>{runningId === item.id ? 'Enviando…' : item.status === 'ready' ? 'Iniciar envio' : 'Continuar'}</button>}{runningId === item.id && <button className="btn btn-ghost btn-sm" style={{ marginLeft: 6 }} onClick={() => { stopRef.current = true; }}>Pausar</button>}</td>
+            <td>{canEdit && ['ready', 'running', 'paused'].includes(item.status) && <button className="btn btn-primary btn-sm" disabled={Boolean(runningId)} onClick={() => void runBroadcast(item)}>{runningId === item.id ? 'Enviando…' : item.status === 'ready' ? 'Iniciar envio' : 'Continuar'}</button>}{runningId === item.id && <button className="btn btn-ghost btn-sm" style={{ marginLeft: 6 }} onClick={() => void pauseBroadcast(item.id)}>Pausar</button>}</td>
           </tr>;
         })}
       </tbody></table></div></section>
