@@ -24,7 +24,7 @@ import {
   shouldForceBroadcastReply,
 } from '@/lib/nara-broadcast-response';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { chooseCanonicalLeadForWhatsApp } from '@/lib/contact-identity';
+import { chooseCanonicalLeadForWhatsApp, findCanonicalLeadByPhone } from '@/lib/contact-identity';
 import type { Lead, LeadKind } from '@/lib/types';
 import { handleAiFailure as recordAiFailure, resolveAiChannelFailure } from '@/lib/whatsapp/aiFailure';
 import type { WhatsAppMediaType, WhatsAppMessageCategory } from '@/lib/whatsapp/channelProvider';
@@ -961,12 +961,7 @@ async function findOrCreateLead(args: {
   receivedAt: string;
   referral?: MetaWebhookMessage['referral'];
 }) {
-  const directRoleRouting = args.channel.routing_mode === 'direct_role';
-  const expectedKind: LeadKind = args.channel.role === 'cliente'
-    ? 'cliente'
-    : directRoleRouting
-      ? 'corretor'
-      : 'geral';
+  const expectedKind: LeadKind = args.channel.role === 'cliente' ? 'cliente' : 'geral';
 
   const { data: matches, error: readError } = await args.admin
     .from('leads')
@@ -992,7 +987,7 @@ async function findOrCreateLead(args: {
       whatsapp_channel_id: args.channel.id,
       whatsapp_routing_mode: args.channel.routing_mode,
       ...(kind === 'geral' ? {
-        general_pipeline_reason: 'Contato novo recebido no número compartilhado do Plantão',
+        general_pipeline_reason: 'Contato novo em canal comercial; aguardando identificação antes de entrar em Corretores',
         plantao_triage_status: 'new',
       } : {}),
     };
@@ -1012,7 +1007,18 @@ async function findOrCreateLead(args: {
       last_inbound_at: args.receivedAt,
       metadata,
     }).select('*').single();
-    if (error) throw error;
+    if (error) {
+      if (error.code === '23505') {
+        const canonical = await findCanonicalLeadByPhone({
+          admin: args.admin,
+          organizationId: args.channel.organization_id,
+          phone: args.waId,
+          preferredKind: expectedKind,
+        });
+        if (canonical) return canonical;
+      }
+      throw error;
+    }
     leadData = data as Lead;
   }
 
