@@ -21,11 +21,13 @@ export function LeadDirectory({
   const [query, setQuery] = useState("");
   const [kind, setKind] = useState("all");
   const [page, setPage] = useState(0);
-  const [ranking, setRanking] = useState('units_sold');
+  const [ranking, setRanking] = useState('overall');
   const [details, setDetails] = useState<string | null>(null);
   const counts = new Map(brokerCounts.map(c=>[c.lead_id,c]));
   const showRanking = kind === 'corretor' && !conversations;
-  const columns = [['interested_clients','Clientes interessados'],['proposals','Propostas'],['visits_with_clients','Visitas com clientes'],['visits_without_clients','Visitas sem clientes'],['units_sold','Unidades vendidas']] as const;
+  const metricColumns = [['interested_clients','Clientes interessados'],['interactions','Interações'],['proposals','Propostas'],['visits_with_clients','Visitas com clientes'],['visits_without_clients','Visitas sem clientes'],['units_sold','Unidades vendidas']] as const;
+  const rankingOptions = [['overall','Geral'],['units_sold','Unidades vendidas'],['proposals','Propostas'],['visits_with_clients','Visitas com clientes'],['visits_without_clients','Visitas sem clientes'],['interactions','Interações'],['interested_clients','Clientes interessados']] as const;
+  const scoreOf = (c?: BrokerCounts) => Number(c?.units_sold??0)*100 + Number(c?.proposals??0)*20 + Number(c?.visits_with_clients??0)*10 + Number(c?.visits_without_clients??0)*4 + Number(c?.interactions??0);
   const unreadMedia = brokerCounts.reduce((sum,c)=>sum+Number(c.unread_media??0),0);
   const completed = brokerCounts.filter(c=>c.review_status==='completed' || !c.review_status).length;
   const filtered = leads.filter(
@@ -36,9 +38,21 @@ export function LeadDirectory({
       ),
   );
   if(showRanking) filtered.sort((a,b)=>{
+    const aCounts=counts.get(a.id);
+    const bCounts=counts.get(b.id);
+    if(ranking==='overall'){
+      return scoreOf(bCounts)-scoreOf(aCounts)
+        || Number(bCounts?.units_sold??0)-Number(aCounts?.units_sold??0)
+        || Number(bCounts?.proposals??0)-Number(aCounts?.proposals??0)
+        || Number(bCounts?.visits_with_clients??0)-Number(aCounts?.visits_with_clients??0)
+        || Number(bCounts?.visits_without_clients??0)-Number(aCounts?.visits_without_clients??0)
+        || Number(bCounts?.interactions??0)-Number(aCounts?.interactions??0)
+        || Number(bCounts?.interested_clients??0)-Number(aCounts?.interested_clients??0)
+        || a.name.localeCompare(b.name,'pt-BR');
+    }
     const metric=ranking as keyof BrokerCounts;
-    const delta=Number(counts.get(b.id)?.[metric]??0)-Number(counts.get(a.id)?.[metric]??0);
-    return delta || a.name.localeCompare(b.name,'pt-BR');
+    const delta=Number(bCounts?.[metric]??0)-Number(aCounts?.[metric]??0);
+    return delta || scoreOf(bCounts)-scoreOf(aCounts) || a.name.localeCompare(b.name,'pt-BR');
   });
   const size = 50;
   return (
@@ -73,8 +87,9 @@ export function LeadDirectory({
       {showRanking && <div className="info-box" style={{marginBottom:12}}>
         <strong>Ranking de corretores</strong> · Histórico conferido: {completed}/{brokerCounts.length} corretores.
         {unreadMedia>0 && <div>{unreadMedia} mídias sem conteúdo legível no histórico; não usadas como comprovação.</div>}
-        <div>Contamos ocorrências distintas comprovadas. Visitas apenas agendadas e fatos incertos ficam pendentes. Clique nos números para conferir os registros.</div>
-        <label>Ordenar por <select className="select" value={ranking} onChange={e=>{setRanking(e.target.value);setPage(0);}}>{columns.map(([key,label])=><option key={key} value={key}>{label}</option>)}</select></label>
+        <div>Ranking geral: venda 100 pts · proposta 20 pts · visita com cliente 10 pts · visita sem cliente 4 pts · interação 1 pt. Cliente interessado segue disponível para ordenação, mas não soma pontos.</div>
+        <div>Interação = dia com conversa recebida do corretor, inclusive pedido de material/informação. Visitas apenas agendadas e fatos incertos ficam pendentes.</div>
+        <label>Ordenar por <select className="select" value={ranking} onChange={e=>{setRanking(e.target.value);setPage(0);}}>{rankingOptions.map(([key,label])=><option key={key} value={key}>{label}</option>)}</select></label>
       </div>}
       {details && <BrokerPerformanceDetails key={details} leadId={details} name={leads.find(l=>l.id===details)?.name??'Corretor'} onClose={()=>setDetails(null)} />}
       <section className="card table-wrap">
@@ -82,12 +97,13 @@ export function LeadDirectory({
           <thead>
             <tr>
               {showRanking && <th>Posição</th>}
+              {showRanking && <th>Pontos</th>}
               <th>Nome</th>
               <th>{conversations ? "Atendimento" : "Tipo"}</th>
               <th>Empreendimento / Imobiliária</th>
               <th>Etapa</th>
               <th>Responsável</th>
-              {showRanking && columns.map(([key,label])=><th key={key}>{label}</th>)}
+              {showRanking && metricColumns.map(([key,label])=><th key={key}>{label}</th>)}
               <th />
             </tr>
           </thead>
@@ -95,6 +111,7 @@ export function LeadDirectory({
             {filtered.slice(page * size, (page + 1) * size).map((l,index) => (
               <tr key={l.id}>
                 {showRanking && <td>{page*size+index+1}º</td>}
+                {showRanking && <td><strong>{scoreOf(counts.get(l.id))}</strong></td>}
                 <td>
                   <button
                     className="plain-name"
@@ -156,7 +173,7 @@ export function LeadDirectory({
                           ?.full_name || "Equipe"
                       : "Sem responsável"}
                 </td>
-                {showRanking && columns.map(([key,label])=><td key={key}><button className="btn btn-ghost btn-sm" aria-label={`${label} de ${l.name}`} onClick={()=>setDetails(l.id)}>{counts.get(l.id)?.[key]??0}</button></td>)}
+                {showRanking && metricColumns.map(([key,label])=><td key={key}><button className="btn btn-ghost btn-sm" aria-label={`${label} de ${l.name}`} onClick={()=>key==='interactions'?ui.openLead(l.id,'whatsapp'):setDetails(l.id)}>{counts.get(l.id)?.[key]??0}</button></td>)}
                 <td>
                   {showRanking && counts.get(l.id)?.review_status!=='completed' && <small className="faint">{counts.get(l.id)?.review_status==='error'?'Conferência pendente':'Histórico em análise'}<br/></small>}
                   <button
