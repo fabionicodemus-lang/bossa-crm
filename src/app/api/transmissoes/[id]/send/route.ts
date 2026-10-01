@@ -57,8 +57,9 @@ function messageCategory(value: unknown): WhatsAppMessageCategory {
   return 'marketing';
 }
 
-export async function POST(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const startedAt = Date.now();
+  const resumeRequested = new URL(request.url).searchParams.get('resume') === '1';
   const { id } = await params;
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -76,6 +77,9 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
   if (broadcastError || !broadcast) return NextResponse.json({ error: 'Transmissão não encontrada.' }, { status: 404 });
   if (['cancelled', 'completed'].includes(broadcast.status)) {
     return NextResponse.json({ error: `A transmissão já está ${broadcast.status === 'completed' ? 'concluída' : 'cancelada'}.` }, { status: 409 });
+  }
+  if (broadcast.status === 'paused' && !resumeRequested) {
+    return NextResponse.json({ error: 'Transmissão pausada.', paused: true }, { status: 409 });
   }
 
   const channelId = String(broadcast.whatsapp_channel_id ?? broadcast.whatsapp_connection_id ?? '');
