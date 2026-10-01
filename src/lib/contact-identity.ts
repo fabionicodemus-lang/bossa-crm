@@ -1,5 +1,6 @@
-import type { LeadKind } from '@/lib/types';
-import { normalizeWaId } from '@/lib/whatsapp/utils';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import type { Lead, LeadKind } from '@/lib/types';
+import { normalizeWaId, phoneMatchVariants } from '@/lib/whatsapp/utils';
 
 export type IdentityLead = {
   id: string;
@@ -143,4 +144,28 @@ export function chooseCanonicalLeadForWhatsApp<T extends IdentityLead>(
     ?? active.find((lead) => lead.kind === 'geral')
     ?? active[0]
     ?? null;
+}
+
+
+export async function findCanonicalLeadByPhone(args: {
+  admin: SupabaseClient;
+  organizationId: string;
+  phone: string;
+  preferredKind: LeadKind;
+}) {
+  const variants = phoneMatchVariants(args.phone);
+  if (!variants.length) return null;
+
+  const { data, error } = await args.admin
+    .from('leads')
+    .select('*')
+    .eq('organization_id', args.organizationId)
+    .in('kind', ['cliente', 'corretor', 'geral'])
+    .in('phone', variants)
+    .is('archived_at', null)
+    .order('updated_at', { ascending: false })
+    .limit(50);
+  if (error) throw error;
+
+  return chooseCanonicalLeadForWhatsApp((data ?? []) as Lead[], args.preferredKind);
 }
