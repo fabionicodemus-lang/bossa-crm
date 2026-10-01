@@ -6,6 +6,7 @@ import {
   CalendarDays,
   CalendarRange,
   MessageCircle,
+  Send,
   UsersRound,
   Handshake,
   Users,
@@ -29,7 +30,13 @@ const links = [
     href: "/conversas",
     label: "Conversas",
     icon: MessageCircle,
-    paths: ["/conversas", "/ia", "/mensagens-corretores", "/transmissoes"],
+    paths: ["/conversas", "/ia", "/mensagens-corretores"],
+  },
+  {
+    href: "/transmissoes",
+    label: "Transmissões",
+    icon: Send,
+    paths: ["/transmissoes"],
   },
   {
     href: "/clientes",
