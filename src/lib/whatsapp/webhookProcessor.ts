@@ -998,7 +998,7 @@ async function findOrCreateLead(args: {
       phone: args.waId,
       stage: 'novo_triagem',
       source: attribution.sourceLabel || 'WhatsApp',
-      company: kind === 'corretor' ? 'Não informada' : null,
+      company: null,
       temperature: 0,
       ai_enabled: kind !== 'geral',
       automation_paused: kind === 'geral',
