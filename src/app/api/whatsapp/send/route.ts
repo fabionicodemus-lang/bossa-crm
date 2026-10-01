@@ -20,6 +20,7 @@ import {
   OUTSIDE_WINDOW_MESSAGE,
 } from '@/lib/whatsapp/window';
 import { normalizeWaId } from '@/lib/whatsapp/utils';
+import { findCanonicalLeadByPhone } from '@/lib/contact-identity';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -66,10 +67,19 @@ export async function POST(request: Request) {
     const admin = createAdminClient();
     const { data: leadData } = await admin.from('leads').select('*')
       .eq('id', leadId).eq('organization_id', membership.organization_id).maybeSingle();
-    const lead = leadData as Lead | null;
-    if (!lead) return NextResponse.json({ error: 'Contato não encontrado.' }, { status: 404 });
+    const requestedLead = leadData as Lead | null;
+    if (!requestedLead) return NextResponse.json({ error: 'Contato não encontrado.' }, { status: 404 });
+    if (!requestedLead.phone) return NextResponse.json({ error: 'O contato não possui telefone válido.' }, { status: 400 });
+
+    let lead = await findCanonicalLeadByPhone({
+      admin,
+      organizationId: membership.organization_id,
+      phone: requestedLead.phone,
+      preferredKind: requestedLead.kind,
+    }) ?? requestedLead;
     if (!lead.phone) return NextResponse.json({ error: 'O contato não possui telefone válido.' }, { status: 400 });
 
+    const canonicalizedFromLeadId = requestedLead.id !== lead.id ? requestedLead.id : null;
     const isBroker = lead.kind === 'corretor';
     const isGeneral = lead.kind === 'geral';
     const sharedPlantaoContact = isBroker || isGeneral;
@@ -105,14 +115,29 @@ export async function POST(request: Request) {
         .from('whatsapp_conversations')
         .select('*')
         .eq('id', requestedConversationId)
-        .eq('lead_id', lead.id)
         .eq('organization_id', membership.organization_id)
         .maybeSingle();
       if (requestedConversationError) throw requestedConversationError;
       if (!requestedConversation) {
+        return NextResponse.json({ error: 'Conversa não encontrada.' }, { status: 404 });
+      }
+      const conversationPhone = normalizeWaId(String(requestedConversation.contact_wa_id || ''));
+      const leadPhone = normalizeWaId(String(lead.phone || ''));
+      if (!conversationPhone || !leadPhone || conversationPhone !== leadPhone) {
         return NextResponse.json({ error: 'A conversa selecionada não pertence a este contato.' }, { status: 404 });
       }
-      selectedConversation = requestedConversation as WhatsAppConversationRecord;
+      if (requestedConversation.lead_id !== lead.id) {
+        const { data: relinked, error: relinkError } = await admin
+          .from('whatsapp_conversations')
+          .update({ lead_id: lead.id, updated_at: new Date().toISOString() })
+          .eq('id', requestedConversation.id)
+          .select('*')
+          .single();
+        if (relinkError) throw relinkError;
+        selectedConversation = relinked as WhatsAppConversationRecord;
+      } else {
+        selectedConversation = requestedConversation as WhatsAppConversationRecord;
+      }
     } else {
       const { data: currentConversation, error: conversationReadError } = await admin
         .from('whatsapp_conversations')
@@ -275,7 +300,24 @@ export async function POST(request: Request) {
       });
     }
 
-    return NextResponse.json({ message, windowExpiresAt, manualTakeover: sharedPlantaoContact });
+    if (canonicalizedFromLeadId) {
+      try {
+        await admin.rpc('merge_duplicate_lead', {
+          p_keep: lead.id,
+          p_dup: canonicalizedFromLeadId,
+        });
+      } catch (mergeError) {
+        console.error('[whatsapp send canonical merge]', mergeError);
+      }
+    }
+
+    return NextResponse.json({
+      message,
+      windowExpiresAt,
+      manualTakeover: sharedPlantaoContact,
+      canonicalLeadId: lead.id,
+      mergedFromLeadId: canonicalizedFromLeadId,
+    });
   } catch (error) {
     console.error('[whatsapp send]', error);
     return NextResponse.json({ error: error instanceof Error ? error.message : 'Não foi possível enviar a mensagem.' }, { status: 500 });
