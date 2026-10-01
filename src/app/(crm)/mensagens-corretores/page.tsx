@@ -8,8 +8,8 @@ export default async function BrokerMessagesPage() {
 
   return <>
     <PageTopbar
-      title="Mensagens WhatsApp · Corretores"
-      subtitle="Acompanhe as conversas do número dos corretores em uma caixa de entrada única"
+      title="WhatsApp Comercial"
+      subtitle="Caixa de entrada das conversas comerciais do WhatsApp"
     />
     <div className={`page-content ${styles.scrollScope}`}>
       <WhatsAppBrokerInbox />
