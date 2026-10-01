@@ -42,6 +42,17 @@ const mappingLabels: Record<MappingSource, string> = {
   stage: 'Etapa do CRM', fixed: 'Texto fixo',
 };
 const dateTime = new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
+// Espera antes de cada nova tentativa após falha de rede ou do servidor (5xx/504).
+const SEND_RETRY_DELAYS_MS = [5_000, 15_000, 30_000, 60_000, 60_000];
+const SEND_MAX_FAILURES = 5;
+
+// Espera o tempo pedido, mas encerra antes se o usuário clicar em Pausar.
+async function waitUnlessStopped(stopRef: { current: boolean }, ms: number) {
+  const endsAt = Date.now() + ms;
+  while (!stopRef.current && Date.now() < endsAt) {
+    await new Promise((resolve) => window.setTimeout(resolve, Math.min(250, endsAt - Date.now())));
+  }
+}
 
 function emptyAudience(): AudienceDiagnostics {
   return { total: 0, withoutPhone: 0, optOut: 0, paused: 0, duplicates: 0, eligible: 0 };
@@ -211,11 +222,31 @@ export function BroadcastsManager({
     const continuing = item.status === 'running';
     if (!continuing && !window.confirm(`Iniciar o envio de “${item.name}” para ${item.recipient_count} contatos?`)) return;
     stopRef.current = false; setRunningId(item.id); setError(''); setNotice('');
+    let consecutiveFailures = 0;
     try {
       while (!stopRef.current) {
-        const response = await fetch(`/api/transmissoes/${item.id}/send`, { method: 'POST' });
+        let response: Response | null = null;
+        try {
+          response = await fetch(`/api/transmissoes/${item.id}/send`, { method: 'POST' });
+        } catch {
+          // Erro de rede: tratado como instabilidade, igual a 5xx/504.
+        }
+        if (!response || response.status >= 500) {
+          consecutiveFailures++;
+          if (consecutiveFailures >= SEND_MAX_FAILURES) {
+            setError('Envio interrompido por instabilidade. Clique em Continuar para retomar.');
+            router.refresh();
+            return;
+          }
+          const delay = SEND_RETRY_DELAYS_MS[Math.min(consecutiveFailures - 1, SEND_RETRY_DELAYS_MS.length - 1)];
+          setNotice(`Instabilidade no envio. Nova tentativa em ${delay / 1000}s (falha ${consecutiveFailures} de ${SEND_MAX_FAILURES}).`);
+          await waitUnlessStopped(stopRef, delay);
+          continue;
+        }
         const payload = await response.json().catch(() => ({}));
         if (!response.ok) throw new Error(payload.error || 'Falha durante o envio da transmissão.');
+        consecutiveFailures = 0;
+        setNotice('');
         const completed = Boolean(payload.done);
         setBroadcasts((current) => current.map((broadcast) => broadcast.id === item.id ? {
           ...broadcast, status: completed ? 'completed' : 'running',
@@ -230,7 +261,7 @@ export function BroadcastsManager({
           router.refresh();
           return;
         }
-        await new Promise((resolve) => window.setTimeout(resolve, 350));
+        await waitUnlessStopped(stopRef, 350);
       }
       setNotice('Envio pausado após o lote atual. Clique em Continuar para retomar.');
       router.refresh();

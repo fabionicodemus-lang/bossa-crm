@@ -88,6 +88,7 @@ export interface ChannelProvider {
     headerType?: 'IMAGE' | 'VIDEO' | 'DOCUMENT' | 'TEXT' | 'NONE';
     headerMediaLink?: string;
     headerText?: string;
+    signal?: AbortSignal;
   }): Promise<WhatsAppSendResult>;
 
   sendMedia(input: {

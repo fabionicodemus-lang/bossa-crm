@@ -236,6 +236,7 @@ export const metaCloudProvider: ChannelProvider = {
       {
         method: 'POST',
         accessToken: input.accessToken,
+        signal: input.signal,
         body: JSON.stringify({
           messaging_product: 'whatsapp',
           recipient_type: 'individual',
