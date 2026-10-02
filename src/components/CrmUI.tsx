@@ -24,6 +24,9 @@ import {
   Send,
   RotateCcw,
   Circle,
+  Bell,
+  ArrowRightLeft,
+  CheckSquare,
 } from "lucide-react";
 import dynamic from "next/dynamic";
 const LeadDetail = dynamic(
@@ -672,10 +675,219 @@ export function CrmUI({
     </UIContext.Provider>
   );
 }
+
+type UserNotification = {
+  id: string;
+  kind: "handoff" | "task";
+  source: string;
+  title: string;
+  body: string | null;
+  lead_id: string | null;
+  handoff_id: string | null;
+  task_id: string | null;
+  metadata: Record<string, unknown> | null;
+  created_at: string;
+};
+
+const notificationDate = new Intl.DateTimeFormat("pt-BR", {
+  day: "2-digit",
+  month: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+});
+
+function NotificationCenter() {
+  const ui = useCrmUI();
+  const router = useRouter();
+  const ref = useRef<HTMLDivElement>(null);
+  const [open, setOpen] = useState(false);
+  const [items, setItems] = useState<UserNotification[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [error, setError] = useState("");
+
+  const load = useCallback(async (quiet = false) => {
+    if (!quiet) setLoading(true);
+    try {
+      const response = await fetch("/api/notifications", { cache: "no-store" });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.error || "Não foi possível carregar as notificações.");
+      setItems((payload.notifications ?? []) as UserNotification[]);
+      setError("");
+    } catch (cause) {
+      if (!quiet) setError(cause instanceof Error ? cause.message : "Não foi possível carregar as notificações.");
+    } finally {
+      if (!quiet) setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void load(true);
+    const timer = window.setInterval(() => void load(true), 15000);
+    const refresh = () => void load(true);
+    window.addEventListener("focus", refresh);
+    window.addEventListener("crm:data-changed", refresh);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("focus", refresh);
+      window.removeEventListener("crm:data-changed", refresh);
+    };
+  }, [load]);
+
+  useEffect(() => {
+    if (!open) return;
+    void load();
+    const close = (event: MouseEvent) => {
+      if (ref.current && !ref.current.contains(event.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, [open, load]);
+
+  async function accept(item: UserNotification) {
+    if (busyId) return;
+    setBusyId(item.id);
+    setError("");
+    try {
+      const action = String(item.metadata?.action ?? "");
+      if (action === "accept_handoff") {
+        if (!item.lead_id) throw new Error("A passagem não está vinculada a um lead.");
+        const response = await fetch(`/api/leads/${item.lead_id}/handoff`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "accept" }),
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(payload.error || "Não foi possível aceitar a passagem.");
+      } else {
+        const response = await fetch("/api/notifications", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: item.id, action: "accept" }),
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(payload.error || "Não foi possível aceitar a notificação.");
+      }
+
+      setItems((current) => current.filter((notification) => notification.id !== item.id));
+      window.dispatchEvent(new Event("crm:data-changed"));
+      router.refresh();
+      ui.notify({
+        message: item.kind === "task" ? "Tarefa aceita." : "Passagem aceita.",
+      });
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Não foi possível aceitar.");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  return (
+    <div className="notification-center" ref={ref}>
+      <button
+        type="button"
+        className={`notification-bell ${items.length ? "has-items" : ""}`}
+        aria-label={`Notificações${items.length ? `: ${items.length} pendente(s)` : ""}`}
+        title="Notificações"
+        onClick={() => setOpen((value) => !value)}
+      >
+        <Bell size={16} />
+        {items.length > 0 && (
+          <span className="notification-count">{items.length > 99 ? "99+" : items.length}</span>
+        )}
+      </button>
+
+      {open && (
+        <div className="notification-panel">
+          <div className="notification-panel-head">
+            <div>
+              <strong>Notificações</strong>
+              <span>{items.length ? `${items.length} pendente${items.length === 1 ? "" : "s"}` : "Tudo em dia"}</span>
+            </div>
+            <button className="icon-button" type="button" aria-label="Fechar notificações" onClick={() => setOpen(false)}>
+              <X size={15} />
+            </button>
+          </div>
+
+          {error && <div className="notification-error">{error}</div>}
+          {loading && !items.length ? (
+            <div className="notification-empty">Carregando…</div>
+          ) : !items.length ? (
+            <div className="notification-empty">
+              <Bell size={22} />
+              <strong>Nenhuma notificação pendente</strong>
+              <span>Passagens e tarefas atribuídas a você aparecerão aqui.</span>
+            </div>
+          ) : (
+            <div className="notification-list">
+              {items.map((item) => {
+                const action = String(item.metadata?.action ?? "");
+                const handoff = item.kind === "handoff";
+                return (
+                  <article className="notification-item" key={item.id}>
+                    <div className={`notification-kind ${handoff ? "handoff" : "task"}`}>
+                      {handoff ? <ArrowRightLeft size={15} /> : <CheckSquare size={15} />}
+                    </div>
+                    <div className="notification-copy">
+                      <div className="notification-title-row">
+                        <strong>{item.title}</strong>
+                        <time>{notificationDate.format(new Date(item.created_at))}</time>
+                      </div>
+                      {item.body && <p>{item.body}</p>}
+                      <div className="notification-source">
+                        {item.source === "nara"
+                          ? "Nara"
+                          : item.source === "plantao"
+                            ? "Plantão"
+                            : item.source === "usuario"
+                              ? "Usuário"
+                              : "Sistema"}
+                      </div>
+                      <div className="notification-actions">
+                        {item.lead_id && (
+                          <button
+                            type="button"
+                            className="btn btn-ghost btn-sm"
+                            onClick={() => {
+                              ui.openLead(item.lead_id!, item.kind === "task" ? "tarefas" : "dados");
+                              setOpen(false);
+                            }}
+                          >
+                            Abrir lead
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          className="btn btn-primary btn-sm"
+                          disabled={busyId === item.id}
+                          onClick={() => void accept(item)}
+                        >
+                          {busyId === item.id
+                            ? "Aceitando…"
+                            : item.kind === "task"
+                              ? "Aceitar tarefa"
+                              : action === "acknowledge_transfer"
+                                ? "Aceitar passagem"
+                                : "Aceitar passagem"}
+                        </button>
+                      </div>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function WorkspaceActions() {
   const ui = useCrmUI();
   return (
     <div className="page-actions">
+      <NotificationCenter />
       <button className="global-search" type="button" onClick={ui.openSearch}>
         <Search size={14} />
         <span>Buscar lead, telefone…</span>
