@@ -108,6 +108,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const { data: task, error } = await supabase.from('lead_tasks').update({
     status,
     completed_at: status === 'completed' ? now : null,
+    accepted_at: action === 'reopen' ? null : undefined,
+    accepted_by: action === 'reopen' ? null : undefined,
   }).eq('id', taskId).eq('lead_id', leadId).eq('organization_id', membership.organization_id)
     .select('*').single();
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });

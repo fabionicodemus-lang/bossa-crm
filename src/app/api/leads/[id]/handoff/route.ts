@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 
 function dueFromNow(minutes: number): string {
   return new Date(Date.now() + minutes * 60_000).toISOString();
@@ -8,12 +9,13 @@ function dueFromNow(minutes: number): string {
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const supabase = await createClient();
+  const admin = createAdminClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Sessão expirada.' }, { status: 401 });
 
   const { data: membership } = await supabase
     .from('memberships')
-    .select('organization_id,role')
+    .select('organization_id,role,profiles(full_name,email)')
     .eq('user_id', user.id)
     .limit(1)
     .maybeSingle();
@@ -90,6 +92,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     .eq('lead_id', id)
     .eq('status', 'pending')
     .maybeSingle();
+  let handoffId: string | null = pending?.id ?? null;
   if (pending?.id) {
     await supabase.from('lead_handoffs').update({
       status: 'accepted',
@@ -98,7 +101,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       updated_at: now,
     }).eq('id', pending.id);
   } else {
-    await supabase.from('lead_handoffs').insert({
+    const { data: insertedHandoff, error: insertedHandoffError } = await supabase.from('lead_handoffs').insert({
       organization_id: membership.organization_id,
       lead_id: id,
       requested_by: 'human',
@@ -110,7 +113,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       status: 'accepted',
       accepted_at: now,
       expires_at: now,
-    });
+    }).select('id').single();
+    if (insertedHandoffError) return NextResponse.json({ error: insertedHandoffError.message }, { status: 400 });
+    handoffId = insertedHandoff.id;
   }
 
   const { error: leadError } = await supabase.from('leads').update({
@@ -164,6 +169,45 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       : 'O atendimento humano assumiu o lead. A IA permanece em silêncio, mas continua analisando a conversa.',
     metadata: { owner_id: ownerId, owner_name: ownerName, accepted_at: now, due_at: contactDue, action },
   });
+
+  if (action === 'transfer' && ownerId !== user.id && handoffId) {
+    const requesterProfileRaw = membership.profiles;
+    const requesterProfile = Array.isArray(requesterProfileRaw) ? requesterProfileRaw[0] : requesterProfileRaw;
+    const requesterName = String(requesterProfile?.full_name ?? '').trim() || 'Outro usuário';
+
+    const { data: existingNotification } = await admin
+      .from('user_notifications')
+      .select('id')
+      .eq('user_id', ownerId)
+      .eq('handoff_id', handoffId)
+      .maybeSingle();
+
+    const notificationPayload = {
+      organization_id: membership.organization_id,
+      user_id: ownerId,
+      kind: 'handoff',
+      source: 'usuario',
+      title: 'Atendimento transferido para você',
+      body: `${lead.name} · enviado por ${requesterName}`,
+      lead_id: id,
+      handoff_id: handoffId,
+      status: 'open',
+      accepted_at: null,
+      resolved_at: null,
+      metadata: {
+        action: 'acknowledge_transfer',
+        transferred_by: user.id,
+        transferred_by_name: requesterName,
+        due_at: contactDue,
+      },
+      updated_at: now,
+    };
+    if (existingNotification?.id) {
+      await admin.from('user_notifications').update(notificationPayload).eq('id', existingNotification.id);
+    } else {
+      await admin.from('user_notifications').insert({ ...notificationPayload, created_at: now });
+    }
+  }
 
   return NextResponse.json({ ok: true, action, owner_id: ownerId, owner_name: ownerName, stage: humanStage, due_at: contactDue });
 }
