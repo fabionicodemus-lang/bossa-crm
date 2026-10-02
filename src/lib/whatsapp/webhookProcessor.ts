@@ -37,6 +37,7 @@ import {
   type WhatsAppConversationRecord,
 } from '@/lib/whatsapp/channelService';
 import { autoRouteEarlyOperationalBroker } from '@/lib/whatsapp/contactKindAutoRouting';
+import { queueBrokerAfterHoursAlert } from '@/lib/whatsapp/brokerAfterHoursAlert';
 import { handleMixedPlantaoConversation } from '@/lib/whatsapp/plantaoMixedRouting';
 import {
   clientBroadcastBrokerSignal,
@@ -745,6 +746,23 @@ export async function processConversation(args: {
     lastUserMessage,
     sourceMessageId: args.sourceMessageId,
   });
+
+  if (lead.kind === 'corretor') {
+    try {
+      await queueBrokerAfterHoursAlert({
+        admin: args.admin,
+        organizationId: args.channel.organization_id,
+        lead,
+        turn,
+        decision,
+        lastUserMessage,
+        sourceMessageId: args.sourceMessageId,
+      });
+    } catch (error) {
+      console.error('[plantao after-hours alert]', error);
+    }
+  }
+
   await recordAiUsage({
     admin: args.admin,
     organizationId: args.channel.organization_id,
