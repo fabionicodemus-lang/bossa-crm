@@ -219,11 +219,12 @@ async function processJobs() {
         templateCache.set(job.organization_id, template);
       }
 
-      if (String(template?.status ?? '').toUpperCase() !== 'APPROVED') {
+      if (!template || String(template.status ?? '').toUpperCase() !== 'APPROVED') {
         summary.template_pending += 1;
         continue;
       }
 
+      const approvedTemplate = template;
       const destination = normalizeManualPhone(settings.primary_owner_alert_phone ?? '');
       if (!destination) throw new Error('Telefone da Taís não configurado para alertas.');
 
@@ -238,8 +239,8 @@ async function processJobs() {
         phoneNumberId,
         accessToken,
         to: destination,
-        name: String(template.name),
-        language: String(template.language),
+        name: String(approvedTemplate.name),
+        language: String(approvedTemplate.language),
         bodyParameters: values,
         headerType: 'NONE',
       });
@@ -263,7 +264,7 @@ async function processJobs() {
           recipient: 'tais',
           source_message_id: job.source_message_id,
           alert_job_id: job.id,
-          template_name: String(template.name),
+          template_name: String(approvedTemplate.name),
         },
         status: 'sent',
         category: 'utility',
