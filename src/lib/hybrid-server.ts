@@ -11,6 +11,10 @@ type ClientHandoffSettings = {
   primary_owner_user_id: string | null;
   primary_owner_name: string;
   primary_owner_alert_phone: string | null;
+  secondary_owner_user_id: string | null;
+  secondary_owner_name: string | null;
+  secondary_owner_alert_phone: string | null;
+  last_assigned_owner_user_id: string | null;
   manager_user_id: string | null;
   manager_name: string;
   manager_alert_phone: string | null;
@@ -35,6 +39,33 @@ async function loadClientHandoffSettings(
     throw error;
   }
   return data as ClientHandoffSettings | null;
+}
+
+type ClientHandoffAssignee = {
+  user_id: string | null;
+  owner_name: string | null;
+  alert_phone: string | null;
+  reused: boolean;
+};
+
+async function nextClientHandoffOwner(
+  admin: AdminClient,
+  organizationId: string,
+  leadId: string,
+): Promise<ClientHandoffAssignee | null> {
+  const { data, error } = await admin.rpc('next_client_handoff_owner', {
+    target_organization_id: organizationId,
+    target_lead_id: leadId,
+  });
+  if (error) throw error;
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return null;
+  const row = data as Record<string, unknown>;
+  return {
+    user_id: typeof row.user_id === 'string' ? row.user_id : null,
+    owner_name: typeof row.owner_name === 'string' ? row.owner_name : null,
+    alert_phone: typeof row.alert_phone === 'string' ? row.alert_phone : null,
+    reused: row.reused === true,
+  };
 }
 
 function changed(value: unknown, previous: unknown): boolean {
@@ -144,15 +175,18 @@ export async function applyHybridDecision(args: {
   const clientHandoffSettings = decision.handoffRequired
     && args.lead.kind === 'cliente'
     && args.lead.owner_mode !== 'human'
-    && !postSaleHandoff
     ? await loadClientHandoffSettings(args.admin, args.organizationId)
     : null;
-  const designatedOwnerId = postSaleHandoff ? null : clientHandoffSettings?.enabled
-    ? clientHandoffSettings.primary_owner_user_id
-    : args.lead.owner_id;
-  const designatedOwnerName = clientHandoffSettings?.enabled
-    ? clientHandoffSettings.primary_owner_name
+  const roundRobinAssignee = clientHandoffSettings?.enabled && !postSaleHandoff
+    ? await nextClientHandoffOwner(args.admin, args.organizationId, args.lead.id)
     : null;
+  const designatedOwnerId = postSaleHandoff
+    ? clientHandoffSettings?.secondary_owner_user_id ?? null
+    : roundRobinAssignee?.user_id ?? args.lead.owner_id;
+  const designatedOwnerName = postSaleHandoff
+    ? clientHandoffSettings?.secondary_owner_name ?? 'Cíntia'
+    : roundRobinAssignee?.owner_name
+      ?? (clientHandoffSettings?.enabled ? clientHandoffSettings.primary_owner_name : null);
   const resolvedNextAction = designatedOwnerName && decision.handoffRequired && args.lead.kind === 'cliente'
     ? decision.nextAction.replace(/^Um consultor deve/i, `${designatedOwnerName} deve`)
     : decision.nextAction;
@@ -181,6 +215,10 @@ export async function applyHybridDecision(args: {
       stage: decision.stage,
       handoff_required: decision.handoffRequired,
       handoff_reason: decision.handoffReason,
+      handoff_owner_id: designatedOwnerId,
+      handoff_owner_name: designatedOwnerName,
+      handoff_round_robin: Boolean(roundRobinAssignee),
+      handoff_reused_assignment: roundRobinAssignee?.reused ?? false,
       routed_to_kind: routedToBroker ? 'corretor' : null,
       decided_at: now,
     },
@@ -272,6 +310,8 @@ export async function applyHybridDecision(args: {
         classification,
         score: args.turn.score,
         handoff_required: decision.handoffRequired,
+        handoff_owner_id: designatedOwnerId,
+        handoff_owner_name: designatedOwnerName,
         next_action: resolvedNextAction,
         next_action_due_at: decision.nextActionDueAt,
       },

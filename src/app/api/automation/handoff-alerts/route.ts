@@ -17,6 +17,9 @@ type HandoffSettings = {
   primary_owner_user_id: string | null;
   primary_owner_name: string;
   primary_owner_alert_phone: string | null;
+  secondary_owner_user_id: string | null;
+  secondary_owner_name: string | null;
+  secondary_owner_alert_phone: string | null;
   manager_user_id: string | null;
   manager_name: string;
   manager_alert_phone: string | null;
@@ -49,6 +52,18 @@ const DEFAULT_TEMPLATE = {
   language: 'pt_BR',
   category: 'UTILITY' as const,
   body: 'Nova passagem da Nara para a Taís.\n\nLead: {{1}}\n\nDados principais:\n{{2}}\n\nResumo da conversa:\n{{3}}\n\nPróxima ação:\n{{4}}\n\nAbra o Bossa CRM para continuar o atendimento.',
+  examples: [
+    'João Silva',
+    'Telefone: +55 47 99999-9999 | Origem: Meta | Empreendimento: Flow | Prioridade: A1',
+    'Busca apartamento para morar e pediu uma visita nesta semana.',
+    'Entrar em contato e confirmar o melhor horário para a visita.',
+  ],
+};
+
+const SECONDARY_TEMPLATE = {
+  ...DEFAULT_TEMPLATE,
+  name: 'alerta_passagem_nara_cintia',
+  body: 'Nova passagem da Nara para a Cíntia.\n\nLead: {{1}}\n\nDados principais:\n{{2}}\n\nResumo da conversa:\n{{3}}\n\nPróxima ação:\n{{4}}\n\nAbra o Bossa CRM para continuar o atendimento.',
   examples: [
     'João Silva',
     'Telefone: +55 47 99999-9999 | Origem: Meta | Empreendimento: Flow | Prioridade: A1',
@@ -228,15 +243,10 @@ async function sendRecipient(args: {
   template: Record<string, unknown>;
   recipient: 'owner' | 'manager';
   definition?: typeof DEFAULT_TEMPLATE;
+  secondaryTemplate?: Record<string, unknown> | null;
 }) {
   const postSale = args.job.recipient_kind === 'post_sale';
   const isOwner = args.recipient === 'owner';
-  const phone = isOwner
-    ? postSale ? args.settings.post_sale_alert_phone : args.settings.primary_owner_alert_phone
-    : args.settings.manager_alert_phone;
-  const recipientName = isOwner
-    ? postSale ? 'Cíntia (Canal 2)' : args.settings.primary_owner_name
-    : args.settings.manager_name;
   const statusKey = isOwner ? 'owner_status' : 'manager_status';
   const attemptsKey = isOwner ? 'owner_attempts' : 'manager_attempts';
   const messageKey = isOwner ? 'owner_message_id' : 'manager_message_id';
@@ -246,9 +256,34 @@ async function sendRecipient(args: {
 
   const [{ data: currentJob }, { data: handoff }] = await Promise.all([
     args.admin.from('client_handoff_alert_jobs').select('owner_status,manager_status').eq('id', args.job.id).maybeSingle(),
-    args.admin.from('lead_handoffs').select('status').eq('id', args.job.handoff_id).maybeSingle(),
+    args.admin.from('lead_handoffs').select('status,offered_to').eq('id', args.job.handoff_id).maybeSingle(),
   ]);
   if (!currentJob || currentJob[statusKey] !== 'queued' || handoff?.status !== 'pending') return 'skipped';
+
+  const assignedToSecondary = !postSale
+    && Boolean(args.settings.secondary_owner_user_id)
+    && handoff.offered_to === args.settings.secondary_owner_user_id;
+  const responsibleName = postSale
+    ? 'Cíntia (Canal 2)'
+    : assignedToSecondary
+      ? args.settings.secondary_owner_name || 'Cíntia'
+      : args.settings.primary_owner_name;
+  const phone = isOwner
+    ? postSale
+      ? args.settings.post_sale_alert_phone
+      : assignedToSecondary
+        ? args.settings.secondary_owner_alert_phone
+        : args.settings.primary_owner_alert_phone
+    : args.settings.manager_alert_phone;
+  const recipientName = isOwner ? responsibleName : args.settings.manager_name;
+  const selectedTemplate = assignedToSecondary && args.secondaryTemplate
+    ? args.secondaryTemplate
+    : args.template;
+  const selectedDefinition = assignedToSecondary ? SECONDARY_TEMPLATE : (args.definition ?? DEFAULT_TEMPLATE);
+
+  if (assignedToSecondary && String(selectedTemplate?.status ?? '').toUpperCase() !== 'APPROVED') {
+    return 'template_pending';
+  }
 
   const destination = normalizeManualPhone(phone ?? '');
   if (!destination) {
@@ -272,13 +307,13 @@ async function sendRecipient(args: {
     phoneNumberId,
     accessToken,
     to: destination,
-    name: String(args.template.name),
-    language: String(args.template.language),
+    name: String(selectedTemplate.name),
+    language: String(selectedTemplate.language),
     bodyParameters: values,
     headerType: 'NONE',
   });
   const sentAt = new Date().toISOString();
-  const rendered = renderTemplate(values, args.definition);
+  const rendered = renderTemplate(values, selectedDefinition);
 
   const transport = {
     organization_id: args.job.organization_id,
@@ -294,9 +329,13 @@ async function sendRecipient(args: {
       provider: result.raw,
       internal_notification: true,
       notification_kind: postSale ? 'nara_post_sale' : 'nara_handoff',
-      recipient: postSale ? 'cintia_canal_2' : isOwner ? 'tais' : 'fabio',
+      recipient: postSale
+        ? 'cintia_canal_2'
+        : isOwner
+          ? assignedToSecondary ? 'cintia' : 'tais'
+          : 'fabio',
       handoff_id: args.job.handoff_id,
-      template_name: String(args.template.name),
+      template_name: String(selectedTemplate.name),
     },
     status: 'sent',
     category: 'utility',
@@ -330,7 +369,7 @@ async function sendRecipient(args: {
         recipient_phone: destination,
         handoff_id: args.job.handoff_id,
         whatsapp_message_id: result.messageId,
-        responsible: args.settings.primary_owner_name,
+        responsible: responsibleName,
       },
     }),
   ]);
@@ -388,6 +427,19 @@ async function runWorker() {
 
     const commercialTemplateApproved = String(template.status ?? '').toUpperCase() === 'APPROVED';
 
+    let secondaryTemplate: Record<string, unknown> | null = null;
+    try {
+      secondaryTemplate = await syncTemplate(
+        admin,
+        channel,
+        SECONDARY_TEMPLATE.name,
+        SECONDARY_TEMPLATE,
+      ) as Record<string, unknown>;
+    } catch (error) {
+      console.error('[secondary handoff template]', error);
+      summary.errors += 1;
+    }
+
     let postSaleTemplate: Record<string, unknown> | null = null;
     try {
       postSaleTemplate = await syncTemplate(admin, channel, POST_SALE_TEMPLATE.name, POST_SALE_TEMPLATE) as Record<string, unknown>;
@@ -425,13 +477,15 @@ async function runWorker() {
             admin, job, settings, channel,
             template: job.recipient_kind === 'post_sale' ? postSaleTemplate! : template,
             definition: job.recipient_kind === 'post_sale' ? POST_SALE_TEMPLATE : DEFAULT_TEMPLATE,
+            secondaryTemplate,
             recipient: 'owner',
           });
           if (result === 'sent') summary.owner_sent += 1;
+          else if (result === 'template_pending') summary.templates_pending += 1;
           else summary.skipped += 1;
         } catch (error) {
           const attempts = Number(job.owner_attempts || 0) + 1;
-          const message = error instanceof Error ? error.message : 'Falha no alerta para Taís.';
+          const message = error instanceof Error ? error.message : 'Falha no alerta para o responsável comercial.';
           await admin.from('client_handoff_alert_jobs').update({
             owner_attempts: attempts,
             owner_status: attempts >= 10 ? 'failed' : 'queued',
@@ -445,9 +499,10 @@ async function runWorker() {
       if (job.manager_status === 'queued') {
         try {
           const result = await sendRecipient({
-            admin, job, settings, channel, template, recipient: 'manager',
+            admin, job, settings, channel, template, secondaryTemplate, recipient: 'manager',
           });
           if (result === 'sent') summary.manager_sent += 1;
+          else if (result === 'template_pending') summary.templates_pending += 1;
           else summary.skipped += 1;
         } catch (error) {
           const attempts = Number(job.manager_attempts || 0) + 1;
