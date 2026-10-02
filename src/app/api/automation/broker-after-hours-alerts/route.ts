@@ -178,7 +178,30 @@ async function processJobs() {
     .limit(40);
   if (jobsError) throw jobsError;
   summary.queued = jobs?.length ?? 0;
-  if (!jobs?.length) return summary;
+
+  if (!jobs?.length) {
+    const { data: settingsRows, error: settingsError } = await admin
+      .from('client_handoff_settings')
+      .select('organization_id,primary_owner_name,primary_owner_alert_phone,alert_sender_channel_id,enabled')
+      .eq('enabled', true);
+    if (settingsError) throw settingsError;
+
+    for (const rawSettings of settingsRows ?? []) {
+      const settings = rawSettings as AlertSettings;
+      if (!settings.alert_sender_channel_id) continue;
+      try {
+        const channel = await findChannelById(admin, settings.organization_id, settings.alert_sender_channel_id);
+        if (!channel || channel.status !== 'connected') continue;
+        const template = await syncTemplate(admin, channel);
+        if (String(template?.status ?? '').toUpperCase() !== 'APPROVED') {
+          summary.template_pending += 1;
+        }
+      } catch (error) {
+        console.error('[plantao alert template bootstrap]', error);
+      }
+    }
+    return summary;
+  }
 
   const settingsCache = new Map<string, AlertSettings | null>();
   const channelCache = new Map<string, WhatsAppChannelRecord | null>();
