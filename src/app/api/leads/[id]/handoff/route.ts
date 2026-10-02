@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 
 function dueFromNow(minutes: number): string {
   return new Date(Date.now() + minutes * 60_000).toISOString();
@@ -8,6 +9,7 @@ function dueFromNow(minutes: number): string {
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const supabase = await createClient();
+  const admin = createAdminClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Sessão expirada.' }, { status: 401 });
 
@@ -173,7 +175,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const requesterProfile = Array.isArray(requesterProfileRaw) ? requesterProfileRaw[0] : requesterProfileRaw;
     const requesterName = String(requesterProfile?.full_name ?? '').trim() || 'Outro usuário';
 
-    const { data: existingNotification } = await supabase
+    const { data: existingNotification } = await admin
       .from('user_notifications')
       .select('id')
       .eq('user_id', ownerId)
@@ -201,9 +203,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       updated_at: now,
     };
     if (existingNotification?.id) {
-      await supabase.from('user_notifications').update(notificationPayload).eq('id', existingNotification.id);
+      await admin.from('user_notifications').update(notificationPayload).eq('id', existingNotification.id);
     } else {
-      await supabase.from('user_notifications').insert({ ...notificationPayload, created_at: now });
+      await admin.from('user_notifications').insert({ ...notificationPayload, created_at: now });
     }
   }
 
