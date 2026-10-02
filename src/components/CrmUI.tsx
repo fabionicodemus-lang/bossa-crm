@@ -722,12 +722,13 @@ function NotificationCenter() {
   }, []);
 
   useEffect(() => {
-    void load(true);
+    const initial = window.setTimeout(() => void load(true), 0);
     const timer = window.setInterval(() => void load(true), 15000);
     const refresh = () => void load(true);
     window.addEventListener("focus", refresh);
     window.addEventListener("crm:data-changed", refresh);
     return () => {
+      window.clearTimeout(initial);
       window.clearInterval(timer);
       window.removeEventListener("focus", refresh);
       window.removeEventListener("crm:data-changed", refresh);
@@ -736,12 +737,15 @@ function NotificationCenter() {
 
   useEffect(() => {
     if (!open) return;
-    void load();
+    const refresh = window.setTimeout(() => void load(), 0);
     const close = (event: MouseEvent) => {
       if (ref.current && !ref.current.contains(event.target as Node)) setOpen(false);
     };
     document.addEventListener("mousedown", close);
-    return () => document.removeEventListener("mousedown", close);
+    return () => {
+      window.clearTimeout(refresh);
+      document.removeEventListener("mousedown", close);
+    };
   }, [open, load]);
 
   async function accept(item: UserNotification) {
