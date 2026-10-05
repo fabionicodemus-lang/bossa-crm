@@ -79,6 +79,7 @@ export function AlmaSalesTableImporter({
   units: DevelopmentUnit[];
 }) {
   const supabase = useMemo(() => createClient(), []);
+  const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -94,10 +95,13 @@ export function AlmaSalesTableImporter({
   const exchangeCount = almaRows.filter((row) => row.sourceStatus === 'permutante').length;
   const availableVgv = almaRows.reduce((total, row) => total + (row.sourceStatus === 'disponivel' ? row.listPrice : 0), 0);
 
-  if (!canEdit || !alma) return null;
-  const almaId = alma.id;
+  if (!canEdit) return null;
 
   async function applyTable() {
+    if (!alma) {
+      setError('O empreendimento Alma não foi localizado no cadastro desta organização.');
+      return;
+    }
     if (missingRows.length > 0) {
       setError(`Não foi possível aplicar: faltam no cadastro as unidades ${missingRows.map((row) => row.unitCode).join(', ')}.`);
       return;
@@ -122,7 +126,7 @@ export function AlmaSalesTableImporter({
         return {
           id: unit.id,
           organization_id: organizationId,
-          development_id: almaId,
+          development_id: alma.id,
           typology_id: typology?.id ?? unit.typology_id,
           unit_code: unit.unit_code,
           floor: row.floor,
@@ -160,37 +164,66 @@ export function AlmaSalesTableImporter({
     }
   }
 
-  return <section className="card" style={{ marginBottom: 16 }}>
-    <div className="card-head">
-      <div>
-        <h3>Aplicar tabela de vendas do Alma</h3>
-        <small className="muted">Fonte: {SOURCE_FILE} · referência agosto/2026</small>
-      </div>
-      <span className="chip chip-orange">{almaRows.length} unidades</span>
-    </div>
-    <div className="card-body">
-      {error && <div className="error-box" style={{ marginBottom: 12 }}>{error}</div>}
-      {notice && <div className="success-box" style={{ marginBottom: 12 }}>{notice}</div>}
-      <div className="grid grid-4" style={{ marginBottom: 14 }}>
-        <div className="kpi"><div className="kpi-label">Disponíveis</div><div className="kpi-value">{availableCount}</div></div>
-        <div className="kpi"><div className="kpi-label">Reservadas</div><div className="kpi-value">{reservedCount}</div></div>
-        <div className="kpi"><div className="kpi-label">Permutantes</div><div className="kpi-value">{exchangeCount}</div></div>
-        <div className="kpi"><div className="kpi-label">VGV disponível</div><div className="kpi-value" style={{ fontSize: 18 }}>{money.format(availableVgv)}</div></div>
-      </div>
-      <p className="muted" style={{ margin: '0 0 12px' }}>
-        As unidades 2401 e 2901 serão mantidas como reservadas e com valores zerados. As unidades 501 e 502 não constam na planilha e permanecerão intactas.
-      </p>
-      {missingRows.length > 0 && <div className="error-box" style={{ marginBottom: 12 }}>
-        Unidades da planilha ainda não encontradas no cadastro: {missingRows.map((row) => row.unitCode).join(', ')}.
-      </div>}
-      <button
-        type="button"
-        className="btn btn-primary"
-        disabled={saving || missingRows.length > 0}
-        onClick={() => void applyTable()}
-      >
-        {saving ? 'Aplicando tabela…' : 'Aplicar valores na tabela do Alma'}
-      </button>
-    </div>
-  </section>;
+  return <div style={{ position: 'fixed', right: 20, bottom: 20, zIndex: 1200 }}>
+    {!open
+      ? <button
+          type="button"
+          className="btn btn-primary"
+          style={{ boxShadow: '0 12px 30px rgba(36, 30, 24, 0.28)' }}
+          onClick={() => {
+            setOpen(true);
+            setError('');
+            setNotice('');
+          }}
+        >
+          📊 Preencher tabela do Alma
+        </button>
+      : <section
+          className="card"
+          style={{
+            width: 'min(560px, calc(100vw - 32px))',
+            maxHeight: 'calc(100vh - 40px)',
+            overflowY: 'auto',
+            boxShadow: '0 20px 50px rgba(36, 30, 24, 0.32)',
+          }}
+        >
+          <div className="card-head">
+            <div>
+              <h3>Aplicar tabela de vendas do Alma</h3>
+              <small className="muted">Fonte: {SOURCE_FILE} · referência agosto/2026</small>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span className="chip chip-orange">{almaRows.length} unidades</span>
+              <button type="button" className="btn btn-ghost btn-sm" onClick={() => setOpen(false)}>Fechar</button>
+            </div>
+          </div>
+          <div className="card-body">
+            {error && <div className="error-box" style={{ marginBottom: 12 }}>{error}</div>}
+            {notice && <div className="success-box" style={{ marginBottom: 12 }}>{notice}</div>}
+            {!alma && <div className="error-box" style={{ marginBottom: 12 }}>
+              O empreendimento Alma não foi localizado no cadastro. O botão permanecerá bloqueado até o empreendimento ser identificado.
+            </div>}
+            <div className="grid grid-4" style={{ marginBottom: 14 }}>
+              <div className="kpi"><div className="kpi-label">Disponíveis</div><div className="kpi-value">{availableCount}</div></div>
+              <div className="kpi"><div className="kpi-label">Reservadas</div><div className="kpi-value">{reservedCount}</div></div>
+              <div className="kpi"><div className="kpi-label">Permutantes</div><div className="kpi-value">{exchangeCount}</div></div>
+              <div className="kpi"><div className="kpi-label">VGV disponível</div><div className="kpi-value" style={{ fontSize: 18 }}>{money.format(availableVgv)}</div></div>
+            </div>
+            <p className="muted" style={{ margin: '0 0 12px' }}>
+              As unidades 2401 e 2901 serão mantidas como reservadas e com valores zerados. As unidades 501 e 502 não constam na planilha e permanecerão intactas.
+            </p>
+            {alma && missingRows.length > 0 && <div className="error-box" style={{ marginBottom: 12 }}>
+              Unidades da planilha ainda não encontradas no cadastro: {missingRows.map((row) => row.unitCode).join(', ')}.
+            </div>}
+            <button
+              type="button"
+              className="btn btn-primary"
+              disabled={saving || !alma || missingRows.length > 0}
+              onClick={() => void applyTable()}
+            >
+              {saving ? 'Aplicando tabela…' : 'Aplicar valores na tabela do Alma'}
+            </button>
+          </div>
+        </section>}
+  </div>;
 }
