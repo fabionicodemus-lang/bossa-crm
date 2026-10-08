@@ -6,32 +6,58 @@ function numeric(value: unknown): number {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
-export async function recordAiUsage(args: {
+type UsageArgs = {
   admin: SupabaseClient;
   organizationId: string;
   leadId: string;
   records: AiUsageRecord[];
-}) {
+};
+
+/**
+ * Grava as chamadas em `ai_usage_logs` e mais nada. É o que as análises em
+ * segundo plano usam (conversa e desempenho do corretor, propostas/agenda,
+ * imagem, áudio).
+ *
+ * Não atualiza o lead de propósito: qualquer UPDATE em `leads` muda o
+ * `updated_at` (trigger), e a análise da conversa do corretor só salva o
+ * resultado se o `updated_at` não mudou. Mexer no lead aqui faria essa
+ * análise ser descartada e paga de novo no ciclo seguinte.
+ *
+ * Nunca lança erro: falhar em registrar o custo não pode derrubar a rotina.
+ */
+export async function recordAiUsageLog(args: UsageArgs): Promise<boolean> {
+  if (!args.records.length) return true;
+  try {
+    const { error } = await args.admin.from('ai_usage_logs').insert(args.records.map((item) => ({
+      organization_id: args.organizationId,
+      lead_id: args.leadId,
+      request_kind: item.request_kind,
+      model: item.model,
+      request_id: item.request_id,
+      input_tokens: item.input_tokens,
+      cached_tokens: item.cached_tokens,
+      cache_write_tokens: item.cache_write_tokens,
+      output_tokens: item.output_tokens,
+      reasoning_tokens: item.reasoning_tokens,
+      preflight_input_tokens: item.preflight_input_tokens,
+      preflight_estimated: item.preflight_estimated,
+      estimated_cost_usd: item.estimated_cost_usd,
+      fallback_used: item.fallback_used,
+      compacted: item.compacted,
+      long_context: item.long_context,
+    })));
+    if (error) console.error('[ai usage log]', args.records.map((item) => item.request_kind).join(','), error.message);
+    return !error;
+  } catch (error) {
+    console.error('[ai usage log]', error instanceof Error ? error.message : error);
+    return false;
+  }
+}
+
+/** Registro da Nara/Plantão: grava o log e soma o total no cartão do lead. */
+export async function recordAiUsage(args: UsageArgs) {
   if (!args.records.length) return;
-  const { error } = await args.admin.from('ai_usage_logs').insert(args.records.map((item) => ({
-    organization_id: args.organizationId,
-    lead_id: args.leadId,
-    request_kind: item.request_kind,
-    model: item.model,
-    request_id: item.request_id,
-    input_tokens: item.input_tokens,
-    cached_tokens: item.cached_tokens,
-    cache_write_tokens: item.cache_write_tokens,
-    output_tokens: item.output_tokens,
-    reasoning_tokens: item.reasoning_tokens,
-    preflight_input_tokens: item.preflight_input_tokens,
-    preflight_estimated: item.preflight_estimated,
-    estimated_cost_usd: item.estimated_cost_usd,
-    fallback_used: item.fallback_used,
-    compacted: item.compacted,
-    long_context: item.long_context,
-  })));
-  if (error) console.error('[ai usage log]', error.message);
+  await recordAiUsageLog(args);
 
   const { data: lead } = await args.admin.from('leads').select('metadata').eq('id', args.leadId).maybeSingle();
   const current = (lead?.metadata ?? {}) as Record<string, unknown>;

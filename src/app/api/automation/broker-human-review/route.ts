@@ -1,4 +1,7 @@
 import { NextResponse } from 'next/server';
+import type { AiUsageRecord } from '@/lib/ai';
+import { usageFromResponsesPayload } from '@/lib/ai-pricing';
+import { recordAiUsageLog } from '@/lib/ai-usage';
 import { createAdminClient } from '@/lib/supabase/admin';
 
 export const runtime = 'nodejs';
@@ -33,7 +36,7 @@ function outputText(payload: Record<string, unknown>) {
 async function analyzeConversation(input: {
   leadName: string; stage: string; messages: Array<{ direction: string; body: string }>;
   proposals: Array<{ status: string; proposal_number: number; updated_at: string }>;
-}): Promise<Review> {
+}, onUsage: (record: AiUsageRecord) => void): Promise<Review> {
   if (!process.env.OPENAI_API_KEY) throw new Error('OPENAI_API_KEY indisponível.');
   const schema = {
     type: 'object', additionalProperties: false,
@@ -60,6 +63,9 @@ async function analyzeConversation(input: {
   });
   const payload = await response.json().catch(() => ({})) as Record<string, unknown>;
   if (!response.ok) throw new Error(`OpenAI HTTP ${response.status}: ${String((payload.error as { message?: string } | undefined)?.message || 'falha')}`);
+  // A chamada já foi cobrada aqui, mesmo que a resposta seja descartada adiante.
+  const usage = usageFromResponsesPayload(payload, { requestKind: 'broker_review', fallbackModel: MODEL });
+  if (usage) onUsage(usage);
   const raw = outputText(payload);
   const review = JSON.parse(raw) as Partial<Review>;
   if (typeof review.summary !== 'string' || !review.summary.trim() || typeof review.next_action !== 'string' || !review.next_action.trim()
@@ -131,8 +137,15 @@ async function run() {
         body: String(item.body || '').replace(/^📱 WhatsApp Business:\s*/, '').slice(0, 700),
       }));
       if (!messages.some((item) => item.direction === 'equipe')) { skipped++; continue; }
-      const review = await analyzeConversation({ leadName: lead.name, stage: lead.stage, messages,
-        proposals: (proposals ?? []) as Array<{ status: string; proposal_number: number; updated_at: string }> });
+      const usage: AiUsageRecord[] = [];
+      let review: Review;
+      try {
+        review = await analyzeConversation({ leadName: lead.name, stage: lead.stage, messages,
+          proposals: (proposals ?? []) as Array<{ status: string; proposal_number: number; updated_at: string }> },
+        (record) => usage.push(record));
+      } finally {
+        await recordAiUsageLog({ admin, organizationId: lead.organization_id, leadId: lead.id, records: usage });
+      }
       const { data: latestNow } = await admin.from('messages').select('id')
         .eq('lead_id', lead.id).eq('whatsapp_channel_id', latest.whatsapp_channel_id)
         .in('sender_kind', ['lead', 'humano']).order('created_at', { ascending: false }).limit(1).maybeSingle();

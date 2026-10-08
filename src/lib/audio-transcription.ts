@@ -1,5 +1,8 @@
+import { usageFromTranscription } from './ai-pricing';
+
 type OpenAiTranscriptionResponse = {
   text?: string;
+  usage?: unknown;
   error?: { message?: string } | null;
 };
 
@@ -50,5 +53,6 @@ export async function transcribeAudio(input: {
 
   const text = String(data.text ?? '').trim();
   if (!text) throw new Error('A OpenAI não devolveu texto para o áudio recebido.');
-  return { text, model };
+  // `usage` é o consumo cobrado desta transcrição; quem chama grava em ai_usage_logs.
+  return { text, model, usage: usageFromTranscription(data.usage, model) };
 }
