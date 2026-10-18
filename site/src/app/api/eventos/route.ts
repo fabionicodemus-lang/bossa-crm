@@ -35,7 +35,7 @@ export async function POST(req: Request) {
   if (c.utm && typeof c.utm === "object") for (const [k, v] of Object.entries(c.utm as Record<string, unknown>)) if (/^(utm_\w+|fbclid|gclid)$/.test(k) && typeof v === "string") utm[k] = v.slice(0, 200);
 
   const db = banco();
-  if (!db) return new NextResponse(null, { status: 204 });
+  if (!db) { console.warn("[eventos] banco não configurado; evento não gravado"); return new NextResponse(null, { status: 204 }); }
 
   const pais = req.headers.get("x-vercel-ip-country") || null;
   const cidade = decodeURIComponent(req.headers.get("x-vercel-ip-city") || "") || null;
@@ -43,7 +43,7 @@ export async function POST(req: Request) {
   const visita = typeof c.visita === "number" ? Math.min(Math.max(1, Math.floor(c.visita)), 100000) : 1;
 
   // Visitante e sessão são criados/atualizados aqui; o evento entra em seguida.
-  await db.rpc("site_registrar_evento", {
+  const { error } = await db.rpc("site_registrar_evento", {
     p_visitante: visitante,
     p_sessao: sessao,
     p_visita: visita,
@@ -58,5 +58,6 @@ export async function POST(req: Request) {
     p_cidade: cidade,
     p_dispositivo: /Mobi|Android|iPhone/i.test(req.headers.get("user-agent") || "") ? "celular" : "computador",
   });
+  if (error) console.error("[eventos]", evento, error.message);
   return new NextResponse(null, { status: 204 });
 }
