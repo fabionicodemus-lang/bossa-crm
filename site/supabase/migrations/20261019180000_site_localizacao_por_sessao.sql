@@ -5,11 +5,8 @@ alter table public.site_sessions
   add column if not exists region text,
   add column if not exists city text;
 
--- A assinatura muda para incluir o estado/região. Remove a anterior para evitar
--- manter uma função de serviço obsoleta publicada em paralelo.
-drop function if exists public.site_registrar_evento(text, uuid, integer, text, jsonb, text, text, jsonb, text, text, text, text, text);
-
-create function public.site_registrar_evento(
+-- Mantém a assinatura anterior funcionando durante a transição do deploy.
+create or replace function public.site_registrar_evento(
   p_visitante text, p_sessao uuid, p_visita integer, p_evento text, p_detalhe jsonb,
   p_pagina text, p_referencia text, p_utm jsonb, p_tela text, p_idioma text,
   p_pais text, p_estado text, p_cidade text, p_dispositivo text
