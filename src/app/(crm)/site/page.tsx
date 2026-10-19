@@ -54,8 +54,8 @@ const num = (n: number) => n.toLocaleString('pt-BR');
 const media = (xs: number[]) => (xs.length ? xs.reduce((s, x) => s + x, 0) / xs.length : 0);
 const fmt1 = (n: number) => n.toLocaleString('pt-BR', { maximumFractionDigits: 1 });
 
-function ComparativoHistorico({ atual, referencia, percentual = false }: { atual: number; referencia: number | null; percentual?: boolean }) {
-  const variacao = referencia !== null && referencia > 0 ? (atual / referencia - 1) * 100 : null;
+function ComparativoHistorico({ atual, referencia, percentual = false }: { atual: number | null; referencia: number | null; percentual?: boolean }) {
+  const variacao = atual !== null && referencia !== null && referencia > 0 ? (atual / referencia - 1) * 100 : null;
   const referenciaTxt = referencia === null ? '—' : `${fmt1(referencia)}${percentual ? '%' : ''}`;
   const cor = variacao === null || Math.abs(variacao) < 0.05 ? 'var(--ink-3)' : variacao > 0 ? 'var(--green)' : 'var(--red)';
   const diferenca = variacao === null ? 'sem comparação' : `${variacao > 0 ? '+' : ''}${fmt1(variacao)}%`;
@@ -134,10 +134,11 @@ export default async function SitePage({ searchParams }: { searchParams: Promise
       admin.from('site_visitors').select('code', { count: 'exact', head: true }),
       admin.from('site_visitors').select('first_seen_at').order('first_seen_at', { ascending: true }).limit(1).maybeSingle(),
     ]);
-    if (totalHistorico.error) throw totalHistorico.error;
-    if (primeiraVisita.error) throw primeiraVisita.error;
-    totalVisitantesSite = totalHistorico.count ?? 0;
-    primeiraVisitaSite = primeiraVisita.data?.first_seen_at ?? null;
+    // Falhas no benchmark não podem impedir a leitura dos números principais.
+    if (!totalHistorico.error && !primeiraVisita.error) {
+      totalVisitantesSite = totalHistorico.count ?? 0;
+      primeiraVisitaSite = primeiraVisita.data?.first_seen_at ?? null;
+    }
 
     const ids = [...new Set(ligacoes.map((l) => l.lead_id))];
     for (let i = 0; i < ids.length; i += 200) {
@@ -193,7 +194,7 @@ export default async function SitePage({ searchParams }: { searchParams: Promise
   const mediaVisitantes = historicoSuficiente ? totalVisitantesSite! * dias / diasHistoricos : null;
   const mediaLeads = historicoSuficiente ? todasLig.length * dias / diasHistoricos : null;
   const mediaConversao = historicoSuficiente ? todasLig.length / totalVisitantesSite! * 100 : null;
-  const conversaoAtual = visitantes.size > 0 ? leadsPeriodo.length / visitantes.size * 100 : 0;
+  const conversaoAtual = visitantes.size > 0 ? leadsPeriodo.length / visitantes.size * 100 : null;
 
   const funil = [
     { t: 'Visitantes', n: visitantes.size, nota: 'pessoas diferentes no site' },
