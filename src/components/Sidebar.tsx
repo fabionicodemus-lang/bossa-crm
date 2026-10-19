@@ -17,6 +17,7 @@ import {
   Sparkles,
   Settings,
   Moon,
+  Globe,
   Sun,
 } from "lucide-react";
 import type { UserContext } from "@/lib/types";
@@ -85,6 +86,13 @@ const links = [
     label: "Gestão",
     icon: ChartNoAxesCombined,
     paths: ["/gestao", "/dashboard"],
+  },
+  {
+    href: "/site",
+    label: "Site",
+    icon: Globe,
+    paths: ["/site"],
+    restricted: true,
   },
   {
     href: "/nara",

@@ -1153,6 +1153,21 @@ async function persistInboundMessage(args: {
     updated_at: new Date().toISOString(),
   }).eq('id', lead.id);
 
+  // Site: a mensagem pronta do site termina com "(ref. CODIGO)". Liga o código de
+  // visita a este lead para o painel /site. Nunca pode atrasar nem quebrar a Nara.
+  if (/\(ref\.\s*[A-Z2-9]{4,8}\)/.test(body)) {
+    try {
+      const { error: siteError } = await args.admin.rpc('site_vincular_whatsapp', {
+        p_organizacao: args.channel.organization_id,
+        p_lead: lead.id,
+        p_mensagem: body,
+      });
+      if (siteError) console.warn('[site ref]', lead.id, siteError.message);
+    } catch (siteError) {
+      console.warn('[site ref]', lead.id, siteError);
+    }
+  }
+
   return {
     channel: args.channel,
     conversation,
