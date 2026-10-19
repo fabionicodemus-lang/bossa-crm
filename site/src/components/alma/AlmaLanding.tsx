@@ -22,7 +22,7 @@ const SABADO = [
   { hora: "7h", titulo: "Espaço Vitalidade", texto: "O dia começa devagar, com yoga ou um treino funcional entre plantas e luz natural.", fotos: [["yoga", "Espaço Vitalidade, para yoga e treino funcional, com luz natural"]], chips: ["Yoga", "Funcional"] },
   { hora: "8h", titulo: "Academia panorâmica", texto: "Do alto, a academia enxerga o pavimento inteiro: os jardins, a piscina, o movimento lento da manhã.", fotos: [["academia", "Academia panorâmica do Alma com vista para os jardins e a piscina"]], chips: ["Academia panorâmica"] },
   { hora: "10h", titulo: "A piscina aquecida", texto: "O coração do Alma. Uma piscina de formato orgânico, aquecida, com prainha revestida em areia Bora Bora da Crystal Pool, hidromassagem e jardins em volta. Água morna o ano inteiro, como uma praia particular.", fotos: [["piscina", "Piscina aquecida de formato orgânico do Alma, com prainha e jardins"], ["gourmet-piscina", "Prainha da piscina com espreguiçadeiras e o gourmet ao lado"]], chips: ["Piscina aquecida", "Prainha", "Hidromassagem", "Garden solarium"] },
-  { hora: "13h", titulo: "Gourmet ao lado da piscina", texto: "A churrasqueira fica a poucos passos da água. Os amigos chegam de roupa de banho e a conversa não precisa mudar de lugar.", fotos: [["gourmet", "Espaço gourmet com churrasqueira, ao lado da piscina do Alma"]], chips: ["Gourmet com churrasqueira"] },
+  { hora: "13h", titulo: "Gourmet ao lado da piscina", texto: "A churrasqueira fica a poucos passos da água. Os amigos chegam de roupa de banho e a conversa não precisa mudar de lugar.", fotos: [["gourmet-piscina-noite", "Gourmet da piscina ao entardecer, com mesas, bar e o mar ao fundo"]], chips: ["Gourmet com churrasqueira"] },
   { hora: "16h", titulo: "Casa da Árvore", texto: "As crianças sobem na casa da árvore, no playground entre os jardins. O pet place fica ali perto.", fotos: [["playground-2", "Jardim do pavimento de lazer com a Casa da Árvore ao fundo"]], chips: ["Playground Casa da Árvore", "Pet place"] },
   { hora: "18h", titulo: "Casa de banho", texto: "O sábado termina num ritual: a casa de banho sensorial, com banheiras, e a sauna seca. É o spa da sua casa na praia.", fotos: [["casa-de-banho", "Casa de banho sensorial do Alma, com banheiras"], ["sauna", "Sauna seca do Alma"]], chips: ["Casa de banho", "Banheiras", "Sauna seca"] },
 ] as const;
@@ -151,12 +151,16 @@ export function AlmaLanding({ e, plantaInicial }: { e: Empreendimento; plantaIni
               <h2 className="al-h2">De chinelo, toalha no ombro, <span className="al-mao">quatro minutos</span>.</h2>
               <p className="al-p">Gravamos o caminho de verdade, da calçada do Alma até a areia do Perequê. Na volta, a entrada exclusiva de banhistas tem ducha e lava-pés, e cada apartamento tem seu box de praia para guardar cadeira, guarda-sol e prancha.</p>
             </div>
-            <div className="al-trilha" aria-hidden="true" />
-            <ol className="al-passos">
-              <li className="al-surge"><div className="al-foto"><Image src={`${IMG}/trajeto-porta.jpg`} alt="Esquina do Alma Seahouses, ponto de partida até a praia" fill sizes="(max-width: 700px) 100vw, 22vw" /></div><b>0 m</b><span>A porta do Alma, na Rua Wilson Belber</span></li>
-              <li className="al-surge"><div className="al-foto"><Image src={`${IMG}/trajeto-avenida.jpg`} alt="Travessia da Avenida Senador Atílio Fontana a caminho da praia" fill sizes="(max-width: 700px) 100vw, 22vw" /></div><b>Av. Atílio Fontana</b><span>Pela Rua Felix Walendowsky até a avenida</span></li>
-              <li className="al-surge"><div className="al-foto"><Image src={`${IMG}/trajeto-praia.jpg`} alt="Chegada à areia da Praia do Perequê" fill sizes="(max-width: 700px) 100vw, 22vw" /></div><b>300 m</b><span>A areia da Praia do Perequê</span></li>
-            </ol>
+            <div className="al-mapa al-surge">
+              <iframe
+                title="Mapa: Alma Seahouses, Rua Wilson Belber, 316, Balneário Perequê, Porto Belo"
+                src="https://maps.google.com/maps?q=Rua%20Wilson%20Belber%2C%20316%2C%20Balne%C3%A1rio%20Pereque%2C%20Porto%20Belo%20-%20SC&z=16&output=embed"
+                loading="lazy" referrerPolicy="no-referrer-when-downgrade" />
+            </div>
+            <div className="al-acoes al-surge">
+              <span className="al-selo" style={{ borderColor: "rgba(233,230,223,.45)" }}>300 m · cerca de 4 minutos a pé</span>
+              <LinkRastreado externo className="al-bt al-bt--linha" evento="click_route" detalhe={{ empreendimento: e.slug }} href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent("Praia do Perequê, Porto Belo - SC")}&origin=${encodeURIComponent(`${e.endereco}, ${e.bairro}, ${e.cidade} - SC`)}&travelmode=walking`}>Ver o caminho a pé</LinkRastreado>
+            </div>
           </div>
           <div className="al-surge" style={{ maxWidth: 360, width: "100%", justifySelf: "center" }}>
             <VideoVertical src={`${VID}/trajeto.mp4`} poster={`${IMG}/poster-trajeto.jpg`} nome="Do Alma até a praia" legenda="O caminho real · 1min04" video="trajeto-praia" />
@@ -209,10 +213,11 @@ export function AlmaLanding({ e, plantaInicial }: { e: Empreendimento; plantaIni
               <p className="al-p">Num jantar maior, salão, Jantar Jardim, Wine Bar e terraço viram um espaço só, ao ar livre, com a região inteira em volta.</p>
             </div>
             <div className="al-mosaico">
-              <div className="al-foto al-suave al-surge" style={{ minHeight: 380 }}><Image src={`${IMG}/jantar-jardim.jpg`} alt="Jantar Jardim no rooftop do Alma, com mesa longa entre plantas" fill sizes="(max-width: 860px) 100vw, 40vw" /><span className="al-legenda">Jantar Jardim</span></div>
+              <div className="al-foto al-suave al-surge" style={{ minHeight: 420 }}><Image src={`${IMG}/gourmet.jpg`} alt="Salão de festas do rooftop, com pé-direito duplo, mesas de madeira e vista para a cidade" fill sizes="(max-width: 860px) 100vw, 40vw" /><span className="al-legenda">Salão de festas</span></div>
               <div className="al-foto al-suave al-r-4-5 al-surge"><Image src={`${IMG}/pub.jpg`} alt="Pub View com pé-direito duplo no rooftop" fill sizes="(max-width: 860px) 100vw, 30vw" /><span className="al-legenda">Pub View</span></div>
               <div className="al-foto al-suave al-r-4-5 al-surge"><Image src={`${IMG}/brinquedoteca.jpg`} alt="Brinquedoteca Floresta Encantada" fill sizes="(max-width: 860px) 100vw, 30vw" /><span className="al-legenda">Brinquedoteca Floresta Encantada</span></div>
-              <div className="al-foto al-suave al-r-16-9 al-surge" style={{ gridColumn: "span 2" }}><Image src={`${IMG}/planta-rooftop.jpg`} alt="Planta humanizada do rooftop do Alma" fill sizes="(max-width: 860px) 100vw, 60vw" style={{ objectFit: "contain", background: "#fff" }} /><span className="al-legenda" style={{ color: "var(--sal-noite)", textShadow: "none" }}>Planta do rooftop</span></div>
+              <div className="al-foto al-suave al-r-4-5 al-surge"><Image src={`${IMG}/jantar-jardim.jpg`} alt="Jantar Jardim no rooftop do Alma, com mesa longa entre plantas" fill sizes="(max-width: 860px) 100vw, 30vw" /><span className="al-legenda">Jantar Jardim</span></div>
+              <div className="al-foto al-suave al-r-4-5 al-surge" style={{ background: "#fff" }}><Image src={`${IMG}/planta-rooftop.jpg`} alt="Planta humanizada do rooftop do Alma" fill sizes="(max-width: 860px) 100vw, 30vw" style={{ objectFit: "contain" }} /><span className="al-legenda" style={{ color: "var(--sal-noite)", textShadow: "none" }}>Planta do rooftop</span></div>
             </div>
             <ul className="al-chips" style={{ marginTop: 28 }}><li>Salão de festas</li><li>Jantar Jardim</li><li>Pub View</li><li>Wine Bar</li><li>Fire Place</li><li>Lounge das Pedras</li><li>Brinquedoteca</li></ul>
           </div>
