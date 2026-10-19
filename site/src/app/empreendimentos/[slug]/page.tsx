@@ -3,6 +3,7 @@ import { empreendimentos, getEmpreendimento } from "@/content/empreendimentos";
 import { meta } from "@/lib/seo";
 import { PaginaEmpreendimento } from "@/components/PaginaEmpreendimento";
 import { FlowLanding } from "@/components/flow/FlowLanding";
+import { AlmaLanding } from "@/components/alma/AlmaLanding";
 import { PaginaEntregue } from "@/components/PaginaEntregue";
 
 export const dynamicParams = false;
@@ -18,5 +19,6 @@ export default async function Pagina({ params }: { params: Promise<{ slug: strin
   const e = getEmpreendimento((await params).slug);
   if (!e) notFound();
   if (e.slug === "flow-aptos") return <FlowLanding e={e} />;
+  if (e.slug === "alma-seahouses") return <AlmaLanding e={e} />;
   return e.status === "obra" ? <PaginaEmpreendimento e={e} /> : <PaginaEntregue e={e} />;
 }
