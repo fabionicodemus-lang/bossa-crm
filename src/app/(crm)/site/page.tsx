@@ -47,6 +47,7 @@ async function todas<T>(consulta: (de: number, ate: number) => PromiseLike<{ dat
 
 // Fora do componente: a regra de pureza do React não aceita Date.now() no corpo da página.
 function inicioDoPeriodo(dias: number) { return new Date(Date.now() - dias * DAY).toISOString(); }
+function diasDesde(iso: string) { return Math.max(0, (Date.now() - new Date(iso).getTime()) / DAY); }
 
 const pct = (a: number, b: number) => (b > 0 ? `${((a / b) * 100).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%` : '—');
 const num = (n: number) => n.toLocaleString('pt-BR');
@@ -187,9 +188,7 @@ export default async function SitePage({ searchParams }: { searchParams: Promise
   // A referência é todo o histórico desde a primeira visita, normalizado
   // para o filtro (7, 30, 90 ou 365 dias). Com menos histórico que a janela,
   // evitamos comparar um intervalo incompleto com uma janela inteira.
-  const diasHistoricos = primeiraVisitaSite
-    ? Math.max(0, (Date.now() - new Date(primeiraVisitaSite).getTime()) / DAY)
-    : 0;
+  const diasHistoricos = primeiraVisitaSite ? diasDesde(primeiraVisitaSite) : 0;
   const historicoSuficiente = totalVisitantesSite !== null && totalVisitantesSite > 0 && diasHistoricos >= dias;
   const mediaVisitantes = historicoSuficiente ? totalVisitantesSite! * dias / diasHistoricos : null;
   const mediaLeads = historicoSuficiente ? todasLig.length * dias / diasHistoricos : null;
