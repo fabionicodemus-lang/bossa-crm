@@ -47,11 +47,27 @@ async function todas<T>(consulta: (de: number, ate: number) => PromiseLike<{ dat
 
 // Fora do componente: a regra de pureza do React não aceita Date.now() no corpo da página.
 function inicioDoPeriodo(dias: number) { return new Date(Date.now() - dias * DAY).toISOString(); }
+function diasDesde(iso: string) { return Math.max(0, (Date.now() - new Date(iso).getTime()) / DAY); }
 
 const pct = (a: number, b: number) => (b > 0 ? `${((a / b) * 100).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%` : '—');
 const num = (n: number) => n.toLocaleString('pt-BR');
 const media = (xs: number[]) => (xs.length ? xs.reduce((s, x) => s + x, 0) / xs.length : 0);
 const fmt1 = (n: number) => n.toLocaleString('pt-BR', { maximumFractionDigits: 1 });
+
+function ComparativoHistorico({ atual, referencia, percentual = false }: { atual: number | null; referencia: number | null; percentual?: boolean }) {
+  const variacao = atual !== null && referencia !== null && referencia > 0 ? (atual / referencia - 1) * 100 : null;
+  const referenciaTxt = referencia === null ? '—' : `${fmt1(referencia)}${percentual ? '%' : ''}`;
+  const cor = variacao === null || Math.abs(variacao) < 0.05 ? 'var(--ink-3)' : variacao > 0 ? 'var(--green)' : 'var(--red)';
+  const diferenca = variacao === null ? 'sem comparação' : `${variacao > 0 ? '+' : ''}${fmt1(variacao)}%`;
+  return (
+    <div className="kpi-note" style={{ display: 'flex', alignItems: 'baseline', flexWrap: 'wrap', gap: 8 }}>
+      <span>Média histórica: {referenciaTxt}</span>
+      <span style={{ color: cor, fontWeight: 700 }} title="Diferença relativa à média histórica do site para o mesmo intervalo">
+        {variacao === null ? 'sem comparação' : `${variacao > 0 ? '↑ ' : variacao < 0 ? '↓ ' : ''}${diferenca}`}
+      </span>
+    </div>
+  );
+}
 
 function origem(s: Sessao): string {
   const u = s.utm ?? {};
@@ -103,6 +119,8 @@ export default async function SitePage({ searchParams }: { searchParams: Promise
   const admin = createAdminClient();
 
   let erro: string | null = null;
+  let totalVisitantesSite: number | null = null;
+  let primeiraVisitaSite: string | null = null;
   let sessoes: Sessao[] = [], eventos: Evento[] = [], ligacoes: Ligacao[] = [];
   const leads: LeadInfo[] = [], marcos: Marco[] = [], comport: Comportamento[] = [];
   try {
@@ -111,6 +129,17 @@ export default async function SitePage({ searchParams }: { searchParams: Promise
       todas<Evento>((a, b) => admin.from('site_events').select('visitor_code,name,props,page,created_at').gte('created_at', inicio).neq('name', 'scroll_depth').order('id').range(a, b)),
       todas<Ligacao>((a, b) => admin.from('lead_site_links').select('lead_id,visitor_code,method,linked_at').eq('organization_id', orgId).order('linked_at', { ascending: false }).range(a, b)),
     ]);
+    // Consultas leves para a média histórica, sem baixar todos os acessos do site.
+    const [totalHistorico, primeiraVisita] = await Promise.all([
+      admin.from('site_visitors').select('code', { count: 'exact', head: true }),
+      admin.from('site_visitors').select('first_seen_at').order('first_seen_at', { ascending: true }).limit(1).maybeSingle(),
+    ]);
+    // Falhas no benchmark não podem impedir a leitura dos números principais.
+    if (!totalHistorico.error && !primeiraVisita.error) {
+      totalVisitantesSite = totalHistorico.count ?? 0;
+      primeiraVisitaSite = primeiraVisita.data?.first_seen_at ?? null;
+    }
+
     const ids = [...new Set(ligacoes.map((l) => l.lead_id))];
     for (let i = 0; i < ids.length; i += 200) {
       const lote = ids.slice(i, i + 200);
@@ -156,6 +185,16 @@ export default async function SitePage({ searchParams }: { searchParams: Promise
   const todasLig = [...primeiraLig.values()].filter((l) => clientes(l.lead_id));
   const vendasTotal = todasLig.filter((l) => { const w = marcoPor.get(l.lead_id)?.won_at; return w && w >= l.linked_at.slice(0, 10); }).length;
   const corretoresPeriodo = [...primeiraLig.values()].filter((l) => l.linked_at >= inicio && !clientes(l.lead_id)).length;
+
+  // A referência é todo o histórico desde a primeira visita, normalizado
+  // para o filtro (7, 30, 90 ou 365 dias). Com menos histórico que a janela,
+  // evitamos comparar um intervalo incompleto com uma janela inteira.
+  const diasHistoricos = primeiraVisitaSite ? diasDesde(primeiraVisitaSite) : 0;
+  const historicoSuficiente = totalVisitantesSite !== null && totalVisitantesSite > 0 && diasHistoricos >= dias;
+  const mediaVisitantes = historicoSuficiente ? totalVisitantesSite! * dias / diasHistoricos : null;
+  const mediaLeads = historicoSuficiente ? todasLig.length * dias / diasHistoricos : null;
+  const mediaConversao = historicoSuficiente ? todasLig.length / totalVisitantesSite! * 100 : null;
+  const conversaoAtual = visitantes.size > 0 ? leadsPeriodo.length / visitantes.size * 100 : null;
 
   const funil = [
     { t: 'Visitantes', n: visitantes.size, nota: 'pessoas diferentes no site' },
@@ -248,9 +287,13 @@ export default async function SitePage({ searchParams }: { searchParams: Promise
 
         <div className="kpis">
           <div className="kpi"><div className="kpi-label">Vendas com participação do site</div><div className="kpi-value">{num(vendasTotal)}</div><div className="kpi-note">desde o início · lead passou pelo site antes de comprar</div></div>
-          <div className="kpi"><div className="kpi-label">Leads vindos do site</div><div className="kpi-value">{num(leadsPeriodo.length)}</div><div className="kpi-note">{periodoTxt}{corretoresPeriodo ? ` · + ${corretoresPeriodo} corretores` : ''}</div></div>
-          <div className="kpi"><div className="kpi-label">Visitantes</div><div className="kpi-value">{num(visitantes.size)}</div><div className="kpi-note">{num(sessoes.length)} visitas · {num(recorrentes.size)} voltaram</div></div>
-          <div className="kpi"><div className="kpi-label">Conversão visitante → lead</div><div className="kpi-value">{pct(leadsPeriodo.length, visitantes.size)}</div><div className="kpi-note">{periodoTxt}</div></div>
+          <div className="kpi"><div className="kpi-label">Leads vindos do site</div><div className="kpi-value">{num(leadsPeriodo.length)}</div><div className="kpi-note">{periodoTxt}{corretoresPeriodo ? ` · + ${corretoresPeriodo} corretores` : ''}</div><ComparativoHistorico atual={leadsPeriodo.length} referencia={mediaLeads} /></div>
+          <div className="kpi"><div className="kpi-label">Visitantes</div><div className="kpi-value">{num(visitantes.size)}</div><div className="kpi-note">{num(sessoes.length)} visitas · {num(recorrentes.size)} voltaram</div><ComparativoHistorico atual={visitantes.size} referencia={mediaVisitantes} /></div>
+          <div className="kpi"><div className="kpi-label">Conversão visitante → lead</div><div className="kpi-value">{pct(leadsPeriodo.length, visitantes.size)}</div><div className="kpi-note">{periodoTxt}</div><ComparativoHistorico atual={conversaoAtual} referencia={mediaConversao} percentual /></div>
+        </div>
+        <div className="muted" style={{ fontSize: 11, margin: '-2px 0 14px' }}>
+          Comparativos: variação sobre a média de todo o histórico do site, proporcional a {periodoTxt}. Na conversão, comparamos as taxas.
+          {!historicoSuficiente && !erro ? ` A comparação ficará disponível após ${periodoTxt} completos de medição.` : ''}
         </div>
 
         <section className="card" style={{ marginBottom: 14 }}>
