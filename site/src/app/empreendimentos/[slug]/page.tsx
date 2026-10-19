@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { empreendimentos, getEmpreendimento } from "@/content/empreendimentos";
 import { meta } from "@/lib/seo";
 import { PaginaEmpreendimento } from "@/components/PaginaEmpreendimento";
+import { FlowLanding } from "@/components/flow/FlowLanding";
 import { PaginaEntregue } from "@/components/PaginaEntregue";
 
 export const dynamicParams = false;
@@ -16,5 +17,6 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
 export default async function Pagina({ params }: { params: Promise<{ slug: string }> }) {
   const e = getEmpreendimento((await params).slug);
   if (!e) notFound();
+  if (e.slug === "flow-aptos") return <FlowLanding e={e} />;
   return e.status === "obra" ? <PaginaEmpreendimento e={e} /> : <PaginaEntregue e={e} />;
 }
