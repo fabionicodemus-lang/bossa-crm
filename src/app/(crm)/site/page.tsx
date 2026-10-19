@@ -11,7 +11,7 @@ import type { LeadKind } from '@/lib/types';
 // Lê as tabelas site_* e lead_site_links, criadas pela migração do site, e cruza
 // com os marcos do funil do CRM (lead_funnel_milestones).
 
-type Sessao = { visitor_code: string; utm: Record<string, string> | null; referrer: string | null; entry_page: string | null; visit_number: number; started_at: string };
+type Sessao = { visitor_code: string; utm: Record<string, string> | null; referrer: string | null; entry_page: string | null; visit_number: number; started_at: string; city: string | null; region: string | null; country: string | null };
 type Evento = { visitor_code: string; name: string; props: Record<string, unknown> | null; page: string | null; created_at: string };
 type Ligacao = { lead_id: string; visitor_code: string; method: string; linked_at: string };
 type LeadInfo = { id: string; name: string | null; kind: LeadKind; stage: string; enterprise: string | null; created_at: string };
@@ -70,6 +70,24 @@ function origem(s: Sessao): string {
   } catch { return 'Direto'; }
 }
 
+const REGIOES_BR: Record<string, string> = {
+  AC: 'Acre', AL: 'Alagoas', AP: 'Amapá', AM: 'Amazonas', BA: 'Bahia', CE: 'Ceará', DF: 'Distrito Federal',
+  ES: 'Espírito Santo', GO: 'Goiás', MA: 'Maranhão', MT: 'Mato Grosso', MS: 'Mato Grosso do Sul',
+  MG: 'Minas Gerais', PA: 'Pará', PB: 'Paraíba', PR: 'Paraná', PE: 'Pernambuco', PI: 'Piauí',
+  RJ: 'Rio de Janeiro', RN: 'Rio Grande do Norte', RS: 'Rio Grande do Sul', RO: 'Rondônia',
+  RR: 'Roraima', SC: 'Santa Catarina', SP: 'São Paulo', SE: 'Sergipe', TO: 'Tocantins',
+};
+function localizacao(s: Sessao): string {
+  const cidade = s.city?.trim();
+  const codigoRegiao = s.region?.trim().replace(/^BR-/, '').toUpperCase();
+  const estado = codigoRegiao ? (REGIOES_BR[codigoRegiao] ?? s.region?.trim()) : null;
+  let pais = s.country?.trim() ?? null;
+  if (pais && /^[A-Z]{2}$/.test(pais)) {
+    try { pais = new Intl.DisplayNames(['pt-BR'], { type: 'region' }).of(pais) ?? pais; } catch { /* mantém o código recebido */ }
+  }
+  return [cidade, estado, pais].filter(Boolean).join(' · ') || 'Localização não identificada';
+}
+
 function Barra({ valor, max, cor = 'var(--ink)' }: { valor: number; max: number; cor?: string }) {
   const w = max > 0 ? Math.max(2, Math.round((valor / max) * 100)) : 0;
   return <span aria-hidden="true" style={{ display: 'block', height: 6, borderRadius: 3, background: 'var(--sunken)', overflow: 'hidden' }}><span style={{ display: 'block', height: '100%', width: `${w}%`, background: cor }} /></span>;
@@ -89,7 +107,7 @@ export default async function SitePage({ searchParams }: { searchParams: Promise
   const leads: LeadInfo[] = [], marcos: Marco[] = [], comport: Comportamento[] = [];
   try {
     [sessoes, eventos, ligacoes] = await Promise.all([
-      todas<Sessao>((a, b) => admin.from('site_sessions').select('visitor_code,utm,referrer,entry_page,visit_number,started_at').gte('started_at', inicio).order('started_at').range(a, b)),
+      todas<Sessao>((a, b) => admin.from('site_sessions').select('visitor_code,utm,referrer,entry_page,visit_number,started_at,city,region,country').gte('started_at', inicio).order('started_at').range(a, b)),
       todas<Evento>((a, b) => admin.from('site_events').select('visitor_code,name,props,page,created_at').gte('created_at', inicio).neq('name', 'scroll_depth').order('id').range(a, b)),
       todas<Ligacao>((a, b) => admin.from('lead_site_links').select('lead_id,visitor_code,method,linked_at').eq('organization_id', orgId).order('linked_at', { ascending: false }).range(a, b)),
     ]);
@@ -184,6 +202,18 @@ export default async function SitePage({ searchParams }: { searchParams: Promise
     if (visitantesLigados.has(s.visitor_code)) origens.get(o)!.l.add(s.visitor_code);
   }
   const listaOrigens = [...origens.entries()].map(([o, x]) => ({ o, v: x.v.size, l: x.l.size })).sort((a, b) => b.v - a.v).slice(0, 10);
+  const porLocal = new Map<string, { acessos: number; visitantes: Set<string> }>();
+  for (const s of sessoes) {
+    const nome = localizacao(s);
+    if (!porLocal.has(nome)) porLocal.set(nome, { acessos: 0, visitantes: new Set() });
+    const local = porLocal.get(nome)!;
+    local.acessos += 1;
+    local.visitantes.add(s.visitor_code);
+  }
+  const listaLocais = [...porLocal.entries()]
+    .map(([nome, dados]) => ({ nome, acessos: dados.acessos, visitantes: dados.visitantes.size }))
+    .sort((a, b) => b.acessos - a.acessos)
+    .slice(0, 15);
 
   // Conteúdo
   const plantas = new Map<string, number>();
@@ -277,6 +307,19 @@ export default async function SitePage({ searchParams }: { searchParams: Promise
             </div>
           </section>
         </div>
+
+        <section className="card" style={{ marginBottom: 14 }}>
+          <div className="card-head"><h3>Acessos por localização</h3><span className="muted">{periodoTxt}</span></div>
+          <div className="card-body">
+            {listaLocais.length === 0 ? <div className="muted">Sem visitas no período.</div> : (
+              <div className="table-wrap"><table>
+                <thead><tr><th>Cidade · Estado · País</th><th style={{ textAlign: 'right' }}>Acessos</th><th style={{ textAlign: 'right' }}>Visitantes</th></tr></thead>
+                <tbody>{listaLocais.map((l) => <tr key={l.nome}><td>{l.nome}</td><td style={{ textAlign: 'right' }}>{num(l.acessos)}</td><td style={{ textAlign: 'right' }}>{num(l.visitantes)}</td></tr>)}</tbody>
+              </table></div>
+            )}
+            <div className="muted" style={{ marginTop: 10, fontSize: 11 }}>A localização é estimada pela conexão e depende dos dados fornecidos pela Vercel. Visitas anteriores à ativação podem aparecer como não identificadas.</div>
+          </div>
+        </section>
 
         <section className="card" style={{ marginBottom: 14 }}>
           <div className="card-head"><h3>O que as pessoas fazem no site</h3><span className="muted">pessoas diferentes · {periodoTxt}</span></div>

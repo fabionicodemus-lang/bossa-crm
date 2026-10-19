@@ -39,6 +39,7 @@ export async function POST(req: Request) {
 
   const pais = req.headers.get("x-vercel-ip-country") || null;
   const cidade = decodeURIComponent(req.headers.get("x-vercel-ip-city") || "") || null;
+  const estado = req.headers.get("x-vercel-ip-country-region") || null;
   const sessao = typeof c.sessao === "string" && /^[0-9a-f-]{36}$/i.test(c.sessao) ? c.sessao : null;
   const visita = typeof c.visita === "number" ? Math.min(Math.max(1, Math.floor(c.visita)), 100000) : 1;
 
@@ -55,6 +56,7 @@ export async function POST(req: Request) {
     p_tela: limpar(c.tela, 20),
     p_idioma: limpar(c.idioma, 20),
     p_pais: pais,
+    p_estado: estado,
     p_cidade: cidade,
     p_dispositivo: /Mobi|Android|iPhone/i.test(req.headers.get("user-agent") || "") ? "celular" : "computador",
   });
