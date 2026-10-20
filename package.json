@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "npm run test:ai-model-routing && npm run test:nara-language && next build",
+    "build": "npm run test:ai-model-routing && npm run test:nara-language && npm run test:nara-round3 && npm run test:nara-phase10 && next build",
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
