@@ -23,6 +23,7 @@ assert.doesNotMatch(naraLayer, /Sua ordem obrigatória é/);
 assert.doesNotMatch(naraLayer, /ETAPA 1 — TRIAGEM OBRIGATÓRIA/);
 assert.doesNotMatch(naraLayer, /ETAPA 2 — QUALIFICAÇÃO/);
 assert.doesNotMatch(naraLayer, /Use no máximo duas frases curtas/);
-assert.match(plantaoLayer, /Use no máximo duas frases curtas e uma pergunta por mensagem/);
+assert.match(plantaoLayer, /Mensagens curtas de WhatsApp e no máximo uma pergunta por mensagem/);
+assert.match(plantaoLayer, /CLIENTE OU PROPOSTA VÃO PARA A TAÍS NA HORA/);
 
 console.log('Camada fixa da Nara validada sem sequência rígida nem limite duplicado.');

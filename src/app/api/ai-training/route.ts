@@ -113,7 +113,8 @@ function normalizeConfig(agent: Agent, value: unknown): AgentConfig {
     : Object.fromEntries(
         Object.entries(knowledgeInput)
           .slice(0, 30)
-          .map(([key, item]) => [key.slice(0, 80), String(item ?? '').slice(0, 10000)]),
+          // O Prompt final do Plantão pode ser longo (mesmo limite da Nara); os demais itens seguem curtos.
+          .map(([key, item]) => [key.slice(0, 80), String(item ?? '').slice(0, key === 'prompt_final' ? 100_000 : 10000)]),
       );
   return {
     persona,

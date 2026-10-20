@@ -223,6 +223,7 @@ ${qualification}
 
 function buildPlantaoPrompt(config: AgentConfig, examples: TrainingExample[]) {
   const base = Object.entries(config.knowledge)
+    .filter(([key]) => key !== 'prompt_final')
     .map(([key, value]) => `## ${titleFromKey(key)}\n${value}`)
     .join('\n\n');
   const learning = examples.slice(0, 30).map((item) => {
@@ -256,6 +257,13 @@ function savedNaraPrompt(config: AgentConfig) {
   return stored.startsWith(NARA_PROMPT_MARKER) ? stored : '';
 }
 
+function plantaoConfigWithPrompt(config: AgentConfig, prompt: string): AgentConfig {
+  const knowledge = { ...config.knowledge };
+  if (prompt.trim()) knowledge.prompt_final = prompt;
+  else delete knowledge.prompt_final;
+  return { ...config, knowledge };
+}
+
 function naraConfigWithPrompt(config: AgentConfig, prompt: string): AgentConfig {
   return {
     ...config,
@@ -284,6 +292,7 @@ export default function AgentTrainingPage() {
   const [tab, setTab] = useState<Tab>(isNara ? 'prompt' : 'simulador');
   const [config, setConfig] = useState<AgentConfig>(() => defaultConfig(agent));
   const [promptText, setPromptText] = useState('');
+  const [plantaoFinalText, setPlantaoFinalText] = useState('');
   const [examples, setExamples] = useState<TrainingExample[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [scenario, setScenario] = useState('');
@@ -309,7 +318,7 @@ export default function AgentTrainingPage() {
 
   const scenarios = isNara ? naraScenarios : plantaoScenarios;
   const plantaoPrompt = useMemo(() => buildPlantaoPrompt(config, examples), [config, examples]);
-  const baseEntries = Object.entries(config.knowledge).filter(([key]) => !key.startsWith('triagem_'));
+  const baseEntries = Object.entries(config.knowledge).filter(([key]) => !key.startsWith('triagem_') && key !== 'prompt_final');
   const tabs: Array<{ key: Tab; label: string }> = isNara
     ? [
         { key: 'simulador', label: '🎭 Simulador' },
@@ -349,6 +358,7 @@ export default function AgentTrainingPage() {
         const loadedConfig = agent === 'nara' ? withNaraDefaults(data.config) : data.config;
         setConfig(loadedConfig);
         setPromptText(agent === 'nara' ? savedNaraPrompt(loadedConfig) || buildNaraPrompt(loadedConfig) : '');
+        setPlantaoFinalText(agent === 'nara' ? '' : String(loadedConfig.knowledge?.prompt_final ?? ''));
         setExamples(data.examples);
         setAi(data.ai ?? null);
         if (agent === 'nara' && data.runtime_variables) {
@@ -401,7 +411,7 @@ export default function AgentTrainingPage() {
     setSaving(true);
     setError('');
     setNotice('');
-    const configToSave = isNara ? naraConfigWithPrompt(config, promptText) : config;
+    const configToSave = isNara ? naraConfigWithPrompt(config, promptText) : plantaoConfigWithPrompt(config, plantaoFinalText);
     try {
       const data = await readJson<{ ok: boolean; config?: AgentConfig; prompt_versions?: PromptVersionsState }>(await fetch('/api/ai-training', {
         method: 'PUT',
@@ -484,7 +494,7 @@ async function restorePromptVersion(version: PromptVersion) {
     setError('');
     setNotice('');
     setLastSimulation(null);
-    const simulationConfig = isNara ? naraConfigWithPrompt(config, promptText) : config;
+    const simulationConfig = isNara ? naraConfigWithPrompt(config, promptText) : plantaoConfigWithPrompt(config, plantaoFinalText);
     try {
       const data = await readJson<{ reply: string; model: string; source: 'openai'; classification: string; score: number; stage: string; handoff: boolean; priority: string; word_count: number; price_consulted: boolean; returned_units: string[]; consultation_names: string[]; attachments: SimulationResult['attachments'] }>(await fetch('/api/ai-training', {
         method: 'POST',
@@ -588,7 +598,7 @@ async function restorePromptVersion(version: PromptVersion) {
   }
 
   async function copyPrompt() {
-    const currentPrompt = isNara ? promptText : plantaoPrompt;
+    const currentPrompt = isNara ? promptText : plantaoFinalText || plantaoPrompt;
     try {
       await navigator.clipboard.writeText(currentPrompt);
       setNotice('Prompt copiado.');
@@ -835,18 +845,20 @@ async function restorePromptVersion(version: PromptVersion) {
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             <button className="btn btn-ghost btn-sm" onClick={copyPrompt}>Copiar prompt</button>
             {isNara && <button className="btn btn-primary btn-sm" onClick={saveConfig} disabled={saving || !promptText.trim()}>{saving ? 'Salvando...' : 'Salvar prompt'}</button>}
+            {!isNara && <button className="btn btn-primary btn-sm" onClick={saveConfig} disabled={saving}>{saving ? 'Salvando...' : 'Salvar prompt'}</button>}
           </div>
         </div>
         <div className="card-body">
           <textarea
             className="textarea mono"
             style={{ minHeight: 680, fontSize: 12, lineHeight: 1.55, resize: 'vertical' }}
-            value={isNara ? promptText : plantaoPrompt}
-            readOnly={!isNara}
-            onChange={isNara ? (event) => setPromptText(event.target.value) : undefined}
+            value={isNara ? promptText : plantaoFinalText}
+            placeholder={isNara ? undefined : plantaoPrompt}
+            onChange={(event) => (isNara ? setPromptText : setPlantaoFinalText)(event.target.value)}
             spellCheck={false}
           />
           {isNara && !promptVersionsSchemaReady && <div className="error-box" style={{ marginTop: 12 }}>Execute a migration <code>019_nara_prompt_versions.sql</code> para habilitar salvamento e restauração com histórico.</div>}
+          {!isNara && <div className="info-box" style={{ marginTop: 12 }}>Cole aqui o Prompt final do Plantão. Quando preenchido, ele passa a ser a camada principal de tom, conhecimento e condução; o simulador já usa o texto aberto, mesmo antes de salvar. Vazio, o Plantão usa a Personalidade e a Base do corretor (texto de exemplo acima, em cinza).</div>}
           {isNara && <div className="info-box" style={{ marginTop: 12 }}>O botão <strong>Salvar prompt</strong> guarda automaticamente a versão anterior. O simulador usa o texto aberto agora, mesmo antes de salvar.</div>}
         </div>
       </section>}
