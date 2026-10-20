@@ -3,7 +3,7 @@ import { naraConversationLanguage, requestedNaraLanguage } from './nara-language
 import type { AiFileOption, AiTrainingContext, AiTurn } from './ai';
 import type { Lead } from './types';
 import type { NaraUnitOffer } from './nara-unit-queries';
-import { isGenericPortfolioInterest, portfolioFacadesForFirstPresentation, selectPortfolioFacadeIds } from './nara-generic-interest';
+import { isGenericPortfolioInterest, portfolioFacadesForFirstPresentation, presentsWholePortfolio, selectPortfolioFacadeIds } from './nara-generic-interest';
 
 export * from './ai';
 
@@ -588,6 +588,38 @@ export function postProcessNaraTurn(
   return finishTurn(turn, history);
 }
 
+/** "Em que posso ajudar?" e variações: pergunta genérica que pouca gente responde. */
+export function isGenericHelpQuestion(text: string): boolean {
+  const value = normalizeText(text);
+  return /\b(em que|como|no que) (?:eu )?posso (?:te |lhe )?ajudar|posso (?:te )?ajudar (?:em )?(?:algo|alguma coisa)|(?:en que|como|en qué|cómo) (?:te |le )?puedo ayudar|how (?:can|may) i help/.test(value);
+}
+
+function portfolioPresentation(history: ChatMessage[], withFacades: boolean): string {
+  if (isSpanishLead(history)) {
+    return `Hoy tenemos tres opciones: Soul, listo en Itapema, y en Porto Belo Flow, con entrega en 2027, y Alma, en 2030.${withFacades ? ' Te comparto las fachadas.' : ''} ¿Cuál te llamó más la atención?`;
+  }
+  if (isEnglishLead(history)) {
+    return `We have three options: Soul, ready to move in, in Itapema, and in Porto Belo Flow, delivering in 2027, and Alma, in 2030.${withFacades ? ' Here are the facades.' : ''} Which one caught your eye?`;
+  }
+  return `Hoje temos três opções: o Soul, pronto em Itapema, e em Porto Belo o Flow, com entrega em 2027, e o Alma, em 2030.${withFacades ? ' Te mandei as fachadas.' : ''} Qual te chamou mais atenção?`;
+}
+
+/**
+ * Em vez de "em que posso ajudar?", a Nara apresenta a carteira (com fachadas)
+ * quando o contato ainda não escolheu um empreendimento e a carteira ainda não
+ * foi apresentada nesta conversa. Pedido do Fábio em 20/10/2026.
+ */
+export function replaceGenericHelpWithPortfolio(turn: AiTurn, history: ChatMessage[], context: AiTrainingContext): void {
+  if (turn.handoff || !isGenericHelpQuestion(turn.reply)) return;
+  if (/\b(soul|flow|alma)\b/.test(normalizeText(userText(history)))) return;
+  if (assistantMessages(history).some(presentsWholePortfolio)) return;
+  const withFacades = selectPortfolioFacadeIds(context.files ?? []).length > 0;
+  const intro = assistantMessages(history).length === 0
+    ? (turn.reply.match(/^[^?]*?(?:Nara[^.!?;]*[.!?;]|😊)\s*/u)?.[0] ?? '').replace(/;\s*$/, '.').trim()
+    : '';
+  turn.reply = `${intro ? `${intro} ` : ''}${portfolioPresentation(history, withFacades)}`;
+}
+
 /**
  * Regra da primeira apresentação: se a Nara apresentou Soul, Flow e Alma juntos
  * pela primeira vez e não anexou as fachadas, anexa as que existirem na
@@ -608,6 +640,7 @@ export async function generateAiTurn(
   const turn = await generateCoreAiTurn(lead, history, context);
   if (!turn || lead.kind !== 'cliente') return turn;
   const processed = finishTurn(postProcessNaraTurn(turn, history, context), history);
+  replaceGenericHelpWithPortfolio(processed, history, context);
   attachFirstPortfolioFacades(processed, history, context);
   return enforceNaraReplyGuardrails(processed, lead, history, context);
 }

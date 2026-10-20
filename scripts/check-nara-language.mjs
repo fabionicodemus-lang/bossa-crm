@@ -45,4 +45,17 @@ assert.equal(noMoreIntroductions, 'Te muestro el Flow.');
 assert.equal(naraConversationLanguage([...followup, {role:'assistant',content:processed.reply},{role:'user',content:'¿Cuánto cuesta el Flow?'}]),'es');
 assert.equal(requestedNaraLanguage('Podes falar em português?'),'pt');
 assert.equal(naraConversationLanguage([{role:'user',content:'Hello, I am Jack'}]),'en');
+// Pergunta genérica vira apresentação da carteira (Soul, Flow, Alma).
+{
+  const { replaceGenericHelpWithPortfolio } = await import('../src/lib/ai-v120.ts');
+  const files = [{ id: 'soul-f', category: 'imagem', title: 'Fachada Soul', description: null, trigger_keywords: [], storage_bucket: '', storage_path: '', original_name: 's.jpg', mime_type: 'image/jpeg' }];
+  const t = turn('¡Hola, Fabio! Soy Nara, de Bossa Empreendimentos; ¿en qué puedo ayudarte?');
+  replaceGenericHelpWithPortfolio(t, first, { files });
+  assert.match(t.reply, /^¡Hola, Fabio! Soy Nara, de Bossa Empreendimentos\. Hoy tenemos tres opciones: Soul/);
+  assert.match(t.reply, /fachadas/);
+  assert.doesNotMatch(t.reply, /ayudarte/);
+  const named = turn('Oi! Aqui é a Nara, da Bossa 😊 Como posso te ajudar?');
+  replaceGenericHelpWithPortfolio(named, [{ role: 'user', content: 'Oi, vi o Flow' }], { files });
+  assert.match(named.reply, /Como posso te ajudar/);
+}
 console.log('Nara: primeira saudação única, sem pergunta de triagem e troca de idioma sem transferência — OK.');
