@@ -601,7 +601,19 @@ export function ensureFirstTurnIntroduction(reply: string, history: ChatMessage[
     const withoutIntro = removeRepeatedNaraIntroduction(clean);
     return withoutIntro || clean;
   }
-  if (hasNaraIntroduction(clean)) return clean;
+  if (hasNaraIntroduction(clean)) {
+    const firstName = declaredContactFirstName(userText(history));
+    const opening = clean.slice(0, 130);
+    if (firstName && !normalizeText(opening).includes(normalizeText(firstName))) {
+      // Nome explicitamente informado: personalize a saudação existente,
+      // sem anexar novamente "Aqui é a Nara".
+      const language = naraConversationLanguage(history);
+      const localizedGreeting = language === 'es' ? `¡Hola, ${firstName}!`
+        : language === 'en' ? `Hi, ${firstName}!` : `Oi, ${firstName}!`;
+      return clean.replace(/^\s*[¡!]?\s*(?:hola|oi|olá|ola|hi|hello)\b[!,.;]?\s*/iu, `${localizedGreeting} `);
+    }
+    return clean;
+  }
   return collapseRepeatedNaraIntroductions(`${firstContactOpening(context, history)} ${clean}`);
 }
 
