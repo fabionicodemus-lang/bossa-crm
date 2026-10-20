@@ -1,4 +1,5 @@
 import { extractNaraPrompt } from './nara-prompt-config';
+import { aiModelRoutingSettings, pricingFor, selectAiModels, supportsExplicitCaching, type AiWorkload } from './openai-model-routing';
 import { isAssistedSaleSignal, isBrokerRoutingSignal, isPostSaleRoutingSignal } from './nara-contact-routing';
 import type { NaraDynamicTurnContext } from './nara-dynamic-context';
 import type { NaraForeignContext } from './nara-exterior';
@@ -130,6 +131,7 @@ type CountResponse = { input_tokens?: number; error?: { message?: string } | nul
 
 type ModelSettings = {
   primary: string;
+  light: string;
   fallback: string;
   reasoningEffort: string;
   maxOutputTokens: number;
@@ -206,8 +208,7 @@ function envNumber(name: string, fallback: number, min: number, max: number): nu
 
 export function openAiSettings(): ModelSettings {
   return {
-    primary: process.env.OPENAI_MODEL?.trim() || 'gpt-5.6-terra',
-    fallback: process.env.OPENAI_MODEL_FALLBACK?.trim() || 'gpt-5.6-luna',
+    ...aiModelRoutingSettings(),
     reasoningEffort: process.env.OPENAI_REASONING_EFFORT?.trim() || 'low',
     maxOutputTokens: envNumber('OPENAI_MAX_OUTPUT_TOKENS', 2400, 128, 128_000),
     verbosity: process.env.OPENAI_VERBOSITY?.trim() || 'low',
@@ -924,36 +925,6 @@ export function enforceNaraTriage(turn: AiTurn, lead: Lead, history: ChatMessage
   return turn;
 }
 
-function supportsExplicitCaching(model: string): boolean {
-  return /^gpt-5\.(?:[6-9]|\d{2,})/.test(model);
-}
-
-function extractOutputText(data: OpenAiResponse): string {
-  for (const item of data.output ?? []) {
-    for (const content of item.content ?? []) {
-      if (content.type === 'output_text' && content.text) return content.text;
-    }
-  }
-  return '';
-}
-
-function extractRefusal(data: OpenAiResponse): string {
-  for (const item of data.output ?? []) {
-    for (const content of item.content ?? []) {
-      if (content.type === 'refusal' && content.refusal) return content.refusal;
-    }
-  }
-  return '';
-}
-
-function pricingFor(model: string) {
-  if (model.startsWith('gpt-5.6-luna')) return { input: 1, cached: 0.1, write: 1.25, output: 6 };
-  if (model.startsWith('gpt-5.6-terra')) return { input: 2.5, cached: 0.25, write: 3.125, output: 15 };
-  if (model.startsWith('gpt-5.6-sol') || model === 'gpt-5.6') return { input: 5, cached: 0.5, write: 6.25, output: 30 };
-  if (model.startsWith('gpt-5-mini')) return { input: 0.25, cached: 0.025, write: 0.25, output: 2 };
-  return { input: 2.5, cached: 0.25, write: 3.125, output: 15 };
-}
-
 function buildUsage(
   data: OpenAiResponse,
   options: RequestOptions,
@@ -1015,7 +986,7 @@ async function fetchJson(url: string, body: unknown, timeoutMs: number): Promise
 
 function requestPayload(options: RequestOptions) {
   const settings = openAiSettings();
-  const is56 = supportsExplicitCaching(options.model);
+  const cacheSupported = supportsExplicitCaching(options.model);
   const payload: Record<string, unknown> = {
     model: options.model,
     store: false,
@@ -1035,7 +1006,7 @@ function requestPayload(options: RequestOptions) {
         }
       : { verbosity: options.verbosity || settings.verbosity },
   };
-  if (is56 && options.promptCacheKey) {
+  if (cacheSupported && options.promptCacheKey) {
     payload.prompt_cache_key = options.promptCacheKey;
     payload.prompt_cache_options = { mode: 'explicit', ttl: '30m' };
   }
@@ -1096,27 +1067,28 @@ async function runRequest(options: RequestOptions): Promise<RequestResult> {
 
 async function runWithRetryAndFallback(
   buildOptions: (model: string, fallbackUsed: boolean) => RequestOptions,
+  workload: AiWorkload = 'conversation',
 ): Promise<RequestResult> {
-  const settings = openAiSettings();
+  const { primary, fallback } = selectAiModels(openAiSettings(), workload);
   const errors: string[] = [];
-  const primaryOptions = buildOptions(settings.primary, false);
+  const primaryOptions = buildOptions(primary, false);
 
   for (let attempt = 0; attempt < 2; attempt += 1) {
     try {
       return await runRequest(primaryOptions);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      errors.push(`${settings.primary} tentativa ${attempt + 1}: ${message}`);
+      errors.push(`${primary} tentativa ${attempt + 1}: ${message}`);
       if (attempt === 0) await new Promise((resolve) => setTimeout(resolve, 800));
     }
   }
 
-  if (settings.fallback && settings.fallback !== settings.primary) {
+  if (fallback) {
     try {
-      return await runRequest(buildOptions(settings.fallback, true));
+      return await runRequest(buildOptions(fallback, true));
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      errors.push(`${settings.fallback}: ${message}`);
+      errors.push(`${fallback}: ${message}`);
     }
   }
 
@@ -1141,7 +1113,7 @@ async function summarizeOldHistory(
     maxOutputTokens: 700,
     reasoningEffort: 'low',
     verbosity: 'low',
-  }));
+  }), 'background');
   console.info(`[openai context] compactação aplicada: ${old.length} mensagens resumidas; ${recent.length} mantidas integralmente.`);
   return { summary: result.outputText.trim(), recent, usage: result.usage };
 }

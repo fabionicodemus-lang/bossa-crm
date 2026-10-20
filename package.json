@@ -14,6 +14,7 @@
     "test:flow-table": "node scripts/check-flow-sales-table.mjs",
     "test:ai-files-commercial": "node scripts/check-ai-files-commercial-access.mjs",
     "test:nara-prompt": "node scripts/check-nara-prompt-contract.mjs",
+    "test:ai-model-routing": "node scripts/check-ai-model-routing.mjs",
     "test:nara-fixed-layer": "node scripts/check-nara-fixed-layer.mjs",
     "test:nara-price-levels": "node --experimental-strip-types scripts/check-nara-price-levels.mjs",
     "test:nara-unit-queries": "node --experimental-strip-types --experimental-loader ./scripts/ts-extension-loader.mjs scripts/check-nara-unit-queries.mjs",

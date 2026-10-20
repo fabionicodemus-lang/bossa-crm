@@ -104,7 +104,7 @@ function syntheticLead(organizationId: string, scenario: string): Lead {
     phone: null,
     email: null,
     stage: 'ia',
-    source: 'Teste GPT-5.6',
+    source: 'Teste de IA',
     enterprise: null,
     company: null,
     group_name: null,

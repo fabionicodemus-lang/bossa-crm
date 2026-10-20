@@ -27,7 +27,7 @@ export async function transcribeAudio(input: {
   language?: string;
 }) {
   // Modelo especializado somente para transformar fala em texto. A resposta ao
-  // contato continua sendo produzida exclusivamente pelo gpt-5.6-luna.
+  // contato é produzida pelo modelo principal (Sol), com fallback Luna.
   const model = process.env.OPENAI_TRANSCRIPTION_MODEL?.trim() || 'gpt-transcribe';
   const mimeType = input.mimeType || 'audio/ogg';
   const blob = new Blob([input.bytes], { type: mimeType });

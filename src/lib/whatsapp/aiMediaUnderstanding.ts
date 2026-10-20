@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { transcribeAudio } from '@/lib/audio-transcription';
+import { aiModelRoutingSettings } from '@/lib/openai-model-routing';
 import { channelAccess, findChannelById } from '@/lib/whatsapp/channelService';
 import { fetchMetaMedia } from '@/lib/whatsapp/media';
 
@@ -52,7 +53,7 @@ function cachedTranscript(raw: Record<string, unknown> | null) {
 async function describeImage(bytes: ArrayBuffer, mimeType: string) {
   const key = process.env.OPENAI_API_KEY?.trim();
   if (!key) throw new Error('OPENAI_API_KEY ausente para compreensão de imagem.');
-  const model = 'gpt-5.6-luna';
+  const model = aiModelRoutingSettings().light;
   const base64 = Buffer.from(bytes).toString('base64');
   const response = await fetch('https://api.openai.com/v1/responses', {
     method: 'POST',
