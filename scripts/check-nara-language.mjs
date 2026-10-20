@@ -51,11 +51,18 @@ assert.equal(naraConversationLanguage([{role:'user',content:'Hello, I am Jack'}]
   const files = [{ id: 'soul-f', category: 'imagem', title: 'Fachada Soul', description: null, trigger_keywords: [], storage_bucket: '', storage_path: '', original_name: 's.jpg', mime_type: 'image/jpeg' }];
   const t = turn('¡Hola, Fabio! Soy Nara, de Bossa Empreendimentos; ¿en qué puedo ayudarte?');
   replaceGenericHelpWithPortfolio(t, first, { files });
-  assert.match(t.reply, /^¡Hola, Fabio! Soy Nara, de Bossa Empreendimentos\. Hoy tenemos tres opciones: Soul/);
-  assert.match(t.reply, /fachadas/);
+  assert.match(t.reply, /^¡Hola, Fabio! Soy Nara, de Bossa Empreendimentos\. ¡Qué bueno hablar con alguien de Chile! Tenemos Soul, listo para vivir/);
+  assert.match(t.reply, /¿Alguno es el que viste\?$/);
   assert.doesNotMatch(t.reply, /ayudarte/);
   const named = turn('Oi! Aqui é a Nara, da Bossa 😊 Como posso te ajudar?');
   replaceGenericHelpWithPortfolio(named, [{ role: 'user', content: 'Oi, vi o Flow' }], { files });
   assert.match(named.reply, /Como posso te ajudar/);
+  // Lead de anúncio do Alma: fala só do Alma e manda a fachada dele.
+  const almaFiles = [...files, { id: 'alma-f', category: 'imagem', title: 'Fachada Alma', description: null, trigger_keywords: [], storage_bucket: '', storage_path: '', original_name: 'a.jpg', mime_type: 'image/jpeg' }];
+  const fromAd = turn('Oi! Aqui é a Nara, da Bossa 😊 Em que posso te ajudar?');
+  replaceGenericHelpWithPortfolio(fromAd, [{ role: 'user', content: 'Olá! Tenho interesse' }], { files: almaFiles }, { metadata: { ad: { headline: 'Alma Seahouses · casa na praia', captured_at: '2026-10-20T10:00:00Z' } }, source: 'Meta' });
+  assert.match(fromAd.reply, /^Oi! Aqui é a Nara, da Bossa 😊 Que bom que o Alma te chamou atenção!/);
+  assert.doesNotMatch(fromAd.reply, /Soul|Flow/);
+  assert.deepEqual(fromAd.attachment_ids, ['alma-f']);
 }
 console.log('Nara: primeira saudação única, sem pergunta de triagem e troca de idioma sem transferência — OK.');

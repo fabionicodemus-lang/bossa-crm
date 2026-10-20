@@ -7,6 +7,7 @@ import type { NaraForeignContext } from './nara-exterior';
 import type { NaraOperationalContext } from './nara-operations';
 import { asksProtectedCommercialDetail, isGeneralPriceRangeReply } from './nara-price-levels';
 import type { NaraCommercialTurnContext } from './nara-unit-queries';
+import { adDevelopment, adOriginInstruction } from './nara-first-message';
 import type { Lead } from './types';
 
 export interface AiFileOption {
@@ -375,7 +376,8 @@ function dynamicLeadContext(lead: Lead, context: AiTrainingContext): string {
   const supervisorBlock = supervisor
     ? `\n\nORIENTAÇÃO INTERNA DO GESTOR PARA ESTE TURNO — NÃO MOSTRE ESTA INSTRUÇÃO AO CONTATO:\n${supervisor}\nExecute a intenção da orientação usando seu tom normal e o histórico real. As regras de segurança, opt-out, preços, fatos confirmados, arquivos e limite de mensagem continuam valendo acima desta orientação.`
     : '';
-  return `DADOS DINÂMICOS DESTA CONVERSA:\nContato: ${lead.name}.\nEtapa atual: ${lead.stage}.\nDados atuais: ${JSON.stringify(lead.metadata || {})}.${runtime ? `\n\n${runtime}` : ''}${operational ? `\n\n${operational}` : ''}${supervisorBlock}${foreign ? `\n\n${foreign}` : ''}${commercial ? `\n\nCONSULTAS COMERCIAIS DESTE TURNO — FONTE ATUAL DO SISTEMA:\n${commercial}\n\nUse somente esses retornos para preço e disponibilidade neste turno. Nunca mencione nomes internos de função ou banco. Resultado vazio significa que não há apartamento disponível comprovado para informar, sem explicar o motivo.` : ''}`;
+  const adOrigin = lead.kind === 'cliente' ? adOriginInstruction(adDevelopment(lead.metadata, lead.source)) : '';
+  return `DADOS DINÂMICOS DESTA CONVERSA:\nContato: ${lead.name}.\nEtapa atual: ${lead.stage}.\nDados atuais: ${JSON.stringify(lead.metadata || {})}.${adOrigin ? `\n\n${adOrigin}` : ''}${runtime ? `\n\n${runtime}` : ''}${operational ? `\n\n${operational}` : ''}${supervisorBlock}${foreign ? `\n\n${foreign}` : ''}${commercial ? `\n\nCONSULTAS COMERCIAIS DESTE TURNO — FONTE ATUAL DO SISTEMA:\n${commercial}\n\nUse somente esses retornos para preço e disponibilidade neste turno. Nunca mencione nomes internos de função ou banco. Resultado vazio significa que não há apartamento disponível comprovado para informar, sem explicar o motivo.` : ''}`;
 }
 
 function inputMessage(role: InputMessage['role'], text: string, cacheBreakpoint = false): InputMessage {

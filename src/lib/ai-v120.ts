@@ -3,6 +3,7 @@ import { naraConversationLanguage, requestedNaraLanguage } from './nara-language
 import type { AiFileOption, AiTrainingContext, AiTurn } from './ai';
 import type { Lead } from './types';
 import type { NaraUnitOffer } from './nara-unit-queries';
+import { adDevelopment, declaredPlace, facadeFor, firstMessageBody } from './nara-first-message';
 import { isGenericPortfolioInterest, portfolioFacadesForFirstPresentation, presentsWholePortfolio, selectPortfolioFacadeIds } from './nara-generic-interest';
 
 export * from './ai';
@@ -594,30 +595,42 @@ export function isGenericHelpQuestion(text: string): boolean {
   return /\b(em que|como|no que) (?:eu )?posso (?:te |lhe )?ajudar|posso (?:te )?ajudar (?:em )?(?:algo|alguma coisa)|(?:en que|como|en qué|cómo) (?:te |le )?puedo ayudar|how (?:can|may) i help/.test(value);
 }
 
-function portfolioPresentation(history: ChatMessage[], withFacades: boolean): string {
-  if (isSpanishLead(history)) {
-    return `Hoy tenemos tres opciones: Soul, listo en Itapema, y en Porto Belo Flow, con entrega en 2027, y Alma, en 2030.${withFacades ? ' Te comparto las fachadas.' : ''} ¿Cuál te llamó más la atención?`;
-  }
-  if (isEnglishLead(history)) {
-    return `We have three options: Soul, ready to move in, in Itapema, and in Porto Belo Flow, delivering in 2027, and Alma, in 2030.${withFacades ? ' Here are the facades.' : ''} Which one caught your eye?`;
-  }
-  return `Hoje temos três opções: o Soul, pronto em Itapema, e em Porto Belo o Flow, com entrega em 2027, e o Alma, em 2030.${withFacades ? ' Te mandei as fachadas.' : ''} Qual te chamou mais atenção?`;
-}
-
 /**
- * Em vez de "em que posso ajudar?", a Nara apresenta a carteira (com fachadas)
- * quando o contato ainda não escolheu um empreendimento e a carteira ainda não
- * foi apresentada nesta conversa. Pedido do Fábio em 20/10/2026.
+ * Em vez de "em que posso ajudar?", a Nara abre com algo concreto (Fábio, 20/10/2026):
+ * - lead de anúncio de um empreendimento → fala só dele, com a fachada;
+ * - sem origem conhecida → apresenta Soul, Flow e Alma por benefícios, com as fachadas;
+ * - se o contato disse de onde é, comenta isso antes.
  */
-export function replaceGenericHelpWithPortfolio(turn: AiTurn, history: ChatMessage[], context: AiTrainingContext): void {
+export function replaceGenericHelpWithPortfolio(
+  turn: AiTurn,
+  history: ChatMessage[],
+  context: AiTrainingContext,
+  lead?: Pick<Lead, 'metadata' | 'source'>,
+): void {
   if (turn.handoff || !isGenericHelpQuestion(turn.reply)) return;
   if (/\b(soul|flow|alma)\b/.test(normalizeText(userText(history)))) return;
   if (assistantMessages(history).some(presentsWholePortfolio)) return;
-  const withFacades = selectPortfolioFacadeIds(context.files ?? []).length > 0;
-  const intro = assistantMessages(history).length === 0
-    ? (turn.reply.match(/^[^?]*?(?:Nara[^.!?;]*[.!?;]|😊)\s*/u)?.[0] ?? '').replace(/;\s*$/, '.').trim()
+  const firstTurn = assistantMessages(history).length === 0;
+  const development = adDevelopment(lead?.metadata, lead?.source);
+  const intro = firstTurn
+    ? turn.reply
+      .split(/(?<=[.!?;]|😊)\s+/u)
+      .filter((part) => !isGenericHelpQuestion(part))
+      .join(' ')
+      .replace(/;\s*$/, '.')
+      .trim()
     : '';
-  turn.reply = `${intro ? `${intro} ` : ''}${portfolioPresentation(history, withFacades)}`;
+  const language = isSpanishLead(history) ? 'es' : isEnglishLead(history) ? 'en' : 'pt';
+  turn.reply = firstMessageBody({
+    intro,
+    language,
+    development,
+    place: firstTurn ? declaredPlace(userText(history)) : '',
+  });
+  if (development) {
+    const facade = facadeFor(context.files ?? [], development);
+    turn.attachment_ids = facade ? [facade] : [];
+  }
 }
 
 /**
@@ -640,7 +653,7 @@ export async function generateAiTurn(
   const turn = await generateCoreAiTurn(lead, history, context);
   if (!turn || lead.kind !== 'cliente') return turn;
   const processed = finishTurn(postProcessNaraTurn(turn, history, context), history);
-  replaceGenericHelpWithPortfolio(processed, history, context);
+  replaceGenericHelpWithPortfolio(processed, history, context, lead);
   attachFirstPortfolioFacades(processed, history, context);
   return enforceNaraReplyGuardrails(processed, lead, history, context);
 }
