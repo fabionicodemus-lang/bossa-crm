@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { openAiSettings } from '@/lib/ai';
 import { buildAiInstructions, generateAiTurn, type AiFileOption, type AiTrainingContext } from '@/lib/ai-v120';
 import { loadNaraDynamicTurnContext, loadNaraRuntimeVariables, saveNaraRuntimeVariables } from '@/lib/nara-dynamic-context';
 import { loadNaraForeignContext } from '@/lib/nara-exterior';
@@ -244,9 +245,11 @@ function aiStatus(filesCount: number) {
   return {
     provider: 'openai' as const,
     configured: Boolean(process.env.OPENAI_API_KEY),
-    model: process.env.OPENAI_MODEL || 'gpt-5-mini',
+    model: openAiSettings().primary,
     files_count: filesCount,
     simulator_mode: 'mesmo_motor_do_whatsapp' as const,
+    fallback_model: openAiSettings().fallback,
+    light_model: openAiSettings().light,
   };
 }
 
@@ -505,7 +508,7 @@ export async function POST(request: Request) {
     return NextResponse.json({
       reply: turn.reply,
       source: 'openai',
-      model: turn.model_used || process.env.OPENAI_MODEL || 'gpt-5-mini',
+      model: turn.model_used || openAiSettings().primary,
       classification: turn.classification,
       score: turn.score,
       stage: hybridDecision.stage,

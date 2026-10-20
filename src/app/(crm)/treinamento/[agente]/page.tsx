@@ -45,8 +45,9 @@ type TrainingExample = {
 
 type ChatMessage = { role: ChatRole; content: string; diagnostics?: SimulationResult };
 type Scenario = { key: string; name: string; first: string };
-type AiStatus = { configured: boolean; model: string; files_count: number; simulator_mode: string };
+type AiStatus = { configured: boolean; model: string; fallback_model?: string; light_model?: string; files_count: number; simulator_mode: string };
 type SimulationResult = {
+  model: string;
   classification: string;
   score: number;
   stage: string;
@@ -485,12 +486,13 @@ async function restorePromptVersion(version: PromptVersion) {
     setLastSimulation(null);
     const simulationConfig = isNara ? naraConfigWithPrompt(config, promptText) : config;
     try {
-      const data = await readJson<{ reply: string; source: 'openai'; classification: string; score: number; stage: string; handoff: boolean; priority: string; word_count: number; price_consulted: boolean; returned_units: string[]; consultation_names: string[]; attachments: SimulationResult['attachments'] }>(await fetch('/api/ai-training', {
+      const data = await readJson<{ reply: string; model: string; source: 'openai'; classification: string; score: number; stage: string; handoff: boolean; priority: string; word_count: number; price_consulted: boolean; returned_units: string[]; consultation_names: string[]; attachments: SimulationResult['attachments'] }>(await fetch('/api/ai-training', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ action: 'simulate', agent, messages: nextMessages, scenario, config: simulationConfig }),
       }));
       const diagnostics: SimulationResult = {
+        model: data.model,
         classification: data.classification,
         score: data.score,
         stage: data.stage,
@@ -642,7 +644,7 @@ async function restorePromptVersion(version: PromptVersion) {
           <div className="wa-head">
             <div className="wa-icon">💬</div>
             <div><strong>Conversa de treino</strong><div className="faint" style={{ fontSize: 10 }}>{isNara ? 'Testa o conteúdo atual do prompt, mesmo antes de salvar.' : 'Você interpreta o corretor e avalia a resposta.'}</div></div>
-            <span className="connection-pill">{ai?.configured ? `OPENAI · ${ai.model}` : 'SEM API'}</span>
+            <span className="connection-pill" title={ai?.configured ? `Fallback: ${ai.fallback_model || 'não configurado'} · Resumos: ${ai.light_model || 'não configurado'}` : undefined}>{ai?.configured ? `OPENAI · ${ai.model}` : 'SEM API'}</span>
           </div>
           <div className="messages">
             {messages.length === 0 && <div className="empty-state">Escolha um cenário para começar.</div>}
@@ -650,7 +652,8 @@ async function restorePromptVersion(version: PromptVersion) {
               {message.content}
               {message.role === 'assistant' && message.diagnostics && <div className="info-box" style={{ marginTop: 9, fontSize: 11 }}>
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 6 }}>
-                  <span className="chip">{message.diagnostics.word_count} palavras</span>
+                  <span className="chip">Modelo: {message.diagnostics.model}</span>
+                   <span className="chip">{message.diagnostics.word_count} palavras</span>
                   <span className="chip">Preço consultado: {message.diagnostics.price_consulted ? 'sim' : 'não'}</span>
                   <span className="chip">Prioridade {message.diagnostics.priority}</span>
                   <span className="chip">Score {message.diagnostics.score}</span>
