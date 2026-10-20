@@ -332,7 +332,7 @@ export function postProcessNaraTurn(
   const nonApartmentValue = /\b(?:valor|preco|precio|quanto custa|cuanto cuesta|how much)\b.{0,28}\b(?:condominio|iptu|aluguel|taxa|laudemio|itbi|escritura|entrada|parcelas?|reforcos?|chaves)\b/.test(latestNormalized);
   const asksPriceNow = !nonApartmentValue && /\b(preco|precio|prices?|valor|quanto custa|cuanto cuesta|how much|dolar|usd)\b/.test(latestNormalized);
   const asksPlan = /\b(entrada|parcelas?|reforcos?|chaves|condicao de pagamento)\b/.test(latestNormalized);
-  const exactUsCampaignSeed = /^ola moro nos (?:eua|estados unidos|usa) e quero conhecer os imoveis da bossa em sc\.?$/.test(latestNormalized);
+  const exactUsCampaignSeed = /^ola[!.]?\s+moro nos (?:eua|estados unidos|usa) e quero conhecer os imoveis da bossa em sc\.?$/.test(latestNormalized);
 
   if (context.foreign?.us_campaign_lead && exactUsCampaignSeed && history.filter((item) => item.role === 'user').length === 1) {
     turn.reply = 'Oi! 😊 Que bom falar com você. Temos imóveis em Porto Belo, no litoral de Santa Catarina, em diferentes fases de obra. Pra eu te mostrar primeiro o que combina com você: busca mais investimento ou um imóvel no Brasil para usar com a família?';
