@@ -28,13 +28,17 @@ const noDatabase = {
   from() { throw new Error('A consulta ao banco não deveria ocorrer para perfil bloqueado.'); },
 };
 
-const brokerContext = await loadNaraCommercialTurnContext(noDatabase, 'org', {
+// Conversa do Plantão (contato já é corretor): a consulta comercial é liberada.
+let plantaoQueried = false;
+const plantaoDatabase = {
+  from() { plantaoQueried = true; throw new Error('consulta liberada para o Plantão'); },
+};
+const brokerContext = await loadNaraCommercialTurnContext(plantaoDatabase, 'org', {
   ...baseLead,
   kind: 'corretor',
 }, [{ role: 'user', content: 'Qual o preço do Flow?' }]);
-assert.equal(brokerContext?.blocked_reason, 'corretor');
-assert.equal(brokerContext?.calls.length, 0);
-assert.match(brokerContext?.source_text ?? '', /Plantão da Bossa/);
+assert.notEqual(brokerContext?.blocked_reason, 'corretor');
+assert.equal(plantaoQueried, true);
 
 const brokerSelfIdentified = await loadNaraCommercialTurnContext(noDatabase, 'org', baseLead, [
   { role: 'user', content: 'Sou corretor, qual a tabela do Alma?' },

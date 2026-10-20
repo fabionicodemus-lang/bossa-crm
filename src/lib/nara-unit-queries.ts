@@ -448,7 +448,10 @@ function blockedCommercialProfile(
   lead: Lead,
   history: ChatMessage[],
 ): 'corretor' | 'cliente_atual' | 'venda_assistida' | null {
-  if (lead.kind === 'corretor') return 'corretor';
+  // Conversa do Plantão (contato já tratado como corretor): o Plantão pode consultar e informar
+  // unidades, valores e condições. A trava abaixo vale só para a Nara quando um contato dela se
+  // revela corretor.
+  if (lead.kind === 'corretor') return null;
   const userMessages = history
     .filter((item) => item.role === 'user')
     .map((item) => item.content);
