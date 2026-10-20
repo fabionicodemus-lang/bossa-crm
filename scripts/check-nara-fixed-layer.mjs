@@ -24,6 +24,9 @@ assert.doesNotMatch(naraLayer, /ETAPA 1 — TRIAGEM OBRIGATÓRIA/);
 assert.doesNotMatch(naraLayer, /ETAPA 2 — QUALIFICAÇÃO/);
 assert.doesNotMatch(naraLayer, /Use no máximo duas frases curtas/);
 assert.match(plantaoLayer, /Mensagens curtas de WhatsApp e no máximo uma pergunta por mensagem/);
-assert.match(plantaoLayer, /CLIENTE OU PROPOSTA VÃO PARA A TAÍS NA HORA/);
+assert.match(plantaoLayer, /QUANDO PASSAR PARA A TAÍS \(somente nestes casos\)/);
+assert.match(plantaoLayer, /Comissão padrão: 5%/);
+assert.match(plantaoLayer, /entrada é maior que a da tabela/);
+assert.match(plantaoLayer, /Corretor NÃO cadastrado/);
 
 console.log('Camada fixa da Nara validada sem sequência rígida nem limite duplicado.');
