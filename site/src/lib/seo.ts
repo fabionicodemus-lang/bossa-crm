@@ -26,7 +26,7 @@ export const organizacaoLd = {
   description: empresa.definicao,
   slogan: empresa.assinatura,
   email: empresa.email,
-  address: { "@type": "PostalAddress", streetAddress: empresa.endereco.rua, addressLocality: empresa.endereco.cidade, addressRegion: empresa.endereco.uf, postalCode: empresa.endereco.cep, addressCountry: "BR" },
+  address: { "@type": "PostalAddress", streetAddress: empresa.endereco.rua, addressLocality: empresa.endereco.cidade, addressRegion: empresa.endereco.uf, postalCode: empresa.endereco.cep || undefined, addressCountry: "BR" },
   areaServed: ["Porto Belo, SC", "Itapema, SC"],
   sameAs: [empresa.instagram, empresa.facebook],
 };

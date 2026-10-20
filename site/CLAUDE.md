@@ -140,7 +140,7 @@ As páginas são: home, `/empreendimentos`, `/empreendimentos/[slug]`, `/empreen
   - Obra: começou em novembro de 2023, entrega em novembro de 2027. Andamento de 57,87% em setembro de 2026. As vagas ainda estão por confirmar.
 - **Soul Residence:** Itapema, 36 unidades, entregue em dezembro de 2023, no prazo, mesmo com a pandemia. Resta uma unidade de 2 suítes com 70 m².
 - **Jazz Residence:** Itapema, 14 unidades. Obra de novembro de 2017 a setembro de 2019, entregue um ano e oito meses antes do prazo, com Habite-se 15 dias depois.
-- **Escritório:** R. 406-B, 272, Morretes, Itapema.
+- **Escritório e decorado:** Rua São José, 163, Balneário Perequê, Porto Belo (térreo do Flow). O endereço antigo de Itapema não vale mais.
 - **Erro conhecido no material:** a imagem da planta do duplex Tipo 1 do Flow diz 114,7 m², mas o correto é 117,7 m².
 
 ## 7. Medição e CRM

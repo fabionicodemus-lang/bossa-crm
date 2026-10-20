@@ -9,7 +9,7 @@ export const empresa = {
   nome: "Bossa Empreendimentos",
   fundacao: 2017,
   fundadores: ["Sabrina", "Carlos"],
-  endereco: { rua: "R. 406-B, 272", bairro: "Morretes", cidade: "Itapema", uf: "SC", cep: "88220-000" },
+  endereco: { rua: "Rua São José, 163", bairro: "Balneário Perequê", cidade: "Porto Belo", uf: "SC", cep: "" }, // escritório e decorado, no térreo do Flow (confirmado em 20/10/2026); CEP a confirmar
   email: "contato@bossaempreendimentos.com.br",
   instagram: "https://instagram.com/bossaempreendimentos/",
   facebook: "https://www.facebook.com/bossaempreendimentos",
