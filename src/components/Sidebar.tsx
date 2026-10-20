@@ -18,6 +18,7 @@ import {
   Settings,
   Moon,
   Globe,
+  Megaphone,
   Sun,
 } from "lucide-react";
 import type { UserContext } from "@/lib/types";
@@ -92,6 +93,13 @@ const links = [
     label: "Site",
     icon: Globe,
     paths: ["/site"],
+    restricted: true,
+  },
+  {
+    href: "/campanhas",
+    label: "Campanhas",
+    icon: Megaphone,
+    paths: ["/campanhas"],
     restricted: true,
   },
   {
