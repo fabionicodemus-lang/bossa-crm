@@ -1,4 +1,5 @@
 import { extractNaraPrompt } from './nara-prompt-config';
+import { collapseRepeatedNaraIntroductions, hasNaraIntroduction, naraConversationLanguage, naraLanguageSwitchReply, removeRepeatedNaraIntroduction, requestedNaraLanguage } from './nara-language';
 import { aiModelRoutingSettings, pricingFor, selectAiModels, supportsExplicitCaching, type AiWorkload } from './openai-model-routing';
 import { isAssistedSaleSignal, isBrokerRoutingSignal, isPostSaleRoutingSignal } from './nara-contact-routing';
 import type { NaraDynamicTurnContext } from './nara-dynamic-context';
@@ -528,7 +529,9 @@ function looksLikeTriageQuestion(text: string, context: AiTrainingContext): bool
   return value.includes(configured)
     || value.includes(alternative)
     || (/buscando.*imovel.*comprar/.test(value) && /outro assunto|outro atendimento/.test(value))
-    || (/interesse.*comprar/.test(value) && /assunto|outro atendimento/.test(value));
+    || (/interesse.*comprar/.test(value) && /assunto|outro atendimento/.test(value))
+    || (/buscas.*(?:departamento|apartamento).*comprar/.test(value) && /otro asunto/.test(value))
+    || (/looking to buy.*apartment/.test(value) && /another.*matter/.test(value));
 }
 
 function hasTriageQuestionBeenAsked(history: ChatMessage[], context: AiTrainingContext): boolean {
@@ -566,13 +569,11 @@ function hasExplicitBuyerIntent(lead: Lead, history: ChatMessage[], context: AiT
 }
 
 function isSpanishConversation(history: ChatMessage[]): boolean {
-  const value = normalizeText(userText(history));
-  const matches = value.match(/\b(hola|soy|me llamo|mi nombre|vivo en|quiero|quisiera|precio|cuanto cuesta|departamento|ustedes|puedo|chile|santiago)\b/g) ?? [];
-  return matches.length >= 2 || /\b(hola|soy|me llamo|mi nombre)\b/.test(value);
+  return naraConversationLanguage(history) === 'es';
 }
 
 function isEnglishConversation(history: ChatMessage[]): boolean {
-  return !isSpanishConversation(history) && /\b(hi|hello|i'm|i am|we saw|prices?|how much|buy|usd|dollars?)\b/i.test(lastUserText(history));
+  return naraConversationLanguage(history) === 'en';
 }
 
 function declaredContactFirstName(text: string): string {
@@ -585,7 +586,7 @@ function firstContactOpening(context: AiTrainingContext, history: ChatMessage[])
     ? context.config.persona.name.trim()
     : '';
   const agentName = configuredName || 'Nara';
-  const name = declaredContactFirstName(lastUserText(history));
+  const name = declaredContactFirstName(userText(history));
   return isEnglishConversation(history)
     ? `Hi${name ? `, ${name}` : ''}! I'm ${agentName} from Bossa.`
     : isSpanishConversation(history)
@@ -593,13 +594,15 @@ function firstContactOpening(context: AiTrainingContext, history: ChatMessage[])
     : `Oi${name ? `, ${name}` : ''}! Aqui é a ${agentName}, da Bossa 😊`;
 }
 
-function ensureFirstTurnIntroduction(reply: string, history: ChatMessage[], context: AiTrainingContext): string {
-  if (assistantMessages(history).length > 0) return reply.trim();
-  const value = normalizeText(reply);
-  const hasGreeting = /^(ola|oi|bom dia|boa tarde|boa noite|hola|buenos dias|buenas tardes|buenas noches|hi|hello)\b/.test(value);
-  const hasIdentity = /\bnara\b/.test(value) && /\bbossa\b/.test(value);
-  if (hasGreeting && hasIdentity) return reply.trim();
-  return `${firstContactOpening(context, history)} ${reply.trim()}`.trim();
+export function ensureFirstTurnIntroduction(reply: string, history: ChatMessage[], context: AiTrainingContext): string {
+  const clean = collapseRepeatedNaraIntroductions(reply);
+  if (assistantMessages(history).length > 0) {
+    // Uma conversa iniciada nunca deve apresentar novamente a Nara.
+    const withoutIntro = removeRepeatedNaraIntroduction(clean);
+    return withoutIntro || clean;
+  }
+  if (hasNaraIntroduction(clean)) return clean;
+  return collapseRepeatedNaraIntroductions(`${firstContactOpening(context, history)} ${clean}`);
 }
 
 function repeatedReply(reply: string, history: ChatMessage[]): boolean {
@@ -797,6 +800,16 @@ function normalizeClientDecision(turn: AiTurn): AiTurn {
 export function enforceNaraTriage(turn: AiTurn, lead: Lead, history: ChatMessage[], context: AiTrainingContext): AiTurn {
   normalizeClientDecision(turn);
   const lastUser = lastUserText(history);
+  // Mudança de idioma é uma solicitação legítima, não uma segunda falha de triagem.
+  const requestedLanguage = requestedNaraLanguage(lastUser);
+  if (requestedLanguage) {
+    turn.reply = naraLanguageSwitchReply(requestedLanguage);
+    turn.handoff = false;
+    turn.stage = 'ia';
+    turn.next_action = 'Responder à solicitação de idioma e continuar a conversa, sem encaminhamento humano.';
+    turn.summary = 'Contato solicitou atendimento em outro idioma.';
+    return turn;
+  }
   const routed = routeOutsideBuyerProfile(history);
   const buyerConfirmed = hasExplicitBuyerIntent(lead, history, context);
   const askedBefore = hasTriageQuestionBeenAsked(history, context);
@@ -865,8 +878,14 @@ export function enforceNaraTriage(turn: AiTurn, lead: Lead, history: ChatMessage
 
     const learnedCorrection = exactManagerCorrection(history, context);
     const safeLearnedCorrection = learnedCorrection && !moneyTokens(learnedCorrection).length && learnedCorrection.includes('?');
-    const question = configuredTriageQuestion(context);
-    turn.reply = safeLearnedCorrection ? learnedCorrection : question;
+    const locale = naraConversationLanguage(history);
+    const question = locale === 'es'
+      ? '¿Buscas un departamento para comprar o necesitas ayuda con otro asunto de Bossa?'
+      : locale === 'en'
+        ? 'Are you looking to buy an apartment, or do you need help with another Bossa matter?'
+        : configuredTriageQuestion(context);
+    // Uma correção em português não pode sobrescrever a pergunta no idioma do cliente.
+    turn.reply = locale === 'pt' && safeLearnedCorrection ? learnedCorrection : question;
     turn.reply = ensureFirstTurnIntroduction(turn.reply, history, context);
     turn.classification = 'frio';
     turn.score = Math.min(turn.score, 20);

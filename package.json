@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "npm run test:ai-model-routing && next build",
+    "build": "npm run test:ai-model-routing && npm run test:nara-language && next build",
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
@@ -15,6 +15,7 @@
     "test:ai-files-commercial": "node scripts/check-ai-files-commercial-access.mjs",
     "test:nara-prompt": "node scripts/check-nara-prompt-contract.mjs",
     "test:ai-model-routing": "node scripts/check-ai-model-routing.mjs",
+    "test:nara-language": "node --experimental-strip-types --experimental-loader ./scripts/ts-extension-loader.mjs scripts/check-nara-language.mjs",
     "test:nara-fixed-layer": "node scripts/check-nara-fixed-layer.mjs",
     "test:nara-price-levels": "node --experimental-strip-types scripts/check-nara-price-levels.mjs",
     "test:nara-unit-queries": "node --experimental-strip-types --experimental-loader ./scripts/ts-extension-loader.mjs scripts/check-nara-unit-queries.mjs",

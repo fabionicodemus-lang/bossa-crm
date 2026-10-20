@@ -1,4 +1,5 @@
-import { enforceNaraReplyGuardrails, generateAiTurn as generateCoreAiTurn } from './ai';
+import { enforceNaraReplyGuardrails, ensureFirstTurnIntroduction, generateAiTurn as generateCoreAiTurn } from './ai';
+import { naraConversationLanguage, requestedNaraLanguage } from './nara-language';
 import type { AiFileOption, AiTrainingContext, AiTurn } from './ai';
 import type { Lead } from './types';
 import type { NaraUnitOffer } from './nara-unit-queries';
@@ -30,13 +31,11 @@ function userText(history: ChatMessage[]): string {
 }
 
 function isSpanishLead(history: ChatMessage[]): boolean {
-  const value = normalizeText(userText(history));
-  const matches = value.match(/\b(hola|soy|me llamo|mi nombre|vivo en|resido en|quiero|quisiera|precio|cuanto cuesta|departamento|ustedes|puedo|chile|santiago)\b/g) ?? [];
-  return matches.length >= 2 || /\b(hola|soy|me llamo|mi nombre)\b/.test(value);
+  return naraConversationLanguage(history) === 'es';
 }
 
 function isEnglishLead(history: ChatMessage[]): boolean {
-  return !isSpanishLead(history) && /\b(hi|hello|i'm|i am|we saw|prices?|how much|buy|usd|dollars?)\b/i.test(lastUserText(history));
+  return naraConversationLanguage(history) === 'en';
 }
 
 function declaredFirstName(text: string): string {
@@ -238,28 +237,8 @@ function projectPlantFiles(history: ChatMessage[], context: AiTrainingContext): 
 }
 
 function ensureFirstReplyIdentity(reply: string, history: ChatMessage[]): string {
-  if (assistantMessages(history).length > 0) return reply;
-  const spanish = isSpanishLead(history);
-  const english = isEnglishLead(history);
-  const name = declaredFirstName(lastUserText(history));
-  const normalized = normalizeText(reply);
-  const alreadyIdentified = normalized.includes('nara') && normalized.includes('bossa');
-
-  if (alreadyIdentified) {
-    if (!name || normalized.includes(normalizeText(name))) return reply.trim();
-    if (spanish && /^¡?hola[!,.]?\s*/i.test(reply.trim())) {
-      return reply.trim().replace(/^¡?hola[!,.]?\s*/i, `¡Hola, ${name}! `);
-    }
-    if (!spanish && /^oi[!,.]?\s*/i.test(reply.trim())) {
-      return reply.trim().replace(/^oi[!,.]?\s*/i, `Oi, ${name}! `);
-    }
-    return `${spanish ? `¡Hola, ${name}!` : `Oi, ${name}!`} ${reply.trim()}`;
-  }
-
-  const intro = english ? `Hi${name ? `, ${name}` : ''}! I'm Nara from Bossa.` : spanish
-    ? `¡Hola${name ? `, ${name}` : ''}! Soy Nara, de Bossa.`
-    : `Oi${name ? `, ${name}` : ''}! Aqui é a Nara, da Bossa.`;
-  return `${intro} ${reply.trim()}`.trim();
+  // Reaproveita a mesma validação idempotente do motor central.
+  return ensureFirstTurnIntroduction(reply, history, {});
 }
 
 function materialQualificationQuestion(history: ChatMessage[]): string {
@@ -348,6 +327,8 @@ export function postProcessNaraTurn(
   const latestRaw = lastUserText(history);
   const latestNormalized = normalizeText(latestRaw);
   const spanish = isSpanishLead(history);
+  const isLanguageRequest = Boolean(requestedNaraLanguage(latestRaw));
+  if (isLanguageRequest) return finishTurn(turn, history);
   const nonApartmentValue = /\b(?:valor|preco|precio|quanto custa|cuanto cuesta|how much)\b.{0,28}\b(?:condominio|iptu|aluguel|taxa|laudemio|itbi|escritura|entrada|parcelas?|reforcos?|chaves)\b/.test(latestNormalized);
   const asksPriceNow = !nonApartmentValue && /\b(preco|precio|prices?|valor|quanto custa|cuanto cuesta|how much|dolar|usd)\b/.test(latestNormalized);
   const asksPlan = /\b(entrada|parcelas?|reforcos?|chaves|condicao de pagamento)\b/.test(latestNormalized);
