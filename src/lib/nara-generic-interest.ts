@@ -44,7 +44,8 @@ function fileCorpus(file: AiFileOption) {
 
 export function selectPortfolioFacadeIds(files: AiFileOption[] = []): string[] {
   const result: string[] = [];
-  for (const enterprise of ['flow', 'alma']) {
+  // Ordem combinada com o Fábio: Soul, Flow e Alma.
+  for (const enterprise of ['soul', 'flow', 'alma']) {
     const file = files.find((item) => {
       const corpus = fileCorpus(item);
       return String(item.category ?? '').toLocaleLowerCase('pt-BR') === 'imagem'
@@ -53,5 +54,28 @@ export function selectPortfolioFacadeIds(files: AiFileOption[] = []): string[] {
     });
     if (file?.id && !result.includes(file.id)) result.push(file.id);
   }
-  return result.slice(0, 2);
+  return result.slice(0, 3);
+}
+
+/** A resposta apresenta a carteira inteira (Soul, Flow e Alma juntos)? */
+export function presentsWholePortfolio(text: string): boolean {
+  const value = normalize(text);
+  return /\bsoul\b/.test(value) && /\bflow\b/.test(value) && /\balma\b/.test(value);
+}
+
+/**
+ * Primeira apresentação da carteira: quando a resposta apresenta os três
+ * empreendimentos pela primeira vez na conversa, anexa as fachadas da
+ * biblioteca (Soul, Flow, Alma), sem repetir fachada já enviada antes.
+ */
+export function portfolioFacadesForFirstPresentation(
+  reply: string,
+  history: GenericInterestMessage[],
+  files: AiFileOption[] = [],
+  alreadyAttached: string[] = [],
+): string[] {
+  if (!presentsWholePortfolio(reply)) return [];
+  const presentedBefore = history.some((item) => item.role === 'assistant' && presentsWholePortfolio(item.content));
+  if (presentedBefore) return [];
+  return selectPortfolioFacadeIds(files).filter((id) => !alreadyAttached.includes(id));
 }

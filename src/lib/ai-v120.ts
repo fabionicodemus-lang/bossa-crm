@@ -3,7 +3,7 @@ import { naraConversationLanguage, requestedNaraLanguage } from './nara-language
 import type { AiFileOption, AiTrainingContext, AiTurn } from './ai';
 import type { Lead } from './types';
 import type { NaraUnitOffer } from './nara-unit-queries';
-import { isGenericPortfolioInterest, selectPortfolioFacadeIds } from './nara-generic-interest';
+import { isGenericPortfolioInterest, portfolioFacadesForFirstPresentation, selectPortfolioFacadeIds } from './nara-generic-interest';
 
 export * from './ai';
 
@@ -349,7 +349,7 @@ export function postProcessNaraTurn(
   if (isGenericPortfolioInterest(history)) {
     const facadeIds = selectPortfolioFacadeIds(context.files ?? []);
     turn.reply = facadeIds.length
-      ? 'Hoje temos o Soul pronto em Itapema, o Flow com 2 suítes e duplex para 2027, e o Alma com 3 e 4 suítes para 2030. Te mando duas fachadas. Quer mais fotos, plantas ou folder de algum deles?'
+      ? 'Hoje temos o Soul pronto em Itapema, o Flow com 2 suítes e duplex para 2027, e o Alma com 3 e 4 suítes para 2030. Te mando as fachadas. Quer mais fotos, plantas ou folder de algum deles?'
       : 'Hoje temos o Soul pronto em Itapema, o Flow com 2 suítes e duplex para 2027, e o Alma com 3 e 4 suítes para 2030. Quer mais fotos, plantas ou folder de algum deles?';
     turn.classification = 'morno';
     turn.score = Math.max(30, Math.min(turn.score, 59));
@@ -588,6 +588,18 @@ export function postProcessNaraTurn(
   return finishTurn(turn, history);
 }
 
+/**
+ * Regra da primeira apresentação: se a Nara apresentou Soul, Flow e Alma juntos
+ * pela primeira vez e não anexou as fachadas, anexa as que existirem na
+ * biblioteca, na ordem Soul, Flow, Alma, em vez de outros arquivos.
+ */
+function attachFirstPortfolioFacades(turn: AiTurn, history: ChatMessage[], context: AiTrainingContext): void {
+  if (turn.handoff) return;
+  const facades = portfolioFacadesForFirstPresentation(turn.reply, history, context.files ?? []);
+  if (!facades.length) return;
+  turn.attachment_ids = facades.slice(0, 3);
+}
+
 export async function generateAiTurn(
   lead: Lead,
   history: ChatMessage[],
@@ -596,6 +608,7 @@ export async function generateAiTurn(
   const turn = await generateCoreAiTurn(lead, history, context);
   if (!turn || lead.kind !== 'cliente') return turn;
   const processed = finishTurn(postProcessNaraTurn(turn, history, context), history);
+  attachFirstPortfolioFacades(processed, history, context);
   return enforceNaraReplyGuardrails(processed, lead, history, context);
 }
 

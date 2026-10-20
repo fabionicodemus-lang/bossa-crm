@@ -105,7 +105,7 @@ await accept(2, 'Pedido do menor recebe faixa e permanece frio', () => {
   assert.match(result.reply, /R\$ 900 mil/);
 });
 
-await accept(3, 'Duas tentativas de triagem não entram em loop', () => {
+await accept(3, 'Contato indeciso segue como possível comprador, sem triagem nem transferência', () => {
   const history = [
     { role: 'assistant', content: 'Para eu te direcionar certinho, você está buscando um imóvel para comprar ou precisa falar com a Bossa sobre outro assunto?' },
     { role: 'user', content: 'Não respondi' },
@@ -113,7 +113,7 @@ await accept(3, 'Duas tentativas de triagem não entram em loop', () => {
     { role: 'user', content: 'Ainda não sei' },
   ];
   const result = enforceNaraTriage(turn(), baseLead, history, {});
-  assert.equal(result.handoff, true);
+  assert.equal(result.handoff, false);
   assert.doesNotMatch(result.reply, /buscando um imóvel para comprar/i);
   assert.doesNotMatch(result.reply, /interesse é conhecer um imóvel/i);
 });

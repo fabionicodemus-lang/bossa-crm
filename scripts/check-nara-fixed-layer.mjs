@@ -16,7 +16,7 @@ assert.match(source, /delete generalKnowledge\.prompt_final/);
 assert.match(source, /!finalPrompt && persona/);
 assert.match(source, /!finalPrompt && context\.config\?\.first_message/);
 assert.doesNotMatch(source, /A qualificação só pode começar/);
-assert.match(source, /A pergunta direta de triagem é exceção/);
+assert.match(source, /Nunca faça pergunta de triagem/);
 assert.match(naraLayer, /O Prompt final define o ritmo, o tom, a ordem da conversa e o tamanho das mensagens/);
 assert.match(naraLayer, /sem checklist e sem ordem obrigatória/);
 assert.doesNotMatch(naraLayer, /Sua ordem obrigatória é/);

@@ -191,12 +191,12 @@ const NARA_REPLY_REGENERATION_ATTEMPTS = 2;
 
 const NARA_TRIAGE_DEFAULTS: Record<string, string> = {
   triagem_objetivo: 'Identifique silenciosamente o tipo de contato ao longo da conversa, sem transformar a triagem em uma etapa visível antes de entregar valor.',
-  triagem_pergunta_inicial: 'Quando houver ambiguidade real, use uma única pergunta curta e aberta: “Para eu te direcionar certinho, você está buscando um imóvel para comprar ou precisa falar com a Bossa sobre outro assunto?”',
+  triagem_pergunta_inicial: 'Não pergunte se o contato quer comprar ou tratar de outro assunto. Presuma que todo contato é um possível comprador e já comece entregando valor.',
   triagem_comprador: 'Sinais de interesse em empreendimento, planta, entrega, pagamento, moradia, veraneio ou investimento permitem seguir naturalmente como possível comprador, sem exigir confirmação formal.',
   triagem_corretor: 'Se for corretor, imobiliária ou parceiro comercial, não conduza como cliente final. Direcione ao Plantão da Bossa e marque transferência para o canal correto.',
   triagem_cliente_atual: 'Se já for cliente, comprador, proprietário ou morador e o assunto for contrato, boleto, obra, assistência, entrega, documentação ou pós-venda, não qualifique. Acolha, registre o assunto e transfira ao setor responsável.',
   triagem_outros: 'Fornecedor, prestador, candidato a vaga, currículo, imprensa, vizinho, cobrança, spam e assuntos institucionais não seguem para condução comercial. Colete somente o mínimo necessário e transfira ou encerre educadamente.',
-  triagem_saida: 'A pergunta direta de triagem é exceção: nunca deve abrir a conversa, deve aparecer no máximo uma vez e somente quando houver dúvida real sobre o tipo de atendimento.',
+  triagem_saida: 'Só mude o atendimento quando o próprio contato disser que é corretor, imobiliária, fornecedor, já cliente ou que não quer comprar. Nunca faça pergunta de triagem.',
 };
 
 function envNumber(name: string, fallback: number, min: number, max: number): number {
@@ -314,7 +314,14 @@ ${persona}` : '',
 
 function triageInstructions(context: AiTrainingContext): string {
   const { triage } = splitKnowledge(context.config?.knowledge);
-  const rules = { ...NARA_TRIAGE_DEFAULTS, ...triage };
+  // Todo contato é tratado como possível comprador (decisão do Fábio, 20/10/2026):
+  // a pergunta de triagem configurada não é mais oferecida ao modelo.
+  const rules = {
+    ...NARA_TRIAGE_DEFAULTS,
+    ...triage,
+    triagem_pergunta_inicial: NARA_TRIAGE_DEFAULTS.triagem_pergunta_inicial,
+    triagem_saida: NARA_TRIAGE_DEFAULTS.triagem_saida,
+  };
   const configured = Object.entries(rules)
     .map(([key, value]) => `${key.replace('triagem_', '').replaceAll('_', ' ')}: ${value}`)
     .join('\n');
@@ -322,7 +329,7 @@ function triageInstructions(context: AiTrainingContext): string {
   return `\n\nPROTEÇÕES DE TRIAGEM E ROTEAMENTO\n${configured}\n\nREGRAS OPERACIONAIS:\n- Na primeira resposta da conversa, cumprimente e apresente-se como Nara, da Bossa. Não diga espontaneamente que é IA.\n- Leia o histórico inteiro e avance a conversa. Nunca repita uma pergunta que o contato já respondeu nem envie a mesma mensagem duas vezes.
 - Se o contato disser que viu anúncio, demonstrou interesse, citou Flow/Alma/Soul ou fizer perguntas comerciais compatíveis com esses empreendimentos, trate a conversa como imobiliária e não pergunte “comprar ou outro assunto?”. Isso NÃO significa passar para humano: preço, tabela, fotos, vídeo, folder, localização e planta são atendidos pela Nara enquanto não houver pedido de visita, proposta/negociação ou atendimento humano.
 - Se, dentro de uma conversa de compra, ele pedir “uma pessoa”, “um corretor” ou “atendimento humano”, faça a passagem imediatamente. Não pergunte novamente qual é o assunto.
-- Ao passar para humano, você pode fazer UMA pergunta curta do dado comercial mais importante ainda ausente (forma de pagamento, prazo ou melhor horário), sem atrasar a passagem.\n- Faça a leitura do tipo de contato de forma silenciosa ao longo da conversa. Não transforme a triagem em uma etapa visível ou em um checklist obrigatório.\n- Quando a mensagem for compatível com interesse imobiliário, deixe o Prompt final conduzir a conversa naturalmente, sem criar um pedágio antes de entregar valor.\n- Um pedido isolado de preço, valor, tabela, fotos, vídeo, folder, localização, planta ou disponibilidade não deve gerar handoff. Entregue a informação/material possível e continue a conversa.\n- Quando houver retorno de faixa_empreendimento nas consultas comerciais deste turno, você pode informar somente a faixa geral mesmo sem intenção confirmada. Isso não libera qualificação, arquivos, tabela, unidade, disponibilidade ou condição específica.\n- Unidade, andar, disponibilidade, entrada, parcela e condição específica só podem ser informados quando a intenção de compra estiver confirmada e houver retorno correspondente da consulta comercial no mesmo turno.\n- Se a consulta comercial estiver vazia ou indisponível, não use valores lembrados: diga que o comercial confirmará a condição vigente.\n- Se a consulta comercial estiver bloqueada por perfil de corretor ou cliente atual, não informe nenhum preço: transfira para o Plantão ou pós-venda conforme indicado.\n- Quando houver ambiguidade real entre possível comprador e outro tipo de atendimento, use a pergunta configurada uma única vez e aguarde, sem iniciar uma sequência fixa de perguntas.\n- Corretor, cliente atual, fornecedor, currículo, pós-venda, financeiro, assistência, reclamação ou assunto institucional não entra na qualificação da Nara. Nesses casos, acolha, resuma o pedido, use handoff=true, mantenha stage=ia e indique o setor ou canal correto em next_action.\n- Para spam ou contato sem relação com a Bossa, use sem_interesse e handoff=true.\n- Nunca use preços lembrados pelo modelo. Um valor só pode ser informado quando estiver explicitamente nas mensagens do contato, na base de conhecimento, ou no retorno das consultas comerciais do sistema no mesmo turno.\n- A resposta não deve mencionar internamente as palavras “triagem”, “classificação” ou “handoff” para o contato.`;
+- Ao passar para humano, você pode fazer UMA pergunta curta do dado comercial mais importante ainda ausente (forma de pagamento, prazo ou melhor horário), sem atrasar a passagem.\n- Faça a leitura do tipo de contato de forma silenciosa ao longo da conversa. Não transforme a triagem em uma etapa visível ou em um checklist obrigatório.\n- Quando a mensagem for compatível com interesse imobiliário, deixe o Prompt final conduzir a conversa naturalmente, sem criar um pedágio antes de entregar valor.\n- Um pedido isolado de preço, valor, tabela, fotos, vídeo, folder, localização, planta ou disponibilidade não deve gerar handoff. Entregue a informação/material possível e continue a conversa.\n- Quando houver retorno de faixa_empreendimento nas consultas comerciais deste turno, você pode informar somente a faixa geral mesmo sem intenção confirmada. Isso não libera qualificação, arquivos, tabela, unidade, disponibilidade ou condição específica.\n- Unidade, andar, disponibilidade, entrada, parcela e condição específica só podem ser informados quando a intenção de compra estiver confirmada e houver retorno correspondente da consulta comercial no mesmo turno.\n- Se a consulta comercial estiver vazia ou indisponível, não use valores lembrados: diga que o comercial confirmará a condição vigente.\n- Se a consulta comercial estiver bloqueada por perfil de corretor ou cliente atual, não informe nenhum preço: transfira para o Plantão ou pós-venda conforme indicado.\n- Presuma que todo contato é um possível comprador. Não pergunte se ele quer comprar ou tratar de outro assunto; só mude o atendimento se ele mesmo disser que é corretor, fornecedor, cliente atual ou que não quer comprar.\n- Corretor, cliente atual, fornecedor, currículo, pós-venda, financeiro, assistência, reclamação ou assunto institucional não entra na qualificação da Nara. Nesses casos, acolha, resuma o pedido, use handoff=true, mantenha stage=ia e indique o setor ou canal correto em next_action.\n- Para spam ou contato sem relação com a Bossa, use sem_interesse e handoff=true.\n- Nunca use preços lembrados pelo modelo. Um valor só pode ser informado quando estiver explicitamente nas mensagens do contato, na base de conhecimento, ou no retorno das consultas comerciais do sistema no mesmo turno.\n- A resposta não deve mencionar internamente as palavras “triagem”, “classificação” ou “handoff” para o contato.`;
 }
 
 function fileInstructions(files: AiFileOption[]): string {
@@ -534,10 +541,6 @@ function looksLikeTriageQuestion(text: string, context: AiTrainingContext): bool
     || (/looking to buy.*apartment/.test(value) && /another.*matter/.test(value));
 }
 
-function hasTriageQuestionBeenAsked(history: ChatMessage[], context: AiTrainingContext): boolean {
-  return assistantMessages(history).some((message) => looksLikeTriageQuestion(message, context));
-}
-
 function contextualBuyerReply(history: ChatMessage[], context: AiTrainingContext): boolean {
   let lastTriageIndex = -1;
   history.forEach((message, index) => {
@@ -630,14 +633,14 @@ function nextQualificationQuestion(history: ChatMessage[]): string {
   const value = normalizeText(userText(history));
   const spanish = isSpanishConversation(history);
   const hasPurpose = /\b(morar|moradia|investir|investimento|revenda|aluguel|vivir|invertir|inversion|reventa|alquiler)\b/.test(value);
-  const hasEnterprise = /\b(flow|alma)\b/.test(value);
+  const hasEnterprise = /\b(soul|flow|alma)\b/.test(value);
   const hasTypology = /\b\d+\s*(?:quartos?|suites?|habitaciones?)\b|\b(?:dois|tres|quatro|dos|tres|cuatro)\s*(?:quartos?|suites?|habitaciones?)\b/.test(value);
   const hasBudget = moneyTokens(userText(history)).length > 0;
   const hasDeadline = /\b(agora|essa semana|este mes|proximo mes|ainda este ano|em \d+ meses|sem pressa|prazo|ahora|esta semana|proximo mes|este ano|sin apuro|plazo)\b/.test(value);
   const hasDecision = /\b(esposa|marido|companheira|companheiro|familia|filhos|decido sozinho|so eu|socio|socia|esposa|esposo|pareja|familia|hijos|decido solo|socio|socia)\b/.test(value);
 
   if (!hasPurpose) return spanish ? 'Perfecto, te ayudo. ¿Lo buscas para vivir o para invertir?' : 'Perfeito, eu te ajudo! Você está buscando um imóvel para morar ou para investir?';
-  if (!hasEnterprise) return spanish ? '¿Llegaste por un anuncio de Flow Aptos o de Alma Seahouses?' : 'Legal! Você chegou pelo anúncio do Flow Aptos ou do Alma Seahouses?';
+  if (!hasEnterprise) return spanish ? '¿Cuál te llamó más la atención: Soul, Flow o Alma?' : 'Legal! Qual te chamou mais atenção: o Soul, o Flow ou o Alma?';
   if (!hasTypology) return spanish ? '¿Cuántas habitaciones o suites buscas?' : 'Entendi. Você procura quantos quartos ou suítes?';
   if (!hasBudget) return spanish ? '¿En qué rango de inversión quieres mantenerte?' : 'Para eu separar as opções mais adequadas, em qual faixa de investimento você pretende ficar?';
   if (!hasDeadline) return spanish ? '¿En qué plazo piensas comprar?' : 'Você pensa em comprar em qual prazo?';
@@ -824,14 +827,10 @@ export function enforceNaraTriage(turn: AiTurn, lead: Lead, history: ChatMessage
   }
   const routed = routeOutsideBuyerProfile(history);
   const buyerConfirmed = hasExplicitBuyerIntent(lead, history, context);
-  const askedBefore = hasTriageQuestionBeenAsked(history, context);
-  const triageAttempts = assistantMessages(history)
-    .filter((message) => looksLikeTriageQuestion(message, context)).length;
   const canKeepGeneralPriceRange = asksCommercialValue(lastUser)
     && !asksProtectedCommercialDetail(lastUser)
     && isGeneralPriceRangeReply(turn.reply)
     && !hasUngroundedMoney(turn.reply, history, context);
-  const clearTopic = /\b(flow|alma|soul|apartamento|imovel|anuncio|decorado|visita|visitar|planta|fotos?|video|preco|precio|prices?|valor|quanto|cuanto|desconto|financiamento|troca|permuta|comprar|buy|usd|dolar)\b/.test(normalizeText(lastUser));
 
   if (canKeepGeneralPriceRange && !routed && !/\b(quero comprar|pretendo comprar|quero investir|quero morar|proposta|reserva)\b/.test(normalizeText(userText(history)))) {
     turn.classification = 'frio';
@@ -859,59 +858,17 @@ export function enforceNaraTriage(turn: AiTurn, lead: Lead, history: ChatMessage
       turn.extracted.decision_maker = '';
       return turn;
     }
-    if (clearTopic) {
-      turn.reply = asksProtectedCommercialDetail(lastUser) || looksLikeTriageQuestion(turn.reply, context)
-        ? nextQualificationQuestion(history) : turn.reply;
-      turn.classification = 'frio'; turn.score = Math.min(turn.score, 20);
-      turn.stage = 'ia'; turn.handoff = false;
+    // Sem intenção declarada, o contato continua sendo tratado como possível
+    // comprador: a resposta do modelo segue (inclusive arquivos públicos, como
+    // fachadas), sem pergunta de triagem. Só detalhes comerciais protegidos
+    // (unidade, parcela, entrada) seguem bloqueados até a intenção aparecer.
+    if (asksProtectedCommercialDetail(lastUser) || looksLikeTriageQuestion(turn.reply, context)) {
+      turn.reply = nextQualificationQuestion(history);
       turn.attachment_ids = [];
-      turn.reply = ensureFirstTurnIntroduction(turn.reply, history, context);
-      return turn;
     }
-    if (triageAttempts >= 1) {
-      turn.reply = ensureFirstTurnIntroduction(
-        'Vou encaminhar você para um atendente da Bossa; por favor, diga em uma frase qual é o assunto para o time continuar.',
-        history,
-        context,
-      );
-      turn.classification = 'frio';
-      turn.score = Math.min(turn.score, 20);
-      turn.stage = 'ia';
-      turn.summary = 'A intenção do contato permanece indefinida após a pergunta inicial.';
-      turn.next_action = 'Transferir para atendimento humano e identificar o assunto solicitado.';
-      turn.handoff = true;
-      turn.attachment_ids = [];
-      turn.extracted.budget = '';
-      turn.extracted.typology = '';
-      turn.extracted.deadline = '';
-      turn.extracted.decision_maker = '';
-      return turn;
-    }
-
-    const learnedCorrection = exactManagerCorrection(history, context);
-    const safeLearnedCorrection = learnedCorrection && !moneyTokens(learnedCorrection).length && learnedCorrection.includes('?');
-    const locale = naraConversationLanguage(history);
-    const question = locale === 'es'
-      ? '¿Buscas un departamento para comprar o necesitas ayuda con otro asunto de Bossa?'
-      : locale === 'en'
-        ? 'Are you looking to buy an apartment, or do you need help with another Bossa matter?'
-        : configuredTriageQuestion(context);
-    // Uma correção em português não pode sobrescrever a pergunta no idioma do cliente.
-    turn.reply = locale === 'pt' && safeLearnedCorrection ? learnedCorrection : question;
+    turn.classification = 'frio'; turn.score = Math.min(turn.score, 20);
+    turn.stage = 'ia'; turn.handoff = false;
     turn.reply = ensureFirstTurnIntroduction(turn.reply, history, context);
-    turn.classification = 'frio';
-    turn.score = Math.min(turn.score, 20);
-    turn.stage = 'ia';
-    turn.summary = asksCommercialValue(lastUser)
-      ? 'Contato pediu informação comercial, mas a intenção de compra ainda não foi confirmada.'
-      : 'Intenção do contato ainda não confirmada; triagem em andamento.';
-    turn.next_action = 'Aguardar o contato confirmar se busca comprar um imóvel ou se precisa de outro atendimento.';
-    turn.handoff = false;
-    turn.attachment_ids = [];
-    turn.extracted.budget = '';
-    turn.extracted.typology = '';
-    turn.extracted.deadline = '';
-    turn.extracted.decision_maker = '';
     return turn;
   }
 

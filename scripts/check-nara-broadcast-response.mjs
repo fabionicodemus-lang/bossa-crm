@@ -9,6 +9,7 @@ import { agendaActionFromText } from '../src/lib/nara-agenda-intent.ts';
 import {
   isGenericPortfolioInterest,
   selectPortfolioFacadeIds,
+  portfolioFacadesForFirstPresentation,
 } from '../src/lib/nara-generic-interest.ts';
 
 const base = {
@@ -77,6 +78,17 @@ const facadeIds = selectPortfolioFacadeIds([
   { id: 'flow-planta', category: 'planta', title: 'Planta Flow', description: null, trigger_keywords: ['flow'], storage_bucket: '', storage_path: '', original_name: 'planta.jpg', mime_type: 'image/jpeg' },
 ]);
 assert.deepEqual(facadeIds, ['flow-fachada', 'alma-fachada']);
+
+// Primeira apresentação: Soul, Flow e Alma juntos recebem as fachadas, uma única vez.
+const libraryWithSoul = [
+  { id: 'alma-fachada', category: 'imagem', title: 'Fachada Alma', description: null, trigger_keywords: [], storage_bucket: '', storage_path: '', original_name: 'alma.jpg', mime_type: 'image/jpeg' },
+  { id: 'soul-fachada', category: 'imagem', title: 'Fachada Soul', description: null, trigger_keywords: [], storage_bucket: '', storage_path: '', original_name: 'soul.jpg', mime_type: 'image/jpeg' },
+  { id: 'flow-fachada', category: 'imagem', title: 'Fachada Flow', description: null, trigger_keywords: [], storage_bucket: '', storage_path: '', original_name: 'flow.jpg', mime_type: 'image/jpeg' },
+];
+const trio = 'Temos três opções: o Soul pronto, o Flow para 2027 e o Alma para 2030. Qual te chamou atenção?';
+assert.deepEqual(portfolioFacadesForFirstPresentation(trio, [{ role: 'user', content: 'Oi' }], libraryWithSoul), ['soul-fachada', 'flow-fachada', 'alma-fachada']);
+assert.deepEqual(portfolioFacadesForFirstPresentation(trio, [{ role: 'assistant', content: trio }, { role: 'user', content: 'Me fala de novo' }], libraryWithSoul), []);
+assert.deepEqual(portfolioFacadesForFirstPresentation('O Flow tem duplex de 4,90 m.', [], libraryWithSoul), []);
 
 const processor = readFileSync(new URL('../src/lib/whatsapp/webhookProcessor.ts', import.meta.url), 'utf8');
 const safety = readFileSync(new URL('../src/lib/whatsapp/aiTurnSafety.ts', import.meta.url), 'utf8');
