@@ -50,9 +50,16 @@ function currentOwnerMode(lead: Lead): OwnerMode {
 function explicitHighIntent(text: string, kind: LeadKind): string | null {
   const value = normalize(text);
   if (/\b(quero falar com (?:uma pessoa|alguem|consultor|corretor)|atendimento humano|me liga|pode me ligar|ligacao|videochamada)\b/.test(value)) return 'O contato pediu atendimento humano ou ligação.';
+  if (kind === 'corretor') {
+    // Plantão (Fábio, 20/10/2026): tabela, unidades, entrada, parcelas e desconto o Plantão responde sozinho.
+    // Só vai para a Taís cliente concreto, proposta/negociação ou comissão diferente dos 5%.
+    if (/\b(proposta|reservar|reserva|negociar|negociacao|contraproposta)\b/.test(value)) return 'Corretor entrou em proposta, reserva ou negociação.';
+    if (/\bcomiss(?:ao|oes)\b/.test(value) && /\b(diferenciad|diferente|maior|melhor|mais|aument|negoci|especial|[6-9] ?%|1[0-9] ?%)/.test(value)) return 'Corretor pediu comissão diferenciada.';
+    if (/\b(tenho (?:um |uma )?cliente|cliente ativo|estou com (?:um |uma )?cliente|meu cliente|minha cliente|visita com (?:o |a )?cliente|proposta do cliente|reserva para (?:o |a )?cliente)\b/.test(value)) return 'Corretor informou cliente ativo ou oportunidade concreta.';
+    return null;
+  }
   if (/\b(proposta|reservar|reserva|fechar|negociar|contraproposta|desconto|condicao|entrada|reforco|parcelamento)\b/.test(value)) return 'O contato entrou em proposta, condição ou negociação.';
   if (/\b(unidade disponivel|qual unidade|apartamento pronto|pronto para morar|soul)\b/.test(value)) return 'O contato pediu unidade específica ou demonstrou aderência à unidade pronta do Soul.';
-  if (kind === 'corretor' && /\b(tenho cliente|cliente ativo|estou com cliente|visita com cliente|proposta do cliente|reserva para cliente)\b/.test(value)) return 'Corretor informou cliente ativo ou oportunidade concreta.';
   return null;
 }
 function proposalSignal(text: string) { return /\b(proposta|reservar|reserva|fechar|negociar|contraproposta|desconto|condicao|entrada|reforco|parcelamento)\b/.test(normalize(text)); }

@@ -29,8 +29,20 @@ function concreteClientSignal(value: string) {
     || /\b(?:cliente ativo|cliente quente|cliente na mao|cliente na m[aã]o)\b/.test(value);
 }
 
+// O Plantão responde sozinho dúvidas de tabela, entrada, parcelas e desconto (Fábio, 20/10/2026).
+// Só vira alerta para a Taís proposta/reserva/negociação de verdade, ou condição pedida para um cliente.
 function proposalSignal(value: string) {
-  return /\b(proposta|simulacao|simular|reservar|reserva|fechar|negociar|negociacao|contraproposta|desconto|condicao|entrada|reforco|parcelamento|fluxo de pagamento)\b/.test(value);
+  return /\b(proposta|reservar|reserva|fechar negocio|fechar com|negociar|negociacao|contraproposta)\b/.test(value);
+}
+
+function conditionSignal(value: string) {
+  return /\b(simulacao|simular|desconto|condicao|entrada|reforco|parcelamento|fluxo de pagamento)\b/.test(value);
+}
+
+/** Comissão diferente dos 5% padrão. */
+function customCommissionSignal(value: string) {
+  return /\bcomiss(?:ao|oes)\b/.test(value)
+    && /\b(diferenciad|diferente|maior|melhor|mais|aument|negoci|especial|[6-9] ?%|[6-9] por cento|1[0-9] ?%)/.test(value);
 }
 
 function appointmentSignal(value: string) {
@@ -70,7 +82,8 @@ function alertReason(args: {
     && !args.decision.handoffRequired;
 
   if (onlyMaterial) return null;
-  if (hasProposal) return 'Proposta / negociação';
+  if (customCommissionSignal(value)) return 'Comissão diferenciada';
+  if (hasProposal || (hasClient && conditionSignal(value))) return 'Proposta / negociação';
   if (hasAppointment) return 'Agendamento / visita';
   if (hasClient) return 'Corretor com cliente';
   if (wantsHuman) return 'Solicitou atendimento humano';
