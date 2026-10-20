@@ -925,6 +925,24 @@ export function enforceNaraTriage(turn: AiTurn, lead: Lead, history: ChatMessage
   return turn;
 }
 
+function extractOutputText(data: OpenAiResponse): string {
+  for (const item of data.output ?? []) {
+    for (const content of item.content ?? []) {
+      if (content.type === 'output_text' && content.text) return content.text;
+    }
+  }
+  return '';
+}
+
+function extractRefusal(data: OpenAiResponse): string {
+  for (const item of data.output ?? []) {
+    for (const content of item.content ?? []) {
+      if (content.type === 'refusal' && content.refusal) return content.refusal;
+    }
+  }
+  return '';
+}
+
 function buildUsage(
   data: OpenAiResponse,
   options: RequestOptions,
