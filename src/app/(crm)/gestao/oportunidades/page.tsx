@@ -50,7 +50,8 @@ export default async function Opportunities({
       />
       <div className="page-content">
         <Link href="/gestao">← Gestão</Link>{" · "}
-        <Link href="/gestao/vinculos">Revisar vínculos de propostas e visitas</Link>
+        <Link href="/gestao/vinculos">Revisar vínculos de propostas e visitas</Link>{" · "}
+        <Link href="/gestao/etapas">Etapas por fatos confirmados</Link>
         <form
           className="card card-body"
           style={{ display: "flex", gap: 12, marginBlock: 16 }}

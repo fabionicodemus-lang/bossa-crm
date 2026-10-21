@@ -47,6 +47,8 @@ jobs:
         run: node scripts/commercial/check-linking.mjs
       - name: Test verified purchase intent
         run: node --experimental-strip-types scripts/commercial/check-intake.mjs
+      - name: Test fact-driven stage synchronization
+        run: node scripts/commercial/check-stages.mjs
       - name: Test human agenda API session
         run: node --experimental-strip-types --loader ./scripts/agenda/loader.mjs scripts/agenda/check-route.mjs
       - name: Test agenda actor and RLS in PostgreSQL
@@ -128,3 +130,5 @@ jobs:
         run: command -v psql || (sudo apt-get update -qq && sudo apt-get install -y postgresql-client)
       - name: Test real concurrent intent confirmations
         run: node scripts/commercial/check-intake-concurrency.mjs
+      - name: Test real concurrent stage advances
+        run: node scripts/commercial/check-stage-concurrency.mjs
