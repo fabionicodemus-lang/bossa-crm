@@ -6,7 +6,7 @@ import { PageTopbar } from "@/components/PageTopbar";
 export default async function New({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string; lead_id?: string }>;
 }) {
   const ctx = await getCurrentContext();
   const db = await createClient();
@@ -18,6 +18,18 @@ export default async function New({
     .select("user_id,profiles(full_name)")
     .eq("organization_id", ctx!.organization.id);
   if (error) throw error;
+  const selectedContact = p.lead_id
+    ? await db.from("leads")
+        .select("id,name,kind,phone,enterprise,company,group_name")
+        .eq("organization_id", ctx!.organization.id)
+        .eq("kind", "cliente")
+        .is("archived_at", null)
+        .eq("id", p.lead_id)
+        .maybeSingle()
+    : null;
+  const contact = selectedContact?.data
+    ? { ...selectedContact.data, kind: "cliente" as const }
+    : null;
   const team = (data ?? []).map((m) => ({
     id: m.user_id,
     name:
@@ -37,7 +49,13 @@ export default async function New({
           Consultar dois empreendimentos na mesma negociação exige apenas uma
           oportunidade. Cadastre os interesses depois de salvar.
         </p>
-        <CommercialOpportunityForm team={team} />
+        {p.lead_id && !contact && (
+          <p role="alert">
+            Contato não encontrado, arquivado ou indisponível para esta organização.
+            Escolha um contato ativo antes de salvar.
+          </p>
+        )}
+        <CommercialOpportunityForm team={team} contact={contact} />
       </div>
     </>
   );

@@ -84,4 +84,58 @@ language sql stable security invoker set search_path=public as $$
 $$;
 revoke all on function public.commercial_facts(uuid,jsonb) from public,anon;
 grant execute on function public.commercial_facts(uuid,jsonb) to authenticated,service_role;
+
+-- Finished stage transitions only, never guessed from updated_at or legacy stages.
+create function public.commercial_stage_durations(
+  p_org uuid,
+  p_start timestamptz,
+  p_end timestamptz,
+  p_filters jsonb default '{}'::jsonb
+)
+returns table(stage text,sample_size bigint,median_hours double precision,p90_hours double precision)
+language sql stable security invoker set search_path=public as $
+ with eligible as (
+  select o.id from public.commercial_opportunities o
+  where o.organization_id=p_org and private.is_org_member(p_org)
+   and (nullif(p_filters->>'owner','') is null or o.owner_id=(p_filters->>'owner')::uuid)
+   and (nullif(p_filters->>'broker','') is null or o.broker_id=(p_filters->>'broker')::uuid)
+   and (nullif(p_filters->>'source','') is null or coalesce(o.source,'unknown')=p_filters->>'source')
+   and (nullif(p_filters->>'development','') is null or exists(
+     select 1 from public.commercial_interests i
+     where i.opportunity_id=o.id
+      and i.development_id=(p_filters->>'development')::uuid))
+ ), changes as (
+  select e.opportunity_id,e.id,e.occurred_at,e.recorded_at,
+    e.new_state->>'stage' as stage
+  from public.commercial_events e
+  join eligible o on o.id=e.opportunity_id
+  where e.organization_id=p_org and e.confirmation='confirmed'
+   and e.event_type in ('created','stage_changed','reactivated')
+   and e.new_state->>'stage' in
+    ('new','contact','qualified','visit_scheduled','visit_completed',
+     'proposal','negotiation','signed','nurture','lost')
+ ), periods as (
+  select stage,occurred_at,
+   lead(occurred_at) over
+     (partition by opportunity_id order by occurred_at,recorded_at,id) as next_at,
+   lead(stage) over
+     (partition by opportunity_id order by occurred_at,recorded_at,id) as next_stage
+  from changes
+ )
+ select p.stage,count(*)::bigint as sample_size,
+  percentile_cont(0.5) within group
+    (order by extract(epoch from p.next_at-p.occurred_at)/3600.0)::double precision as median_hours,
+  percentile_cont(0.9) within group
+    (order by extract(epoch from p.next_at-p.occurred_at)/3600.0)::double precision as p90_hours
+ from periods p
+ where p.next_at is not null and p.next_at>p.occurred_at
+  and p.next_stage is distinct from p.stage
+  and p.next_at>=p_start and p.next_at<least(p_end,now())
+  and p_end>p_start and p_end-p_start<=interval '367 days'
+ group by p.stage order by p.stage;
+$;
+revoke all on function public.commercial_stage_durations(uuid,timestamptz,timestamptz,jsonb) from public,anon;
+grant execute on function public.commercial_stage_durations(uuid,timestamptz,timestamptz,jsonb)
+ to authenticated,service_role;
+
 commit;

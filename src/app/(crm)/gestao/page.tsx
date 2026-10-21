@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import { CommercialOperations } from "@/components/CommercialOperations";
 import { CommercialDevelopments } from "@/components/CommercialDevelopments";
+import { CommercialStageDuration } from "@/components/CommercialStageDuration";
 import { CommercialContactSelect } from "@/components/CommercialContactSelect";
 import Link from "next/link";
 import { PageTopbar } from "@/components/PageTopbar";
@@ -199,7 +200,7 @@ export default async function Management({
             <CommercialContactSelect
               name="broker"
               kind="corretor"
-              initial={selectedBroker?.data ?? null}
+              initial={selectedBroker?.data ? { ...selectedBroker.data, kind: "corretor" as const } : null}
             />
           </label>
           <label>
@@ -540,6 +541,16 @@ export default async function Management({
               filters={filters}
               developments={developments.data ?? []}
               baseQuery={query.toString()}
+            />
+          </Suspense>
+        )}
+        {!response.error && data && (
+          <Suspense fallback={<p>Calculando duração das etapas…</p>}>
+            <CommercialStageDuration
+              org={context!.organization.id}
+              start={range.start}
+              end={range.end}
+              filters={filters}
             />
           </Suspense>
         )}

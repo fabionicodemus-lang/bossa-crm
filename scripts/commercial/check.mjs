@@ -289,7 +289,29 @@ assert.throws(() =>
   periodRange({ period: "custom", start: "2026-02-30", end: "2026-03-01" }),
 );
 await rejects(`update commercial_opportunities set stage='lost',loss_reason='other',loss_note=null where id=$1`,[op.id]);
+// A documented stage exit contributes to the actual time distribution.
+const [timed] = await q(
+  `insert into commercial_opportunities(organization_id,title,primary_contact_id,created_at)
+   values($1,'Oportunidade com início documentado',$2,now()-interval '2 days') returning id`,
+  [org, buyer],
+);
+await q(
+  `update commercial_opportunities
+   set stage='qualified', qualification='{"need":"morar","product":"apto","horizon":"ano","commercial_fit":"ok"}'
+   where id=$1`, [timed.id],
+);
+const duration = await q(
+  `select * from commercial_stage_durations($1,now()-interval '1 day',now()+interval '1 day') where stage='new'`,
+  [org],
+);
+assert.equal(duration.length, 1);
+assert.ok(Number(duration[0].sample_size) >= 1);
+assert.ok(Number(duration[0].median_hours) >= 0);
+await rejects(
+  `select * from commercial_stage_durations($1,now()-interval '1 day',now()+interval '1 day')`,
+  [other],
+);
 console.log(
-  "PASS: isolated PostgreSQL migrations, qualification, couple, multiple interests, proposal revisions, visit chronology, rescheduling, reactivation, immutable history, financial idempotency, cohorts, reconciliation, organization RLS, viewer permissions, dates, zero reference, cross-development attribution and broker filters.",
+  "PASS: isolated PostgreSQL migrations, qualification, couple, multiple interests, proposal revisions, visit chronology, rescheduling, reactivation, immutable history, financial idempotency, cohorts, reconciliation, organization RLS, viewer permissions, dates, zero reference, cross-development attribution, broker filters and stage duration distributions.",
 );
 await db.close();

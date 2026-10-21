@@ -11,7 +11,7 @@ Base inspecionada: `d88fdd2` de `fabionicodemus-lang/bossa-crm`, Next.js 16/Reac
 | Fase | Implementado nesta alteração | Pendente para concluir a fase |
 |---|---|---|
 | 1 — base e cálculos | Oportunidades separadas de contatos; participantes; interesses principal/alternativos; eventos transacionais imutáveis; versões de proposta; contratos documentados; recebimentos com identificador único; regras canônicas de cartões/detalhe/exportação; RLS por organização; reativação sem mudar criação. | Integração de criação de oportunidades ao fluxo de intenção detectada; revisão de todos os produtores externos e das mesclagens de contatos; atribuição histórica temporal de todos os vínculos. |
-| 2 — operação | Gestão com filtros, cartões, estoque atual do funil, ações, coortes, comparecimento, exportação paginada; lista/ficha de oportunidades; vínculos com agenda/propostas existentes; participantes e interesses; confirmação de contrato, distrato e recebimento. | Funil de oportunidades com arraste; filtros globais completos nos módulos existentes; tempo mediano/p90 por etapa; vinculação automática assistida; remarcação atômica pela interface; proposta com preparação/aprovação completas; Bossa Experience; alertas de concorrência por unidade; troca de interesse principal. |
+| 2 — operação | Gestão com filtros, cartões, estoque atual do funil, ações, coortes, comparecimento, exportação paginada; lista/ficha de oportunidades; vínculos com agenda/propostas existentes; participantes e interesses; confirmação de contrato, distrato e recebimento; acesso às oportunidades pelo cadastro do cliente e pré-seleção do contato; mediana/P90 das transições concluídas. | Funil de oportunidades com arraste; filtros globais completos nos módulos existentes; vinculação automática assistida; remarcação atômica pela interface; proposta com preparação/aprovação completas; Bossa Experience; alertas de concorrência por unidade; troca de interesse principal. |
 | 3 — atendimento e marketing | Análise de transferências com aceite separado da primeira mensagem humana enviada com status válido; taxa no expediente configurado; casos fora do expediente destacados; revisão de conversa com trecho literal; ranking documentado por período com pesos existentes preservados. | SLA completo da escala de plantão; exclusão sistemática de testes/spam; continuidade e erros de envio/agenda; reestruturação de site/campanhas/transmissões e atribuição confiável; revisão do ranking legado e dos marcos inferidos. |
 | 4 — planejamento e validação | Cadastro de metas, pesos configuráveis, parâmetros de amostra/paralisação, despesas documentadas, custos por origem com escopos de data idênticos; qualidade da base; comparativo de empreendimentos com contratos/valores atribuídos à unidade; testes de regressão em PostgreSQL isolado. | Demais custos/coortes; painel e diário de validade da coleta; metas por carteira/equipe com edição; alertas por amostra/maturação; homologação autenticada pela interface; implantação. |
 
@@ -19,7 +19,7 @@ Base inspecionada: `d88fdd2` de `fabionicodemus-lang/bossa-crm`, Next.js 16/Reac
 
 - `/gestao`: nova visão, substitui apenas o antigo alias para `/dashboard`.
 - `/gestao/oportunidades`: lista paginada do estoque atual.
-- `/gestao/nova`: cadastro de uma intenção concreta de compra.
+- `/gestao/nova`: cadastro de uma intenção concreta de compra, opcionalmente com `lead_id` vindo do cadastro do cliente.
 - `/gestao/oportunidades/[id]`: participantes, interesses, documentos e eventos.
 - `/gestao/configuracoes`: metas, custos, ranking e revisão de conversas; administrador.
 - `/api/commercial/export`: CSV da página de 50 registros, com a mesma consulta e os mesmos filtros do detalhamento.
@@ -47,6 +47,7 @@ Não aplicar em produção enquanto as pendências de integração/homologação
 - **Entradas confirmadas**: lançamentos documentados por administrador; não há integração financeira automática. Não há reversão de recebimento/refundo nesta versão.
 - **Coortes**: primeiras propostas/visitas do intervalo, contratos/propostas posteriores até o corte. Coortes abertas não equivalem a previsões. A comparação de maturação equivalente ainda está pendente.
 - **Comparecimento**: realizadas / (realizadas + faltas); cancelamentos e pendências separados. Remarcadas não contam como falta.
+- **Duração de etapas**: mediana/P90 apenas de etapas com entrada e saída documentadas, encerradas no período. Não inclui oportunidade ainda aberta nem preenche ausência histórica por inferência; filtros de carteira refletem os vínculos atuais.
 - **Ranking**: pesos efetivamente encontrados no código (100/20/10/4/1). Interações revisadas têm limite mensal. O novo quadro usa fatos documentados; o ranking legado permanece separado.
 - **SLA**: primeira mensagem humana enviada, excluindo mensagens sem status válido. Casos fora de expediente não são avaliados como se fossem atendidos pelo plantão. Entrega/leitura não são presumidas.
 - **Custos**: despesas com intervalo exato do filtro e mesma origem. Não equivalem a CAC por coorte nem demonstram causalidade de campanha. A ausência de lançamento é indisponibilidade.
@@ -80,3 +81,7 @@ Reverter o commit da aplicação ou a alteração de `/gestao` devolve o painel 
 ## Continuação de 21/10/2026
 
 Novo comparativo de empreendimentos na Gestão, busca remota do filtro de corretor, atribuição de propostas e vendas à unidade real via migração aditiva e regressão de cliente com dois interesses. Esta continuação também permanece em rascunho: executar novo CI e homologação na cópia do banco antes de promover.
+
+## Continuação — acesso pelo cliente e tempo de etapas
+
+A ficha de cliente lista oportunidades distintas e oferece cadastro pré-preenchido (somente contato ativo da mesma organização). A ficha continua operacional se a nova migração ainda não estiver instalada. Adicionada distribuição mediana/P90 por etapa a partir de transições confirmadas, com proteção por organização e regressão em PostgreSQL isolado. Estas alterações ainda precisam passar por CI atualizado e homologação autenticada.
