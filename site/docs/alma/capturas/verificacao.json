@@ -1,0 +1,15 @@
+{
+  "data": "2026-10-21T23:44:17.845Z",
+  "base": "http://localhost:3200",
+  "modo": "Respostas controladas locais; nenhuma integração real de lead testada",
+  "verificacoes": [
+    "Dez seções na ordem, treze perguntas, contato inicial geral, movimento reduzido e nenhuma planta vista fora da tela",
+    "Quatro rotas, recarga, metadados, duas pranchas completas, contexto WhatsApp, zoom, Escape e retorno de foco",
+    "Trocas sem scroll/reload/page_view, comparação e exposição por um segundo sem duplicação",
+    "Compartilhamento: cópia confirmada, cancelamento e falha com link manual limpo",
+    "Formulário: falhas HTTP, confirmação incompleta, JSON inválido, rede, dados preservados na troca, finalidade vazia e sucesso apenas com 2xx + ok + gravado",
+    "Nove posições M01–M08, boletim/FAQ sincronizados, lazer por pavimento, vistas e giro por teclado",
+    "Capturas 1440/390, barra contextual e recolhida em modal/contato, foco contido e ausência de overflow 320–1440 e texto ampliado",
+    "Flow: seletor, navegação e contato preservados; planta inválida 404; boletim e privacidade 200; sem erros JavaScript"
+  ]
+}

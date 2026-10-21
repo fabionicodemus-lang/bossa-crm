@@ -235,3 +235,676 @@
 .al-mapa { position: relative; aspect-ratio: 16 / 10; border-radius: 20px; overflow: hidden; background: var(--sal-esc); margin-top: 32px; }
 @media (max-width: 700px) { .al-mapa { aspect-ratio: 4 / 5; } }
 .al-mapa iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; filter: saturate(.75) contrast(.95); }
+
+/* Fase 3 — apresentação residencial e consulta de plantas. */
+.al-fase3 {
+  background: var(--cla);
+  font-size: 17px;
+  line-height: 1.6;
+}
+.al-fase3 *,
+.al-visor * {
+  box-sizing: border-box;
+}
+.al-fase3 section[id] {
+  scroll-margin-top: 140px;
+}
+.al-fase3 .al-sec {
+  padding-block: clamp(64px, 8vw, 112px);
+}
+.al-secao-cab {
+  display: grid;
+  gap: 24px;
+  max-width: 1000px;
+  margin-bottom: 48px;
+}
+.al-secao-cab .al-p {
+  max-width: 70ch;
+}
+.al-fase3 .al-h2 {
+  font-size: clamp(32px, 4.1vw, 58px);
+  line-height: 1.15;
+}
+.al-fase3 .al-nota {
+  font-size: 16px;
+  line-height: 1.5;
+}
+.al-fase3 .al-bt {
+  font-size: 14px;
+  letter-spacing: 0.035em;
+  text-transform: none;
+  line-height: 1.35;
+  padding: 14px 24px;
+  min-height: 48px;
+  text-align: center;
+}
+.al-fase3 .al-abertura {
+  min-height: min(1020px, calc(100svh - 64px));
+}
+.al-fase3 .al-abertura::after {
+  background: linear-gradient(
+    90deg,
+    rgba(31, 43, 35, 0.86),
+    rgba(31, 43, 35, 0.55) 60%,
+    rgba(31, 43, 35, 0.1)
+  );
+}
+.al-fase3 .al-abertura__conteudo {
+  padding-block: 52px;
+  gap: 20px;
+}
+.al-fase3 .al-abertura__logo {
+  width: 170px;
+}
+.al-fase3 .al-abertura .al-h1 {
+  font-size: clamp(42px, 5.3vw, 76px);
+  line-height: 1.14;
+}
+.al-fase3 .al-abertura :is(.al-p, .al-rot, .al-nota) {
+  color: #fff;
+}
+.al-fase3 .al-abertura .al-p {
+  max-width: 64ch;
+}
+.al-faixa-dados {
+  max-width: 58ch;
+  font-weight: 600;
+}
+.al-nav {
+  position: sticky;
+  top: 64px;
+  z-index: 15;
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  padding: 8px 16px;
+  background: var(--cla);
+  border-bottom: 1px solid var(--are);
+  overflow-x: auto;
+}
+.al-nav a {
+  padding: 12px 20px;
+  white-space: nowrap;
+  border-radius: 30px;
+  text-decoration: none;
+  border: 1px solid transparent;
+}
+.al-nav a[aria-current] {
+  background: var(--sal);
+  color: #fff;
+  border-color: var(--sal);
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+.al-fase3 :is(a, button, input, select, summary):focus-visible {
+  outline: 3px solid currentColor;
+  outline-offset: 4px;
+}
+.al-fase3 :is(button, summary, input, select) {
+  font: inherit;
+}
+.al-fase3 button {
+  cursor: pointer;
+}
+.al-fase3 summary {
+  cursor: pointer;
+  min-height: 48px;
+  padding: 14px 0;
+  font-weight: 600;
+}
+.al-fase3 button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.al-expansao {
+  border-block: 1px solid var(--are);
+  margin-top: 28px;
+  padding: 4px 0 20px;
+}
+.al-expansao:not([open]) {
+  padding-bottom: 4px;
+}
+.al-expandido,
+details[open] > summary .al-recolhido {
+  display: none;
+}
+.al-recolhido,
+details[open] > summary .al-expandido {
+  display: inline;
+}
+.al-interiores {
+  display: grid;
+  gap: 32px;
+  margin-bottom: 32px;
+}
+.al-interiores-apoio {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 28px;
+}
+.al-fase3 .al-figura {
+  margin: 0 0 20px;
+  min-width: 0;
+}
+.al-imagem-botao {
+  display: block;
+  border: 0;
+  padding: 0;
+  width: 100%;
+  aspect-ratio: 16/9;
+  cursor: zoom-in;
+}
+.al-inteira {
+  aspect-ratio: 4/3;
+  background: #fff;
+}
+.al-inteira img {
+  object-fit: contain;
+}
+.al-fase3 figcaption {
+  display: grid;
+  gap: 4px;
+  margin-top: 12px;
+  font-size: 16px;
+}
+.al-fase3 figcaption b {
+  font-weight: 600;
+}
+.al-fase3 figcaption span {
+  font-size: 16px;
+}
+.al-fase3 article {
+  min-width: 0;
+}
+.al-midia-etiqueta {
+  font-size: 16px;
+  padding: 10px 16px;
+  background: #e3e7df;
+  color: #343e37;
+  border-radius: 12px;
+  margin: 12px 0;
+}
+.al-midia-prevista {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  padding: 24px;
+  gap: 12px;
+  background: rgba(157, 150, 141, 0.12);
+  border: 1px dashed currentColor;
+  border-radius: 24px;
+  width: 100%;
+  margin-block: 24px;
+}
+.al-midia-prevista span {
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  padding: 10px;
+  font-weight: 600;
+}
+.al-midia-prevista p {
+  font-family: var(--serif);
+  font-size: clamp(19px, 2.4vw, 28px);
+  line-height: 1.3;
+  max-width: 30ch;
+}
+.al-midia-prevista small {
+  font-size: 16px;
+}
+.al-opcoes {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-block: 28px;
+}
+.al-opcoes button {
+  display: grid;
+  gap: 4px;
+  text-align: left;
+  padding: 20px;
+  border: 1px solid var(--sal);
+  color: var(--sal-noite);
+  background: transparent;
+  border-radius: 20px;
+}
+.al-opcoes strong {
+  font: 400 clamp(24px, 3vw, 38px) / 1.2 var(--serif);
+}
+.al-opcoes button[aria-pressed="true"] {
+  background: var(--sal);
+  color: #fff;
+  box-shadow:
+    inset 0 0 0 2px var(--cla-2),
+    0 0 0 1px var(--sal);
+}
+.al-opcoes small {
+  font-size: 16px;
+}
+.al-planta-painel {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
+  gap: 40px;
+  align-items: start;
+  margin-bottom: 40px;
+}
+.al-planta-quadro {
+  background: #fff;
+  position: relative;
+  aspect-ratio: 4/5;
+  border-radius: 20px;
+  overflow: hidden;
+}
+.al-planta-quadro button {
+  display: block;
+  position: absolute;
+  inset: 0;
+  border: 0;
+  background: transparent;
+  width: 100%;
+  height: 100%;
+  cursor: zoom-in;
+}
+.al-ficha {
+  margin: 0;
+  display: grid;
+}
+.al-ficha > div {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 20px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--are);
+}
+.al-ficha dd {
+  margin: 0;
+  font-weight: 600;
+  text-align: right;
+}
+.al-aviso {
+  font-size: 16px;
+  line-height: 1.6;
+  padding-block: 16px;
+  margin: 0;
+}
+.al-pranchas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-block: 16px;
+}
+.al-pranchas button {
+  min-height: 48px;
+  border: 1px solid var(--sal);
+  border-radius: 12px;
+  padding: 12px;
+  background: transparent;
+  color: var(--sal-noite);
+}
+.al-pranchas button[aria-pressed="true"] {
+  background: var(--sal);
+  color: #fff;
+  text-decoration: underline;
+}
+.al-comparacao {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+  padding-block: 24px;
+}
+.al-comparacao article {
+  padding: 20px;
+  border: 1px solid var(--are);
+  border-radius: 20px;
+}
+.al-comparacao .al-ficha > div {
+  flex-direction: column;
+  gap: 2px;
+}
+.al-comparacao .al-ficha dd {
+  text-align: left;
+}
+.al-comparacao .al-bt {
+  margin-top: 20px;
+}
+.al-grupos {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 48px 32px;
+  align-items: start;
+}
+.al-grupos article > .al-rot {
+  margin-bottom: 16px;
+}
+.al-grupos h3 {
+  margin-bottom: 16px;
+}
+.al-pavimento {
+  font-weight: 600;
+  margin-top: 16px;
+}
+.al-sabado-breve {
+  border-block: 1px solid var(--ped);
+  padding-block: 32px;
+  margin-top: 48px;
+  display: grid;
+  gap: 20px;
+}
+.al-tres {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 28px;
+}
+.al-grade-dupla {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 32px;
+  align-items: start;
+}
+.al-local-trajeto {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(0, 0.65fr);
+  gap: 56px;
+  align-items: start;
+}
+.al-trajeto-quadros {
+  margin-top: 48px;
+}
+.al-mapa-consulta {
+  width: 100%;
+  height: 320px;
+  border: 0;
+  border-radius: 20px;
+}
+.al-confortos {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 32px;
+}
+.al-confortos h3 {
+  margin-bottom: 16px;
+}
+.al-hall {
+  max-width: 680px;
+  margin: 40px auto 0;
+}
+.al-especificacao {
+  margin-block: 24px;
+}
+.al-boletim {
+  display: grid;
+  gap: 20px;
+  border-block: 1px solid var(--ped);
+  padding-block: 40px;
+  margin-block: 40px;
+}
+.al-percentual {
+  font: 300 clamp(40px, 5vw, 64px) / 1.4 var(--serif);
+  display: block;
+}
+.al-boletim .al-bt {
+  justify-self: start;
+}
+.al-faq-lista {
+  display: grid;
+  margin-bottom: 32px;
+}
+.al-faq-lista details {
+  border-top: 1px solid var(--are);
+  padding-block: 8px 20px;
+}
+.al-faq-lista summary {
+  font-size: 19px;
+}
+.al-faq-lista .al-p {
+  max-width: 78ch;
+  margin-bottom: 16px;
+}
+.al-contato-final {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 48px;
+}
+.al-contato-final .al-form {
+  padding: 24px;
+}
+.al-contato-final .al-form h3 {
+  margin-top: 24px;
+}
+.al-contato-final .form {
+  margin-block: 24px;
+}
+.al-contato-final .form label,
+.al-contato-final .campo > span {
+  color: var(--sal-noite);
+}
+.al-contato-final .erro {
+  color: #8b2222;
+}
+.al-fase3 video {
+  max-width: 100%;
+}
+.al-barra-mobile {
+  display: none;
+}
+.al-fase3 [hidden] {
+  display: none !important;
+}
+.al-fase3 .al-vista button {
+  min-width: 48px;
+  min-height: 48px;
+  border: 1px solid var(--sal);
+  border-radius: 24px;
+  background: var(--cla);
+  color: var(--sal-noite);
+  padding: 8px 12px;
+}
+.al-visor {
+  position: fixed;
+  inset: 0;
+  width: 96vw;
+  max-width: 1500px;
+  height: 96dvh;
+  max-height: 96dvh;
+  padding: 20px;
+  border: 0;
+  border-radius: 20px;
+  background: #f3f0eb;
+  color: #343e37;
+  font:
+    400 16px/1.5 "Urbanist Variable",
+    sans-serif;
+}
+.al-visor[open] {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.al-visor::backdrop {
+  background: #18271fe0;
+}
+.al-visor__topo {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: center;
+}
+.al-visor h2 {
+  font-size: 20px;
+  margin: 0;
+}
+.al-visor p {
+  margin: 0;
+  max-height: 25dvh;
+  overflow: auto;
+}
+.al-visor button {
+  min-height: 44px;
+  padding: 8px 16px;
+  border: 1px solid #59695c;
+  border-radius: 24px;
+  background: #fff;
+  color: #343e37;
+  font: inherit;
+  cursor: pointer;
+}
+.al-visor :focus-visible {
+  outline: 3px solid #59695c;
+  outline-offset: 2px;
+}
+.al-visor__controles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.al-visor__imagem {
+  flex: 1;
+  min-height: 100px;
+  overflow: auto;
+  background: white;
+}
+@media (min-width: 1100px) {
+  .al-interiores {
+    grid-template-columns: 1.2fr 1fr;
+  }
+  .al-interiores-apoio {
+    grid-template-columns: 1fr;
+  }
+  .al-interiores-apoio article {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    align-items: start;
+  }
+  .al-interiores-apoio article > .al-expansao {
+    grid-column: 1/-1;
+  }
+}
+@media (max-width: 860px) {
+  .al-planta-painel,
+  .al-contato-final {
+    grid-template-columns: 1fr;
+  }
+  .al-opcoes,
+  .al-comparacao,
+  .al-confortos {
+    grid-template-columns: 1fr 1fr;
+  }
+  .al-nav {
+    justify-content: flex-start;
+  }
+  .al-nav a {
+    padding: 10px 14px;
+  }
+  .al-barra-mobile {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 30;
+    background: var(--cla);
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+    border-top: 1px solid var(--are);
+  }
+  .al-fase3 {
+    padding-bottom: 88px;
+  }
+  .al-local-trajeto {
+    gap: 28px;
+  }
+  .al-visor {
+    padding: 12px;
+  }
+  .al-visor h2 {
+    font-size: 17px;
+  }
+}
+@media (max-width: 600px) {
+  .al-fase3 .al-abertura__conteudo {
+    padding-block: 36px;
+  }
+  .al-fase3 .al-abertura {
+    min-height: 0;
+  }
+  .al-fase3 .al-abertura .al-h1 {
+    font-size: 42px;
+  }
+  .al-fase3 .al-abertura__logo {
+    width: 140px;
+  }
+  .al-interiores-apoio,
+  .al-grupos,
+  .al-grade-dupla,
+  .al-confortos,
+  .al-tres,
+  .al-local-trajeto,
+  .al-comparacao {
+    grid-template-columns: 1fr;
+  }
+  .al-opcoes button {
+    padding: 16px 12px;
+  }
+  .al-fase3 .al-bt {
+    padding-inline: 18px;
+  }
+  .al-local-trajeto .al-vv {
+    max-width: 320px;
+    margin-inline: auto;
+  }
+  .al-visor__controles button {
+    padding-inline: 10px;
+  }
+  .al-visor__topo {
+    align-items: start;
+  }
+  .al-visor__topo button {
+    flex-shrink: 0;
+  }
+  .al-midia-prevista {
+    padding: 16px;
+  }
+  .al-nav {
+    top: 64px;
+  }
+  .al-fase3 .al-sec {
+    padding-block: 60px;
+  }
+  .al-ficha > div {
+    gap: 12px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .al-fase3 * {
+    scroll-behavior: auto !important;
+    transition: none !important;
+    animation: none !important;
+  }
+}
+.al-nav {
+  top: calc(73px + env(safe-area-inset-top, 0px));
+}
+.al-fase3 .al-form .al-bt {
+  background: var(--sal);
+  color: #fff;
+  border-color: var(--sal);
+}
+.al-fase3 .al-form .al-bt:hover {
+  background: var(--sal-noite);
+}
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}

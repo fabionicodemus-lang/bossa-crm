@@ -13,10 +13,4 @@ export function banco(): SupabaseClient | null {
 
 export const ORG = () => process.env.BOSSA_ORGANIZATION_ID || "";
 
-/** Telefone no formato do CRM: só dígitos, com DDI. Números de 10–11 dígitos são tratados como Brasil. */
-export function normalizarTelefone(bruto: string): string | null {
-  const d = (bruto || "").replace(/\D/g, "");
-  if (d.length === 10 || d.length === 11) return "55" + d;
-  if (d.length >= 12 && d.length <= 15) return d;
-  return null;
-}
+export { normalizarTelefone } from "./telefone";

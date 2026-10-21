@@ -12,6 +12,7 @@ export function generateStaticParams() { return empreendimentos.map((e) => ({ sl
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
   const e = getEmpreendimento((await params).slug);
   if (!e) return {};
+  if(e.slug === "alma-seahouses") return meta({ titulo: "Alma Sea Houses em Perequê | Bossa Empreendimentos", descricao: "Apartamentos de 3 suítes e duplex de 4 suítes em Perequê, Porto Belo. Conheça as plantas, os espaços de convivência e o projeto do Alma.", caminho: `/empreendimentos/${e.slug}`, imagem: "/img/alma/fachada.jpg" });
   return meta({ titulo: e.metaTitle, descricao: e.metaDescription, caminho: `/empreendimentos/${e.slug}`, imagem: e.capa.src });
 }
 
