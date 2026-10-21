@@ -231,7 +231,8 @@ export default async function Management({
         </form>
         <p>
           <Link href="/gestao/oportunidades">Todas as oportunidades</Link> ·{" "}
-          <Link href="/gestao/configuracoes">Metas e configurações</Link>
+          <Link href="/gestao/configuracoes">Metas e configurações</Link> ·{" "}
+          <Link href="/gestao/contatos">Reconciliação de contatos</Link>
         </p>
         <p>
           {range.startDay.split("-").reverse().join("/")} a{" "}

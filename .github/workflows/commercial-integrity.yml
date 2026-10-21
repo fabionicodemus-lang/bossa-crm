@@ -47,7 +47,13 @@ jobs:
         run: node --experimental-strip-types scripts/commercial/check-canonical-merge.mjs
       - name: Test original legacy merge and seven migrations in PGlite
         run: node scripts/commercial/check-contact-integrity.mjs
+      - name: Test explicit contact reconciliation in PGlite
+        run: node scripts/commercial/check-contact-reconciliation.mjs
       - name: Ensure PostgreSQL client
         run: command -v psql || (sudo apt-get update -qq && sudo apt-get install -y postgresql-client)
       - name: Test real concurrent identity mutations
         run: node scripts/commercial/check-integrity-concurrency.mjs
+      - name: Test contact review races in separate isolated database
+        run: |
+          psql -X -v ON_ERROR_STOP=1 -d postgres -c 'create database commercial_reconciliation_test'
+          PGDATABASE=commercial_reconciliation_test node scripts/commercial/check-reconciliation-concurrency.mjs
