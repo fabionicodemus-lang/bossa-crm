@@ -1,0 +1,38 @@
+name: Prepare isolated commercial retry audit
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/prepare-commercial-retry-audit.yml'
+permissions:
+  contents: read
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - name: Generate new migration without database access
+        run: |
+          cd "$(mktemp -d)"
+          npx --yes --package=supabase@2.121.0 supabase --version
+          npx --yes --package=supabase@2.121.0 supabase migration new --help
+          npx --yes --package=supabase@2.121.0 supabase migration new commercial_source_idempotency
+          find supabase/migrations -type f -printf 'GENERATED_MIGRATION=%f\n'
+      - name: Fetch current public Supabase changelog
+        run: |
+          curl -fsSL --max-time 30 https://supabase.com/changelog.md | head -c 16000 || true
+      - name: Package source and isolated testing dependencies only
+        run: |
+          tar -czf commercial-retry-source.tgz src scripts supabase docs .github package.json package-lock.json tsconfig.json next-env.d.ts next.config.ts eslint.config.mjs node_modules/typescript node_modules/@electric-sql/pglite
+      - uses: actions/upload-artifact@v4
+        with:
+          name: commercial-retry-source
+          path: commercial-retry-source.tgz
+          retention-days: 1
