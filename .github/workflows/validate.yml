@@ -43,6 +43,8 @@ jobs:
         run: npm ci --no-audit --no-fund
       - name: Test commercial ledger and metrics
         run: npm run test:commercial
+      - name: Test conservative commercial linking
+        run: node scripts/commercial/check-linking.mjs
       - name: Test Hoje workspace
         run: npm run test:hoje-ui
       - name: Test Meta referral attribution
