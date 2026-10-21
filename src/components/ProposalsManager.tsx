@@ -16,7 +16,6 @@ import {
   errorText,
   integerValue,
   localDateTime,
-  money,
   numberValue,
   planText,
   proposalScheduleWarnings,
@@ -41,7 +40,6 @@ export type { Proposal, ProposalDevelopment, ProposalLead, ProposalUnit } from '
 
 export function ProposalsManager({
   organizationId,
-  currentUserId,
   currentUserName,
   canEdit,
   initialProposals,
@@ -71,6 +69,10 @@ export function ProposalsManager({
   const [saving, setSaving] = useState(false);
   const saveLock = useRef(false);
   const saveAttempt = useRef(new SourceSaveAttempt());
+  const [statusSaving, setStatusSaving] = useState(false);
+  const [statusPending, setStatusPending] = useState(false);
+  const statusLock = useRef(false);
+  const statusAttempt = useRef(new SourceSaveAttempt());
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
 
@@ -125,6 +127,7 @@ export function ProposalsManager({
   }
 
   function startNew() {
+    if (statusLock.current || statusAttempt.current.pending) { setError('Confira a alteração de status pendente antes de iniciar outra operação.'); return; }
     if (saveLock.current || saveAttempt.current.pending) { setError('Há uma gravação sem confirmação. Retome a tentativa atual antes de iniciar outra proposta.'); return; }
     setEditingId(null);
     setForm(blankForm());
@@ -238,6 +241,7 @@ export function ProposalsManager({
   }
 
   function editProposal(proposal: Proposal) {
+    if (statusLock.current || statusAttempt.current.pending) { setError('Confira a alteração de status pendente antes de editar.'); return; }
     if (saveLock.current || saveAttempt.current.pending) { setError('Há uma gravação sem confirmação. Retome a tentativa atual antes de iniciar outra proposta.'); return; }
     const plan = proposal.payment_plan ?? {};
     const snapshot = proposal.snapshot ?? {};
@@ -297,7 +301,7 @@ export function ProposalsManager({
 
   async function saveProposal(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!canEdit || saveLock.current) return;
+    if (!canEdit || saveLock.current || statusLock.current || statusAttempt.current.pending) return;
     setError('');
     setNotice('');
     if (!form.leadId || !form.developmentId) {
@@ -467,32 +471,49 @@ export function ProposalsManager({
   }
 
   async function changeStatus(proposal: Proposal, workflowStatus: WorkflowStatus) {
-    if (!canEdit) return;
+    if (!canEdit || statusLock.current || saveLock.current || saveAttempt.current.pending) return;
+    statusLock.current = true;
+    setStatusSaving(true);
     setError('');
-    const snapshot = { ...(proposal.snapshot ?? {}), workflow_status: workflowStatus };
+    setNotice('');
     try {
-      const { data, error: updateError } = await supabase.from('proposals')
-        .update({ status: storedStatusOf(workflowStatus), snapshot, updated_by: currentUserId, version: proposal.version + 1 })
-        .eq('id', proposal.id)
-        .eq('organization_id', organizationId)
-        .select('*')
-        .single();
-      if (updateError) throw updateError;
-      const updated = data as Proposal;
+      const command = { p_org: organizationId, p_id: proposal.id,
+        p_expected_updated_at: proposal.updated_at, p_expected_version: proposal.version,
+        p_workflow_status: workflowStatus };
+      const requestId = statusAttempt.current.prepare(command);
+      setStatusPending(true);
+      const prepared = await supabase.rpc('commercial_prepare_source_request', {
+        p_org: organizationId, p_request: requestId, p_type: 'proposals',
+        p_payload: { data: { operation: 'status', workflow_status: workflowStatus,
+          expected_version: proposal.version }, items: [], id: proposal.id,
+        expected_updated_at: proposal.updated_at },
+      });
+      if (prepared.error) { statusAttempt.current.rejected(prepared.error); throw prepared.error; }
+      if (prepared.data?.request_id !== requestId) throw new Error('Preparação não confirmada. Confira a recuperação antes de outra alteração.');
+      const { data, error: updateError } = await supabase.rpc('commercial_proposal_status_once', {
+        ...command, p_request: requestId,
+      });
+      if (updateError) { statusAttempt.current.rejected(updateError); throw updateError; }
+      if (!data?.record?.id || typeof data.replayed !== 'boolean') throw new Error('Resposta incerta. Confira a recuperação antes de outra alteração.');
+      const updated = data.record as Proposal;
+      statusAttempt.current.complete();
+      setStatusPending(false);
       setProposals((current) => current.map((item) => item.id === proposal.id ? updated : item));
-      if (proposal.lead_id) {
-        await supabase.from('activities').insert({
-          organization_id: organizationId,
-          lead_id: proposal.lead_id,
-          user_id: currentUserId,
-          type: 'proposta',
-          title: `Proposta #${proposal.proposal_number}: ${statusLabels[workflowStatus]}`,
-          description: `${String(snapshot.development_name ?? 'Empreendimento')} · ${money.format(numberValue(proposal.proposed_price))}.`,
-          metadata: { proposal_id: proposal.id, proposal_number: proposal.proposal_number, workflow_status: workflowStatus },
+      setNotice(data.replayed ? 'Alteração anterior recuperada, sem duplicar o histórico.' : 'Status e atividade salvos juntos. A escolha do status não comprova envio, assinatura ou recebimento.');
+      try {
+        const ack = await supabase.rpc('commercial_finish_source_recovery', {
+          p_org: organizationId, p_request: requestId, p_action: 'acknowledge',
         });
-      }
+        if (ack.error || ack.data?.state !== 'acknowledged') setNotice('Status salvo; confira o recibo no painel de recuperação.');
+      } catch { setNotice('Status salvo; confira o recibo no painel de recuperação.'); }
     } catch (caught) {
-      setError(errorText(caught));
+      setStatusPending(statusAttempt.current.pending);
+      const failure = sourceRequestFailure(caught);
+      if (failure.definiteRollback) setError(failure.message);
+      else setNotice(`Resposta incerta. ${failure.message} Confira a tentativa no painel de recuperação.`);
+    } finally {
+      statusLock.current = false;
+      setStatusSaving(false);
     }
   }
 
@@ -521,7 +542,7 @@ export function ProposalsManager({
   }
 
   return <div className="page-content">
-    {canEdit && <CommercialSaveRecovery kind="proposals" busy={saving} />}
+    {canEdit && <CommercialSaveRecovery kind="proposals" busy={saving || statusSaving} />}
     {error && <div className="error-box">{error}</div>}
     {notice && <div className="success-box">{notice}</div>}
     {mode === 'list'
@@ -542,6 +563,7 @@ export function ProposalsManager({
           onNew={startNew}
           onExport={() => void exportXlsx()}
           onEdit={editProposal}
+          statusSaving={statusSaving || saving || statusPending}
           onChangeStatus={(proposal, status) => void changeStatus(proposal, status)}
         />
       : <ProposalEditor

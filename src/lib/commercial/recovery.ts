@@ -16,7 +16,9 @@ export function publicRecovery(value: unknown): RecoveryView {
   const data = row.entity_type === 'proposals' ? objectValue(payload.data) : payload;
   const snapshot = objectValue(data.snapshot);
   const summary = row.entity_type === 'proposals'
-    ? ['Proposta', snapshot.development_name, snapshot.unit_code, data.proposed_price == null ? null : `valor informado ${String(data.proposed_price)}`]
+    ? data.operation === 'status'
+      ? `Alteração rápida de status da proposta · ${String(data.workflow_status ?? 'status não informado')} · versão observada ${String(data.expected_version ?? '—')}`
+      : ['Proposta', snapshot.development_name, snapshot.unit_code, data.proposed_price == null ? null : `valor informado ${String(data.proposed_price)}`]
       .filter((part) => typeof part === 'string' && part.length).join(' · ')
     : `${String(data.title ?? 'Compromisso')} · ${String(data.starts_at ?? 'horário não informado')}`;
   const recordId = typeof record.id === 'string' && recoveryUuid.test(record.id) ? record.id : null;

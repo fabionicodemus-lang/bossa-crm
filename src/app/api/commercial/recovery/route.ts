@@ -53,13 +53,22 @@ export async function POST(request: Request) {
     const payload = objectValue(objectValue(loaded.data).payload);
     let warning = '';
     if (view.kind === 'proposals') {
-      const saved = await db.rpc('commercial_save_proposal_once', {
-        p_org: org, p_request: input.requestId, p_data: payload.data, p_items: payload.items,
-        p_id: payload.id, p_expected_updated_at: payload.expected_updated_at,
-      });
+      const data = objectValue(payload.data);
+      const saved = data.operation === 'status'
+        ? await db.rpc('commercial_proposal_status_once', {
+          p_org: org, p_request: input.requestId, p_id: payload.id,
+          p_expected_updated_at: payload.expected_updated_at,
+          p_expected_version: data.expected_version, p_workflow_status: data.workflow_status,
+        })
+        : await db.rpc('commercial_save_proposal_once', {
+          p_org: org, p_request: input.requestId, p_data: payload.data, p_items: payload.items,
+          p_id: payload.id, p_expected_updated_at: payload.expected_updated_at,
+        });
       if (saved.error) return failed(saved.error);
       if (!objectValue(saved.data).record) return response({ error: 'Resposta incerta. Confira a tentativa antes de iniciar outro pedido.' }, 503);
-      warning = 'Proposta conferida no CRM. Etapa legada do contato e abertura do PDF não foram reexecutadas.';
+      warning = data.operation === 'status'
+        ? 'Status e atividade conferidos no CRM. A escolha não comprova envio, assinatura ou recebimento.'
+        : 'Proposta conferida no CRM. Etapa legada do contato e abertura do PDF não foram reexecutadas.';
     } else {
       // Reuse the human agenda path: availability, RLS and external-sync warnings.
       // Never accept the browser's replacement payload or impersonate another actor.

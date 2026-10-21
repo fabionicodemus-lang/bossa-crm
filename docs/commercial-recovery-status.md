@@ -25,7 +25,7 @@ Abandonar e salvar usam o mesmo bloqueio transacional. Se o salvamento vencer, o
 - Recuperação da agenda usa o handler humano existente. Uma gravação já confirmada não chama o Outlook novamente; uma tentativa ainda não gravada repassa pela disponibilidade e autorização. O convite/sincronização continuam fora da transação do CRM e precisam de conferência própria.
 - Uma tentativa validada mas ainda não gravada pode se tornar inválida depois (contato arquivado, horário ocupado, versão antiga, permissão revogada). A nova tentativa não contorna validações atuais.
 - Preparar não cria fatos comerciais e não é qualificação, proposta enviada, visita, contrato ou recebimento.
-- A reconciliação de duplicatas comerciais, produtores IA/importações, status rápido e remarcação/edição da agenda continuam pendentes. Isto não é deduplicação global.
+- O status rápido de propostas também usa esta recuperação desde `20261021203000_commercial_proposal_status_once.sql`; a retomada lê o comando original no servidor e respeita a revisão observada. Produtores IA/importações e remarcação/edição da agenda continuam pendentes. A relação revisada entre contatos duplicados é parcial e não é deduplicação global.
 - Dados do comando e encerramento são preservados no servidor para rastreabilidade, com RLS por autor/organização e privilégios do chamador. Política completa de retenção/expurgo deve ser definida antes de produção; não apagar tombstones para permitir reexecução de chaves encerradas.
 
 ## Migração e verificação
