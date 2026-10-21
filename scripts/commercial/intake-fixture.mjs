@@ -47,7 +47,9 @@ grant select on organizations,profiles,memberships,developments,development_unit
 grant select,update on leads to authenticated;
 grant select,insert,update,delete on proposals,agenda_events to authenticated;
 grant select,insert,update,delete on proposals,agenda_events to service_role;
-grant select on leads,memberships to service_role;
+-- Source triggers validate referenced units/developments even with bypassrls.
+-- Minimal read grants here model that dependency; no production grants are changed.
+grant select on leads,memberships,developments,development_units to service_role;
 alter table leads enable row level security;
 create policy leads_read on leads for select to authenticated using(private.is_org_member(organization_id));
 create policy leads_write on leads for update to authenticated using(private.can_edit_org(organization_id)) with check(private.can_edit_org(organization_id));
