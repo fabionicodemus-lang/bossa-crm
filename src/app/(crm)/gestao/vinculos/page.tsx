@@ -92,8 +92,11 @@ export default async function CommercialLinks({ searchParams }: {
               {candidates.map((c) => <option key={c.id} value={c.id}>{c.title} · {stages[c.stage as keyof typeof stages] ?? c.stage}</option>)}
             </select></label>
             <button className="btn btn-primary">Confirmar vínculo</button>
-          </form> : <p>Nenhuma oportunidade ativa compatível. {row.leads?.kind === "cliente" && row.contact_id && <Link href={`/gestao/nova?lead_id=${row.contact_id}`}>Cadastrar intenção de compra e depois voltar para vincular</Link>}</p>
+          </form> : <p>Nenhuma oportunidade ativa compatível. Confira a intenção e o comprador antes de criar uma nova.</p>
         )}
+        {canEdit && row.status === "pending" && !failed && row.contact_id && ["cliente", "corretor"].includes(row.leads?.kind ?? "") && <p>
+          <Link href={`/gestao/vinculos/nova?${new URLSearchParams({ entity: row.entity_type, id: row.entity_id })}`}>Revisar intenção e criar oportunidade vinculada</Link>
+        </p>}
         {row.status === "pending" && <small>Vincular organiza o histórico; não transforma detecção da IA em envio comprovado nem altera comissão, responsável, etapa ou data.</small>}
       </section>)}
       {offset > 0 && <Link href={page(Math.max(0, offset - 20))}>← Anterior </Link>}
