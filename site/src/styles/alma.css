@@ -908,3 +908,5 @@ details[open] > summary .al-expandido {
   white-space: nowrap;
   border: 0;
 }
+
+.al-inteira:hover img { transform: none; }

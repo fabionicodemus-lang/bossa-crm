@@ -1,0 +1,57 @@
+{
+  "deploy": "dpl_DznsXc7b2FSkJT8DWJSLG59KWQLP",
+  "commit": "e7a345caa35cd6105da7f97266986dabb3fa0486",
+  "url": "https://bossa-site-ntwmsdynz-elos-os.vercel.app",
+  "modo": "HTML remoto obtido com acesso autenticado existente; sem envio de formulário",
+  "pagina": {
+    "status": 200,
+    "sections": [
+      "inicio",
+      "apartamentos",
+      "plantas",
+      "posicao",
+      "lazer",
+      "localizacao",
+      "conforto",
+      "obra",
+      "duvidas",
+      "contato"
+    ],
+    "midias": [
+      "M01",
+      "M05",
+      "M06",
+      "M08",
+      "M07",
+      "M04A",
+      "M04B",
+      "M02",
+      "M03"
+    ],
+    "preRegistro": true,
+    "boletim": true,
+    "noindex": true
+  },
+  "rotas": [
+    {
+      "slug": "tipo-02",
+      "status": 200,
+      "title": "Alma Sea Houses: 103 m², 3 suítes | Bossa"
+    },
+    {
+      "slug": "tipo-01",
+      "status": 200,
+      "title": "Alma Sea Houses: 114 m², 3 suítes | Bossa"
+    },
+    {
+      "slug": "duplex-tipo-2",
+      "status": 200,
+      "title": "Alma Sea Houses: duplex de 145 m² | Bossa"
+    },
+    {
+      "slug": "duplex-tipo-1",
+      "status": 200,
+      "title": "Alma Sea Houses: duplex de 168 m² | Bossa"
+    }
+  ]
+}

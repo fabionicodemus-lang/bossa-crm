@@ -4,7 +4,7 @@ Data: 21/10/2026 (UTC). Destino: `fabionicodemus-lang/bossa-crm`, exclusivamente
 
 ## Entrega e publicação
 
-Implementação completa das dez seções aprovadas na fase 2, com as quatro rotas de plantas preservadas, contato contextual e espaços de produção na prévia. A URL e o identificador do deploy serão registrados após a geração da prévia isolada no projeto **bossa-site**, time **Elos OS**.
+Implementação completa das dez seções aprovadas na fase 2, com as quatro rotas de plantas preservadas, contato contextual e espaços de produção na prévia. Prévia isolada gerada no projeto **bossa-site**, time **Elos OS**. Primeira versão verificada: https://bossa-site-ntwmsdynz-elos-os.vercel.app/empreendimentos/alma-seahouses (deploy `dpl_DznsXc7b2FSkJT8DWJSLG59KWQLP`, commit `e7a345caa35cd6105da7f97266986dabb3fa0486`). O endereço da consolidação final será registrado abaixo. O acesso mantém a proteção por login da Vercel.
 
 Nenhum deploy de produção, merge em `main`, promoção, alteração de domínio, DNS, estado comercial, credenciais, estrutura de banco, CRM, Nara ou automações comerciais foi realizado. Os testes de formulário usaram respostas controladas e uma RPC HTTP local simulada. Não foram criados leads nem enviadas mensagens reais.
 
@@ -39,9 +39,10 @@ O percentual segue a fonte única `e.edicoes[0]`: **10,52% · agosto de 2026 · 
 - `scripts/verificar-api-alma.cjs`: passou; a rota HTTP real do site chamou uma RPC local simulada. Conferidos DDI +351, +1 e +49 até `p_telefone`, DDD brasileiro, finalidade nula, validação 422 e falha RPC 500.
 - Complemento de navegador: formulário compartilhado do Flow em falha e sucesso controlados; mensagem offline apenas com `navigator.onLine === false`; contexto final de 168 m².
 - Build local com `VERCEL_ENV=production`: cinco páginas do Alma sem `data-midia`, etiquetas internas ou quadros de produção; living e alternativas textuais preservados. Foi uma verificação local, sem publicação. Build final restaurado para prévia.
+- HTML remoto da primeira prévia: página principal e quatro plantas retornaram 200 com títulos correspondentes, dez seções, nove posições de mídia, pré-registro, boletim datado e `noindex`. Sem submissão remota de formulário.
 - `git diff --check`: passou.
 
-As evidências estruturadas estão em [verificacao.json](docs/alma/capturas/verificacao.json), [api-verificacao.json](docs/alma/capturas/api-verificacao.json), [complementos-verificacao.json](docs/alma/capturas/complementos-verificacao.json) e [publico-verificacao.json](docs/alma/capturas/publico-verificacao.json).
+As evidências estruturadas estão em [verificacao.json](docs/alma/capturas/verificacao.json), [api-verificacao.json](docs/alma/capturas/api-verificacao.json), [complementos-verificacao.json](docs/alma/capturas/complementos-verificacao.json) [publico-verificacao.json](docs/alma/capturas/publico-verificacao.json) e [previa-verificacao.json](docs/alma/capturas/previa-verificacao.json).
 
 Para reproduzir os testes, iniciar um build local em `site/` e `npm run start -- -p 3200`. Executar `node scripts/verificar-alma.cjs` com Playwright disponível, ou informar seu caminho em `PLAYWRIGHT_MODULE`. O script aceita apenas localhost/127.0.0.1. O Chromium pode ser indicado em `CHROMIUM_PATH`. Executar `node scripts/verificar-api-alma.cjs` para a simulação da RPC; ela cria e encerra seus próprios servidores locais. Não usar o teste de formulário contra atendimento real.
 

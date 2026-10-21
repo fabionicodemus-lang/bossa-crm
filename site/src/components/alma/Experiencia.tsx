@@ -39,17 +39,22 @@ export function useExposicao(
     };
     const visivel = () => {
       const r = el.getBoundingClientRect();
-      const alturaUtil = Math.max(0, innerHeight - 180);
-      const h = Math.max(
-        0,
-        Math.min(r.bottom, innerHeight - 70) - Math.max(r.top, 110),
-      );
+      const cabecalho = document.querySelector(".cabecalho")?.getBoundingClientRect();
+      const nav = document.querySelector(".al-nav")?.getBoundingClientRect();
+      const barra = document.querySelector(".al-barra-mobile")?.getBoundingClientRect();
+      const topoCabecalho = Math.max(0, cabecalho?.bottom ?? 0);
+      const topo = nav && nav.top <= topoCabecalho + 1 ? Math.max(topoCabecalho, nav.bottom) : topoCabecalho;
+      const base = barra && barra.height > 0 ? Math.min(innerHeight, barra.top) : innerHeight;
+      const alturaUtil = Math.max(0, base - topo);
+      const h = Math.max(0, Math.min(r.bottom, base) - Math.max(r.top, topo));
       const w = Math.max(
         0,
         Math.min(r.right, innerWidth) - Math.max(r.left, 0),
       );
       return (
         document.visibilityState === "visible" &&
+        !document.querySelector("dialog[open]") &&
+        alturaUtil > 0 &&
         r.height > 0 &&
         h >= Math.min(r.height, alturaUtil) / 2 &&
         w >= r.width / 2

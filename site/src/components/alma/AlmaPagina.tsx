@@ -260,6 +260,7 @@ export function AlmaPagina({
                 height={481}
                 priority
                 className="al-abertura__logo"
+                  sizes="170px"
               />
               <p className="al-rot">ALMA SEA HOUSES · PEREQUÊ, PORTO BELO</p>
               <h1 className="al-h1">
