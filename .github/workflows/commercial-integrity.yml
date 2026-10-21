@@ -57,6 +57,12 @@ jobs:
           node --experimental-strip-types --loader ./scripts/commercial/proposal-status-route-loader.mjs scripts/commercial/check-proposal-status-route.mjs
       - name: Test concurrent quick proposal status in disposable PostgreSQL
         run: node scripts/commercial/check-proposal-status-concurrency.mjs
+      - name: Test transactional WhatsApp AI proposal detection and actual producer
+        run: |
+          node scripts/commercial/check-ai-proposal.mjs
+          node --experimental-strip-types --loader ./scripts/commercial/ai-proposal-loader.mjs scripts/commercial/check-ai-proposal-producer.mjs
+      - name: Test concurrent WhatsApp AI detections in disposable PostgreSQL
+        run: node scripts/commercial/check-ai-proposal-concurrency.mjs
       - name: Ensure PostgreSQL client
         run: command -v psql || (sudo apt-get update -qq && sudo apt-get install -y postgresql-client)
       - name: Test real concurrent identity mutations
