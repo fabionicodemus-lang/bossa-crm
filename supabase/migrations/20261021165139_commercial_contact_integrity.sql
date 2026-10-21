@@ -37,8 +37,10 @@ create function public.commercial_lock_contact_references() returns trigger
 language plpgsql security invoker set search_path=public as $$
 declare j jsonb:=to_jsonb(new); ids uuid[]; matched integer;
 begin
- ids:=case when tg_table_name='commercial_opportunities' then array[new.primary_contact_id,new.broker_id]
-  when tg_table_name='commercial_participants' then array[(j->>'contact_id')::uuid]
+ -- Every branch uses JSON keys: proposals/agenda do not have opportunity-only fields.
+ ids:=case when tg_table_name='commercial_opportunities' then
+   array[nullif(j->>'primary_contact_id','')::uuid,nullif(j->>'broker_id','')::uuid]
+  when tg_table_name='commercial_participants' then array[nullif(j->>'contact_id','')::uuid]
   else array[nullif(j->>'lead_id','')::uuid] end;
  select array_agg(distinct x) into ids from unnest(ids) x where x is not null;
  if ids is null then return new; end if;
