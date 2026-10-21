@@ -1,0 +1,41 @@
+name: Prepare isolated commercial integrity audit
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/prepare-commercial-integrity.yml'
+permissions:
+  contents: read
+jobs:
+  prepare:
+    if: github.head_ref == 'feat/commercial-metrics-foundation'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Inventory contact merge and deletion code without connecting to data
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          function walk(path) { return fs.readdirSync(path, {withFileTypes:true}).flatMap(e => e.isDirectory() ? walk(path+'/'+e.name) : [path+'/'+e.name]); }
+          for (const file of [...walk('src'),...walk('supabase/migrations')]) {
+            if (!/\.(ts|tsx|sql)$/.test(file)) continue;
+            const lines=fs.readFileSync(file,'utf8').split('\n');
+            const hits=lines.map((text,i)=>({text,line:i+1})).filter(x => /merge[_A-Za-z]*lead|merge[_A-Za-z]*contact|mescl|dedup|duplicate.*lead|delete.*from.*(leads|messages|proposals)/i.test(x.text));
+            if(hits.length) console.log(JSON.stringify({file,hits:hits.slice(0,12)}));
+          }
+          NODE
+      - name: Generate additive migration in disposable directory
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$(mktemp -d)"
+          npx --yes --package=supabase@2.121.0 supabase --version
+          npx --yes --package=supabase@2.121.0 supabase migration --help
+          npx --yes --package=supabase@2.121.0 supabase migration new --help
+          npx --yes --package=supabase@2.121.0 supabase migration new commercial_contact_integrity
+          find supabase/migrations -type f -name '*_commercial_contact_integrity.sql' -printf 'GENERATED_MIGRATION=%f\n'
