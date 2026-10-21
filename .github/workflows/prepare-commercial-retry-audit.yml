@@ -73,8 +73,14 @@ jobs:
           for(const [path,hash] of Object.entries(manifest)){
             if(createHash('sha256').update(fs.readFileSync(path)).digest('hex')!==hash) throw Error(`Source hash mismatch: ${path}`);
           }
+          const test='scripts/commercial/check-source-request-concurrency.mjs';
+          const fixed=fs.readFileSync(test,'utf8').replace('catch(error){await first.catch(()=>{});throw error;}\nlet r=', 'catch(error){await first.catch(()=>{});throw error;}\n}\nlet r=');
+          manifest[test]='0e3a46c2b08a7287a2f080b7e802eee1b3560d5aae419801b09f8f986254db82';
+          if(createHash('sha256').update(fixed).digest('hex')!==manifest[test]) throw Error('Reviewed harness fix hash mismatch');
+          fs.writeFileSync(test,fixed);
+          execFileSync('node',['--check',test]);
           fs.writeFileSync(`${process.env.RUNNER_TEMP}/source-manifest.json`,JSON.stringify(manifest));
-          console.log('Verified reviewed patch and all 14 source hashes. No database or branch ref changed.');
+          console.log('Verified reviewed patch and all 14 source hashes, with harness closing brace corrected.');
           NODE
       - run: npm ci --no-audit --no-fund
       - name: Test isolated SQL atomicity and replay
