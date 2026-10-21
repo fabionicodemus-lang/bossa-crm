@@ -9,6 +9,7 @@ function fixture() {
   const s = {
     context: { userId: USER, role: 'comercial', organization: { id: ORG } }, sessionClients: 0,
     availability: [], conflicts: [], pushes: [], cancellations: [], writes: [], calls: [],
+    receipts: new Map(), rpcCalls: [], replayError: null, malformedReplay: false, concurrentReplay: false,
     failRead: '', writeCode: '', stale: false, availabilityError: false, syncError: false,
     tables: {
       memberships: [{ organization_id: ORG, user_id: USER }, { organization_id: OTHER, user_id: FOREIGN }],
@@ -50,12 +51,30 @@ function fixture() {
       return { data: structuredClone(one ? rows[0] ?? null : rows), error: null };
     }
   }
-  s.db = { from: (table) => new Query(table) };
+  s.db = { from: (table) => new Query(table), async rpc(name, args) {
+    s.rpcCalls.push({ name, args: structuredClone(args) });
+    if (name === 'commercial_replay_source_request' && s.replayError) return { data: null, error: s.replayError };
+    if (name === 'commercial_replay_source_request' && s.malformedReplay) return { data: {}, error: null };
+    const receipt = s.receipts.get(args.p_request);
+    const payload = args.p_payload ?? args.p_data;
+    if (receipt) {
+      if (JSON.stringify(receipt.payload) !== JSON.stringify(payload)) return { data: null, error: { code: '23505', message: 'COMMERCIAL_REQUEST_REUSED' } };
+      return { data: { replayed: true, record: structuredClone(s.tables.agenda_events.find((e) => e.id === receipt.id)) }, error: null };
+    }
+    if (name === 'commercial_replay_source_request') return { data: null, error: null };
+    if (name !== 'commercial_create_agenda_once') throw Error('Unknown RPC');
+    if (s.concurrentReplay) return { data: { replayed: true, record: structuredClone(s.tables.agenda_events[0]) }, error: null };
+    const result = await new Query('agenda_events').insert({ ...args.p_data, organization_id: args.p_org,
+      created_by: s.context.userId, created_by_kind: 'human', status: 'scheduled' }).single();
+    if (result.error) return result;
+    s.receipts.set(args.p_request, { id: result.data.id, payload: structuredClone(payload) });
+    return { data: { replayed: false, record: result.data }, error: null };
+  } };
   globalThis.__agendaHarness = s;
   return s;
 }
 const request = (method, body, suffix = '') => new Request(`https://crm.test/api/agenda${suffix}`, {
-  method, ...(body === undefined ? {} : { body: JSON.stringify(body), headers: { 'Content-Type': 'application/json' } }),
+  method, ...(body === undefined ? {} : { body: JSON.stringify(body), headers: { 'Content-Type': 'application/json', ...(method === 'POST' ? { 'Idempotency-Key': id(2000) } : {}) } }),
 });
 const remove = () => request('DELETE', undefined, `?id=${EVENT}`);
 let passed = 0;
@@ -120,7 +139,7 @@ await check('overlap check and database race both block external publication', a
   s.conflicts = []; s.writeCode = '23P01'; assert.equal((await POST(request('POST', base))).status, 409); noSideEffects(s);
 });
 await check('denied session write has no privileged fallback', async (s) => {
-  s.writeCode = '42501'; const r = await POST(request('POST', base)); assert.equal(r.status, 500);
+  s.writeCode = '42501'; const r = await POST(request('POST', base)); assert.equal(r.status, 403);
   assert.ok(!(await r.text()).includes('private database detail')); noSideEffects(s);
 });
 await check('Outlook failure is explicit and does not repeat the CRM insertion', async (s) => {
@@ -208,6 +227,46 @@ await check('read failure is unavailable, never an empty calendar', async (s) =>
 await check('invalid query IDs fail without access', async (s) => {
   assert.equal((await DELETE(request('DELETE', undefined, '?id=bad'))).status, 400);
   assert.equal((await GET(request('GET', undefined, '?assigned_to=bad'))).status, 400); assert.equal(s.sessionClients, 0);
+});
+await check('create requires a valid explicit request key', async (s) => {
+  for (const key of [null, 'not-a-uuid']) {
+    const req = request('POST', base); if (key) req.headers.set('Idempotency-Key', key); else req.headers.delete('Idempotency-Key');
+    assert.equal((await POST(req)).status, 400);
+  }
+  assert.equal(s.sessionClients, 0); noSideEffects(s);
+});
+await check('same request replays before availability and never repeats Outlook', async (s) => {
+  const first = await POST(request('POST', base)); const created = (await first.json()).event;
+  s.conflicts = [{ id: created.id }]; s.availabilityError = true;
+  const replay = await POST(request('POST', base)); assert.equal(replay.status, 200);
+  const payload = await replay.json(); assert.equal(payload.event.id, created.id); assert.equal(payload.replayed, true);
+  assert.equal(s.availability.length, 1); assert.equal(s.writes.length, 1); assert.equal(s.pushes.length, 1);
+});
+await check('uncertain Outlook response still replays the committed CRM event once', async (s) => {
+  s.syncError = true; assert.equal((await POST(request('POST', base))).status, 202);
+  assert.equal((await POST(request('POST', base))).status, 200);
+  assert.equal(s.writes.length, 1); assert.equal(s.pushes.length, 1);
+});
+await check('same key with changed fields returns 409 without a second write', async (s) => {
+  await POST(request('POST', base)); const second = await POST(request('POST', { ...base, title: 'Changed' }));
+  assert.equal(second.status, 409); assert.equal(s.writes.length, 1); assert.equal(s.pushes.length, 1);
+});
+await check('missing migration fails closed without falling back to direct insertion', async (s) => {
+  s.replayError = { code: 'PGRST202', message: 'missing RPC' };
+  assert.equal((await POST(request('POST', base))).status, 503); noSideEffects(s);
+});
+await check('malformed replay cannot be presented as a successful save', async (s) => {
+  s.malformedReplay = true; assert.equal((await POST(request('POST', base))).status, 503); noSideEffects(s);
+});
+await check('concurrent winner recovered by create RPC does not call Outlook again', async (s) => {
+  s.concurrentReplay = true; const r = await POST(request('POST', base)); assert.equal(r.status, 200);
+  assert.equal((await r.json()).replayed, true); noSideEffects(s);
+});
+await check('cancelled record replay preserves its current status without remote write', async (s) => {
+  const first = (await (await POST(request('POST', base))).json()).event;
+  s.tables.agenda_events.find((event) => event.id === first.id).status = 'cancelled';
+  const repeat = (await (await POST(request('POST', base))).json()).event;
+  assert.equal(repeat.status, 'cancelled'); assert.equal(s.pushes.length, 1);
 });
 const source = fs.readFileSync(new URL('../../src/app/api/agenda/route.ts', import.meta.url), 'utf8');
 assert.ok(!source.includes('createAdminClient'), 'A human route must not bypass its session');

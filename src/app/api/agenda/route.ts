@@ -1,3 +1,4 @@
+import { sourceRequestFailure } from '@/lib/commercial/source-request';
 import { getCurrentContext } from '@/lib/auth';
 import { findAgendaConflicts } from '@/lib/agenda';
 import { deleteMicrosoftEvent, pushMicrosoftEvent } from '@/lib/microsoft-calendar';
@@ -94,6 +95,8 @@ export async function POST(request: Request) {
   if (!auth.context) return auth.response!;
   const body = await payload(request);
   if (!body) return err('Dados da agenda inválidos.');
+  const requestId = request.headers.get('Idempotency-Key');
+  if (!requestId || !uuid.test(requestId)) return err('Informe uma chave válida para salvar este compromisso.');
   if (!body.title?.trim() || !body.assigned_to) return err('Informe título e responsável.');
   if (!validateTime(body.starts_at, body.ends_at)) return err('Informe início e término válidos.');
   if (!eventTypes.has(body.event_type || '') || !meetingModes.has(body.meeting_mode || '')) return err('Tipo ou formato inválido.');
@@ -102,20 +105,35 @@ export async function POST(request: Request) {
   // preserves auth.uid() in transactional commercial events and enforces RLS.
   const db = await createClient();
   const org = auth.context.organization.id;
+  const creation = {
+    lead_id: body.lead_id || null, assigned_to: body.assigned_to,
+    title: body.title.trim(), description: body.description?.trim() || null,
+    event_type: body.event_type, meeting_mode: body.meeting_mode,
+    location: body.location?.trim() || null, video_url: body.video_url?.trim() || null,
+    starts_at: new Date(body.starts_at!).toISOString(), ends_at: new Date(body.ends_at!).toISOString(),
+  };
+  const replay = await db.rpc('commercial_replay_source_request', {
+    p_org: org, p_request: requestId, p_type: 'agenda_events', p_payload: creation,
+  });
+  if (replay.error) { const failure = sourceRequestFailure(replay.error); return Response.json({ error: failure.message, code: replay.error.code, definiteRollback: failure.definiteRollback }, { status: failure.status }); }
+  // Do not repeat Outlook side effects, even if the original event has been cancelled or edited.
+  if (replay.data !== null && (!replay.data?.record?.id || replay.data.replayed !== true)) return err('O servidor não confirmou a gravação anterior. Tente novamente com a mesma chave.', 503);
+  if (replay.data) return Response.json({ event: replay.data.record, replayed: true,
+    warning: 'Gravação anterior recuperada. Confira o estado atual e a sincronização com o Outlook antes de avisar o participante.' });
   const invalid = await references(db, org, body.assigned_to, body.lead_id || null, true);
   if (invalid) return invalid;
   const availability = await conflictsOrFailure({ organizationId: org,
     assignedTo: body.assigned_to, startsAt: body.starts_at!, endsAt: body.ends_at! });
   if (availability.error) return err(availability.error, 503);
-  if (availability.conflicts.length) return Response.json({ error: 'Responsável já possui compromisso nesse horário.', conflicts: availability.conflicts }, { status: 409 });
-  const { data, error } = await db.from('agenda_events').insert({
-    organization_id: org, lead_id: body.lead_id || null, assigned_to: body.assigned_to,
-    created_by: auth.context.userId, created_by_kind: 'human', title: body.title.trim(),
-    description: body.description?.trim() || null, event_type: body.event_type, meeting_mode: body.meeting_mode,
-    location: body.location?.trim() || null, video_url: body.video_url?.trim() || null,
-    starts_at: body.starts_at, ends_at: body.ends_at, status: 'scheduled',
-  }).select('*').single();
-  if (error || !data) return err(error?.code === '23P01' ? 'Outro compromisso foi criado nesse horário. Atualize a agenda.' : 'Não foi possível salvar o compromisso com a sua sessão.', error?.code === '23P01' ? 409 : 500);
+  if (availability.conflicts.length) return Response.json({ error: 'Responsável já possui compromisso nesse horário.', conflicts: availability.conflicts, definiteRollback: true }, { status: 409 });
+  const created = await db.rpc('commercial_create_agenda_once', { p_org: org, p_request: requestId, p_data: creation });
+  if (created.error || !created.data?.record?.id || typeof created.data.replayed !== 'boolean') {
+    const failure = sourceRequestFailure(created.error);
+    return Response.json({ error: failure.message, code: created.error?.code, definiteRollback: failure.definiteRollback }, { status: failure.status });
+  }
+  const data = created.data.record;
+  if (created.data.replayed) return Response.json({ event: data, replayed: true,
+    warning: 'Compromisso já salvo por outra tentativa. Confira a sincronização com o Outlook; nenhum novo envio foi iniciado.' });
   try {
     const syncStatus = await pushMicrosoftEvent(data);
     const refreshed = await db.from('agenda_events').select('*').eq('organization_id', org).eq('id', data.id).maybeSingle();

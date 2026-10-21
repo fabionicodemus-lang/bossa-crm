@@ -1,6 +1,8 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+
+import { SourceSaveAttempt } from '@/lib/commercial/source-request';
 
 type Member = { user_id: string; full_name: string; email: string; role: string };
 type ViewMode = 'month' | 'week' | 'day';
@@ -80,6 +82,9 @@ export function AgendaCalendar({ members, currentUserId, canEdit }: { members: M
   const [assigneeFilter, setAssigneeFilter] = useState('all');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const saveLock = useRef(false);
+  const saveAttempt = useRef(new SourceSaveAttempt());
+  const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
   const [form, setForm] = useState<FormState | null>(null);
 
@@ -128,6 +133,7 @@ export function AgendaCalendar({ members, currentUserId, canEdit }: { members: M
   const visibleEvents = useMemo(() => events.filter((event) => event.status !== 'cancelled'), [events]);
 
   function openNew(date = cursor, hour?: number) {
+    if (saveLock.current || saveAttempt.current.pending) { setError('Confirme a gravação atual antes de iniciar outro compromisso.'); return; }
     if (!canEdit) return;
     const base = new Date(date);
     if (hour !== undefined) base.setHours(hour, 0, 0, 0);
@@ -135,6 +141,7 @@ export function AgendaCalendar({ members, currentUserId, canEdit }: { members: M
   }
 
   function openEdit(event: AgendaEvent) {
+    if (saveLock.current || saveAttempt.current.pending) { setError('Confirme a gravação atual antes de iniciar outro compromisso.'); return; }
     if (!canEdit) return;
     const start = new Date(event.starts_at);
     void event.ends_at;
@@ -146,27 +153,37 @@ export function AgendaCalendar({ members, currentUserId, canEdit }: { members: M
   }
 
   async function save() {
-    if (!form) return;
-    setSaving(true); setError('');
+    if (!form || !canEdit || saveLock.current) return;
+    saveLock.current = true;
+    setSaving(true); setError(''); setNotice('');
     try {
       const startsAt = localIso(form.date, form.start_time);
       let endsAt = localIso(form.date, form.end_time);
       if (new Date(endsAt) <= new Date(startsAt)) {
         const end = new Date(endsAt); end.setDate(end.getDate() + 1); endsAt = end.toISOString();
       }
+      const command = {
+        id: form.id || undefined, title: form.title, description: form.description, assigned_to: form.assigned_to,
+        event_type: form.event_type, meeting_mode: form.meeting_mode, location: form.location, video_url: form.video_url,
+        starts_at: startsAt, ends_at: endsAt,
+      };
+      const requestId = form.id ? null : saveAttempt.current.prepare(command);
       const response = await fetch('/api/agenda', {
-        method: form.id ? 'PATCH' : 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id: form.id || undefined, title: form.title, description: form.description, assigned_to: form.assigned_to,
-          event_type: form.event_type, meeting_mode: form.meeting_mode, location: form.location, video_url: form.video_url,
-          starts_at: startsAt, ends_at: endsAt,
-        }),
+        method: form.id ? 'PATCH' : 'POST',
+        headers: { 'Content-Type': 'application/json', ...(requestId ? { 'Idempotency-Key': requestId } : {}) },
+        body: JSON.stringify(command),
       });
-      const payload = await response.json() as { event?: AgendaEvent; error?: string };
-      if (!response.ok) throw new Error(payload.error || 'Não foi possível salvar o compromisso.');
+      const payload = await response.json() as { event?: AgendaEvent; error?: string; warning?: string; definiteRollback?: boolean };
+      if (!response.ok) {
+        if (payload.definiteRollback || [400, 401, 403].includes(response.status)) saveAttempt.current.complete();
+        throw new Error(payload.error || 'Não foi possível confirmar o compromisso. Tente novamente com os mesmos dados.');
+      }
+      if (!payload.event?.id) throw new Error('O servidor não confirmou o compromisso. Tente novamente com os mesmos dados.');
+      saveAttempt.current.complete();
+      setNotice(payload.warning || 'Compromisso salvo.');
       setForm(null); await load();
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Não foi possível salvar o compromisso.'); }
-    finally { setSaving(false); }
+    finally { saveLock.current = false; setSaving(false); }
   }
 
   async function remove() {
@@ -213,6 +230,7 @@ export function AgendaCalendar({ members, currentUserId, canEdit }: { members: M
 
   return <div className="grid" style={{ gap: 14 }}>
     {error && <div className="error-box">{error}</div>}
+    {notice && <div role="status" className="notice-box">{notice}</div>}
 
     <section className="card">
       <div className="card-body" style={{ display: 'flex', gap: 10, justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap' }}>
@@ -273,7 +291,7 @@ export function AgendaCalendar({ members, currentUserId, canEdit }: { members: M
 
     {form && <div onMouseDown={(e) => { if (e.currentTarget === e.target) setForm(null); }} style={{ position: 'fixed', inset: 0, background: 'rgba(20,18,16,.35)', zIndex: 100, display: 'grid', placeItems: 'center', padding: 20 }}>
       <section className="card" style={{ width: 'min(720px, 96vw)', maxHeight: '92vh', overflow: 'auto' }}>
-        <div className="card-head"><h3>{form.id ? 'Editar compromisso' : 'Novo compromisso'}</h3><button className="btn btn-ghost btn-sm" onClick={() => setForm(null)}>✕</button></div>
+        <div className="card-head"><h3>{form.id ? 'Editar compromisso' : 'Novo compromisso'}</h3><button className="btn btn-ghost btn-sm" onClick={() => { if (saveLock.current || saveAttempt.current.pending) { setError('Confirme a gravação atual antes de fechar o formulário.'); return; } setForm(null); }}>✕</button></div>
         <div className="card-body grid" style={{ gap: 12 }}>
           <div className="field"><label>Título</label><input className="input" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="Ex.: Apresentação do Flow para João" /></div>
           <div className="grid grid-2">
@@ -293,7 +311,7 @@ export function AgendaCalendar({ members, currentUserId, canEdit }: { members: M
           <div className="info-box"><strong>Conflitos:</strong> o CRM bloqueia automaticamente dois compromissos sobrepostos para o mesmo responsável. A mesma regra é usada pela Nara e pelo Plantão.</div>
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
             <div>{form.id && <button className="btn btn-ghost" onClick={() => void remove()} disabled={saving}>Excluir</button>}</div>
-            <div style={{ display: 'flex', gap: 8 }}><button className="btn btn-ghost" onClick={() => setForm(null)}>Cancelar</button><button className="btn btn-primary" onClick={() => void save()} disabled={saving || !form.title.trim() || !form.assigned_to}>{saving ? 'Salvando...' : 'Salvar'}</button></div>
+            <div style={{ display: 'flex', gap: 8 }}><button className="btn btn-ghost" onClick={() => { if (saveLock.current || saveAttempt.current.pending) { setError('Confirme a gravação atual antes de fechar o formulário.'); return; } setForm(null); }}>Cancelar</button><button className="btn btn-primary" onClick={() => void save()} disabled={saving || !form.title.trim() || !form.assigned_to}>{saving ? 'Salvando...' : 'Salvar'}</button></div>
           </div>
         </div>
       </section>

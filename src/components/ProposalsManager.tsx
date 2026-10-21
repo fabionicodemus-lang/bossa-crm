@@ -1,7 +1,8 @@
 'use client';
 
-import { FormEvent, useMemo, useState } from 'react';
+import { FormEvent, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
+import { SourceSaveAttempt, sourceRequestFailure } from '@/lib/commercial/source-request';
 import { createClient } from '@/lib/supabase/client';
 import { ProposalEditor } from './proposals/ProposalEditor';
 import { ProposalList } from './proposals/ProposalList';
@@ -67,6 +68,8 @@ export function ProposalsManager({
   const [statusFilter, setStatusFilter] = useState('');
   const [developmentFilter, setDevelopmentFilter] = useState('');
   const [saving, setSaving] = useState(false);
+  const saveLock = useRef(false);
+  const saveAttempt = useRef(new SourceSaveAttempt());
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
 
@@ -121,6 +124,7 @@ export function ProposalsManager({
   }
 
   function startNew() {
+    if (saveLock.current || saveAttempt.current.pending) { setError('Há uma gravação sem confirmação. Retome a tentativa atual antes de iniciar outra proposta.'); return; }
     setEditingId(null);
     setForm(blankForm());
     setError('');
@@ -233,6 +237,7 @@ export function ProposalsManager({
   }
 
   function editProposal(proposal: Proposal) {
+    if (saveLock.current || saveAttempt.current.pending) { setError('Há uma gravação sem confirmação. Retome a tentativa atual antes de iniciar outra proposta.'); return; }
     const plan = proposal.payment_plan ?? {};
     const snapshot = proposal.snapshot ?? {};
     const linkedLead = leads.find((lead) => lead.id === proposal.lead_id);
@@ -291,7 +296,7 @@ export function ProposalsManager({
 
   async function saveProposal(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!canEdit) return;
+    if (!canEdit || saveLock.current) return;
     setError('');
     setNotice('');
     if (!form.leadId || !form.developmentId) {
@@ -329,6 +334,7 @@ export function ProposalsManager({
       pdfWindow.document.title = 'Gerando proposta';
       pdfWindow.document.body.innerHTML = '<p style="font-family:Arial;padding:24px">Gerando PDF da proposta…</p>';
     }
+    saveLock.current = true;
     setSaving(true);
 
     try {
@@ -377,7 +383,6 @@ export function ProposalsManager({
         next_action_due_at: nextActionDueAt,
       };
       const payload = {
-        organization_id: organizationId,
         development_id: form.developmentId,
         unit_id: form.unitId || null,
         lead_id: form.leadId,
@@ -389,67 +394,33 @@ export function ProposalsManager({
         notes: form.notes.trim() || null,
         payment_plan: paymentPlan,
         snapshot,
-        updated_by: currentUserId,
       };
 
-      let saved: Proposal;
-      if (editingId) {
-        const current = proposals.find((proposal) => proposal.id === editingId);
-        const { data, error: updateError } = await supabase.from('proposals')
-          .update({ ...payload, version: (current?.version ?? 1) + 1 })
-          .eq('id', editingId)
-          .eq('organization_id', organizationId)
-          .select('*')
-          .single();
-        if (updateError) throw updateError;
-        saved = data as Proposal;
-      } else {
-        const { data, error: insertError } = await supabase.from('proposals')
-          .insert({ ...payload, created_by: currentUserId })
-          .select('*')
-          .single();
-        if (insertError) throw insertError;
-        saved = data as Proposal;
-      }
-
-      const { error: deleteItemsError } = await supabase.from('proposal_payment_items').delete().eq('proposal_id', saved.id);
-      if (deleteItemsError) throw deleteItemsError;
-      const items = calculations.scheduleItems.map((item, index) => ({
-        organization_id: organizationId,
-        proposal_id: saved.id,
-        kind: item.kind,
-        label: item.label,
-        quantity: item.quantity,
-        amount: item.amount,
-        start_date: item.startDate || null,
-        interval_months: item.intervalMonths,
-        sort_order: index + 1,
-        metadata: {
-          paid_until_keys_quantity: item.paidUntilKeysQuantity,
-          paid_until_keys_amount: item.paidUntilKeysAmount,
-        },
+      const items = calculations.scheduleItems.map((item) => ({
+        kind: item.kind, label: item.label, quantity: item.quantity, amount: item.amount,
+        start_date: item.startDate || null, interval_months: item.intervalMonths,
+        metadata: { paid_until_keys_quantity: item.paidUntilKeysQuantity, paid_until_keys_amount: item.paidUntilKeysAmount },
       }));
-      if (items.length) {
-        const { error: itemsError } = await supabase.from('proposal_payment_items').insert(items);
-        if (itemsError) throw itemsError;
+      const current = proposals.find((proposal) => proposal.id === editingId);
+      const command = {
+        p_org: organizationId, p_data: payload, p_items: items,
+        p_id: editingId, p_expected_updated_at: current?.updated_at ?? null,
+      };
+      const requestId = saveAttempt.current.prepare(command);
+      const { data, error: saveError } = await supabase.rpc('commercial_save_proposal_once', { ...command, p_request: requestId });
+      if (saveError) {
+        saveAttempt.current.rejected(saveError);
+        throw new Error(sourceRequestFailure(saveError).message);
       }
-
-      const activityTitle = editingId
-        ? `Proposta #${saved.proposal_number} atualizada`
-        : `Proposta #${saved.proposal_number} criada`;
-      const unitDescription = selectedUnit ? ` · unidade ${selectedUnit.unit_code}` : '';
-      const { error: activityError } = await supabase.from('activities').insert({
-        organization_id: organizationId,
-        lead_id: form.leadId,
-        user_id: currentUserId,
-        type: 'proposta',
-        title: activityTitle,
-        description: `${selectedDevelopment?.name ?? 'Empreendimento'}${unitDescription} · ${money.format(calculations.proposedPrice)} · ${statusLabels[form.workflowStatus]}.`,
-        metadata: { proposal_id: saved.id, proposal_number: saved.proposal_number, ...snapshot },
-      });
-      if (activityError) throw activityError;
-
-      if (!['recusada', 'expirada', 'convertida'].includes(form.workflowStatus)) {
+      if (!data?.record?.id || typeof data.replayed !== 'boolean') throw new Error('O servidor não confirmou a gravação. Tente novamente sem alterar os dados.');
+      const saved = data.record as Proposal;
+      saveAttempt.current.complete();
+      // A confirmed commit must be reflected before optional stage/PDF work.
+      setProposals((rows) => [saved, ...rows.filter((proposal) => proposal.id !== saved.id)]);
+      setEditingId(saved.id);
+      let postSaveWarning = '';
+      if (!data.replayed && !['recusada', 'expirada', 'convertida'].includes(form.workflowStatus)) {
+        try {
         const stageResponse = await fetch(`/api/leads/${form.leadId}/stage`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -460,15 +431,12 @@ export function ProposalsManager({
         });
         const stagePayload = await stageResponse.json().catch(() => ({})) as { error?: string };
         if (!stageResponse.ok) {
-          throw new Error(stagePayload.error || 'A proposta foi salva, mas não foi possível mover o lead para Proposta / Negociação.');
+          postSaveWarning = stagePayload.error || 'A proposta foi salva, mas a movimentação do contato precisa ser conferida.';
         }
+        } catch { postSaveWarning = 'A proposta foi salva, mas não foi possível confirmar a etapa do contato. Confira o funil; não é necessário salvar novamente.'; }
       }
 
-      setProposals((current) => editingId
-        ? current.map((proposal) => proposal.id === saved.id ? saved : proposal)
-        : [saved, ...current]);
-      setEditingId(saved.id);
-      setNotice('Proposta salva, registrada no histórico e PDF gerado.');
+      setNotice(`${data.replayed ? 'Gravação anterior recuperada sem duplicar a proposta.' : 'Proposta e parcelas salvas com histórico.'}${postSaveWarning ? ` Atenção: ${postSaveWarning}` : ''}`);
       const pdfUrl = `/api/propostas/${saved.id}/pdf`;
       if (pdfWindow) pdfWindow.location.href = pdfUrl;
       else window.open(pdfUrl, '_blank', 'noopener,noreferrer');
@@ -476,6 +444,7 @@ export function ProposalsManager({
       if (pdfWindow) pdfWindow.close();
       setError(errorText(caught));
     } finally {
+      saveLock.current = false;
       setSaving(false);
     }
   }
@@ -581,7 +550,7 @@ export function ProposalsManager({
           canEdit={canEdit}
           saving={saving}
           editingId={editingId}
-          onCancel={() => setMode('list')}
+          onCancel={() => { if (saveLock.current || saveAttempt.current.pending) { setError('Confirme a gravação atual antes de fechar o formulário.'); return; } setMode('list'); }}
           onSubmit={saveProposal}
         />}
   </div>;
