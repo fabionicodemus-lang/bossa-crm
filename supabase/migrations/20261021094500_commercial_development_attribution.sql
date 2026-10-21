@@ -93,7 +93,7 @@ create function public.commercial_stage_durations(
   p_filters jsonb default '{}'::jsonb
 )
 returns table(stage text,sample_size bigint,median_hours double precision,p90_hours double precision)
-language sql stable security invoker set search_path=public as $
+language sql stable security invoker set search_path=public as $$
  with eligible as (
   select o.id from public.commercial_opportunities o
   where o.organization_id=p_org and private.is_org_member(p_org)
@@ -133,7 +133,7 @@ language sql stable security invoker set search_path=public as $
   and p.next_at>=p_start and p.next_at<least(p_end,now())
   and p_end>p_start and p_end-p_start<=interval '367 days'
  group by p.stage order by p.stage;
-$;
+$$;
 revoke all on function public.commercial_stage_durations(uuid,timestamptz,timestamptz,jsonb) from public,anon;
 grant execute on function public.commercial_stage_durations(uuid,timestamptz,timestamptz,jsonb)
  to authenticated,service_role;
