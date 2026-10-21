@@ -307,10 +307,12 @@ const duration = await q(
 assert.equal(duration.length, 1);
 assert.ok(Number(duration[0].sample_size) >= 1);
 assert.ok(Number(duration[0].median_hours) >= 0);
-await rejects(
+// An unauthorized organization must not reveal any duration rows.
+const outsideDurations = await q(
   `select * from commercial_stage_durations($1,now()-interval '1 day',now()+interval '1 day')`,
   [other],
 );
+assert.deepEqual(outsideDurations, []);
 console.log(
   "PASS: isolated PostgreSQL migrations, qualification, couple, multiple interests, proposal revisions, visit chronology, rescheduling, reactivation, immutable history, financial idempotency, cohorts, reconciliation, organization RLS, viewer permissions, dates, zero reference, cross-development attribution, broker filters and stage duration distributions.",
 );
