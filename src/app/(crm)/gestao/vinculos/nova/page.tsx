@@ -38,10 +38,12 @@ export default async function VerifiedIntent({ searchParams }: { searchParams: P
     <Link href="/gestao/vinculos">Voltar</Link>
   </div>;
   const revision = typeof source.updated_at === "string" ? source.updated_at : "";
+  // Time-sensitive eligibility is checked against the database clock in the RPC,
+  // under the source lock. Rendering performs only structural validation.
   const available = entity === "proposals"
     ? ["rascunho", "enviada", "aprovada"].includes(String(source.status))
     : source.status === "scheduled" && ["visita", "apresentacao", "reuniao_cliente"].includes(String(source.event_type))
-      && typeof source.starts_at === "string" && new Date(source.starts_at).getTime() >= Date.now();
+      && typeof source.starts_at === "string" && Number.isFinite(Date.parse(source.starts_at));
   const detail = entity === "proposals" ? `Proposta #${String(source.proposal_number ?? "—")}` : String(source.title ?? "Compromisso comercial");
   const price = source.proposed_price === null || source.proposed_price === undefined ? null : Number(source.proposed_price);
   return <>
@@ -58,7 +60,7 @@ export default async function VerifiedIntent({ searchParams }: { searchParams: P
         <p>Referência: {id} · última alteração: {revision ? formatDateTime(revision) : "indisponível"}</p>
         <p><Link href={`/leads/${contact.id}`}>Conferir conversa do contato</Link>{" · "}<Link href={entity === "proposals" ? "/propostas" : "/agenda"}>Conferir documento ou compromisso</Link></p>
       </section>
-      {!available || !revision ? <p role="alert">Este registro está encerrado, é passado ou não possui versão verificável. Revise o histórico sem criar outra intenção por este atalho.</p> : <form action={createVerifiedIntent} className="card card-body" style={{ display: "grid", gap: 16 }}>
+      {!available || !revision ? <p role="alert">Este registro está encerrado, tem formato incompatível ou não possui versão verificável. Revise o histórico sem criar outra intenção por este atalho.</p> : <form action={createVerifiedIntent} className="card card-body" style={{ display: "grid", gap: 16 }}>
         <input type="hidden" name="entity_type" value={entity} />
         <input type="hidden" name="entity_id" value={id} />
         <input type="hidden" name="revision" value={revision} />
@@ -70,6 +72,7 @@ export default async function VerifiedIntent({ searchParams }: { searchParams: P
         <label>Próxima ação<input className="input" name="next_action" required minLength={3} maxLength={500} placeholder="Ex.: confirmar horário da visita com o comprador" /></label>
         <label>Evidência conferida<textarea className="input" name="evidence" required minLength={20} maxLength={2000} rows={4} placeholder="Descreva o que foi confirmado e indique a mensagem, data ou documento conferido." /></label>
         <p>Responsável inicial: {ctx.fullName}. A oportunidade será registrada agora, em atendimento, sem inventar uma data histórica ou alterar o responsável do contato.</p>
+        <p>O banco confere novamente a versão do registro e o horário no momento da confirmação. Compromissos passados não podem criar outra intenção por este atalho.</p>
         <p>Se já houver oportunidade deste comprador em aberto ou em nutrição, a criação será recusada. Volte à revisão e vincule a existente; uma compra independente exige análise separada.</p>
         <label style={{ display: "flex", alignItems: "start", gap: 10 }}><input type="checkbox" name="confirmed" value="yes" required />Conferi a origem, o comprador e a intenção concreta de compra. Não estou apenas aceitando uma inferência da IA.</label>
         <SubmitIntent />
