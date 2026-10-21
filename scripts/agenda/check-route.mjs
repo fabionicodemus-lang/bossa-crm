@@ -53,6 +53,8 @@ function fixture() {
   }
   s.db = { from: (table) => new Query(table), async rpc(name, args) {
     s.rpcCalls.push({ name, args: structuredClone(args) });
+    if (name === 'commercial_prepare_source_request' && s.prepareMalformed) return { data: {}, error: null };
+    if (name === 'commercial_prepare_source_request') return s.prepareError ? { data: null, error: s.prepareError } : { data: { request_id: args.p_request, status: 'pending' }, error: null };
     if (name === 'commercial_replay_source_request' && s.replayError) return { data: null, error: s.replayError };
     if (name === 'commercial_replay_source_request' && s.malformedReplay) return { data: {}, error: null };
     const receipt = s.receipts.get(args.p_request);
@@ -270,4 +272,15 @@ await check('cancelled record replay preserves its current status without remote
 });
 const source = fs.readFileSync(new URL('../../src/app/api/agenda/route.ts', import.meta.url), 'utf8');
 assert.ok(!source.includes('createAdminClient'), 'A human route must not bypass its session');
+await check('durable preparation refuses another unresolved command before source writes and Outlook', async (s) => {
+  s.prepareError = { code: '23505', message: 'COMMERCIAL_RECOVERY_PENDING' };
+  assert.equal((await POST(request('POST', base))).status, 409); noSideEffects(s); assert.equal(s.availability.length, 0);
+});
+await check('durable preparation missing migration fails closed without source fallback', async (s) => {
+  s.prepareError = { code: 'PGRST202', message: 'not deployed' };
+  assert.equal((await POST(request('POST', base))).status, 503); noSideEffects(s);
+});
+await check('malformed preparation is not treated as authorization to save', async (s) => {
+  s.prepareMalformed = true; assert.equal((await POST(request('POST', base))).status, 503); noSideEffects(s);
+});
 console.log(`PASS ${passed} isolated agenda API scenarios. Supabase/Outlook adapters mocked; not production or browser homologation.`);

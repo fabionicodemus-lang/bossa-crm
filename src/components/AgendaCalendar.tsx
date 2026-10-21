@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
+import { CommercialSaveRecovery } from './CommercialSaveRecovery';
 import { SourceSaveAttempt } from '@/lib/commercial/source-request';
 
 type Member = { user_id: string; full_name: string; email: string; role: string };
@@ -180,7 +181,16 @@ export function AgendaCalendar({ members, currentUserId, canEdit }: { members: M
       }
       if (!payload.event?.id) throw new Error('O servidor não confirmou o compromisso. Tente novamente com os mesmos dados.');
       saveAttempt.current.complete();
-      setNotice(payload.warning || 'Compromisso salvo.');
+      let recoveryWarning = '';
+      if (!form.id) {
+        try {
+          const ack = await fetch('/api/commercial/recovery', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ requestId, action: 'acknowledge', confirmed: true }) });
+          const acknowledgement = await ack.json();
+          if (!ack.ok || acknowledgement.request?.state !== 'acknowledged') recoveryWarning = ' Confira também a tentativa no painel de recuperação.';
+        } catch { recoveryWarning = ' Confira também a tentativa no painel de recuperação.'; }
+      }
+      setNotice((payload.warning || 'Compromisso salvo.') + recoveryWarning);
       setForm(null); await load();
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Não foi possível salvar o compromisso.'); }
     finally { saveLock.current = false; setSaving(false); }
@@ -229,6 +239,7 @@ export function AgendaCalendar({ members, currentUserId, canEdit }: { members: M
   }
 
   return <div className="grid" style={{ gap: 14 }}>
+    {canEdit && <CommercialSaveRecovery kind="agenda_events" busy={saving} />}
     {error && <div className="error-box">{error}</div>}
     {notice && <div role="status" className="notice-box">{notice}</div>}
 

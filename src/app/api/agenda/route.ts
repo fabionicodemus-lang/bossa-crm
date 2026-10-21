@@ -112,6 +112,11 @@ export async function POST(request: Request) {
     location: body.location?.trim() || null, video_url: body.video_url?.trim() || null,
     starts_at: new Date(body.starts_at!).toISOString(), ends_at: new Date(body.ends_at!).toISOString(),
   };
+  const prepared = await db.rpc('commercial_prepare_source_request', {
+    p_org: org, p_request: requestId, p_type: 'agenda_events', p_payload: creation,
+  });
+  if (prepared.error) { const failure = sourceRequestFailure(prepared.error); return Response.json({ error: failure.message, definiteRollback: failure.definiteRollback }, { status: failure.status }); }
+  if (prepared.data?.request_id !== requestId) return err('Não foi possível confirmar a preparação. Confira a recuperação de salvamentos antes de iniciar outro pedido.', 503);
   const replay = await db.rpc('commercial_replay_source_request', {
     p_org: org, p_request: requestId, p_type: 'agenda_events', p_payload: creation,
   });

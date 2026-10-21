@@ -42,6 +42,6 @@ test('proposal editor no longer performs split payment writes and records succes
 });
 test('agenda editor includes a retry key, prevents concurrent click, and displays warnings',()=>{
  const s=fs.readFileSync('src/components/AgendaCalendar.tsx','utf8');
- assert.match(s,/Idempotency-Key/);assert.match(s,/saveLock.current = true/);assert.match(s,/setNotice\(payload.warning/);
+ assert.match(s,/Idempotency-Key/);assert.match(s,/saveLock.current = true/);assert.match(s,/setNotice\(\(payload.warning/);assert.match(s,/\+ recoveryWarning/);
 });
 console.log(`PASS: ${count} client/helper/structural checks. UI structure is not a rendered-browser test.`);

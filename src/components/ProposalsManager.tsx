@@ -4,6 +4,7 @@ import { FormEvent, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { SourceSaveAttempt, sourceRequestFailure } from '@/lib/commercial/source-request';
 import { createClient } from '@/lib/supabase/client';
+import { CommercialSaveRecovery } from './CommercialSaveRecovery';
 import { ProposalEditor } from './proposals/ProposalEditor';
 import { ProposalList } from './proposals/ProposalList';
 import {
@@ -407,6 +408,15 @@ export function ProposalsManager({
         p_id: editingId, p_expected_updated_at: current?.updated_at ?? null,
       };
       const requestId = saveAttempt.current.prepare(command);
+      const prepared = await supabase.rpc('commercial_prepare_source_request', {
+        p_org: organizationId, p_request: requestId, p_type: 'proposals',
+        p_payload: { data: payload, items, id: editingId, expected_updated_at: current?.updated_at ?? null },
+      });
+      if (prepared.error) {
+        saveAttempt.current.rejected(prepared.error);
+        throw new Error(sourceRequestFailure(prepared.error).message);
+      }
+      if (prepared.data?.request_id !== requestId) throw new Error('Preparação não confirmada. Confira a recuperação acima antes de iniciar outro pedido.');
       const { data, error: saveError } = await supabase.rpc('commercial_save_proposal_once', { ...command, p_request: requestId });
       if (saveError) {
         saveAttempt.current.rejected(saveError);
@@ -419,6 +429,13 @@ export function ProposalsManager({
       setProposals((rows) => [saved, ...rows.filter((proposal) => proposal.id !== saved.id)]);
       setEditingId(saved.id);
       let postSaveWarning = '';
+      try {
+        const acknowledged = await supabase.rpc('commercial_finish_source_recovery', {
+          p_org: organizationId, p_request: requestId, p_action: 'acknowledge',
+        });
+        if (acknowledged.error || acknowledged.data?.state !== 'acknowledged') postSaveWarning = 'A proposta está salva; conclua a conferência da tentativa no painel de recuperação. ';
+      } catch { postSaveWarning = 'A proposta está salva; conclua a conferência da tentativa no painel de recuperação. '; }
+
       if (!data.replayed && !['recusada', 'expirada', 'convertida'].includes(form.workflowStatus)) {
         try {
         const stageResponse = await fetch(`/api/leads/${form.leadId}/stage`, {
@@ -431,9 +448,9 @@ export function ProposalsManager({
         });
         const stagePayload = await stageResponse.json().catch(() => ({})) as { error?: string };
         if (!stageResponse.ok) {
-          postSaveWarning = stagePayload.error || 'A proposta foi salva, mas a movimentação do contato precisa ser conferida.';
+          postSaveWarning += stagePayload.error || 'A proposta foi salva, mas a movimentação do contato precisa ser conferida.';
         }
-        } catch { postSaveWarning = 'A proposta foi salva, mas não foi possível confirmar a etapa do contato. Confira o funil; não é necessário salvar novamente.'; }
+        } catch { postSaveWarning += 'A proposta foi salva, mas não foi possível confirmar a etapa do contato. Confira o funil; não é necessário salvar novamente.'; }
       }
 
       setNotice(`${data.replayed ? 'Gravação anterior recuperada sem duplicar a proposta.' : 'Proposta e parcelas salvas com histórico.'}${postSaveWarning ? ` Atenção: ${postSaveWarning}` : ''}`);
@@ -504,6 +521,7 @@ export function ProposalsManager({
   }
 
   return <div className="page-content">
+    {canEdit && <CommercialSaveRecovery kind="proposals" busy={saving} />}
     {error && <div className="error-box">{error}</div>}
     {notice && <div className="success-box">{notice}</div>}
     {mode === 'list'

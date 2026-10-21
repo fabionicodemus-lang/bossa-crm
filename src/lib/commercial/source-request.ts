@@ -28,6 +28,18 @@ export function sourceRequestFailure(cause: unknown) {
   const error = cause && typeof cause === 'object' ? cause as { code?: string; message?: string } : {};
   const code = String(error.code ?? '');
   const message = String(error.message ?? '');
+  if (message.includes('COMMERCIAL_RECOVERY_PENDING')) return {
+    message: 'Existe um salvamento anterior para conferir. Use a recuperação acima antes de iniciar outro pedido.', status: 409, definiteRollback: true,
+  };
+  if (message.includes('COMMERCIAL_RECOVERY_ABANDONED')) return {
+    message: 'Esta tentativa foi abandonada e não será executada. Atualize a página para iniciar um novo pedido consciente.', status: 409, definiteRollback: true,
+  };
+  if (message.includes('COMMERCIAL_RECOVERY_NOT_COMMITTED')) return {
+    message: 'A gravação ainda não foi confirmada. Confira, retome a mesma tentativa ou abandone-a explicitamente.', status: 409, definiteRollback: false,
+  };
+  if (message.includes('COMMERCIAL_RECOVERY_NOT_FOUND')) return {
+    message: 'Tentativa indisponível para seu usuário e organização. Confira a sessão atual.', status: 404, definiteRollback: false,
+  };
   if (message.includes('COMMERCIAL_REQUEST_REUSED')) return {
     message: 'Esta chave já pertence a outra gravação. Confira o registro anterior; nenhuma nova gravação foi realizada.', status: 409, definiteRollback: false,
   };
