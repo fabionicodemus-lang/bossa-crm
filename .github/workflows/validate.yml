@@ -45,6 +45,10 @@ jobs:
         run: npm run test:commercial
       - name: Test conservative commercial linking
         run: node scripts/commercial/check-linking.mjs
+      - name: Test human agenda API session
+        run: node --experimental-strip-types --loader ./scripts/agenda/loader.mjs scripts/agenda/check-route.mjs
+      - name: Test agenda actor and RLS in PostgreSQL
+        run: node scripts/commercial/check-agenda-session.mjs
       - name: Test Hoje workspace
         run: npm run test:hoje-ui
       - name: Test Meta referral attribution
