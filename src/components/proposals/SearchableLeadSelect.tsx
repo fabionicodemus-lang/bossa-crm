@@ -1,32 +1,32 @@
-'use client';
+"use client";
 
-import { useEffect, useMemo, useState } from 'react';
-import type { ProposalLead } from './model';
+import { useEffect, useMemo, useState, useId } from "react";
+import type { ProposalLead } from "./model";
 
 function normalizeSearch(value: string) {
   return value
-    .normalize('NFD')
-    .replace(/\p{Diacritic}/gu, '')
-    .toLocaleLowerCase('pt-BR')
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .toLocaleLowerCase("pt-BR")
     .trim();
 }
 
 function leadLabel(lead: ProposalLead) {
-  return `${lead.name}${lead.company ? ` · ${lead.company}` : ''}`;
+  return `${lead.name}${lead.company ? ` · ${lead.company}` : ""}`;
 }
 
 function leadDetails(lead: ProposalLead) {
-  return [lead.phone, lead.enterprise, lead.group_name].filter(Boolean).join(' · ');
+  return [lead.phone, lead.enterprise, lead.group_name]
+    .filter(Boolean)
+    .join(" · ");
 }
 
 function leadSearchText(lead: ProposalLead) {
-  return normalizeSearch([
-    lead.name,
-    lead.company,
-    lead.phone,
-    lead.enterprise,
-    lead.group_name,
-  ].filter(Boolean).join(' '));
+  return normalizeSearch(
+    [lead.name, lead.company, lead.phone, lead.enterprise, lead.group_name]
+      .filter(Boolean)
+      .join(" "),
+  );
 }
 
 function resultScore(lead: ProposalLead, term: string) {
@@ -41,20 +41,26 @@ export function SearchableLeadSelect({
   leads,
   value,
   onChange,
+  onSelect,
   disabled = false,
-  placeholder = 'Digite para buscar…',
+  placeholder = "Digite para buscar…",
 }: {
   leads: ProposalLead[];
   value: string;
   onChange: (leadId: string) => void;
+  onSelect?: (lead: ProposalLead) => void;
   disabled?: boolean;
   placeholder?: string;
 }) {
+  const optionsId = useId();
   const selectedLead = leads.find((lead) => lead.id === value) ?? null;
-  const selectedLabel = selectedLead ? leadLabel(selectedLead) : '';
-  const kind: ProposalLead['kind'] = selectedLead?.kind
-    ?? leads[0]?.kind
-    ?? (placeholder.toLocaleLowerCase('pt-BR').includes('imobiliária') ? 'corretor' : 'cliente');
+  const selectedLabel = selectedLead ? leadLabel(selectedLead) : "";
+  const kind: ProposalLead["kind"] =
+    selectedLead?.kind ??
+    leads[0]?.kind ??
+    (placeholder.toLocaleLowerCase("pt-BR").includes("imobiliária")
+      ? "corretor"
+      : "cliente");
   const [query, setQuery] = useState(selectedLabel);
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
@@ -71,15 +77,19 @@ export function SearchableLeadSelect({
     const timer = window.setTimeout(async () => {
       setLoading(true);
       try {
-        const response = await fetch(`/api/leads/search?kind=${kind}&q=${encodeURIComponent(query.trim())}`, {
-          cache: 'no-store',
-          signal: controller.signal,
-        });
-        if (!response.ok) throw new Error('Não foi possível buscar os leads.');
-        const payload = await response.json() as { leads?: ProposalLead[] };
+        const response = await fetch(
+          `/api/leads/search?kind=${kind}&q=${encodeURIComponent(query.trim())}`,
+          {
+            cache: "no-store",
+            signal: controller.signal,
+          },
+        );
+        if (!response.ok) throw new Error("Não foi possível buscar os leads.");
+        const payload = (await response.json()) as { leads?: ProposalLead[] };
         setRemoteLeads(payload.leads ?? []);
       } catch (error) {
-        if (!(error instanceof DOMException && error.name === 'AbortError')) setRemoteLeads([]);
+        if (!(error instanceof DOMException && error.name === "AbortError"))
+          setRemoteLeads([]);
       } finally {
         if (!controller.signal.aborted) setLoading(false);
       }
@@ -103,8 +113,11 @@ export function SearchableLeadSelect({
 
     return [...merged.values()]
       .sort((first, second) => {
-        const scoreDifference = resultScore(first, term) - resultScore(second, term);
-        return scoreDifference || first.name.localeCompare(second.name, 'pt-BR');
+        const scoreDifference =
+          resultScore(first, term) - resultScore(second, term);
+        return (
+          scoreDifference || first.name.localeCompare(second.name, "pt-BR")
+        );
       })
       .slice(0, 40);
   }, [canSearch, leads, remoteLeads, selectedLead, showingSelectedValue, term]);
@@ -115,81 +128,108 @@ export function SearchableLeadSelect({
     setActiveIndex(0);
     setRemoteLeads([]);
     onChange(lead.id);
+    onSelect?.(lead);
   }
 
-  return <div style={{ position: 'relative' }}>
-    <input
-      className="input"
-      type="text"
-      role="combobox"
-      aria-autocomplete="list"
-      aria-expanded={open}
-      aria-controls="proposal-lead-options"
-      value={query}
-      placeholder={placeholder}
-      autoComplete="off"
-      disabled={disabled}
-      onFocus={(event) => {
-        setOpen(true);
-        setActiveIndex(0);
-        event.currentTarget.select();
-      }}
-      onChange={(event) => {
-        setQuery(event.target.value);
-        setRemoteLeads([]);
-        setOpen(true);
-        setActiveIndex(0);
-      }}
-      onBlur={() => window.setTimeout(() => {
-        setOpen(false);
-        setQuery(selectedLabel);
-      }, 160)}
-      onKeyDown={(event) => {
-        if (event.key === 'ArrowDown') {
-          event.preventDefault();
+  return (
+    <div style={{ position: "relative" }}>
+      <input
+        className="input"
+        type="text"
+        role="combobox"
+        aria-autocomplete="list"
+        aria-expanded={open}
+        aria-controls={optionsId}
+        value={query}
+        placeholder={placeholder}
+        autoComplete="off"
+        disabled={disabled}
+        onFocus={(event) => {
           setOpen(true);
-          setActiveIndex((current) => Math.min(current + 1, Math.max(0, filteredLeads.length - 1)));
-        } else if (event.key === 'ArrowUp') {
-          event.preventDefault();
-          setActiveIndex((current) => Math.max(0, current - 1));
-        } else if (event.key === 'Enter') {
-          event.preventDefault();
-          const lead = filteredLeads[Math.min(activeIndex, Math.max(0, filteredLeads.length - 1))];
-          if (lead) selectLead(lead);
-        } else if (event.key === 'Escape') {
-          setOpen(false);
-          setQuery(selectedLabel);
+          setActiveIndex(0);
+          event.currentTarget.select();
+        }}
+        onChange={(event) => {
+          setQuery(event.target.value);
+          setRemoteLeads([]);
+          setOpen(true);
+          setActiveIndex(0);
+        }}
+        onBlur={() =>
+          window.setTimeout(() => {
+            setOpen(false);
+            setQuery(selectedLabel);
+          }, 160)
         }
-      }}
-    />
+        onKeyDown={(event) => {
+          if (event.key === "ArrowDown") {
+            event.preventDefault();
+            setOpen(true);
+            setActiveIndex((current) =>
+              Math.min(current + 1, Math.max(0, filteredLeads.length - 1)),
+            );
+          } else if (event.key === "ArrowUp") {
+            event.preventDefault();
+            setActiveIndex((current) => Math.max(0, current - 1));
+          } else if (event.key === "Enter") {
+            event.preventDefault();
+            const lead =
+              filteredLeads[
+                Math.min(activeIndex, Math.max(0, filteredLeads.length - 1))
+              ];
+            if (lead) selectLead(lead);
+          } else if (event.key === "Escape") {
+            setOpen(false);
+            setQuery(selectedLabel);
+          }
+        }}
+      />
 
-    {open && !disabled && <div
-      id="proposal-lead-options"
-      role="listbox"
-      style={{
-        position: 'absolute',
-        isolation: 'isolate',
-        zIndex: 100,
-        top: 'calc(100% + 4px)',
-        left: 0,
-        right: 0,
-        maxHeight: 320,
-        overflowY: 'auto',
-        overscrollBehavior: 'contain',
-        border: '1px solid #d8d2c8',
-        borderRadius: 10,
-        backgroundColor: 'var(--panel)',
-        color: '#2c2925',
-        boxShadow: '0 16px 36px rgba(36, 30, 24, 0.22)',
-      }}
-    >
-      {!canSearch && !showingSelectedValue
-        ? <div className="faint" style={{ padding: 12, backgroundColor: 'var(--panel)' }}>Digite ao menos 2 letras para buscar.</div>
-        : loading && filteredLeads.length === 0
-          ? <div className="faint" style={{ padding: 12, backgroundColor: 'var(--panel)' }}>Buscando…</div>
-          : filteredLeads.length === 0
-            ? <div className="faint" style={{ padding: 12, backgroundColor: 'var(--panel)' }}>Nenhum resultado encontrado.</div>
-            : filteredLeads.map((lead, index) => <button
+      {open && !disabled && (
+        <div
+          id={optionsId}
+          role="listbox"
+          style={{
+            position: "absolute",
+            isolation: "isolate",
+            zIndex: 100,
+            top: "calc(100% + 4px)",
+            left: 0,
+            right: 0,
+            maxHeight: 320,
+            overflowY: "auto",
+            overscrollBehavior: "contain",
+            border: "1px solid #d8d2c8",
+            borderRadius: 10,
+            backgroundColor: "var(--panel)",
+            color: "#2c2925",
+            boxShadow: "0 16px 36px rgba(36, 30, 24, 0.22)",
+          }}
+        >
+          {!canSearch && !showingSelectedValue ? (
+            <div
+              className="faint"
+              style={{ padding: 12, backgroundColor: "var(--panel)" }}
+            >
+              Digite ao menos 2 letras para buscar.
+            </div>
+          ) : loading && filteredLeads.length === 0 ? (
+            <div
+              className="faint"
+              style={{ padding: 12, backgroundColor: "var(--panel)" }}
+            >
+              Buscando…
+            </div>
+          ) : filteredLeads.length === 0 ? (
+            <div
+              className="faint"
+              style={{ padding: 12, backgroundColor: "var(--panel)" }}
+            >
+              Nenhum resultado encontrado.
+            </div>
+          ) : (
+            filteredLeads.map((lead, index) => (
+              <button
                 key={lead.id}
                 type="button"
                 role="option"
@@ -200,27 +240,53 @@ export function SearchableLeadSelect({
                 }}
                 onMouseEnter={() => setActiveIndex(index)}
                 style={{
-                  display: 'block',
-                  width: '100%',
-                  height: 'auto',
+                  display: "block",
+                  width: "100%",
+                  height: "auto",
                   minHeight: 58,
-                  boxSizing: 'border-box',
+                  boxSizing: "border-box",
                   border: 0,
-                  borderBottom: index < filteredLeads.length - 1 ? '1px solid #e6e1d9' : 0,
-                  padding: '10px 12px',
-                  textAlign: 'left',
-                  cursor: 'pointer',
-                  backgroundColor: index === activeIndex ? 'var(--hover)' : 'var(--panel)',
-                  color: '#2c2925',
-                  font: 'inherit',
+                  borderBottom:
+                    index < filteredLeads.length - 1 ? "1px solid #e6e1d9" : 0,
+                  padding: "10px 12px",
+                  textAlign: "left",
+                  cursor: "pointer",
+                  backgroundColor:
+                    index === activeIndex ? "var(--hover)" : "var(--panel)",
+                  color: "#2c2925",
+                  font: "inherit",
                   lineHeight: 1.3,
-                  whiteSpace: 'normal',
-                  overflow: 'visible',
+                  whiteSpace: "normal",
+                  overflow: "visible",
                 }}
               >
-                <strong style={{ display: 'block', lineHeight: 1.3, overflowWrap: 'anywhere' }}>{leadLabel(lead)}</strong>
-                {leadDetails(lead) && <small className="faint" style={{ display: 'block', marginTop: 4, lineHeight: 1.35, overflowWrap: 'anywhere' }}>{leadDetails(lead)}</small>}
-              </button>)}
-    </div>}
-  </div>;
+                <strong
+                  style={{
+                    display: "block",
+                    lineHeight: 1.3,
+                    overflowWrap: "anywhere",
+                  }}
+                >
+                  {leadLabel(lead)}
+                </strong>
+                {leadDetails(lead) && (
+                  <small
+                    className="faint"
+                    style={{
+                      display: "block",
+                      marginTop: 4,
+                      lineHeight: 1.35,
+                      overflowWrap: "anywhere",
+                    }}
+                  >
+                    {leadDetails(lead)}
+                  </small>
+                )}
+              </button>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
 }
