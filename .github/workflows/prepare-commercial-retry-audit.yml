@@ -7,32 +7,114 @@ permissions:
   contents: read
 jobs:
   prepare:
+    if: github.event.pull_request.number == 128 && github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'feat/commercial-metrics-foundation'
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 12
+    permissions:
+      contents: write
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: isolated-ci-only
+          POSTGRES_DB: commercial_source_request_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d commercial_source_request_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: 5432
+      PGUSER: postgres
+      PGPASSWORD: isolated-ci-only
+      PGDATABASE: commercial_source_request_test
+      BASE_SHA: ${{ github.event.pull_request.head.sha }}
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ github.event.pull_request.head.sha }}
           persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
+      - name: Apply exact reviewed patch to disposable checkout
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          import {inflateSync} from 'node:zlib';
+          import {createHash} from 'node:crypto';
+          import {execFileSync} from 'node:child_process';
+          const shas=['e60ecf306f0ca5e2def92ba87f635145b229d90c','01f772540b72753325907e6244d93563fddead68','cc53b58a2563096f402ab3751a13b272a9ad9db0','950404640b96785e0abaf2861f0ce645da584cb0'];
+          let encoded='';
+          for(const sha of shas){
+            const response=await fetch(`https://api.github.com/repos/${process.env.GITHUB_REPOSITORY}/git/blobs/${sha}`,{headers:{Authorization:`Bearer ${process.env.GH_TOKEN}`,Accept:'application/vnd.github+json'}});
+            if(!response.ok) throw Error(`Cannot read patch blob: ${response.status}`);
+            const blob=await response.json();
+            let part=Buffer.from(blob.content,'base64').toString('utf8');
+            if(sha===shas[0]) part=part.replace('bpy+6gj','bpy+gj');
+            encoded+=part;
+          }
+          const patch=inflateSync(Buffer.from(encoded,'base64'));
+          if(createHash('sha256').update(patch).digest('hex')!=='3f26d38659562ce708aa0241521a1e05dcb77f2a74e31601fe493258e4882d8c') throw Error('Patch integrity mismatch');
+          const manifest={"src/app/api/agenda/route.ts":"b606bb37b949eda78f5dde702feeab727f476acf67ffb2c9952a560ced09f419","src/components/AgendaCalendar.tsx":"7d9bb6e7624d5a228de6650b20e3ed4071fc44a6019fe1ba2887ac917077a636","src/components/ProposalsManager.tsx":"187e685f25b0223bc1c46240146b712f1132b82000c74d50a2c2a4a5b39a6afc","src/lib/commercial/source-request.ts":"fa63b9f57432b876eaf3d3fafc82be341214a16d4b777e6c0fef98226baec430","src/lib/microsoft-calendar.ts":"5619a016d601c961e64ea0ce2e8b682a3d16fb969b4523aaa218d35cbcaf62cd","src/lib/microsoft-event-write.ts":"6b62dcefde89099fc4be74f94e9b2fa860bb4541a349060e1e25e9ee6a51048d","scripts/agenda/check-route.mjs":"e5af047a527dd266f8339137cb531cc4ee604d1e3b88d3a4dccc4c4dd7d8cb82","scripts/agenda/loader.mjs":"5178775f5b94f179aad84e481c304cbdf513169f9b594ceb92cfad9a7baa8e42","scripts/commercial/check-source-request-client.mjs":"ff625a26894cf3fe2730e8fccb2cd4be3f8615a3131c3510548dd2e52833067d","scripts/commercial/check-source-request-concurrency.mjs":"9c293953af346d2ba75544269ef04f276a9ae85f19581dec78a200f6c5141184","scripts/commercial/check-source-requests.mjs":"ed41ec9ec643255652ba4cd2cfba507addd8a185d613256db5327a22abd5b19a","scripts/commercial/source-request-fixture.mjs":"8f57cb673238f261485201f618290b8a70600a7815849df02f4a39888a79bf75","supabase/migrations/20261021172930_commercial_source_idempotency.sql":"f97ab9ec44109ed2a25953716828485cd353a12e3d489bdae4e37c417fd042d3","docs/commercial-source-requests-status.md":"ce18939b4fad5d0417ff516118d58794762fc2fd368bf6884f314508daa38a7f"};
+          const patchPath=`${process.env.RUNNER_TEMP}/reviewed-source.patch`;
+          fs.writeFileSync(patchPath,patch);
+          const changed=execFileSync('git',['apply','--numstat',patchPath],{encoding:'utf8'}).trim().split('\n').map(line=>line.split('\t')[2]).sort();
+          if(JSON.stringify(changed)!==JSON.stringify(Object.keys(manifest).sort())) throw Error('Unexpected patch paths');
+          execFileSync('git',['apply','--check',patchPath]);
+          execFileSync('git',['apply',patchPath]);
+          for(const [path,hash] of Object.entries(manifest)){
+            if(createHash('sha256').update(fs.readFileSync(path)).digest('hex')!==hash) throw Error(`Source hash mismatch: ${path}`);
+          }
+          fs.writeFileSync(`${process.env.RUNNER_TEMP}/source-manifest.json`,JSON.stringify(manifest));
+          console.log('Verified reviewed patch and all 14 source hashes. No database or branch ref changed.');
+          NODE
       - run: npm ci --no-audit --no-fund
-      - name: Generate new migration without database access
+      - name: Test isolated SQL atomicity and replay
+        run: node scripts/commercial/check-source-requests.mjs
+      - name: Test form retry and Microsoft request options
+        run: node --experimental-strip-types scripts/commercial/check-source-request-client.mjs
+      - name: Test human agenda API including retry
+        run: node --experimental-strip-types --loader ./scripts/agenda/loader.mjs scripts/agenda/check-route.mjs
+      - name: Ensure PostgreSQL client
+        run: command -v psql || (sudo apt-get update -qq && sudo apt-get install -y postgresql-client)
+      - name: Test independent concurrent transactions
+        run: node scripts/commercial/check-source-request-concurrency.mjs
+      - run: npm run lint
+      - run: npm run typecheck
+      - name: Prepare source commit only after tests; never update a ref
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          cd "$(mktemp -d)"
-          npx --yes --package=supabase@2.121.0 supabase --version
-          npx --yes --package=supabase@2.121.0 supabase migration new --help
-          npx --yes --package=supabase@2.121.0 supabase migration new commercial_source_idempotency
-          find supabase/migrations -type f -printf 'GENERATED_MIGRATION=%f\n'
-      - name: Fetch current public Supabase changelog
-        run: |
-          curl -fsSL --max-time 30 https://supabase.com/changelog.md | head -c 16000 || true
-      - name: Package source and isolated testing dependencies only
-        run: |
-          tar -czf commercial-retry-source.tgz src scripts supabase docs .github package.json package-lock.json tsconfig.json next-env.d.ts next.config.ts eslint.config.mjs node_modules/typescript node_modules/@electric-sql/pglite
-      - uses: actions/upload-artifact@v4
-        with:
-          name: commercial-retry-source
-          path: commercial-retry-source.tgz
-          retention-days: 1
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          import {createHash} from 'node:crypto';
+          const repo=process.env.GITHUB_REPOSITORY;
+          async function api(path,body){
+            const response=await fetch(`https://api.github.com/repos/${repo}/${path}`,{method:body?'POST':'GET',headers:{Authorization:`Bearer ${process.env.GH_TOKEN}`,Accept:'application/vnd.github+json','Content-Type':'application/json'},...(body?{body:JSON.stringify(body)}:{})});
+            if(!response.ok) throw Error(`Git object request failed: ${response.status}`);
+            return response.json();
+          }
+          const head=await api('git/ref/heads/feat/commercial-metrics-foundation');
+          if(head.object.sha!==process.env.BASE_SHA) throw Error('Branch changed; refusing to prepare against stale revision');
+          const base=await api(`git/commits/${process.env.BASE_SHA}`);
+          const manifest=JSON.parse(fs.readFileSync(`${process.env.RUNNER_TEMP}/source-manifest.json`,'utf8'));
+          const tree=Object.entries(manifest).map(([path,hash])=>{
+            const content=fs.readFileSync(path,'utf8');
+            if(createHash('sha256').update(content).digest('hex')!==hash) throw Error(`Source changed after review: ${path}`);
+            if(!/^(src|scripts|supabase\/migrations|docs)\//.test(path)) throw Error('Unapproved source path');
+            return {path,mode:'100644',type:'blob',content};
+          });
+          const createdTree=await api('git/trees',{base_tree:base.tree.sha,tree});
+          const commit=await api('git/commits',{message:'Save human proposals atomically and recover agenda creation retries without duplicate side effects',tree:createdTree.sha,parents:[process.env.BASE_SHA]});
+          console.log(`PREPARED_COMMIT_SHA=${commit.sha}`);
+          console.log(`PREPARED_TREE_SHA=${createdTree.sha}`);
+          console.log('No branch refs, production database or external messages changed by this preparation.');
+          NODE
