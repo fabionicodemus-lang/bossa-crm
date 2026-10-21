@@ -53,9 +53,13 @@ language sql stable security invoker set search_path=public as $$
  );
 $$;
 
+-- SECURITY DEFINER is confined to these two write gates: authenticated has no direct
+-- INSERT/UPDATE on the audit table. Both gates check auth.uid(), membership and
+-- organization before touching contacts; only authenticated receives EXECUTE.
+-- pg_catalog precedes public and pg_temp is last to avoid search-path shadowing.
 create function public.commercial_propose_contact_reconciliation(
  p_org uuid,p_first uuid,p_second uuid,p_preferred uuid,p_reason text,p_evidence text
-) returns jsonb language plpgsql security definer set search_path=public,pg_temp as $$
+) returns jsonb language plpgsql security definer set search_path=pg_catalog,public,pg_temp as $$
 declare a public.leads%rowtype; b public.leads%rowtype; v_id uuid; existing public.commercial_contact_reconciliations%rowtype;
 begin
  if auth.uid() is null or not private.can_edit_org(p_org) then raise exception 'COMMERCIAL_RECONCILIATION_FORBIDDEN' using errcode='42501'; end if;
@@ -63,7 +67,7 @@ begin
     or length(trim(coalesce(p_reason,''))) not between 20 and 2000 or length(trim(coalesce(p_evidence,''))) not between 8 and 500 then
   raise exception 'COMMERCIAL_RECONCILIATION_INVALID' using errcode='22023'; end if;
  -- Identical lock order for either request direction; validation happens under these locks.
- perform l.id from public.leads l where l.id in (p_first,p_second) order by l.id for update;
+ perform l.id from public.leads l where l.organization_id=p_org and l.id in (p_first,p_second) order by l.id for update;
  select * into a from public.leads where id=least(p_first,p_second) and organization_id=p_org;
  select * into b from public.leads where id=greatest(p_first,p_second) and organization_id=p_org;
  if a.id is null or b.id is null or a.kind<>'cliente' or b.kind<>'cliente'
@@ -89,7 +93,7 @@ begin
 end; $$;
 
 create function public.commercial_review_contact_reconciliation(p_org uuid,p_id uuid,p_confirm boolean,p_reason text)
- returns jsonb language plpgsql security definer set search_path=public,pg_temp as $$
+ returns jsonb language plpgsql security definer set search_path=pg_catalog,public,pg_temp as $$
 declare r public.commercial_contact_reconciliations%rowtype; a public.leads%rowtype; b public.leads%rowtype;
 begin
  if auth.uid() is null or not private.is_org_admin(p_org) then raise exception 'COMMERCIAL_RECONCILIATION_FORBIDDEN' using errcode='42501'; end if;
@@ -98,7 +102,7 @@ begin
  -- Contact locks first, then review row, matching proposal lock order.
  select * into r from public.commercial_contact_reconciliations where id=p_id and organization_id=p_org;
  if r.id is null then raise exception 'COMMERCIAL_RECONCILIATION_NOT_FOUND' using errcode='P0002'; end if;
- perform l.id from public.leads l where l.id in (r.contact_low_id,r.contact_high_id) order by l.id for update;
+ perform l.id from public.leads l where l.organization_id=p_org and l.id in (r.contact_low_id,r.contact_high_id) order by l.id for update;
  select * into r from public.commercial_contact_reconciliations where id=p_id and organization_id=p_org for update;
  if r.status<>'pending' then
   if r.reviewed_by=auth.uid() and r.review_reason=trim(p_reason) and (r.status='confirmed')=p_confirm then

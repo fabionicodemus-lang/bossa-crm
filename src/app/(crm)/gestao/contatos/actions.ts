@@ -4,8 +4,8 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getCurrentContext } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
+import { commercialUuid } from "@/lib/commercial/intake";
 
-const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const value = (form: FormData, key: string) => String(form.get(key) ?? "").trim();
 const fail = (message: string): never => redirect(`/gestao/contatos?error=${encodeURIComponent(message)}`);
 
@@ -17,7 +17,7 @@ export async function proposeContactReconciliation(form: FormData) {
   const preferred = value(form, "preferred");
   const reason = value(form, "reason");
   const evidence = value(form, "evidence");
-  if (!uuid.test(first) || !uuid.test(second) || first === second || ![first, second].includes(preferred)
+  if (!commercialUuid.test(first) || !commercialUuid.test(second) || first === second || ![first, second].includes(preferred)
       || reason.length < 20 || reason.length > 2000 || evidence.length < 8 || evidence.length > 500) {
     fail("Informe duas fichas diferentes, qual manter como referência, justificativa e evidência conferível.");
   }
@@ -37,7 +37,7 @@ export async function reviewContactReconciliation(form: FormData) {
   const id = value(form, "id");
   const decision = value(form, "decision");
   const reason = value(form, "reason");
-  if (!uuid.test(id) || !["confirm", "reject"].includes(decision) || reason.length < 20 || reason.length > 2000) {
+  if (!commercialUuid.test(id) || !["confirm", "reject"].includes(decision) || reason.length < 20 || reason.length > 2000) {
     fail("Informe decisão e justificativa detalhada.");
   }
   const db = await createClient();

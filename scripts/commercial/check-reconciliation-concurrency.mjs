@@ -59,3 +59,15 @@ assert.match(String(decisions[1].reason),/ALREADY_REVIEWED/);
 assert.equal(await sql(`select status from commercial_contact_reconciliations where id='${rid}';`),'confirmed');
 assert.equal(await sql(`select primary_contact_id from commercial_opportunities where primary_contact_id='${id(50)}';`),id(50));
 console.log('PASS reconciliation concurrency: competing decisions leave one confirmation and preserve sources');
+
+const foreign=sql(`begin; select id from leads where id='${id(91)}' for update;
+ select pg_advisory_xact_lock(981119); select pg_sleep(1.2); commit;`);
+await waitLock(981119);
+const crossOrg=sql(`begin; set local lock_timeout='350ms'; ${auth(user)} ${propose(id(50),id(91))} commit;`);
+const isolated=await Promise.allSettled([foreign,crossOrg]);
+assert.equal(isolated[0].status,'fulfilled');
+assert.equal(isolated[1].status,'rejected');
+assert.match(String(isolated[1].reason),/COMMERCIAL_RECONCILIATION_CONTACT_UNAVAILABLE/);
+assert.doesNotMatch(String(isolated[1].reason),/lock timeout/);
+assert.equal(await sql(`select organization_id from leads where id='${id(91)}';`),id(2));
+console.log('PASS reconciliation concurrency: an authorized organization rejects a foreign contact without waiting on its row lock');

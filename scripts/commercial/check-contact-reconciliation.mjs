@@ -46,6 +46,7 @@ await test('direct writes, cross-organization reads and viewer proposals are den
  await as(user);
  await rejected(()=>q('select commercial_propose_contact_reconciliation($1,$2,$3,$4,$5,$6)',
   [other,id(40),id(91),id(40),reason,evidence]),'FORBIDDEN');
+ await rejected(()=>propose(id(40),id(91)),'CONTACT_UNAVAILABLE');
 });
 await test('proposer cannot approve, and evidence and source stay intact',async()=>{
  await rejected(()=>review(globalThis.firstReview),'SELF_REVIEW');
