@@ -261,7 +261,7 @@ create trigger commercial_05_link_source before insert or update of opportunity_
 -- It never changes source status, sends a message, or invents an earlier send.
 create function public.commercial_resolve_link(p_org uuid,p_entity text,p_id uuid,p_opportunity uuid)
 returns uuid language plpgsql security invoker set search_path=public as $$
-declare src jsonb; current_link uuid; contact uuid;
+declare src jsonb; current_link uuid; contact uuid; affected bigint;
 begin
  if auth.uid() is null or not private.can_edit_org(p_org) then raise exception 'Not authorized' using errcode='42501'; end if;
  if p_entity not in ('proposals','agenda_events') or p_entity is null then raise exception 'Invalid entity'; end if;
@@ -282,7 +282,8 @@ begin
  end if;
  execute format('update public.%I set opportunity_id=$1 where organization_id=$2 and id=$3 and opportunity_id is null',p_entity)
    using p_opportunity,p_org,p_id;
- if not found then raise exception 'Source changed; reload before resolving'; end if;
+ get diagnostics affected = row_count;
+ if affected<>1 then raise exception 'Source changed; reload before resolving'; end if;
  return p_opportunity;
 end; $$;
 
