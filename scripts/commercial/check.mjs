@@ -41,6 +41,13 @@ await db.exec(
     "utf8",
   ),
 );
+await db.exec(
+  fs.readFileSync(
+    root +
+      "supabase/migrations/20261021094500_commercial_development_attribution.sql",
+    "utf8",
+  ),
+);
 const org = "00000000-0000-0000-0000-000000000001",
   other = "00000000-0000-0000-0000-000000000002",
   user = "00000000-0000-0000-0000-000000000010",
@@ -190,6 +197,28 @@ assert.equal(d.metrics.proposals.value, 1);
 assert.equal(d.metrics.visits.value, 1);
 assert.equal(d.metrics.contracts.value, 1);
 assert.equal(d.metrics.receipts.value, 10000);
+// A family interested in two products must not count the Flow sale as an Alma sale.
+const [flowFacts] = await q(
+  `select commercial_dashboard($1,now()-interval '1 day',now()+interval '1 day',jsonb_build_object('development',$2::text)) data`,
+  [org, dev],
+);
+const [almaFacts] = await q(
+  `select commercial_dashboard($1,now()-interval '1 day',now()+interval '1 day',jsonb_build_object('development',$2::text)) data`,
+  [org, dev2],
+);
+assert.equal(flowFacts.data.metrics.new.value, 1);
+assert.equal(almaFacts.data.metrics.new.value, 1);
+assert.equal(flowFacts.data.metrics.proposals.value, 1);
+assert.equal(almaFacts.data.metrics.proposals.value, 0);
+assert.equal(flowFacts.data.metrics.contracts.value, 1);
+assert.equal(almaFacts.data.metrics.contracts.value, 0);
+assert.equal(flowFacts.data.metrics.receipts.value, 10000);
+assert.equal(almaFacts.data.metrics.receipts.value, 0);
+const [brokerFacts] = await q(
+  `select commercial_dashboard($1,now()-interval '1 day',now()+interval '1 day',jsonb_build_object('broker',$2::text)) data`,
+  [org, broker],
+);
+assert.equal(brokerFacts.data.metrics.proposals.value, 1);
 assert.equal(d.visit_cohort.converted, 0);
 assert.equal(d.proposal_cohort.converted, 1);
 assert.equal(d.attendance.no_show, 0);
@@ -261,6 +290,6 @@ assert.throws(() =>
 );
 await rejects(`update commercial_opportunities set stage='lost',loss_reason='other',loss_note=null where id=$1`,[op.id]);
 console.log(
-  "PASS: isolated PostgreSQL migrations, qualification, couple, multiple interests, proposal revisions, visit chronology, rescheduling, reactivation, immutable history, financial idempotency, cohorts, reconciliation, organization RLS, viewer permissions, dates and zero reference.",
+  "PASS: isolated PostgreSQL migrations, qualification, couple, multiple interests, proposal revisions, visit chronology, rescheduling, reactivation, immutable history, financial idempotency, cohorts, reconciliation, organization RLS, viewer permissions, dates, zero reference, cross-development attribution and broker filters.",
 );
 await db.close();

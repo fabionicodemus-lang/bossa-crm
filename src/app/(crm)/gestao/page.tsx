@@ -1,5 +1,7 @@
 import { Suspense } from "react";
 import { CommercialOperations } from "@/components/CommercialOperations";
+import { CommercialDevelopments } from "@/components/CommercialDevelopments";
+import { CommercialContactSelect } from "@/components/CommercialContactSelect";
 import Link from "next/link";
 import { PageTopbar } from "@/components/PageTopbar";
 import { getCurrentContext } from "@/lib/auth";
@@ -60,6 +62,15 @@ export default async function Management({
       .select("user_id,profiles(full_name)")
       .eq("organization_id", context!.organization.id),
   ]);
+  const selectedBroker = p.broker
+    ? await db
+        .from("leads")
+        .select("id,name,kind,phone,enterprise,company,group_name")
+        .eq("organization_id", context!.organization.id)
+        .eq("kind", "corretor")
+        .eq("id", p.broker)
+        .maybeSingle()
+    : null;
   const data = response.data as Dashboard | null;
   const query = new URLSearchParams(
     Object.entries(p).filter(
@@ -182,6 +193,14 @@ export default async function Management({
                 </option>
               ))}
             </select>
+          </label>
+          <label>
+            Corretor
+            <CommercialContactSelect
+              name="broker"
+              kind="corretor"
+              initial={selectedBroker?.data ?? null}
+            />
           </label>
           <label>
             Origem
@@ -511,6 +530,18 @@ export default async function Management({
               </p>
             </section>
           </>
+        )}
+        {!response.error && data && (
+          <Suspense fallback={<p>Carregando comparativo de empreendimentos…</p>}>
+            <CommercialDevelopments
+              org={context!.organization.id}
+              start={range.start}
+              end={range.end}
+              filters={filters}
+              developments={developments.data ?? []}
+              baseQuery={query.toString()}
+            />
+          </Suspense>
         )}
         <Suspense fallback={<p>Carregando operação e custos…</p>}>
           <CommercialOperations

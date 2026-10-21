@@ -13,7 +13,7 @@ Base inspecionada: `d88fdd2` de `fabionicodemus-lang/bossa-crm`, Next.js 16/Reac
 | 1 — base e cálculos | Oportunidades separadas de contatos; participantes; interesses principal/alternativos; eventos transacionais imutáveis; versões de proposta; contratos documentados; recebimentos com identificador único; regras canônicas de cartões/detalhe/exportação; RLS por organização; reativação sem mudar criação. | Integração de criação de oportunidades ao fluxo de intenção detectada; revisão de todos os produtores externos e das mesclagens de contatos; atribuição histórica temporal de todos os vínculos. |
 | 2 — operação | Gestão com filtros, cartões, estoque atual do funil, ações, coortes, comparecimento, exportação paginada; lista/ficha de oportunidades; vínculos com agenda/propostas existentes; participantes e interesses; confirmação de contrato, distrato e recebimento. | Funil de oportunidades com arraste; filtros globais completos nos módulos existentes; tempo mediano/p90 por etapa; vinculação automática assistida; remarcação atômica pela interface; proposta com preparação/aprovação completas; Bossa Experience; alertas de concorrência por unidade; troca de interesse principal. |
 | 3 — atendimento e marketing | Análise de transferências com aceite separado da primeira mensagem humana enviada com status válido; taxa no expediente configurado; casos fora do expediente destacados; revisão de conversa com trecho literal; ranking documentado por período com pesos existentes preservados. | SLA completo da escala de plantão; exclusão sistemática de testes/spam; continuidade e erros de envio/agenda; reestruturação de site/campanhas/transmissões e atribuição confiável; revisão do ranking legado e dos marcos inferidos. |
-| 4 — planejamento e validação | Cadastro de metas, pesos configuráveis, parâmetros de amostra/paralisação, despesas documentadas, custos por origem com escopos de data idênticos; qualidade da base; testes de regressão em PostgreSQL isolado; build/typecheck/lint. | Visão analítica por empreendimento; demais custos/coortes; painel e diário de validade da coleta; metas por carteira/equipe com edição; alertas por amostra/maturação; homologação autenticada pela interface; implantação. |
+| 4 — planejamento e validação | Cadastro de metas, pesos configuráveis, parâmetros de amostra/paralisação, despesas documentadas, custos por origem com escopos de data idênticos; qualidade da base; comparativo de empreendimentos com contratos/valores atribuídos à unidade; testes de regressão em PostgreSQL isolado. | Demais custos/coortes; painel e diário de validade da coleta; metas por carteira/equipe com edição; alertas por amostra/maturação; homologação autenticada pela interface; implantação. |
 
 ## Rotas
 
@@ -31,6 +31,7 @@ Base inspecionada: `d88fdd2` de `fabionicodemus-lang/bossa-crm`, Next.js 16/Reac
 1. `20261021011240_commercial_metrics_foundation.sql`
 2. `20261021011422_commercial_metrics_queries.sql`
 3. `20261021012121_commercial_operations_insights.sql`
+4. `20261021094500_commercial_development_attribution.sql`
 
 Geradas inicialmente com Supabase CLI. São adicionais; não alteram migrações anteriores, não apagam dados e não preenchem datas antigas por inferência. A agenda mantém os estados legados e recebe campos de desfecho comercial. Propostas antigas só entram na nova análise depois de vínculo explícito e de novos eventos documentados; vincular uma proposta enviada anteriormente não inventa um novo envio.
 
@@ -49,13 +50,14 @@ Não aplicar em produção enquanto as pendências de integração/homologação
 - **Ranking**: pesos efetivamente encontrados no código (100/20/10/4/1). Interações revisadas têm limite mensal. O novo quadro usa fatos documentados; o ranking legado permanece separado.
 - **SLA**: primeira mensagem humana enviada, excluindo mensagens sem status válido. Casos fora de expediente não são avaliados como se fossem atendidos pelo plantão. Entrega/leitura não são presumidas.
 - **Custos**: despesas com intervalo exato do filtro e mesma origem. Não equivalem a CAC por coorte nem demonstram causalidade de campanha. A ausência de lançamento é indisponibilidade.
-- **Filtros**: cartões/coortes usam empreendimento, responsável, origem e formato de visita. SQL também aceita corretor; o seletor na interface ainda está pendente. O quadro operacional informa explicitamente que usa toda a organização no período. O filtro de formato modifica apenas o fato de visita.
+- **Filtros**: cartões/coortes usam empreendimento, responsável, corretor, origem e formato de visita. O quadro operacional informa explicitamente que usa toda a organização no período. O filtro de formato modifica apenas o fato de visita.
+- **Comparação por empreendimento**: oportunidades, qualificação e visitas acompanham os interesses atuais e podem aparecer em dois empreendimentos; propostas enviadas são atribuídas pela unidade da proposta, contratos/valores/recebimentos pela unidade contratada. Sem vinculação histórica exclusiva das visitas a um produto. O comparativo usa até 12 empreendimentos simultâneos para limitar carga.
 - **Histórico**: começa na implantação da nova coleta. Contatos legados não são convertidos automaticamente em oportunidades. Os marcos legados, inferidos de etapa/updated_at, permanecem para compatibilidade e não são usados nos novos cartões.
 - **Permissões**: mesma fronteira por organização da aplicação existente. Novas carteiras/restrições por perfil exigem extensão antes de adoção. Configurações e confirmações financeiras são exclusivas do administrador; viewer não escreve.
 
 ## Verificação executada
 
-- `npm run test:commercial`: migrações em PostgreSQL WASM/PGlite, casal, dois interesses sem duplicar, qualificação obrigatória, versões de proposta, proposta anterior à visita, remarcação, reativação, contrato/distrato, recebimento repetido, histórico imutável, conciliação, organização alheia com dados reais de teste, viewer, datas de Brasília e referência zero.
+- `npm run test:commercial`: migrações em PostgreSQL WASM/PGlite, teste de venda única com interesses em dois empreendimentos e filtro por corretor, casal, dois interesses sem duplicar, qualificação obrigatória, versões de proposta, proposta anterior à visita, remarcação, reativação, contrato/distrato, recebimento repetido, histórico imutável, conciliação, organização alheia com dados reais de teste, viewer, datas de Brasília e referência zero.
 - `npm run typecheck`.
 - `npm run lint`: sem erros; avisos preexistentes documentados na execução.
 - `npm run build`, incluindo os testes de Nara exigidos pelo script do projeto.
@@ -74,3 +76,7 @@ Não foi executado o percurso autenticado Nara → atendimento → visita → pr
 ## Reversão
 
 Reverter o commit da aplicação ou a alteração de `/gestao` devolve o painel legado. Manter as tabelas, snapshots, recibos e eventos para preservar os dados produzidos. Se uma migração falhar antes de commit, a transação reverte suas próprias alterações. Não fazer DROP das novas tabelas depois que houver registros. Uma eventual desativação dos gatilhos deve ser registrada e acompanhada da marcação do intervalo sem coleta; não apagar o histórico. Executar restauração de backup apenas em ambiente isolado antes de qualquer intervenção em produção.
+
+## Continuação de 21/10/2026
+
+Novo comparativo de empreendimentos na Gestão, busca remota do filtro de corretor, atribuição de propostas e vendas à unidade real via migração aditiva e regressão de cliente com dois interesses. Esta continuação também permanece em rascunho: executar novo CI e homologação na cópia do banco antes de promover.
