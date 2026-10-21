@@ -4,7 +4,7 @@ Data: 21/10/2026 (UTC). Destino: `fabionicodemus-lang/bossa-crm`, exclusivamente
 
 ## Entrega e publicação
 
-Implementação completa das dez seções aprovadas na fase 2, com as quatro rotas de plantas preservadas, contato contextual e espaços de produção na prévia. Prévia isolada gerada no projeto **bossa-site**, time **Elos OS**. Primeira versão verificada: https://bossa-site-ntwmsdynz-elos-os.vercel.app/empreendimentos/alma-seahouses (deploy `dpl_DznsXc7b2FSkJT8DWJSLG59KWQLP`, commit `e7a345caa35cd6105da7f97266986dabb3fa0486`). O endereço da consolidação final será registrado abaixo. O acesso mantém a proteção por login da Vercel.
+Implementação completa das dez seções aprovadas na fase 2, com as quatro rotas de plantas preservadas, contato contextual e espaços de produção na prévia. Prévia isolada gerada no projeto **bossa-site**, time **Elos OS**. Primeira versão verificada: https://bossa-site-ntwmsdynz-elos-os.vercel.app/empreendimentos/alma-seahouses (deploy `dpl_DznsXc7b2FSkJT8DWJSLG59KWQLP`, commit `e7a345caa35cd6105da7f97266986dabb3fa0486`). **Prévia final para revisão:** https://bossa-site-esjmlce7e-elos-os.vercel.app/empreendimentos/alma-seahouses. Deploy `dpl_47QekXhF3bed7DbS4fdTCaUdEx45`, estado **READY**, ambiente Preview (`target: null`), commit de implementação `a391be0695a2256f74e1d238992e049422ee0d54`. HTML final respondeu **200**, com os nove espaços, `noindex` e boletim datado. O acesso mantém a proteção por login da Vercel.
 
 Nenhum deploy de produção, merge em `main`, promoção, alteração de domínio, DNS, estado comercial, credenciais, estrutura de banco, CRM, Nara ou automações comerciais foi realizado. Os testes de formulário usaram respostas controladas e uma RPC HTTP local simulada. Não foram criados leads nem enviadas mensagens reais.
 
@@ -42,7 +42,7 @@ O percentual segue a fonte única `e.edicoes[0]`: **10,52% · agosto de 2026 · 
 - HTML remoto da primeira prévia: página principal e quatro plantas retornaram 200 com títulos correspondentes, dez seções, nove posições de mídia, pré-registro, boletim datado e `noindex`. Sem submissão remota de formulário.
 - `git diff --check`: passou.
 
-As evidências estruturadas estão em [verificacao.json](docs/alma/capturas/verificacao.json), [api-verificacao.json](docs/alma/capturas/api-verificacao.json), [complementos-verificacao.json](docs/alma/capturas/complementos-verificacao.json) [publico-verificacao.json](docs/alma/capturas/publico-verificacao.json) e [previa-verificacao.json](docs/alma/capturas/previa-verificacao.json).
+As evidências estruturadas estão em [verificacao.json](docs/alma/capturas/verificacao.json), [api-verificacao.json](docs/alma/capturas/api-verificacao.json), [complementos-verificacao.json](docs/alma/capturas/complementos-verificacao.json), [publico-verificacao.json](docs/alma/capturas/publico-verificacao.json) [previa-verificacao.json](docs/alma/capturas/previa-verificacao.json) e [previa-final-verificacao.json](docs/alma/capturas/previa-final-verificacao.json).
 
 Para reproduzir os testes, iniciar um build local em `site/` e `npm run start -- -p 3200`. Executar `node scripts/verificar-alma.cjs` com Playwright disponível, ou informar seu caminho em `PLAYWRIGHT_MODULE`. O script aceita apenas localhost/127.0.0.1. O Chromium pode ser indicado em `CHROMIUM_PATH`. Executar `node scripts/verificar-api-alma.cjs` para a simulação da RPC; ela cria e encerra seus próprios servidores locais. Não usar o teste de formulário contra atendimento real.
 
@@ -120,5 +120,7 @@ Todos sob `site/`:
 - `src/app/api/leads/route.ts`: mensagens de validação coerentes com a especificação.
 - `src/app/empreendimentos/[slug]/page.tsx` e `src/app/empreendimentos/[slug]/plantas/[planta]/page.tsx`: metadados do Alma e miniaturas corretas.
 - `scripts/verificar-alma.cjs` e `scripts/verificar-api-alma.cjs`: verificações locais reproduzíveis.
-- `docs/alma/capturas/`: seis PNGs e evidências JSON.
+- `docs/alma/capturas/`: seis PNGs e evidências JSON, incluindo as verificações remotas das prévias.
 - `Alma_Fase3_Relatorio_Implementacao.md`: este relatório.
+
+O commit posterior que registra a URL e esta evidência altera somente a documentação. A prévia final continua vinculada ao commit de implementação indicado acima.
