@@ -1,0 +1,41 @@
+name: Prepare commercial recovery snapshot
+on:
+  pull_request:
+    paths: ['.github/workflows/prepare-commercial-recovery.yml']
+permissions:
+  contents: read
+jobs:
+  snapshot:
+    if: github.event.pull_request.number == 128 && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - name: Generate migration in a disposable directory without a database
+        run: |
+          set -eu
+          work="$(mktemp -d)"
+          cd "$work"
+          npx --yes --package=supabase@2.121.0 supabase --version
+          npx --yes --package=supabase@2.121.0 supabase migration new --help
+          npx --yes --package=supabase@2.121.0 supabase migration new commercial_recoverable_requests
+          find supabase/migrations -type f -printf 'GENERATED_MIGRATION=%f\n'
+      - name: Read relevant public database documentation
+        run: |
+          curl -fsSL --max-time 30 https://supabase.com/changelog.md -o /tmp/supabase-changelog.md
+          head -c 18000 /tmp/supabase-changelog.md
+      - name: Package current sources and isolated test dependencies
+        run: tar -czf recovery-source.tgz src scripts supabase docs .github package.json package-lock.json tsconfig.json next-env.d.ts next.config.ts eslint.config.mjs node_modules/typescript node_modules/@electric-sql/pglite
+      - uses: actions/upload-artifact@v4
+        with:
+          name: recovery-source
+          path: recovery-source.tgz
+          retention-days: 1
