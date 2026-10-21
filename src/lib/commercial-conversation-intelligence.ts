@@ -1,4 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { usageFromResponsesPayload } from '@/lib/ai-pricing';
+import { recordAiUsageLog } from '@/lib/ai-usage';
 import { understandInboundMedia } from '@/lib/whatsapp/aiMediaUnderstanding';
 
 type AdminClient = SupabaseClient;
@@ -216,6 +218,7 @@ function parseAnalysis(text: string): ProposalAnalysis {
 }
 
 async function analyzeConversation(args: {
+  admin: AdminClient;
   lead: LeadRow;
   messages: Array<MessageRow & { intelligenceText: string }>;
   developments: DevelopmentRow[];
@@ -323,6 +326,16 @@ Formato:
   if (!response.ok) {
     console.error('[commercial intelligence openai]', response.status, asRecord(data)?.error);
     return null;
+  }
+  // A chamada já foi cobrada aqui, mesmo que a resposta seja descartada adiante.
+  const usage = usageFromResponsesPayload(data, { requestKind: 'commercial_intelligence', fallbackModel: 'gpt-5.6-luna' });
+  if (usage) {
+    await recordAiUsageLog({
+      admin: args.admin,
+      organizationId: args.lead.organization_id,
+      leadId: args.lead.id,
+      records: [usage],
+    });
   }
   const text = outputText(data);
   if (!text) return null;
@@ -894,6 +907,7 @@ export async function processCommercialConversationMessage(
       const understanding = await understandInboundMedia({
         admin,
         organizationId: lead.organization_id,
+        leadId: lead.id,
         row,
       });
       if (understanding) intelligenceText = `${row.body} — ${understanding}`;
@@ -914,7 +928,7 @@ export async function processCommercialConversationMessage(
   ]);
   const developments = (developmentsData ?? []) as DevelopmentRow[];
   const units = (unitsData ?? []) as UnitRow[];
-  const analysis = await analyzeConversation({ lead, messages: enriched, developments, units });
+  const analysis = await analyzeConversation({ admin, lead, messages: enriched, developments, units });
   if (!analysis) {
     await markProcessed(admin, source, { relevant: true, analyzed: false });
     return { processed: true, reason: 'analysis_unavailable' };

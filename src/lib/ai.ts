@@ -1,3 +1,4 @@
+import { buildUsageRecord, type AiUsageKind } from './ai-pricing';
 import { extractNaraPrompt } from './nara-prompt-config';
 import { collapseRepeatedNaraIntroductions, hasNaraIntroduction, naraConversationLanguage, naraLanguageSwitchReply, removeRepeatedNaraIntroduction, requestedNaraLanguage } from './nara-language';
 import { aiModelRoutingSettings, pricingFor, selectAiModels, supportsExplicitCaching, type AiWorkload } from './openai-model-routing';
@@ -45,7 +46,7 @@ export interface AiTrainingContext {
 }
 
 export interface AiUsageRecord {
-  request_kind: 'summary' | 'response';
+  request_kind: AiUsageKind;
   model: string;
   request_id: string | null;
   input_tokens: number;
@@ -184,7 +185,6 @@ const CLIENT_CLASSIFICATIONS = ['frio', 'morno', 'quente', 'agendamento', 'sem_i
 const CLIENT_STAGES = ['novo', 'ia', 'qualificado', 'agendado', 'negociacao', 'fechado'] as const;
 const BROKER_CLASSIFICATIONS = ['cadastrado', 'curioso', 'ativo', 'negociando', 'parceiro'] as const;
 const BROKER_STAGES = ['n1', 'n2', 'n3', 'n4', 'n5'] as const;
-const LONG_CONTEXT_THRESHOLD = 272_000;
 const MAX_HISTORY_BEFORE_COMPACTION = 25;
 const RECENT_MESSAGES_TO_KEEP = 10;
 const NARA_REPLY_WORD_LIMIT = 45;
@@ -950,39 +950,14 @@ function buildUsage(
   preflightInputTokens: number,
   preflightEstimated: boolean,
 ): AiUsageRecord {
-  const inputTokens = Math.max(0, data.usage?.input_tokens ?? preflightInputTokens);
-  const cachedTokens = Math.max(0, data.usage?.input_tokens_details?.cached_tokens ?? 0);
-  const cacheWriteTokens = Math.max(0, data.usage?.input_tokens_details?.cache_write_tokens ?? 0);
-  const outputTokens = Math.max(0, data.usage?.output_tokens ?? 0);
-  const reasoningTokens = Math.max(0, data.usage?.output_tokens_details?.reasoning_tokens ?? 0);
-  const uncachedTokens = Math.max(0, inputTokens - cachedTokens - cacheWriteTokens);
-  const longContext = inputTokens > LONG_CONTEXT_THRESHOLD;
-  const pricing = pricingFor(data.model || options.model);
-  const inputMultiplier = longContext ? 2 : 1;
-  const outputMultiplier = longContext ? 1.5 : 1;
-  const cost = (
-    uncachedTokens * pricing.input * inputMultiplier
-    + cachedTokens * pricing.cached * inputMultiplier
-    + cacheWriteTokens * pricing.write * inputMultiplier
-    + outputTokens * pricing.output * outputMultiplier
-  ) / 1_000_000;
-
-  return {
-    request_kind: options.requestKind,
-    model: data.model || options.model,
-    request_id: data.id || null,
-    input_tokens: inputTokens,
-    cached_tokens: cachedTokens,
-    cache_write_tokens: cacheWriteTokens,
-    output_tokens: outputTokens,
-    reasoning_tokens: reasoningTokens,
-    preflight_input_tokens: preflightInputTokens,
-    preflight_estimated: preflightEstimated,
-    estimated_cost_usd: Number(cost.toFixed(8)),
-    fallback_used: options.fallbackUsed,
+  return buildUsageRecord(data, {
+    requestKind: options.requestKind,
+    fallbackModel: options.model,
+    preflightInputTokens,
+    preflightEstimated,
+    fallbackUsed: options.fallbackUsed,
     compacted: options.compacted,
-    long_context: longContext,
-  };
+  });
 }
 
 async function fetchJson(url: string, body: unknown, timeoutMs: number): Promise<Response> {
