@@ -51,6 +51,15 @@ export function useExposicaoFlow(
       }
       if (!timer)
         timer = setTimeout(() => {
+          if (
+            document.querySelector(
+              "dialog[open], .fl-nav[data-aberto=true], .cabecalho__abrir[aria-expanded=true]",
+            ) ||
+            document.hidden
+          ) {
+            cancelar();
+            return;
+          }
           contados.add(chave);
           rastrear(evento, dados.current);
         }, 1000);
@@ -60,6 +69,8 @@ export function useExposicaoFlow(
     addEventListener("scroll", conferir, { passive: true });
     addEventListener("resize", conferir);
     document.addEventListener("visibilitychange", conferir);
+    addEventListener("flow:modal", conferir);
+    addEventListener("flow:menu", conferir);
     conferir();
     return () => {
       cancelar();
@@ -67,6 +78,8 @@ export function useExposicaoFlow(
       removeEventListener("scroll", conferir);
       removeEventListener("resize", conferir);
       document.removeEventListener("visibilitychange", conferir);
+      removeEventListener("flow:modal", conferir);
+      removeEventListener("flow:menu", conferir);
     };
   }, [evento, chave, vistos]);
   return ref;
@@ -243,7 +256,9 @@ export function VisorFlow({
     </dialog>
   );
 }
-export function FotoFlow(props: FotoFlow & { inteira?: boolean }) {
+export function FotoFlow(
+  props: FotoFlow & { inteira?: boolean; sizes?: string },
+) {
   const [aberta, setAberta] = useState(false);
   return (
     <figure className="fl-figura">
@@ -263,7 +278,7 @@ export function FotoFlow(props: FotoFlow & { inteira?: boolean }) {
           src={props.src}
           alt={props.alt}
           fill
-          sizes="(max-width:760px) 100vw, 50vw"
+          sizes={props.sizes || "(max-width:760px) 100vw, 50vw"}
         />
       </button>
       <figcaption>

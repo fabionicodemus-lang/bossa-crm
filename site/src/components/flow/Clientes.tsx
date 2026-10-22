@@ -17,7 +17,11 @@ export function VideoAbertura({
   useEffect(() => {
     const v = ref.current;
     if (!v) return;
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    if (
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches ||
+      (navigator as Navigator & { connection?: { saveData?: boolean } })
+        .connection?.saveData
+    ) {
       v.pause();
       setTocando(false);
       return;
@@ -95,14 +99,16 @@ export function VideoVertical({
   nome,
   legenda,
   video,
+  iniciar = false,
 }: {
   src: string;
   poster: string;
   nome: string;
   legenda: string;
   video: string;
+  iniciar?: boolean;
 }) {
-  const [ativo, setAtivo] = useState(false);
+  const [ativo, setAtivo] = useState(iniciar);
   const acessivel = acessibilidadeVideosFlow[video];
   const ref = useRef<HTMLVideoElement>(null);
   useEffect(() => {

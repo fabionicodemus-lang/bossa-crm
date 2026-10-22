@@ -67,112 +67,169 @@ const DIRECOES = [
   },
 ] as const;
 
-export function VistaAndares() {
-  const [d, setD] = useState(0);
-  const [ampliada, setAmpliada] = useState(false);
+export function VistaAndares({
+  onContexto,
+}: {
+  onContexto?: (s: string) => void;
+}) {
+  const [d, setD] = useState(0),
+    [altura, setAltura] = useState(13),
+    [aviso, setAviso] = useState("");
+  const [ampliada, setAmpliada] = useState(false),
+    [comparar, setComparar] = useState(false),
+    [segunda, setSegunda] = useState(7);
   const dir = DIRECOES[d];
-  // posição na escala sempre de baixo (0) para cima (11)
-  const [nivel, setNivel] = useState(4);
-  const indice = "invertido" in dir && dir.invertido ? 11 - nivel : nivel;
-  const andar = dir.andares[indice];
-  const src = `/img/flow/vista/${dir.id}-${String(indice).padStart(2, "0")}.jpg`;
-  const ordem =
-    "invertido" in dir && dir.invertido
-      ? [...dir.andares].reverse()
-      : [...dir.andares];
-
-  function registrar(nd: number, nn: number) {
-    const x = DIRECOES[nd];
-    const i = "invertido" in x && x.invertido ? 11 - nn : nn;
+  const numero = (a: string) => (a === "Rooftop" ? 24 : parseInt(a));
+  const ordem = [...dir.andares].map(numero).sort((a, b) => a - b);
+  const nome = (n: number) => (n === 24 ? "24º · Rooftop" : `${n}º`);
+  const fonte = (n: number) =>
+    `/img/flow/vista/${dir.id}-${String(dir.andares.findIndex((a) => numero(a) === n)).padStart(2, "0")}.jpg`;
+  const src = fonte(altura),
+    andar = nome(altura),
+    nivel = ordem.indexOf(altura);
+  const proximo = (andares: readonly string[], n: number) =>
+    andares
+      .map(numero)
+      .sort((a, b) => Math.abs(a - n) - Math.abs(b - n) || a - b)[0];
+  function registrar(nd: number, n: number) {
+    const direcao = DIRECOES[nd];
+    onContexto?.(
+      `Estou consultando uma referência real de drone ${direcao.nome.toLowerCase()}, na altura do ${nome(n)} pavimento.`,
+    );
     rastrear("gallery_interact", {
       empreendimento: "flow-aptos",
-      ambiente: `vista ${x.nome.toLowerCase()} ${x.andares[i]}`,
+      ambiente: `vista ${direcao.nome.toLowerCase()} ${nome(n)}`,
     });
   }
-
+  function selecionar(n: number) {
+    setAltura(n);
+    setAviso("");
+    registrar(d, n);
+  }
   return (
-    <div className="fl-vista">
-      <div className="fl-vista__tela">
-        <Image
-          key={src}
-          src={src}
-          alt={`Referência de drone ${dir.nome.toLowerCase()} na altura do ${andar === "Rooftop" ? "rooftop" : andar + " pavimento"} do Flow Aptos`}
-          fill
-          sizes="(max-width: 1000px) 100vw, 70vw"
-        />
-        <p className="fl-vista__andar" aria-live="polite">
-          {andar === "Rooftop" ? "Rooftop" : andar}
-          <small>
-            {andar === "Rooftop" ? "The Roof · 24º andar" : "pavimento"}
-          </small>
-        </p>
-      </div>
-      <div className="fl-vista__painel">
-        <div className="fl-abas" role="group" aria-label="Direção da vista">
-          {DIRECOES.map((x, i) => (
-            <button
-              key={x.id}
-              type="button"
-              aria-pressed={i === d}
-              className="fl-aba"
-              onClick={() => {
-                setD(i);
-                registrar(i, nivel);
-              }}
-            >
-              {x.nome}
-              <small>{x.sub}</small>
-            </button>
-          ))}
-        </div>
-        <div className="fl-faixa">
-          <label htmlFor="fl-andar" className="fl-nota">
-            Arraste para subir ou descer
-          </label>
-          <input
-            id="fl-andar"
-            type="range"
-            min={0}
-            max={11}
-            step={1}
-            value={nivel}
-            aria-valuetext={andar}
-            onChange={(e) => setNivel(Number(e.target.value))}
-            onPointerUp={() => registrar(d, nivel)}
-            onKeyUp={() => registrar(d, nivel)}
+    <div className="fl-vistas-editorial">
+      <div className="fl-vista">
+        <div className="fl-vista__tela">
+          <Image
+            src={src}
+            alt={`Referência real de drone ${dir.nome.toLowerCase()}, ${andar} pavimento do Flow Aptos`}
+            fill
+            sizes="(max-width:1000px) 100vw, 70vw"
           />
-          <div className="fl-faixa__marcas" aria-hidden="true">
-            <span>{ordem[0]}</span>
-            <span>{ordem[11]}</span>
+          <p className="fl-vista__andar" aria-live="polite">
+            {andar}
+            <small>Referência real de drone</small>
+          </p>
+        </div>
+        <div className="fl-vista__painel">
+          <div className="fl-abas" role="group" aria-label="Direção da vista">
+            {DIRECOES.map((x, i) => (
+              <button
+                key={x.id}
+                className="fl-aba"
+                aria-pressed={i === d}
+                onClick={() => {
+                  const n = proximo(x.andares, altura);
+                  setD(i);
+                  setAltura(n);
+                  setSegunda(proximo(x.andares, segunda));
+                  setAviso(
+                    n === altura
+                      ? ""
+                      : `Não há foto do ${altura}º ${x.nome.toLowerCase()}. Exibindo o ${n}º.`,
+                  );
+                  registrar(i, n);
+                }}
+              >
+                {x.nome}
+                <small>{x.sub}</small>
+              </button>
+            ))}
+          </div>
+          <p role="status" className="fl-vista-aviso">
+            {aviso}
+          </p>
+          <div className="fl-faixa">
+            <label htmlFor="fl-andar">Escolher altura · {andar}</label>
+            <input
+              id="fl-andar"
+              type="range"
+              min={0}
+              max={ordem.length - 1}
+              step={1}
+              value={nivel}
+              aria-valuetext={andar}
+              onChange={(e) => selecionar(ordem[Number(e.target.value)])}
+            />
+          </div>
+          <div className="fl-andares" role="group" aria-label="Escolher andar">
+            {ordem.map((n) => (
+              <button
+                key={n}
+                aria-pressed={n === altura}
+                onClick={() => selecionar(n)}
+              >
+                {n === 24 ? "RT" : `${n}º`}
+              </button>
+            ))}
+          </div>
+          <button
+            className="fl-bt fl-bt--linha"
+            onClick={() => {
+              setAmpliada(true);
+              rastrear("gallery_interact", {
+                empreendimento: "flow-aptos",
+                ambiente: `ampliar drone ${dir.nome} ${andar}`,
+              });
+            }}
+          >
+            Ampliar referência de drone
+          </button>
+          <button
+            className="fl-bt fl-bt--linha"
+            aria-expanded={comparar}
+            aria-controls="fl-comparar-alturas"
+            onClick={() => setComparar(!comparar)}
+          >
+            Comparar duas alturas
+          </button>
+        </div>
+      </div>
+      {comparar && (
+        <div id="fl-comparar-alturas" className="fl-comparar-alturas">
+          <label>
+            Comparar {andar} com{" "}
+            <select
+              value={segunda}
+              onChange={(e) => setSegunda(Number(e.target.value))}
+            >
+              {ordem.map((n) => (
+                <option key={n} value={n}>
+                  {nome(n)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <div>
+            {[altura, segunda].map((n, i) => (
+              <figure key={i}>
+                <div className="fl-comparar-foto">
+                  <Image
+                    src={fonte(n)}
+                    alt={`Comparação: referência real de drone ${dir.nome.toLowerCase()}, ${nome(n)} pavimento`}
+                    fill
+                    sizes="(max-width:860px) 100vw, 50vw"
+                  />
+                </div>
+                <figcaption>
+                  {dir.nome} · {nome(n)} pavimento
+                </figcaption>
+              </figure>
+            ))}
           </div>
         </div>
-        <div className="fl-andares" aria-label="Escolher andar">
-          {ordem.map((a, i) => (
-            <button
-              key={a + i}
-              type="button"
-              aria-pressed={i === nivel}
-              onClick={() => {
-                setNivel(i);
-                registrar(d, i);
-              }}
-            >
-              {a === "Rooftop" ? "RT" : a}
-            </button>
-          ))}
-        </div>
-        <button
-          className="fl-bt fl-bt--linha"
-          onClick={() => {
-            setAmpliada(true);
-            rastrear("gallery_interact", {
-              empreendimento: "flow-aptos",
-              ambiente: `ampliar drone ${dir.nome} ${andar}`,
-            });
-          }}
-        >
-          Ampliar referência de drone
-        </button>
+      )}
+      <div className="fl-vista-rodape">
         <LinkWhatsApp
           className="fl-bt"
           empreendimento="flow-aptos"
@@ -191,10 +248,10 @@ export function VistaAndares() {
         <VisorFlow
           foto={{
             src,
-            alt: `Referência de drone: ${dir.nome}, ${andar}`,
+            alt: `Referência real de drone: ${dir.nome}, ${andar}`,
             titulo: `${dir.nome} · ${andar}`,
             legenda:
-              "Referência de drone. A vista depende da posição da unidade e do entorno; sem garantia de vista permanente ou de disponibilidade.",
+              "Referência real de drone. A vista depende da posição da unidade e do entorno; sem garantia de vista permanente ou de disponibilidade.",
           }}
           fechar={() => setAmpliada(false)}
         />

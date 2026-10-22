@@ -9,10 +9,12 @@ export function PlantasFlow({
   e,
   indice,
   escolher,
+  contextoVista = "",
 }: {
   e: Empreendimento;
   indice: number;
   escolher: (i: number) => void;
+  contextoVista?: string;
 }) {
   const p = e.plantas[indice],
     vistos = useRef(new Set<string>()),
@@ -86,23 +88,33 @@ export function PlantasFlow({
           }
         }}
       >
-        {[false, true].map(duplex => <div className="fl-opcoes-grupo" key={String(duplex)}><p className="fl-rot">{duplex ? "Duplex" : "Apartamentos tipo"}</p><div>{e.plantas.map((q, j) => (q.suites === 3) === duplex && (
-          <button
-            type="button"
-            key={q.slug}
-            data-planta={q.slug}
-            aria-pressed={j === indice}
-            aria-controls="fl-planta-painel"
-            onClick={() => {
-              setRetorno("");
-              escolher(j);
-            }}
-          >
-            <b>{q.area}</b>
-            <span>{q.suites} suítes</span>
-            <small>{q.nome}</small>
-          </button>
-        ))}</div></div>)}
+        {[false, true].map((duplex) => (
+          <div className="fl-opcoes-grupo" key={String(duplex)}>
+            <p className="fl-rot">{duplex ? "Duplex" : "Apartamentos tipo"}</p>
+            <div>
+              {e.plantas.map(
+                (q, j) =>
+                  (q.suites === 3) === duplex && (
+                    <button
+                      type="button"
+                      key={q.slug}
+                      data-planta={q.slug}
+                      aria-pressed={j === indice}
+                      aria-controls="fl-planta-painel"
+                      onClick={() => {
+                        setRetorno("");
+                        escolher(j);
+                      }}
+                    >
+                      <b>{q.area}</b>
+                      <span>{q.suites} suítes</span>
+                      <small>{q.nome}</small>
+                    </button>
+                  ),
+              )}
+            </div>
+          </div>
+        ))}
       </div>
       <div ref={ref} id="fl-planta-painel" className="fl-planta-painel">
         <div>
@@ -140,7 +152,7 @@ export function PlantasFlow({
             empreendimento={e.slug}
             planta={p.slug}
             botao="flow_planta"
-            mensagem={`Olá! Quero conhecer a planta ${p.nome}, de ${p.area}, com ${p.suites} suítes, do Flow Aptos. Podemos conversar sobre uma visita?`}
+            mensagem={`Olá! Quero conhecer a planta ${p.nome}, de ${p.area}, com ${p.suites} suítes, do Flow Aptos. Podemos conversar sobre uma visita? ${contextoVista}`}
           >
             Quero conhecer esta planta
           </LinkWhatsApp>

@@ -10,8 +10,8 @@ import {
   mensagemFlow,
   engenhariaFlow,
 } from "@/content/flow";
-import { notaLegal } from "@/content/site";
-import { empreendimentoLd, perguntasLd } from "@/lib/seo";
+import { notaLegal, SITE_URL } from "@/content/site";
+import { empreendimentoLd, perguntasLd, migalhasLd } from "@/lib/seo";
 import { rastrear } from "@/lib/rastreio";
 import { JsonLd } from "../Blocos";
 import { FormLead } from "../FormLead";
@@ -59,15 +59,29 @@ export function FlowPagina({
     ),
     [contexto, setContexto] = useState(Boolean(plantaInicial)),
     [modo, setModo] = useState<"visita" | "book">("visita"),
-    [barra, setBarra] = useState(false);
+    [barra, setBarra] = useState(false),
+    [vista, setVista] = useState(""),
+    [duplexVitrine, setDuplexVitrine] = useState(0);
   const p = e.plantas[indice],
     ed = e.edicoes[0],
     trocas = useRef(0),
     inicial = useRef(plantaInicial),
-    msg = mensagemFlow(contexto ? p : undefined);
+    msg = `${mensagemFlow(contexto ? p : undefined)}${vista ? " " + vista : ""}`;
   useEffect(() => {
-    document.title = contexto ? flowMetaPlanta(p).titulo : flowMeta.titulo;
-  }, [contexto, p]);
+    const m = contexto ? flowMetaPlanta(p) : flowMeta;
+    const url = `${SITE_URL}/empreendimentos/${e.slug}${contexto ? "/plantas/" + p.slug : ""}`;
+    document.title = m.titulo;
+    for (const [seletor, valor] of [
+      ["meta[name=description]", m.descricao],
+      ["meta[property='og:title']", m.titulo],
+      ["meta[property='og:description']", m.descricao],
+      ["meta[property='og:url']", url],
+      ["meta[name='twitter:title']", m.titulo],
+      ["meta[name='twitter:description']", m.descricao],
+    ])
+      document.querySelector(seletor)?.setAttribute("content", valor);
+    document.querySelector("link[rel=canonical]")?.setAttribute("href", url);
+  }, [contexto, p, e.slug]);
   useEffect(() => {
     const voltar = () => {
       const slug = location.pathname.split("/plantas/")[1];
@@ -132,7 +146,14 @@ export function FlowPagina({
       subtree: true,
       attributeFilter: ["aria-expanded"],
     });
-    for (const ev of ["scroll", "resize", "focusin", "focusout", "flow:modal", "flow:menu"])
+    for (const ev of [
+      "scroll",
+      "resize",
+      "focusin",
+      "focusout",
+      "flow:modal",
+      "flow:menu",
+    ])
       addEventListener(ev, atualizar);
     const ro = new ResizeObserver(conferir);
     ro.observe(document.body);
@@ -145,7 +166,8 @@ export function FlowPagina({
         "resize",
         "focusin",
         "focusout",
-        "flow:modal", "flow:menu",
+        "flow:modal",
+        "flow:menu",
       ])
         removeEventListener(ev, atualizar);
     };
@@ -153,7 +175,11 @@ export function FlowPagina({
   const wa = (texte: string, botao: string, visita = false, linha = false) => (
     <LinkWhatsApp
       className={`fl-bt ${linha ? "fl-bt--linha" : ""}`}
-      mensagem={visita ? mensagemFlow(contexto ? p : undefined, true) : msg}
+      mensagem={
+        visita
+          ? `${mensagemFlow(contexto ? p : undefined, true)}${vista ? " " + vista : ""}`
+          : msg
+      }
       empreendimento={e.slug}
       planta={contexto ? p.slug : undefined}
       botao={botao}
@@ -165,6 +191,21 @@ export function FlowPagina({
     <div className="fl fl-comercial">
       <VerEmpreendimento slug={e.slug} estagio="obra" />
       <JsonLd dados={empreendimentoLd(e)} />
+      <JsonLd
+        dados={migalhasLd([
+          { nome: "Início", href: "/" },
+          { nome: "Empreendimentos", href: "/empreendimentos" },
+          { nome: "Flow Aptos", href: "/empreendimentos/flow-aptos" },
+          ...(contexto
+            ? [
+                {
+                  nome: p.nome,
+                  href: `/empreendimentos/flow-aptos/plantas/${p.slug}`,
+                },
+              ]
+            : []),
+        ])}
+      />
       <JsonLd dados={perguntasLd(faqFlow)} />
       <section id="inicio-flow" className="fl-abertura">
         <VideoAbertura
@@ -184,7 +225,9 @@ export function FlowPagina({
           <p className="fl-rot">FLOW APTOS · NO RITMO DA NOSSA VIDA.</p>
           <h1 className="fl-h1">Seu apartamento é só o começo.</h1>
           <p className="fl-p">
-            Apartamentos de 62 e 73 m² com duas suítes. Duplex com três suítes. Flow Move no 5º pavimento e The Roof no 24º para ampliar as possibilidades de cada dia, no Balneário Perequê, em Porto Belo.
+            Apartamentos de 62 e 73 m² com duas suítes. Duplex com três suítes.
+            Flow Move no 5º pavimento e The Roof no 24º para ampliar as
+            possibilidades de cada dia, no Balneário Perequê, em Porto Belo.
           </p>
           <ul className="fl-fatos">
             <li>57 apartamentos</li>
@@ -199,9 +242,7 @@ export function FlowPagina({
               Agendar visita
             </a>
           </div>
-          <p className="fl-nota">
-            Perspectiva ilustrativa em movimento. No ritmo da nossa vida.
-          </p>
+          <p className="fl-nota">Perspectiva ilustrativa em movimento.</p>
         </div>
       </section>
       <NavegacaoFlow />
@@ -211,9 +252,17 @@ export function FlowPagina({
             rotulo="OS APARTAMENTOS"
             titulo="O espaço certo para o seu jeito de viver."
           >
-            Nos apartamentos tipo, são duas suítes e configurações que acompanham rotinas diferentes. Compare as plantas, a orientação solar informada no projeto e escolha o desenho que mais combina com você.
+            Nos apartamentos tipo, são duas suítes e configurações que
+            acompanham rotinas diferentes. Compare as plantas, a orientação
+            solar informada no projeto e escolha o desenho que mais combina com
+            você.
           </Cab>
-          <PlantasFlow e={e} indice={indice} escolher={escolher} />
+          <PlantasFlow
+            e={e}
+            indice={indice}
+            escolher={escolher}
+            contextoVista={vista}
+          />
         </div>
       </section>
       <section id="duplex" className="fl-sec fl-clr">
@@ -222,17 +271,34 @@ export function FlowPagina({
             rotulo="DUPLEX · TRÊS SUÍTES"
             titulo="Dois níveis. Outra forma de morar."
           >
-            Os duplex do Flow reúnem três suítes, living com pé-direito duplo e uma organização em dois níveis. Conheça as opções de 93 e 117,7 m².
+            Os duplex do Flow reúnem três suítes, living com pé-direito duplo e
+            uma organização em dois níveis. Conheça as opções de 93 e 117,7 m².
           </Cab>
+          <FotoFlow
+            sizes="(max-width:1200px) 100vw, 1100px"
+            src={`${I}/duplex-490.jpg`}
+            alt="Perspectiva ilustrativa de living duplex do acervo do Flow"
+            titulo="Living duplex · perspectiva ilustrativa"
+            legenda="Imagem do acervo do Flow. Consulte a configuração de cada planta com a equipe."
+          />
+          <div
+            className="fl-duplex-escolhas"
+            role="group"
+            aria-label="Visualizar opções de duplex"
+          >
+            {e.plantas.slice(3).map((q, j) => (
+              <button
+                key={q.slug}
+                aria-pressed={j === duplexVitrine}
+                onClick={() => setDuplexVitrine(j)}
+              >
+                {q.area}
+              </button>
+            ))}
+          </div>
           <div className="fl-duplex-editorial">
             {e.plantas.slice(3).map((q, j) => (
-              <article key={q.slug}>
-                <FotoFlow
-                  src={`${I}/${j === 0 ? "duplex-tipo23-living" : "duplex-490"}.jpg`}
-                  alt={`Perspectiva ilustrativa de living duplex do acervo do Flow`}
-                  titulo="Living duplex · perspectiva ilustrativa"
-                  legenda="Imagem do acervo de duplex do Flow. Confirme com a equipe sua correspondência à configuração consultada."
-                />
+              <article key={q.slug} data-ativo={j === duplexVitrine}>
                 <h3 className="fl-h3">{q.area} · 3 suítes</h3>
                 <p>
                   {j === 0
@@ -248,7 +314,7 @@ export function FlowPagina({
                       ?.scrollIntoView({ block: "start" });
                   }}
                 >
-                  Ver planta de {q.area}
+                  Ver a planta de {q.area}
                 </button>
               </article>
             ))}
@@ -268,30 +334,105 @@ export function FlowPagina({
           </div>
         </div>
       </section>
-      <div id="lazer" className="fl-distancia"><div className="fl-wrap"><p>Balneário Perequê, Porto Belo <span>·</span> Aproximadamente 800 m da Praia do Perequê, conforme distância divulgada <span>·</span> Entrega prevista para novembro de 2027.</p><a href="#localizacao-flow">Ver localização ↗</a></div></div>
-      <section id="the-roof" className="fl-sec fl-fundo"><div className="fl-wrap">
-        <Cab rotulo="THE ROOF · 24º PAVIMENTO" titulo="Lá em cima, o dia ganha outro ritmo.">Piscina com infraestrutura para aquecimento, salão de festas, pub, brinquedoteca e espaço gourmet formam um pavimento para encontros, descanso e bons momentos.</Cab>
-        <div className="fl-roof-editorial"><FotoFlow src={`${I}/piscina.jpg`} alt="Perspectiva ilustrativa da piscina do The Roof, 24º pavimento" titulo="Piscina · The Roof"/>
-        <div className="fl-roof-apoio">{[["salao-festas","Salão de festas"],["pub","Pub"],["brinquedoteca","Brinquedoteca"],["rooftop-aereo","The Roof — vista geral"]].map(([src,nome]) => <FotoFlow key={src} src={`${I}/${src}.jpg`} alt={`Perspectiva ilustrativa: ${nome}, 24º pavimento`} titulo={nome}/>)}</div></div>
-        <details className="fl-distribuicao"><summary>Ver distribuição do 24º pavimento</summary><FotoFlow inteira src={`${I}/planta-the-roof.jpg`} alt="Planta ilustrativa dos ambientes do The Roof, 24º pavimento" titulo="Planta ilustrativa do 24º pavimento" legenda="Áreas comuns do The Roof. Amplie para consultar a distribuição."/></details>
-        <a className="fl-bt" href="#visita">Quero conhecer o The Roof</a>
-      </div></section>
-      <section id="flow-move" className="fl-sec fl-clr-2"><div className="fl-wrap">
-        <Cab rotulo="FLOW MOVE · 5º PAVIMENTO" titulo="Mais espaço para o dia acontecer.">Coworking, fitness, Flow Store, lavanderia, Cine Flow e ambientes para brincar e pausar ampliam as possibilidades da rotina, dentro do próprio edifício.</Cab>
-        <GaleriaMove/>
-        <details className="fl-distribuicao"><summary>Ver planta do Flow Move</summary><FotoFlow inteira src={`${I}/planta-flow-move.jpg`} alt="Planta ilustrativa dos ambientes do Flow Move, 5º pavimento" titulo="Planta ilustrativa do 5º pavimento" legenda="Áreas comuns do Flow Move. Amplie para consultar a distribuição."/></details>
-        <p className="fl-nota">Os espaços de conveniência não representam promessa de serviços ou horários de operação.</p>
-        <a className="fl-bt" href="#visita">Quero visitar o Flow</a>
-      </div></section>
+      <div id="lazer" className="fl-distancia">
+        <div className="fl-wrap">
+          <p>
+            Balneário Perequê, Porto Belo <span>·</span> Aproximadamente 800 m
+            da Praia do Perequê, conforme distância divulgada <span>·</span>{" "}
+            Entrega prevista para novembro de 2027.
+          </p>
+          <a href="#localizacao-flow">Ver localização ↗</a>
+        </div>
+      </div>
+      <section id="the-roof" className="fl-sec fl-fundo">
+        <div className="fl-wrap">
+          <Cab
+            rotulo="THE ROOF · 24º PAVIMENTO"
+            titulo="Lá em cima, o dia ganha outro ritmo."
+          >
+            Piscina com infraestrutura para aquecimento, salão de festas, pub,
+            brinquedoteca e espaço gourmet formam um pavimento para encontros,
+            descanso e bons momentos.
+          </Cab>
+          <div className="fl-roof-editorial">
+            <FotoFlow
+              sizes="(max-width:1440px) 100vw, 1320px"
+              src={`${I}/piscina.jpg`}
+              alt="Perspectiva ilustrativa da piscina do The Roof, 24º pavimento"
+              titulo="Piscina · The Roof"
+            />
+            <div className="fl-roof-apoio">
+              {[
+                ["salao-festas", "Salão de festas"],
+                ["pub", "Pub"],
+                ["brinquedoteca", "Brinquedoteca"],
+                ["rooftop-aereo", "The Roof — vista geral"],
+              ].map(([src, nome]) => (
+                <FotoFlow
+                  key={src}
+                  src={`${I}/${src}.jpg`}
+                  alt={`Perspectiva ilustrativa: ${nome}, 24º pavimento`}
+                  titulo={nome}
+                />
+              ))}
+            </div>
+          </div>
+          <details className="fl-distribuicao">
+            <summary>Ver distribuição do 24º pavimento</summary>
+            <FotoFlow
+              inteira
+              src={`${I}/planta-the-roof.jpg`}
+              alt="Planta ilustrativa dos ambientes do The Roof, 24º pavimento"
+              titulo="Planta ilustrativa do 24º pavimento"
+              legenda="Áreas comuns do The Roof. Amplie para consultar a distribuição."
+            />
+          </details>
+          <a className="fl-bt" href="#visita">
+            Quero conhecer o The Roof
+          </a>
+        </div>
+      </section>
+      <section id="flow-move" className="fl-sec fl-clr-2">
+        <div className="fl-wrap">
+          <Cab
+            rotulo="FLOW MOVE · 5º PAVIMENTO"
+            titulo="Mais espaço para o dia acontecer."
+          >
+            Coworking, fitness, Flow Store, lavanderia, Cine Flow e ambientes
+            para brincar e pausar ampliam as possibilidades da rotina, dentro do
+            próprio edifício.
+          </Cab>
+          <GaleriaMove />
+          <details className="fl-distribuicao">
+            <summary>Ver planta do Flow Move</summary>
+            <FotoFlow
+              inteira
+              src={`${I}/planta-flow-move.jpg`}
+              alt="Planta ilustrativa dos ambientes do Flow Move, 5º pavimento"
+              titulo="Planta ilustrativa do 5º pavimento"
+              legenda="Áreas comuns do Flow Move. Amplie para consultar a distribuição."
+            />
+          </details>
+          <p className="fl-nota">
+            Os espaços de conveniência não representam promessa de serviços ou
+            horários de operação.
+          </p>
+          <a className="fl-bt" href="#visita">
+            Quero visitar o Flow
+          </a>
+        </div>
+      </section>
       <section id="vistas" className="fl-sec fl-noite">
         <div className="fl-wrap">
           <Cab
             rotulo="REFERÊNCIAS REAIS DE DRONE"
             titulo="Cada altura revela uma perspectiva."
           >
-            Explore referências reais de drone em diferentes direções e alturas. Compare o que se vê em cada posição e escolha as perspectivas sobre as quais deseja conversar com a Bossa.
+            Explore referências reais de drone em diferentes direções e alturas.
+            Compare o que se vê em cada posição e escolha as perspectivas sobre
+            as quais deseja conversar com a Bossa.
           </Cab>
-          <VistaAndares />
+          <VistaAndares onContexto={setVista} />
         </div>
       </section>
       <section id="engenharia" className="fl-sec fl-clr-2">
@@ -301,7 +442,9 @@ export function FlowPagina({
               rotulo="ENGENHARIA · JEITO BOSSA"
               titulo="O conforto começa antes dos acabamentos."
             >
-              Há decisões de projeto e execução que fazem diferença no uso diário. Conheça as soluções previstas para acústica, impermeabilização, esquadrias e exaustão no Flow.
+              Há decisões de projeto e execução que fazem diferença no uso
+              diário. Conheça as soluções previstas para acústica,
+              impermeabilização, esquadrias e exaustão no Flow.
             </Cab>
             <div className="fl-engenharia">
               {engenhariaFlow.map(([t, b, r]) => (
@@ -309,7 +452,13 @@ export function FlowPagina({
                   <h3 className="fl-h3">{t}</h3>
                   <p className="fl-p">{b}</p>
                   <p className="fl-nota">{r}</p>
-                  <Link href="/obras/flow-aptos/2026-09">Ver etapa no boletim ↗</Link>
+                  {t.startsWith("Áreas") || t.startsWith("Esquadrias") ? (
+                    <Link href="/obras/flow-aptos/2026-09">
+                      Ver etapa no boletim ↗
+                    </Link>
+                  ) : (
+                    <a href="#visita">Conhecer o detalhamento ↗</a>
+                  )}
                 </article>
               ))}
             </div>
@@ -326,7 +475,9 @@ export function FlowPagina({
               rotulo="ACOMPANHE A OBRA"
               titulo="A obra avança. Você acompanha cada etapa."
             >
-              O Flow tem entrega prevista para novembro de 2027. A Bossa publica boletins para acompanhar o andamento dos serviços e mostrar como o empreendimento está sendo executado.
+              O Flow tem entrega prevista para novembro de 2027. A Bossa publica
+              boletins para acompanhar o andamento dos serviços e mostrar como o
+              empreendimento está sendo executado.
             </Cab>
             <div className="fl-obra-comercial">
               <div className="fl-pilha">
@@ -351,7 +502,12 @@ export function FlowPagina({
                 </a>
                 <div className="fl-dois">
                   <article>
-                    <FotoFlow src="/img/jazz-1.jpg" alt="Fotografia do Jazz Residence entregue" titulo="Jazz Residence" legenda="Empreendimento entregue · registro real"/>
+                    <FotoFlow
+                      src="/img/jazz-1.jpg"
+                      alt="Fotografia do Jazz Residence entregue"
+                      titulo="Jazz Residence"
+                      legenda="Empreendimento entregue · registro real"
+                    />
                     <h3 className="fl-h3">Jazz</h3>
                     <p>Entregue em setembro de 2019.</p>
                     <Link href="/empreendimentos/jazz-residence">
@@ -359,7 +515,12 @@ export function FlowPagina({
                     </Link>
                   </article>
                   <article>
-                    <FotoFlow src="/img/soul-3.jpg" alt="Fotografia do Soul Residence entregue" titulo="Soul Residence" legenda="Empreendimento entregue · registro real"/>
+                    <FotoFlow
+                      src="/img/soul-3.jpg"
+                      alt="Fotografia do Soul Residence entregue"
+                      titulo="Soul Residence"
+                      legenda="Empreendimento entregue · registro real"
+                    />
                     <h3 className="fl-h3">Soul</h3>
                     <p>Entregue em dezembro de 2023.</p>
                     <Link href="/empreendimentos/soul-residence">
@@ -385,9 +546,7 @@ export function FlowPagina({
           </ExposicaoFlow>
           <div className="fl-clientes">
             <h3 className="fl-h3">Quem já conheceu o Flow</h3>
-            <p>
-              Depoimentos de clientes, com uso autorizado registrado no projeto.
-            </p>
+            <p>Augusto e Natália compartilham suas experiências com o Flow.</p>
             <div className="fl-dois">
               <VideoFlowModal
                 src={`${V}/augusto.mp4`}
@@ -413,15 +572,20 @@ export function FlowPagina({
             rotulo="LOCALIZAÇÃO"
             titulo="Balneário Perequê. O endereço do Flow."
           >
-            Na Rua São José, 163, em Porto Belo, o Flow está a aproximadamente 800 metros da Praia do Perequê, conforme distância divulgada. O percurso efetivo depende do acesso utilizado.
+            Na Rua São José, 163, em Porto Belo, o Flow está a aproximadamente
+            800 metros da Praia do Perequê, conforme distância divulgada. O
+            percurso efetivo depende do acesso utilizado.
           </Cab>
           <ExposicaoFlow evento="view_location">
-            <p className="fl-local-contexto fl-p">Conheça o endereço, os ambientes do edifício e a posição do apartamento para decidir o que faz mais sentido para a sua rotina.</p>
+            <p className="fl-local-contexto fl-p">
+              Conheça o endereço, os ambientes do edifício e a posição do
+              apartamento para decidir o que faz mais sentido para a sua rotina.
+            </p>
             <FotoFlow
               src={`${I}/localizacao-aereo.jpg`}
               alt="Imagem aérea do entorno do Flow Aptos no Balneário Perequê"
               titulo="Balneário Perequê · Porto Belo"
-              legenda="Imagem do acervo de localização do Flow. Não corresponde a rota pedonal aferida."
+              legenda="Imagem aérea do entorno · acervo de localização do Flow."
             />
             <LinkRastreado
               externo
@@ -441,18 +605,29 @@ export function FlowPagina({
             rotulo="CONHEÇA DE PERTO"
             titulo="Vamos conhecer o Flow de perto?"
           >
-            Escolha a planta que mais chamou sua atenção e converse com a equipe Bossa. Vamos combinar uma visita e esclarecer as condições atuais para as opções de seu interesse.
+            Escolha a planta que mais chamou sua atenção e converse com a equipe
+            Bossa. Vamos combinar uma visita e esclarecer as condições atuais
+            para as opções de seu interesse.
           </Cab>
           <div className="fl-conversao">
             <div className="fl-pilha fl-conversao-foto">
-              <FotoFlow src={`${I}/hall.jpg`} alt="Perspectiva ilustrativa do hall do Flow Aptos" titulo="Seu próximo passo começa aqui."/>
-              <p>O escritório da Bossa fica no térreo do Flow, na Rua São José, 163. A equipe confirma data, horário e condições de acesso à obra.</p>
+              <FotoFlow
+                src={`${I}/hall.jpg`}
+                alt="Perspectiva ilustrativa do hall do Flow Aptos"
+                titulo="Seu próximo passo começa aqui."
+              />
+              <p>
+                O escritório da Bossa fica no térreo do Flow, na Rua São José,
+                163. A equipe confirma data, horário e condições de acesso à
+                obra.
+              </p>
             </div>
             <div className="fl-form-comercial">
               <div hidden={modo !== "visita"}>
                 <h3 className="fl-h3">Solicitar visita</h3>
                 <p>
-                  Deixe seu contato. Nossa equipe retorna para combinar data e horário.
+                  Deixe seu contato. Nossa equipe retorna para combinar data e
+                  horário.
                 </p>
                 <FormLead
                   formulario="visita"
@@ -464,10 +639,7 @@ export function FlowPagina({
               </div>
               <div hidden={modo !== "book"}>
                 <h3 className="fl-h3">Solicitar apresentação do Flow</h3>
-                <p>
-                  Peça o material à equipe. Não há download automático nesta
-                  etapa.
-                </p>
+                <p>Peça a apresentação à equipe Bossa.</p>
                 <FormLead
                   formulario="book"
                   empreendimento={e.slug}
@@ -477,8 +649,19 @@ export function FlowPagina({
                 />
               </div>
               {wa("Conversar pelo WhatsApp", "flow_form_alternativa", true)}
-              <button className="fl-book-link" onClick={() => setModo(modo === "book" ? "visita" : "book")} aria-expanded={modo === "book"}>{modo === "book" ? "Voltar ao pedido de visita" : "Prefiro solicitar a apresentação do Flow"}</button>
-              <p className="fl-nota">A solicitação não confirma agendamento. A equipe combina data e horário.</p>
+              <button
+                className="fl-book-link"
+                onClick={() => setModo(modo === "book" ? "visita" : "book")}
+                aria-expanded={modo === "book"}
+              >
+                {modo === "book"
+                  ? "Voltar ao pedido de visita"
+                  : "Prefiro solicitar a apresentação do Flow"}
+              </button>
+              <p className="fl-nota">
+                A solicitação não confirma agendamento. A equipe combina data e
+                horário.
+              </p>
             </div>
           </div>
         </div>
@@ -506,7 +689,9 @@ export function FlowPagina({
               </details>
             ))}
           </div>
-          <a className="fl-bt" href="#visita">Solicitar visita</a>
+          <a className="fl-bt" href="#visita">
+            Solicitar visita
+          </a>
           <p className="fl-nota">
             {notaLegal} Perspectivas ilustrativas do projeto. Andamento
             histórico: {ed.percentual.toLocaleString("pt-BR")}% em{" "}
