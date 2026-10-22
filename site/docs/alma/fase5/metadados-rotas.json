@@ -1,0 +1,41 @@
+{
+  "data": "2026-10-22T01:14:33.166Z",
+  "modo": "GET local, build equivalente público; nenhum envio",
+  "rotas": [
+    {
+      "caminho": "/empreendimentos/alma-seahouses",
+      "status": 200,
+      "titulo": "Alma Sea Houses em Perequê | Bossa Empreendimentos",
+      "og": "Alma Sea Houses em Perequê | Bossa Empreendimentos",
+      "canonical": "https://www.bossaempreendimentos.com.br/empreendimentos/alma-seahouses"
+    },
+    {
+      "caminho": "/empreendimentos/alma-seahouses/plantas/tipo-02",
+      "status": 200,
+      "titulo": "Alma Sea Houses: 103 m², 3 suítes | Bossa",
+      "og": "Alma Sea Houses: 103 m², 3 suítes | Bossa",
+      "canonical": "https://www.bossaempreendimentos.com.br/empreendimentos/alma-seahouses/plantas/tipo-02"
+    },
+    {
+      "caminho": "/empreendimentos/alma-seahouses/plantas/tipo-01",
+      "status": 200,
+      "titulo": "Alma Sea Houses: 114 m², 3 suítes | Bossa",
+      "og": "Alma Sea Houses: 114 m², 3 suítes | Bossa",
+      "canonical": "https://www.bossaempreendimentos.com.br/empreendimentos/alma-seahouses/plantas/tipo-01"
+    },
+    {
+      "caminho": "/empreendimentos/alma-seahouses/plantas/duplex-tipo-2",
+      "status": 200,
+      "titulo": "Alma Sea Houses: duplex de 145 m² | Bossa",
+      "og": "Alma Sea Houses: duplex de 145 m² | Bossa",
+      "canonical": "https://www.bossaempreendimentos.com.br/empreendimentos/alma-seahouses/plantas/duplex-tipo-2"
+    },
+    {
+      "caminho": "/empreendimentos/alma-seahouses/plantas/duplex-tipo-1",
+      "status": 200,
+      "titulo": "Alma Sea Houses: duplex de 168 m² | Bossa",
+      "og": "Alma Sea Houses: duplex de 168 m² | Bossa",
+      "canonical": "https://www.bossaempreendimentos.com.br/empreendimentos/alma-seahouses/plantas/duplex-tipo-1"
+    }
+  ]
+}

@@ -1,0 +1,54 @@
+{
+  "data": "2026-10-22T01:04:19.328Z",
+  "observacao": "Falha reproduzida antes da correção de contraste, não resultado da candidata final",
+  "violacoes": [
+    {
+      "id": "color-contrast",
+      "impacto": "serious",
+      "elementos": [
+        {
+          "alvo": [
+            "#localizacao > .al-wrap > .al-secao-cab > .al-rot"
+          ],
+          "detalhe": "Fix any of the following:\n  Element has insufficient color contrast of 3.18 (foreground color: #c4bfb6, background color: #59695c, font size: 8.3pt (11px), font weight: normal). Expected contrast ratio of 4.5:1"
+        },
+        {
+          "alvo": [
+            ".al-pilha > .al-p:nth-child(1)"
+          ],
+          "detalhe": "Fix any of the following:\n  Element has insufficient color contrast of 3.84 (foreground color: #cfd3cb, background color: #59695c, font size: 14.0pt (18.72px), font weight: normal). Expected contrast ratio of 4.5:1"
+        },
+        {
+          "alvo": [
+            ".al-pilha > .al-p:nth-child(4)"
+          ],
+          "detalhe": "Fix any of the following:\n  Element has insufficient color contrast of 3.84 (foreground color: #cfd3cb, background color: #59695c, font size: 14.0pt (18.72px), font weight: normal). Expected contrast ratio of 4.5:1"
+        },
+        {
+          "alvo": [
+            ".al-pilha > .al-p:nth-child(5)"
+          ],
+          "detalhe": "Fix any of the following:\n  Element has insufficient color contrast of 3.84 (foreground color: #cfd3cb, background color: #59695c, font size: 14.0pt (18.72px), font weight: normal). Expected contrast ratio of 4.5:1"
+        },
+        {
+          "alvo": [
+            ".al-local-trajeto > div:nth-child(2) > .al-nota"
+          ],
+          "detalhe": "Fix any of the following:\n  Element has insufficient color contrast of 3.18 (foreground color: #c4bfb6, background color: #59695c, font size: 12.0pt (16px), font weight: normal). Expected contrast ratio of 4.5:1"
+        },
+        {
+          "alvo": [
+            "div[data-midia=\"M08\"] > span"
+          ],
+          "detalhe": "Fix any of the following:\n  Element has insufficient color contrast of 4.3 (foreground color: #e9e6df, background color: #616e62, font size: 12.8pt (17px), font weight: normal). Expected contrast ratio of 4.5:1"
+        },
+        {
+          "alvo": [
+            "div[data-midia=\"M08\"] > small"
+          ],
+          "detalhe": "Fix any of the following:\n  Element has insufficient color contrast of 4.3 (foreground color: #e9e6df, background color: #616e62, font size: 12.0pt (16px), font weight: normal). Expected contrast ratio of 4.5:1"
+        }
+      ]
+    }
+  ]
+}

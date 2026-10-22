@@ -21,8 +21,8 @@ export async function POST(req: Request) {
 
   const erros: Record<string, string> = {};
   if (nome.length < 2) erros.nome = "Escreva seu nome para sabermos com quem falar.";
-  if (!telefone) erros.whatsapp = "Confira o número, com DDD ou código do país.";
-  if (c.consentimento !== true) erros.consentimento = "Precisamos do seu aceite para entrar em contato.";
+  if (!telefone) erros.whatsapp = "Confira o DDD e o número. Para outro país, informe também + e o código do país.";
+  if (c.consentimento !== true) erros.consentimento = "Precisamos do seu aceite para entrar em contato sobre este assunto.";
   if (!FORMULARIOS.has(formulario)) erros.formulario = "Formulário desconhecido.";
   if (Object.keys(erros).length) return NextResponse.json({ erros }, { status: 422 });
 

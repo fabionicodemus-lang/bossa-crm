@@ -1,0 +1,656 @@
+{
+  "data": "2026-10-22T00:42:19.338Z",
+  "base": "http://localhost:3200",
+  "modo": "Chromium local; emulação móvel por viewport CSS, sem aparelho físico ou teclado virtual",
+  "r01": [
+    {
+      "origem": "página geral",
+      "padrao": "título geral preservado antes de ação",
+      "selecionada": "103",
+      "titulo": "Alma Sea Houses: 103 m², 3 suítes | Bossa",
+      "scrollPreservado": true,
+      "formularioPreservado": true,
+      "expansaoPreservada": true
+    },
+    {
+      "origem": "tipo-02",
+      "via": "seletor",
+      "opcao": "tipo-02",
+      "titulo": "Alma Sea Houses: 103 m², 3 suítes | Bossa",
+      "url": "/empreendimentos/alma-seahouses/plantas/tipo-02",
+      "formularioPreservado": true,
+      "expansaoPreservada": true
+    },
+    {
+      "origem": "tipo-02",
+      "via": "seletor",
+      "opcao": "tipo-01",
+      "titulo": "Alma Sea Houses: 114 m², 3 suítes | Bossa",
+      "url": "/empreendimentos/alma-seahouses/plantas/tipo-01",
+      "formularioPreservado": true,
+      "expansaoPreservada": true
+    },
+    {
+      "origem": "tipo-02",
+      "via": "seletor",
+      "opcao": "duplex-tipo-2",
+      "titulo": "Alma Sea Houses: duplex de 145 m² | Bossa",
+      "url": "/empreendimentos/alma-seahouses/plantas/duplex-tipo-2",
+      "formularioPreservado": true,
+      "expansaoPreservada": true
+    },
+    {
+      "origem": "tipo-02",
+      "via": "seletor",
+      "opcao": "duplex-tipo-1",
+      "titulo": "Alma Sea Houses: duplex de 168 m² | Bossa",
+      "url": "/empreendimentos/alma-seahouses/plantas/duplex-tipo-1",
+      "formularioPreservado": true,
+      "expansaoPreservada": true
+    },
+    {
+      "origem": "tipo-02",
+      "via": "comparação",
+      "opcao": "tipo-02",
+      "titulo": "Alma Sea Houses: 103 m², 3 suítes | Bossa",
+      "url": "/empreendimentos/alma-seahouses/plantas/tipo-02",
+      "formularioPreservado": true,
+      "expansaoPreservada": true
+    },
+    {
+      "origem": "tipo-02",
+      "via": "comparação",
+      "opcao": "tipo-01",
+      "titulo": "Alma Sea Houses: 114 m², 3 suítes | Bossa",
+      "url": "/empreendimentos/alma-seahouses/plantas/tipo-01",
+      "formularioPreservado": true,
+      "expansaoPreservada": true
+    },
+    {
+      "origem": "tipo-02",
+      "via": "comparação",
+      "opcao": "duplex-tipo-2",
+      "titulo": "Alma Sea Houses: duplex de 145 m² | Bossa",
+      "url": "/empreendimentos/alma-seahouses/plantas/duplex-tipo-2",
+      "formularioPreservado": true,
+      "expansaoPreservada": true
+    },
+    {
+      "origem": "tipo-02",
+      "via": "comparação",
+      "opcao": "duplex-tipo-1",
+      "titulo": "Alma Sea Houses: duplex de 168 m² | Bossa",
+      "url": "/empreendimentos/alma-seahouses/plantas/duplex-tipo-1",
+      "formularioPreservado": true,
+      "expansaoPreservada": true
+    },
+    {
+      "origem": "tipo-01",
+      "via": "seletor",
+      "opcao": "tipo-02",
+      "titulo": "Alma Sea Houses: 103 m², 3 suítes | Bossa",
+      "url": "/empreendimentos/alma-seahouses/plantas/tipo-02",
+      "formularioPreservado": true,
+      "expansaoPreservada": true
+    },
+    {
+      "origem": "tipo-01",
+      "via": "seletor",
+      "opcao": "tipo-01",
+      "titulo": "Alma Sea Houses: 114 m², 3 suítes | Bossa",
+      "url": "/empreendimentos/alma-seahouses/plantas/tipo-01",
+      "formularioPreservado": true,
+      "expansaoPreservada": true
+    },
+    {
+      "origem": "tipo-01",
+      "via": "seletor",
+      "opcao": "duplex-tipo-2",
+      "titulo": "Alma Sea Houses: duplex de 145 m² | Bossa",
+      "url": "/empreendimentos/alma-seahouses/plantas/duplex-tipo-2",
+      "formularioPreservado": true,
+      "expansaoPreservada": true
+    },
+    {
+      "origem": "tipo-01",
+      "via": "seletor",
+      "opcao": "duplex-tipo-1",
+      "titulo": "Alma Sea Houses: duplex de 168 m² | Bossa",
+      "url": "/empreendimentos/alma-seahouses/plantas/duplex-tipo-1",
+      "formularioPreservado": true,
+      "expansaoPreservada": true
+    },
+    {
+      "origem": "tipo-01",
+      "via": "comparação",
+      "opcao": "tipo-02",
+      "titulo": "Alma Sea Houses: 103 m², 3 suítes | Bossa",
+      "url": "/empreendimentos/alma-seahouses/plantas/tipo-02",
+      "formularioPreservado": true,
+      "expansaoPreservada": true
+    },
+    {
+      "origem": "tipo-01",
+      "via": "comparação",
+      "opcao": "tipo-01",
+      "titulo": "Alma Sea Houses: 114 m², 3 suítes | Bossa",
+      "url": "/empreendimentos/alma-seahouses/plantas/tipo-01",
+      "formularioPreservado": true,
+      "expansaoPreservada": true
+    },
+    {
+      "origem": "tipo-01",
+      "via": "comparação",
+      "opcao": "duplex-tipo-2",
+      "titulo": "Alma Sea Houses: duplex de 145 m² | Bossa",
+      "url": "/empreendimentos/alma-seahouses/plantas/duplex-tipo-2",
+      "formularioPreservado": true,
+      "expansaoPreservada": true
+    },
+    {
+      "origem": "tipo-01",
+      "via": "comparação",
+      "opcao": "duplex-tipo-1",
+      "titulo": "Alma Sea Houses: duplex de 168 m² | Bossa",
+      "url": "/empreendimentos/alma-seahouses/plantas/duplex-tipo-1",
+      "formularioPreservado": true,
+      "expansaoPreservada": true
+    },
+    {
+      "origem": "duplex-tipo-2",
+      "via": "seletor",
+      "opcao": "tipo-02",
+      "titulo": "Alma Sea Houses: 103 m², 3 suítes | Bossa",
+      "url": "/empreendimentos/alma-seahouses/plantas/tipo-02",
+      "formularioPreservado": true,
+      "expansaoPreservada": true
+    },
+    {
+      "origem": "duplex-tipo-2",
+      "via": "seletor",
+      "opcao": "tipo-01",
+      "titulo": "Alma Sea Houses: 114 m², 3 suítes | Bossa",
+      "url": "/empreendimentos/alma-seahouses/plantas/tipo-01",
+      "formularioPreservado": true,
+      "expansaoPreservada": true
+    },
+    {
+      "origem": "duplex-tipo-2",
+      "via": "seletor",
+      "opcao": "duplex-tipo-2",
+      "titulo": "Alma Sea Houses: duplex de 145 m² | Bossa",
+      "url": "/empreendimentos/alma-seahouses/plantas/duplex-tipo-2",
+      "formularioPreservado": true,
+      "expansaoPreservada": true
+    },
+    {
+      "origem": "duplex-tipo-2",
+      "via": "seletor",
+      "opcao": "duplex-tipo-1",
+      "titulo": "Alma Sea Houses: duplex de 168 m² | Bossa",
+      "url": "/empreendimentos/alma-seahouses/plantas/duplex-tipo-1",
+      "formularioPreservado": true,
+      "expansaoPreservada": true
+    },
+    {
+      "origem": "duplex-tipo-2",
+      "via": "comparação",
+      "opcao": "tipo-02",
+      "titulo": "Alma Sea Houses: 103 m², 3 suítes | Bossa",
+      "url": "/empreendimentos/alma-seahouses/plantas/tipo-02",
+      "formularioPreservado": true,
+      "expansaoPreservada": true
+    },
+    {
+      "origem": "duplex-tipo-2",
+      "via": "comparação",
+      "opcao": "tipo-01",
+      "titulo": "Alma Sea Houses: 114 m², 3 suítes | Bossa",
+      "url": "/empreendimentos/alma-seahouses/plantas/tipo-01",
+      "formularioPreservado": true,
+      "expansaoPreservada": true
+    },
+    {
+      "origem": "duplex-tipo-2",
+      "via": "comparação",
+      "opcao": "duplex-tipo-2",
+      "titulo": "Alma Sea Houses: duplex de 145 m² | Bossa",
+      "url": "/empreendimentos/alma-seahouses/plantas/duplex-tipo-2",
+      "formularioPreservado": true,
+      "expansaoPreservada": true
+    },
+    {
+      "origem": "duplex-tipo-2",
+      "via": "comparação",
+      "opcao": "duplex-tipo-1",
+      "titulo": "Alma Sea Houses: duplex de 168 m² | Bossa",
+      "url": "/empreendimentos/alma-seahouses/plantas/duplex-tipo-1",
+      "formularioPreservado": true,
+      "expansaoPreservada": true
+    },
+    {
+      "origem": "duplex-tipo-1",
+      "via": "seletor",
+      "opcao": "tipo-02",
+      "titulo": "Alma Sea Houses: 103 m², 3 suítes | Bossa",
+      "url": "/empreendimentos/alma-seahouses/plantas/tipo-02",
+      "formularioPreservado": true,
+      "expansaoPreservada": true
+    },
+    {
+      "origem": "duplex-tipo-1",
+      "via": "seletor",
+      "opcao": "tipo-01",
+      "titulo": "Alma Sea Houses: 114 m², 3 suítes | Bossa",
+      "url": "/empreendimentos/alma-seahouses/plantas/tipo-01",
+      "formularioPreservado": true,
+      "expansaoPreservada": true
+    },
+    {
+      "origem": "duplex-tipo-1",
+      "via": "seletor",
+      "opcao": "duplex-tipo-2",
+      "titulo": "Alma Sea Houses: duplex de 145 m² | Bossa",
+      "url": "/empreendimentos/alma-seahouses/plantas/duplex-tipo-2",
+      "formularioPreservado": true,
+      "expansaoPreservada": true
+    },
+    {
+      "origem": "duplex-tipo-1",
+      "via": "seletor",
+      "opcao": "duplex-tipo-1",
+      "titulo": "Alma Sea Houses: duplex de 168 m² | Bossa",
+      "url": "/empreendimentos/alma-seahouses/plantas/duplex-tipo-1",
+      "formularioPreservado": true,
+      "expansaoPreservada": true
+    },
+    {
+      "origem": "duplex-tipo-1",
+      "via": "comparação",
+      "opcao": "tipo-02",
+      "titulo": "Alma Sea Houses: 103 m², 3 suítes | Bossa",
+      "url": "/empreendimentos/alma-seahouses/plantas/tipo-02",
+      "formularioPreservado": true,
+      "expansaoPreservada": true
+    },
+    {
+      "origem": "duplex-tipo-1",
+      "via": "comparação",
+      "opcao": "tipo-01",
+      "titulo": "Alma Sea Houses: 114 m², 3 suítes | Bossa",
+      "url": "/empreendimentos/alma-seahouses/plantas/tipo-01",
+      "formularioPreservado": true,
+      "expansaoPreservada": true
+    },
+    {
+      "origem": "duplex-tipo-1",
+      "via": "comparação",
+      "opcao": "duplex-tipo-2",
+      "titulo": "Alma Sea Houses: duplex de 145 m² | Bossa",
+      "url": "/empreendimentos/alma-seahouses/plantas/duplex-tipo-2",
+      "formularioPreservado": true,
+      "expansaoPreservada": true
+    },
+    {
+      "origem": "duplex-tipo-1",
+      "via": "comparação",
+      "opcao": "duplex-tipo-1",
+      "titulo": "Alma Sea Houses: duplex de 168 m² | Bossa",
+      "url": "/empreendimentos/alma-seahouses/plantas/duplex-tipo-1",
+      "formularioPreservado": true,
+      "expansaoPreservada": true
+    }
+  ],
+  "r02": [
+    {
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "recolhida": {
+        "largura": 616,
+        "altura": 96.890625,
+        "controle": 48.890625,
+        "vazio": 48,
+        "paddingTop": "24px",
+        "paddingBottom": "24px",
+        "alignSelf": "start"
+      },
+      "expandida": {
+        "largura": 616,
+        "altura": 727.921875,
+        "controle": 48.890625,
+        "vazio": 679.03125,
+        "paddingTop": "24px",
+        "paddingBottom": "24px",
+        "alignSelf": "start"
+      },
+      "crescimentoNatural": true,
+      "foco": "interesse-nome"
+    },
+    {
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "recolhida": {
+        "largura": 358,
+        "altura": 96.890625,
+        "controle": 48.890625,
+        "vazio": 48,
+        "paddingTop": "24px",
+        "paddingBottom": "24px",
+        "alignSelf": "start"
+      },
+      "expandida": {
+        "largura": 358,
+        "altura": 796.5,
+        "controle": 48.890625,
+        "vazio": 747.609375,
+        "paddingTop": "24px",
+        "paddingBottom": "24px",
+        "alignSelf": "start"
+      },
+      "crescimentoNatural": true,
+      "foco": "interesse-nome"
+    },
+    {
+      "viewport": {
+        "width": 320,
+        "height": 844
+      },
+      "recolhida": {
+        "largura": 288,
+        "altura": 96.890625,
+        "controle": 48.890625,
+        "vazio": 48,
+        "paddingTop": "24px",
+        "paddingBottom": "24px",
+        "alignSelf": "start"
+      },
+      "expandida": {
+        "largura": 288,
+        "altura": 898.0625,
+        "controle": 48.890625,
+        "vazio": 849.171875,
+        "paddingTop": "24px",
+        "paddingBottom": "24px",
+        "alignSelf": "start"
+      },
+      "crescimentoNatural": true,
+      "foco": "interesse-nome"
+    }
+  ],
+  "mobile": [
+    {
+      "secao": "inicio",
+      "innerWidth": 390,
+      "innerHeight": 844,
+      "clientWidth": 390,
+      "scrollWidth": 390
+    },
+    {
+      "secao": "apartamentos",
+      "innerWidth": 390,
+      "innerHeight": 844,
+      "clientWidth": 390,
+      "scrollWidth": 390
+    },
+    {
+      "secao": "plantas",
+      "innerWidth": 390,
+      "innerHeight": 844,
+      "clientWidth": 390,
+      "scrollWidth": 390
+    },
+    {
+      "secao": "posicao",
+      "innerWidth": 390,
+      "innerHeight": 844,
+      "clientWidth": 390,
+      "scrollWidth": 390
+    },
+    {
+      "secao": "lazer",
+      "innerWidth": 390,
+      "innerHeight": 844,
+      "clientWidth": 390,
+      "scrollWidth": 390
+    },
+    {
+      "secao": "localizacao",
+      "innerWidth": 390,
+      "innerHeight": 844,
+      "clientWidth": 390,
+      "scrollWidth": 390
+    },
+    {
+      "secao": "conforto",
+      "innerWidth": 390,
+      "innerHeight": 844,
+      "clientWidth": 390,
+      "scrollWidth": 390
+    },
+    {
+      "secao": "obra",
+      "innerWidth": 390,
+      "innerHeight": 844,
+      "clientWidth": 390,
+      "scrollWidth": 390
+    },
+    {
+      "secao": "duvidas",
+      "innerWidth": 390,
+      "innerHeight": 844,
+      "clientWidth": 390,
+      "scrollWidth": 390
+    },
+    {
+      "secao": "contato",
+      "innerWidth": 390,
+      "innerHeight": 844,
+      "clientWidth": 390,
+      "scrollWidth": 390
+    },
+    {
+      "secao": "inicio",
+      "innerWidth": 320,
+      "innerHeight": 844,
+      "clientWidth": 320,
+      "scrollWidth": 320
+    },
+    {
+      "secao": "apartamentos",
+      "innerWidth": 320,
+      "innerHeight": 844,
+      "clientWidth": 320,
+      "scrollWidth": 320
+    },
+    {
+      "secao": "plantas",
+      "innerWidth": 320,
+      "innerHeight": 844,
+      "clientWidth": 320,
+      "scrollWidth": 320
+    },
+    {
+      "secao": "posicao",
+      "innerWidth": 320,
+      "innerHeight": 844,
+      "clientWidth": 320,
+      "scrollWidth": 320
+    },
+    {
+      "secao": "lazer",
+      "innerWidth": 320,
+      "innerHeight": 844,
+      "clientWidth": 320,
+      "scrollWidth": 320
+    },
+    {
+      "secao": "localizacao",
+      "innerWidth": 320,
+      "innerHeight": 844,
+      "clientWidth": 320,
+      "scrollWidth": 320
+    },
+    {
+      "secao": "conforto",
+      "innerWidth": 320,
+      "innerHeight": 844,
+      "clientWidth": 320,
+      "scrollWidth": 320
+    },
+    {
+      "secao": "obra",
+      "innerWidth": 320,
+      "innerHeight": 844,
+      "clientWidth": 320,
+      "scrollWidth": 320
+    },
+    {
+      "secao": "duvidas",
+      "innerWidth": 320,
+      "innerHeight": 844,
+      "clientWidth": 320,
+      "scrollWidth": 320
+    },
+    {
+      "secao": "contato",
+      "innerWidth": 320,
+      "innerHeight": 844,
+      "clientWidth": 320,
+      "scrollWidth": 320
+    }
+  ],
+  "barra": [
+    {
+      "width": 390,
+      "estado": "abertura",
+      "visivel": false
+    },
+    {
+      "width": 390,
+      "estado": "após abertura",
+      "visivel": true
+    },
+    {
+      "width": 390,
+      "estado": "menu aberto",
+      "visivel": false
+    },
+    {
+      "width": 390,
+      "estado": "após troca para 168",
+      "contexto": "168 m²"
+    },
+    {
+      "width": 390,
+      "estado": "modal aberto",
+      "visivel": false
+    },
+    {
+      "width": 390,
+      "estado": "contato visível",
+      "visivel": false
+    },
+    {
+      "width": 390,
+      "estado": "campo focado (sem teclado virtual)",
+      "visivel": false
+    },
+    {
+      "width": 320,
+      "estado": "abertura",
+      "visivel": false
+    },
+    {
+      "width": 320,
+      "estado": "após abertura",
+      "visivel": true
+    },
+    {
+      "width": 320,
+      "estado": "menu aberto",
+      "visivel": false
+    },
+    {
+      "width": 320,
+      "estado": "após troca para 168",
+      "contexto": "168 m²"
+    },
+    {
+      "width": 320,
+      "estado": "modal aberto",
+      "visivel": false
+    },
+    {
+      "width": 320,
+      "estado": "contato visível",
+      "visivel": false
+    },
+    {
+      "width": 320,
+      "estado": "campo focado (sem teclado virtual)",
+      "visivel": false
+    }
+  ],
+  "formulario": [
+    {
+      "http": 200,
+      "ok": true,
+      "gravado": false,
+      "rede": false,
+      "estado": "falha recuperável, dados preservados"
+    },
+    {
+      "http": 500,
+      "ok": false,
+      "rede": false,
+      "estado": "falha recuperável, dados preservados"
+    },
+    {
+      "http": 200,
+      "ok": true,
+      "rede": false,
+      "estado": "falha recuperável, dados preservados"
+    },
+    {
+      "http": 200,
+      "ok": false,
+      "gravado": true,
+      "rede": false,
+      "estado": "falha recuperável, dados preservados"
+    },
+    {
+      "http": 200,
+      "ok": true,
+      "gravado": false,
+      "rede": true,
+      "estado": "falha recuperável, dados preservados"
+    },
+    {
+      "http": 200,
+      "ok": true,
+      "gravado": true,
+      "estado": "sucesso controlado"
+    }
+  ],
+  "compartilhamento": {
+    "copiaReal": "http://localhost:3200/empreendimentos/alma-seahouses/plantas/tipo-01#plantas",
+    "sucesso": "simulação navigator.share",
+    "cancelamento": "simulação navigator.share",
+    "falha": "simulação navigator.share"
+  },
+  "erros": [],
+  "r01Eventos": {
+    "novaEntrada": false,
+    "exposicoes": [
+      "tipo-02",
+      "tipo-01"
+    ]
+  },
+  "flow": "Seletor 73 m², layout independente e formulário com confirmação simulada",
+  "enviosInterceptados": 7,
+  "browser": "154.0.8037.57"
+}

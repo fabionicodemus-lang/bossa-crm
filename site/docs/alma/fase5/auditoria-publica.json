@@ -1,0 +1,957 @@
+{
+  "data": "2026-10-22T01:12:10.301Z",
+  "base": "http://localhost:3200",
+  "publica": true,
+  "modo": "Chromium local; viewports CSS; sem aparelho físico, rede móvel ou teclado virtual",
+  "acessibilidade": [
+    {
+      "estado": "1440-pagina",
+      "violacoes": [],
+      "revisaoManual": [
+        {
+          "id": "color-contrast",
+          "quantidade": 120
+        }
+      ],
+      "regrasAprovadas": 27
+    },
+    {
+      "estado": "1440-formulario",
+      "violacoes": [],
+      "revisaoManual": [
+        {
+          "id": "color-contrast",
+          "quantidade": 133
+        }
+      ],
+      "regrasAprovadas": 32
+    },
+    {
+      "estado": "390-formulario",
+      "violacoes": [],
+      "revisaoManual": [
+        {
+          "id": "color-contrast",
+          "quantidade": 134
+        }
+      ],
+      "regrasAprovadas": 31
+    },
+    {
+      "estado": "320-formulario",
+      "violacoes": [],
+      "revisaoManual": [
+        {
+          "id": "color-contrast",
+          "quantidade": 133
+        }
+      ],
+      "regrasAprovadas": 31
+    },
+    {
+      "estado": "320-erros-formulario",
+      "violacoes": [],
+      "revisaoManual": [
+        {
+          "id": "color-contrast",
+          "quantidade": 136
+        }
+      ],
+      "regrasAprovadas": 31
+    },
+    {
+      "estado": "comparacao",
+      "violacoes": [],
+      "revisaoManual": [
+        {
+          "id": "color-contrast",
+          "quantidade": 188
+        }
+      ],
+      "regrasAprovadas": 32
+    },
+    {
+      "estado": "modal",
+      "violacoes": [],
+      "revisaoManual": [
+        {
+          "id": "aria-prohibited-attr",
+          "quantidade": 2
+        },
+        {
+          "id": "color-contrast",
+          "quantidade": 6
+        }
+      ],
+      "regrasAprovadas": 13
+    }
+  ],
+  "secoes": [
+    {
+      "id": "inicio",
+      "innerWidth": 1440,
+      "innerHeight": 1000,
+      "scrollWidth": 1440
+    },
+    {
+      "id": "apartamentos",
+      "innerWidth": 1440,
+      "innerHeight": 1000,
+      "scrollWidth": 1440
+    },
+    {
+      "id": "plantas",
+      "innerWidth": 1440,
+      "innerHeight": 1000,
+      "scrollWidth": 1440
+    },
+    {
+      "id": "posicao",
+      "innerWidth": 1440,
+      "innerHeight": 1000,
+      "scrollWidth": 1440
+    },
+    {
+      "id": "lazer",
+      "innerWidth": 1440,
+      "innerHeight": 1000,
+      "scrollWidth": 1440
+    },
+    {
+      "id": "localizacao",
+      "innerWidth": 1440,
+      "innerHeight": 1000,
+      "scrollWidth": 1440
+    },
+    {
+      "id": "conforto",
+      "innerWidth": 1440,
+      "innerHeight": 1000,
+      "scrollWidth": 1440
+    },
+    {
+      "id": "obra",
+      "innerWidth": 1440,
+      "innerHeight": 1000,
+      "scrollWidth": 1440
+    },
+    {
+      "id": "duvidas",
+      "innerWidth": 1440,
+      "innerHeight": 1000,
+      "scrollWidth": 1440
+    },
+    {
+      "id": "contato",
+      "innerWidth": 1440,
+      "innerHeight": 1000,
+      "scrollWidth": 1440
+    },
+    {
+      "id": "inicio",
+      "innerWidth": 390,
+      "innerHeight": 844,
+      "scrollWidth": 390
+    },
+    {
+      "id": "apartamentos",
+      "innerWidth": 390,
+      "innerHeight": 844,
+      "scrollWidth": 390
+    },
+    {
+      "id": "plantas",
+      "innerWidth": 390,
+      "innerHeight": 844,
+      "scrollWidth": 390
+    },
+    {
+      "id": "posicao",
+      "innerWidth": 390,
+      "innerHeight": 844,
+      "scrollWidth": 390
+    },
+    {
+      "id": "lazer",
+      "innerWidth": 390,
+      "innerHeight": 844,
+      "scrollWidth": 390
+    },
+    {
+      "id": "localizacao",
+      "innerWidth": 390,
+      "innerHeight": 844,
+      "scrollWidth": 390
+    },
+    {
+      "id": "conforto",
+      "innerWidth": 390,
+      "innerHeight": 844,
+      "scrollWidth": 390
+    },
+    {
+      "id": "obra",
+      "innerWidth": 390,
+      "innerHeight": 844,
+      "scrollWidth": 390
+    },
+    {
+      "id": "duvidas",
+      "innerWidth": 390,
+      "innerHeight": 844,
+      "scrollWidth": 390
+    },
+    {
+      "id": "contato",
+      "innerWidth": 390,
+      "innerHeight": 844,
+      "scrollWidth": 390
+    },
+    {
+      "id": "inicio",
+      "innerWidth": 320,
+      "innerHeight": 844,
+      "scrollWidth": 320
+    },
+    {
+      "id": "apartamentos",
+      "innerWidth": 320,
+      "innerHeight": 844,
+      "scrollWidth": 320
+    },
+    {
+      "id": "plantas",
+      "innerWidth": 320,
+      "innerHeight": 844,
+      "scrollWidth": 320
+    },
+    {
+      "id": "posicao",
+      "innerWidth": 320,
+      "innerHeight": 844,
+      "scrollWidth": 320
+    },
+    {
+      "id": "lazer",
+      "innerWidth": 320,
+      "innerHeight": 844,
+      "scrollWidth": 320
+    },
+    {
+      "id": "localizacao",
+      "innerWidth": 320,
+      "innerHeight": 844,
+      "scrollWidth": 320
+    },
+    {
+      "id": "conforto",
+      "innerWidth": 320,
+      "innerHeight": 844,
+      "scrollWidth": 320
+    },
+    {
+      "id": "obra",
+      "innerWidth": 320,
+      "innerHeight": 844,
+      "scrollWidth": 320
+    },
+    {
+      "id": "duvidas",
+      "innerWidth": 320,
+      "innerHeight": 844,
+      "scrollWidth": 320
+    },
+    {
+      "id": "contato",
+      "innerWidth": 320,
+      "innerHeight": 844,
+      "scrollWidth": 320
+    }
+  ],
+  "links": [
+    {
+      "href": "/",
+      "status": 200
+    },
+    {
+      "href": "/empreendimentos",
+      "status": 200
+    },
+    {
+      "href": "/jeito-bossa",
+      "status": 200
+    },
+    {
+      "href": "/nossa-historia",
+      "status": 200
+    },
+    {
+      "href": "/obras",
+      "status": 200
+    },
+    {
+      "href": "/contato",
+      "status": 200
+    },
+    {
+      "href": "/perguntas",
+      "status": 200
+    },
+    {
+      "href": "/empreendimentos/jazz-residence",
+      "status": 200
+    },
+    {
+      "href": "/empreendimentos/soul-residence",
+      "status": 200
+    },
+    {
+      "href": "/obras/alma-seahouses/2026-08",
+      "status": 200
+    },
+    {
+      "href": "/privacidade",
+      "status": 200
+    },
+    {
+      "href": "/empreendimentos/alma-seahouses",
+      "status": 200
+    },
+    {
+      "href": "/empreendimentos/flow-aptos",
+      "status": 200
+    },
+    {
+      "href": "/porto-belo",
+      "status": 200
+    },
+    {
+      "href": "/corretores",
+      "status": 200
+    },
+    {
+      "href": "/comprar-morando-fora",
+      "status": 200
+    }
+  ],
+  "erros": [],
+  "navegador": "154.0.8037.57",
+  "inicial": {
+    "viewport": {
+      "width": 1440,
+      "height": 1000,
+      "dpr": 1
+    },
+    "cls": 0.014832573845003857,
+    "lcp": 376,
+    "navegacao": [
+      {
+        "ttfb": 50.19999999925494,
+        "domContentLoaded": 315.80000000074506
+      }
+    ],
+    "recursos": [
+      {
+        "url": "/_next/image",
+        "tipo": "link",
+        "bytes": 1411,
+        "duracao": 154.40000000037253
+      },
+      {
+        "url": "/_next/image",
+        "tipo": "link",
+        "bytes": 3140,
+        "duracao": 154.7999999988824
+      },
+      {
+        "url": "/_next/static/chunks/2wb49d70ex4os.css",
+        "tipo": "link",
+        "bytes": 6605,
+        "duracao": 63.79999999888241
+      },
+      {
+        "url": "/_next/static/chunks/0fp4k_o3n6f03.css",
+        "tipo": "link",
+        "bytes": 9558,
+        "duracao": 66.70000000111759
+      },
+      {
+        "url": "/_next/static/chunks/1kexj4s7oxhs2.js",
+        "tipo": "link",
+        "bytes": 2655,
+        "duracao": 73.40000000037253
+      },
+      {
+        "url": "/_next/static/chunks/2r4s4h5xul1n-.js",
+        "tipo": "script",
+        "bytes": 7924,
+        "duracao": 77.90000000037253
+      },
+      {
+        "url": "/_next/static/chunks/0psvc2-xx4oyr.js",
+        "tipo": "script",
+        "bytes": 71936,
+        "duracao": 96.10000000149012
+      },
+      {
+        "url": "/_next/static/chunks/2e268anpfvdoc.js",
+        "tipo": "script",
+        "bytes": 46667,
+        "duracao": 94.19999999925494
+      },
+      {
+        "url": "/_next/static/chunks/turbopack-3-ry682tkyiqk.js",
+        "tipo": "script",
+        "bytes": 4240,
+        "duracao": 86.90000000037253
+      },
+      {
+        "url": "/_next/static/chunks/1xbj079srx5p_.js",
+        "tipo": "script",
+        "bytes": 9730,
+        "duracao": 88.90000000037253
+      },
+      {
+        "url": "/_next/static/chunks/1tz8v6r8xwrl1.js",
+        "tipo": "script",
+        "bytes": 2820,
+        "duracao": 98.30000000074506
+      },
+      {
+        "url": "/_next/static/chunks/3j6vwfmstl105.js",
+        "tipo": "script",
+        "bytes": 8910,
+        "duracao": 98.80000000074506
+      },
+      {
+        "url": "/img/alma/poster-piscina.jpg",
+        "tipo": "video",
+        "bytes": 374065,
+        "duracao": 73.59999999962747
+      },
+      {
+        "url": "/_next/static/chunks/1k1vzk47thz0n.js",
+        "tipo": "script",
+        "bytes": 18328,
+        "duracao": 104.70000000111759
+      },
+      {
+        "url": "/_next/static/media/urbanist-latin-wght-normal.1w7lmqb1yqvf6.woff2",
+        "tipo": "css",
+        "bytes": 28052,
+        "duracao": 148
+      },
+      {
+        "url": "/_next/static/media/literata-latin-wght-normal.3mrjy5df0dr0p.woff2",
+        "tipo": "css",
+        "bytes": 52796,
+        "duracao": 117.79999999888241
+      },
+      {
+        "url": "/_next/static/media/geist-latin-wght-normal.20f3xrkj613ah.woff2",
+        "tipo": "css",
+        "bytes": 29700,
+        "duracao": 100.59999999962747
+      },
+      {
+        "url": "/_next/static/media/ephesis-latin-400-normal.0c0gs1rxme3iq.woff2",
+        "tipo": "css",
+        "bytes": 32024,
+        "duracao": 100.40000000037253
+      },
+      {
+        "url": "/_next/image",
+        "tipo": "img",
+        "bytes": 10763,
+        "duracao": 23.40000000037253
+      },
+      {
+        "url": "/_next/image",
+        "tipo": "img",
+        "bytes": 9281,
+        "duracao": 33.40000000037253
+      },
+      {
+        "url": "/_next/image",
+        "tipo": "img",
+        "bytes": 14581,
+        "duracao": 35.40000000037253
+      },
+      {
+        "url": "/icon.png",
+        "tipo": "other",
+        "bytes": 27936,
+        "duracao": 4.899999998509884
+      },
+      {
+        "url": "/api/eventos",
+        "tipo": "beacon",
+        "bytes": 327,
+        "duracao": 20.5
+      },
+      {
+        "url": "/",
+        "tipo": "fetch",
+        "bytes": 471,
+        "duracao": 38.70000000111759
+      },
+      {
+        "url": "/empreendimentos",
+        "tipo": "fetch",
+        "bytes": 495,
+        "duracao": 37.70000000111759
+      },
+      {
+        "url": "/jeito-bossa",
+        "tipo": "fetch",
+        "bytes": 493,
+        "duracao": 37.19999999925494
+      },
+      {
+        "url": "/nossa-historia",
+        "tipo": "fetch",
+        "bytes": 494,
+        "duracao": 34
+      },
+      {
+        "url": "/obras",
+        "tipo": "fetch",
+        "bytes": 487,
+        "duracao": 25.40000000037253
+      },
+      {
+        "url": "/contato",
+        "tipo": "fetch",
+        "bytes": 489,
+        "duracao": 25.09999999962747
+      },
+      {
+        "url": "/empreendimentos",
+        "tipo": "fetch",
+        "bytes": 3539,
+        "duracao": 15.200000001117587
+      },
+      {
+        "url": "/",
+        "tipo": "fetch",
+        "bytes": 5880,
+        "duracao": 14.699999999254942
+      },
+      {
+        "url": "/jeito-bossa",
+        "tipo": "fetch",
+        "bytes": 4726,
+        "duracao": 14.599999999627471
+      },
+      {
+        "url": "/_next/static/chunks/236fkz8ee7-v-.js",
+        "tipo": "script",
+        "bytes": 856,
+        "duracao": 17.799999998882413
+      },
+      {
+        "url": "/nossa-historia",
+        "tipo": "fetch",
+        "bytes": 4223,
+        "duracao": 16.200000001117587
+      },
+      {
+        "url": "/obras",
+        "tipo": "fetch",
+        "bytes": 4512,
+        "duracao": 16.100000001490116
+      },
+      {
+        "url": "/contato",
+        "tipo": "fetch",
+        "bytes": 3518,
+        "duracao": 13.400000000372529
+      },
+      {
+        "url": "/_next/static/chunks/1avt8etbxspqw.js",
+        "tipo": "script",
+        "bytes": 2532,
+        "duracao": 3.700000001117587
+      },
+      {
+        "url": "/api/eventos",
+        "tipo": "beacon",
+        "bytes": 327,
+        "duracao": 3.900000000372529
+      }
+    ],
+    "imagens": [
+      {
+        "src": "http://localhost:3200/_next/image?url=%2Fimg%2Fbossa-logo-preto.png&w=64&q=70",
+        "loading": "auto",
+        "width": 64,
+        "height": 36,
+        "carregada": true
+      },
+      {
+        "src": "http://localhost:3200/_next/image?url=%2Fimg%2Falma%2Flogo-claro.png&w=256&q=70",
+        "loading": "auto",
+        "width": 170,
+        "height": 61,
+        "carregada": true
+      },
+      {
+        "src": "http://localhost:3200/_next/image?url=%2Fimg%2Falma%2Fliving.jpg&w=750&q=70",
+        "loading": "lazy",
+        "width": 720,
+        "height": 423,
+        "carregada": true
+      },
+      {
+        "src": "http://localhost:3200/_next/image?url=%2Fimg%2Falma%2Fsuite-master.jpg&w=750&q=70",
+        "loading": "lazy",
+        "width": 720,
+        "height": 360,
+        "carregada": true
+      },
+      {
+        "src": "http://localhost:3200/_next/image?url=%2Fimg%2Falma%2Fduplex.jpg&w=750&q=70",
+        "loading": "lazy",
+        "width": 720,
+        "height": 600,
+        "carregada": true
+      },
+      {
+        "src": "",
+        "loading": "lazy",
+        "width": 0,
+        "height": 0,
+        "carregada": false
+      },
+      {
+        "src": "",
+        "loading": "lazy",
+        "width": 0,
+        "height": 0,
+        "carregada": false
+      },
+      {
+        "src": "",
+        "loading": "lazy",
+        "width": 0,
+        "height": 0,
+        "carregada": false
+      },
+      {
+        "src": "",
+        "loading": "lazy",
+        "width": 0,
+        "height": 0,
+        "carregada": false
+      },
+      {
+        "src": "",
+        "loading": "lazy",
+        "width": 0,
+        "height": 0,
+        "carregada": false
+      },
+      {
+        "src": "",
+        "loading": "lazy",
+        "width": 0,
+        "height": 0,
+        "carregada": false
+      },
+      {
+        "src": "",
+        "loading": "lazy",
+        "width": 0,
+        "height": 0,
+        "carregada": false
+      },
+      {
+        "src": "",
+        "loading": "lazy",
+        "width": 0,
+        "height": 0,
+        "carregada": false
+      },
+      {
+        "src": "",
+        "loading": "lazy",
+        "width": 0,
+        "height": 0,
+        "carregada": false
+      },
+      {
+        "src": "",
+        "loading": "lazy",
+        "width": 0,
+        "height": 0,
+        "carregada": false
+      },
+      {
+        "src": "",
+        "loading": "lazy",
+        "width": 0,
+        "height": 0,
+        "carregada": false
+      },
+      {
+        "src": "",
+        "loading": "lazy",
+        "width": 0,
+        "height": 0,
+        "carregada": false
+      },
+      {
+        "src": "",
+        "loading": "lazy",
+        "width": 0,
+        "height": 0,
+        "carregada": false
+      },
+      {
+        "src": "",
+        "loading": "lazy",
+        "width": 0,
+        "height": 0,
+        "carregada": false
+      },
+      {
+        "src": "",
+        "loading": "lazy",
+        "width": 0,
+        "height": 0,
+        "carregada": false
+      },
+      {
+        "src": "",
+        "loading": "lazy",
+        "width": 0,
+        "height": 0,
+        "carregada": false
+      },
+      {
+        "src": "",
+        "loading": "lazy",
+        "width": 0,
+        "height": 0,
+        "carregada": false
+      },
+      {
+        "src": "",
+        "loading": "lazy",
+        "width": 0,
+        "height": 0,
+        "carregada": false
+      },
+      {
+        "src": "",
+        "loading": "lazy",
+        "width": 0,
+        "height": 0,
+        "carregada": false
+      },
+      {
+        "src": "",
+        "loading": "lazy",
+        "width": 0,
+        "height": 0,
+        "carregada": false
+      },
+      {
+        "src": "",
+        "loading": "lazy",
+        "width": 0,
+        "height": 0,
+        "carregada": false
+      },
+      {
+        "src": "",
+        "loading": "lazy",
+        "width": 0,
+        "height": 0,
+        "carregada": false
+      },
+      {
+        "src": "",
+        "loading": "lazy",
+        "width": 0,
+        "height": 0,
+        "carregada": false
+      },
+      {
+        "src": "",
+        "loading": "lazy",
+        "width": 0,
+        "height": 0,
+        "carregada": false
+      }
+    ],
+    "movimentoReduzido": true,
+    "videoAberturaPausado": true,
+    "robots": "index, follow",
+    "canonical": "https://www.bossaempreendimentos.com.br/empreendimentos/alma-seahouses"
+  },
+  "skipLink": {
+    "fragmento": "#conteudo",
+    "focoSeguinte": "dentro do conteúdo"
+  },
+  "videoTrajeto": {
+    "currentTime": 0.667044,
+    "paused": false,
+    "readyState": 4,
+    "width": 540,
+    "height": 960,
+    "duration": 64.208333,
+    "erro": null
+  },
+  "carregamentoMovimentoNormal": {
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "cls": 0.052779938119089875,
+    "lcp": 240,
+    "video": {
+      "tempo": 2.091948,
+      "pausado": false
+    },
+    "recursos": [
+      {
+        "url": "/_next/image",
+        "tipo": "link",
+        "bytes": 1411
+      },
+      {
+        "url": "/_next/image",
+        "tipo": "link",
+        "bytes": 3140
+      },
+      {
+        "url": "/_next/static/chunks/2wb49d70ex4os.css",
+        "tipo": "link",
+        "bytes": 6605
+      },
+      {
+        "url": "/_next/static/chunks/0fp4k_o3n6f03.css",
+        "tipo": "link",
+        "bytes": 9558
+      },
+      {
+        "url": "/_next/static/chunks/1kexj4s7oxhs2.js",
+        "tipo": "link",
+        "bytes": 2655
+      },
+      {
+        "url": "/_next/static/chunks/2r4s4h5xul1n-.js",
+        "tipo": "script",
+        "bytes": 7924
+      },
+      {
+        "url": "/_next/static/chunks/0psvc2-xx4oyr.js",
+        "tipo": "script",
+        "bytes": 71936
+      },
+      {
+        "url": "/_next/static/chunks/2e268anpfvdoc.js",
+        "tipo": "script",
+        "bytes": 46667
+      },
+      {
+        "url": "/_next/static/chunks/turbopack-3-ry682tkyiqk.js",
+        "tipo": "script",
+        "bytes": 4240
+      },
+      {
+        "url": "/_next/static/chunks/1xbj079srx5p_.js",
+        "tipo": "script",
+        "bytes": 9730
+      },
+      {
+        "url": "/_next/static/chunks/3j6vwfmstl105.js",
+        "tipo": "script",
+        "bytes": 8910
+      },
+      {
+        "url": "/_next/static/chunks/1tz8v6r8xwrl1.js",
+        "tipo": "script",
+        "bytes": 2820
+      },
+      {
+        "url": "/_next/static/chunks/1k1vzk47thz0n.js",
+        "tipo": "script",
+        "bytes": 18328
+      },
+      {
+        "url": "/img/alma/poster-piscina.jpg",
+        "tipo": "video",
+        "bytes": 374065
+      },
+      {
+        "url": "/_next/static/media/urbanist-latin-wght-normal.1w7lmqb1yqvf6.woff2",
+        "tipo": "css",
+        "bytes": 28052
+      },
+      {
+        "url": "/_next/static/media/literata-latin-wght-normal.3mrjy5df0dr0p.woff2",
+        "tipo": "css",
+        "bytes": 52796
+      },
+      {
+        "url": "/_next/static/media/geist-latin-wght-normal.20f3xrkj613ah.woff2",
+        "tipo": "css",
+        "bytes": 29700
+      },
+      {
+        "url": "/_next/static/media/ephesis-latin-400-normal.0c0gs1rxme3iq.woff2",
+        "tipo": "css",
+        "bytes": 32024
+      },
+      {
+        "url": "/_next/image",
+        "tipo": "img",
+        "bytes": 8859
+      },
+      {
+        "url": "/_next/image",
+        "tipo": "img",
+        "bytes": 7396
+      },
+      {
+        "url": "/icon.png",
+        "tipo": "other",
+        "bytes": 27936
+      },
+      {
+        "url": "/video/alma/piscina.mp4",
+        "tipo": "video",
+        "bytes": 2181486
+      },
+      {
+        "url": "/api/eventos",
+        "tipo": "beacon",
+        "bytes": 327
+      },
+      {
+        "url": "/",
+        "tipo": "fetch",
+        "bytes": 471
+      },
+      {
+        "url": "/",
+        "tipo": "fetch",
+        "bytes": 5880
+      },
+      {
+        "url": "/_next/static/chunks/236fkz8ee7-v-.js",
+        "tipo": "script",
+        "bytes": 856
+      },
+      {
+        "url": "/api/eventos",
+        "tipo": "beacon",
+        "bytes": 327
+      }
+    ],
+    "imagensTotal": 29,
+    "imagensCarregadas": 4
+  }
+}

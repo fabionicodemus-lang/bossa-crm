@@ -1,0 +1,330 @@
+[
+  {
+    "arquivo": "1440-contato-recolhido.png",
+    "bytes": 133374
+  },
+  {
+    "arquivo": "1440-formulario-final-erros.png",
+    "bytes": 125939
+  },
+  {
+    "arquivo": "1440-formulario-topo.png",
+    "bytes": 137563
+  },
+  {
+    "arquivo": "320-apartamentos.png",
+    "bytes": 81159
+  },
+  {
+    "arquivo": "320-barra-plantas.png",
+    "bytes": 82043
+  },
+  {
+    "arquivo": "320-campo-focado.png",
+    "bytes": 44188
+  },
+  {
+    "arquivo": "320-comparacao.png",
+    "bytes": 47475
+  },
+  {
+    "arquivo": "320-conforto.png",
+    "bytes": 58350
+  },
+  {
+    "arquivo": "320-contato-recolhido.png",
+    "bytes": 54213
+  },
+  {
+    "arquivo": "320-contato.png",
+    "bytes": 62510
+  },
+  {
+    "arquivo": "320-duplex-aviso.png",
+    "bytes": 91977
+  },
+  {
+    "arquivo": "320-duvidas.png",
+    "bytes": 49060
+  },
+  {
+    "arquivo": "320-formulario-final-erros.png",
+    "bytes": 53631
+  },
+  {
+    "arquivo": "320-formulario-topo.png",
+    "bytes": 43790
+  },
+  {
+    "arquivo": "320-inicio.png",
+    "bytes": 339952
+  },
+  {
+    "arquivo": "320-lazer.png",
+    "bytes": 86876
+  },
+  {
+    "arquivo": "320-localizacao.png",
+    "bytes": 50490
+  },
+  {
+    "arquivo": "320-menu-aberto.png",
+    "bytes": 93480
+  },
+  {
+    "arquivo": "320-modal-zoom.png",
+    "bytes": 96660
+  },
+  {
+    "arquivo": "320-obra.png",
+    "bytes": 58191
+  },
+  {
+    "arquivo": "320-plantas.png",
+    "bytes": 63024
+  },
+  {
+    "arquivo": "320-posicao.png",
+    "bytes": 72448
+  },
+  {
+    "arquivo": "390-apartamentos.png",
+    "bytes": 133138
+  },
+  {
+    "arquivo": "390-barra-plantas.png",
+    "bytes": 91760
+  },
+  {
+    "arquivo": "390-campo-focado.png",
+    "bytes": 50278
+  },
+  {
+    "arquivo": "390-comparacao.png",
+    "bytes": 52814
+  },
+  {
+    "arquivo": "390-conforto.png",
+    "bytes": 73280
+  },
+  {
+    "arquivo": "390-contato-recolhido.png",
+    "bytes": 64323
+  },
+  {
+    "arquivo": "390-contato.png",
+    "bytes": 76283
+  },
+  {
+    "arquivo": "390-duplex-aviso.png",
+    "bytes": 99663
+  },
+  {
+    "arquivo": "390-duvidas.png",
+    "bytes": 56667
+  },
+  {
+    "arquivo": "390-formulario-final-erros.png",
+    "bytes": 50845
+  },
+  {
+    "arquivo": "390-formulario-topo.png",
+    "bytes": 52063
+  },
+  {
+    "arquivo": "390-inicio.png",
+    "bytes": 434736
+  },
+  {
+    "arquivo": "390-lazer.png",
+    "bytes": 119579
+  },
+  {
+    "arquivo": "390-localizacao.png",
+    "bytes": 57527
+  },
+  {
+    "arquivo": "390-menu-aberto.png",
+    "bytes": 114233
+  },
+  {
+    "arquivo": "390-modal-zoom.png",
+    "bytes": 120883
+  },
+  {
+    "arquivo": "390-obra.png",
+    "bytes": 66950
+  },
+  {
+    "arquivo": "390-plantas.png",
+    "bytes": 71866
+  },
+  {
+    "arquivo": "390-posicao.png",
+    "bytes": 112363
+  },
+  {
+    "arquivo": "audio-amostras.json",
+    "bytes": 497
+  },
+  {
+    "arquivo": "audio-ffprobe.json",
+    "bytes": 4586
+  },
+  {
+    "arquivo": "previa-verificacao.json",
+    "bytes": 614
+  },
+  {
+    "arquivo": "publica-1440-apartamentos.png",
+    "bytes": 478749
+  },
+  {
+    "arquivo": "publica-1440-conforto.png",
+    "bytes": 160821
+  },
+  {
+    "arquivo": "publica-1440-contato.png",
+    "bytes": 140554
+  },
+  {
+    "arquivo": "publica-1440-obra.png",
+    "bytes": 134817
+  },
+  {
+    "arquivo": "publica-1440-posicao.png",
+    "bytes": 305532
+  },
+  {
+    "arquivo": "publica-320-apartamentos.png",
+    "bytes": 86018
+  },
+  {
+    "arquivo": "publica-320-conforto.png",
+    "bytes": 59913
+  },
+  {
+    "arquivo": "publica-320-contato.png",
+    "bytes": 59204
+  },
+  {
+    "arquivo": "publica-320-obra.png",
+    "bytes": 56878
+  },
+  {
+    "arquivo": "publica-320-posicao.png",
+    "bytes": 59161
+  },
+  {
+    "arquivo": "publica-390-apartamentos.png",
+    "bytes": 139053
+  },
+  {
+    "arquivo": "publica-390-conforto.png",
+    "bytes": 71817
+  },
+  {
+    "arquivo": "publica-390-contato.png",
+    "bytes": 71479
+  },
+  {
+    "arquivo": "publica-390-obra.png",
+    "bytes": 65581
+  },
+  {
+    "arquivo": "publica-390-posicao.png",
+    "bytes": 93848
+  },
+  {
+    "arquivo": "publica-visual-verificacao.json",
+    "bytes": 5531
+  },
+  {
+    "arquivo": "texto100-320-abertura.png",
+    "bytes": 339952
+  },
+  {
+    "arquivo": "texto100-390-abertura.png",
+    "bytes": 434736
+  },
+  {
+    "arquivo": "texto200-320-abertura.png",
+    "bytes": 258840
+  },
+  {
+    "arquivo": "texto200-320-comparacao.png",
+    "bytes": 60755
+  },
+  {
+    "arquivo": "texto200-320-formulario-topo.png",
+    "bytes": 53924
+  },
+  {
+    "arquivo": "texto200-320-formulario.png",
+    "bytes": 59320
+  },
+  {
+    "arquivo": "texto200-320-menu-final.png",
+    "bytes": 49129
+  },
+  {
+    "arquivo": "texto200-320-menu.png",
+    "bytes": 49129
+  },
+  {
+    "arquivo": "texto200-320-modal-controles.png",
+    "bytes": 38372
+  },
+  {
+    "arquivo": "texto200-320-modal.png",
+    "bytes": 40161
+  },
+  {
+    "arquivo": "texto200-320-plantas.png",
+    "bytes": 55982
+  },
+  {
+    "arquivo": "texto200-390-abertura.png",
+    "bytes": 323679
+  },
+  {
+    "arquivo": "texto200-390-comparacao.png",
+    "bytes": 72446
+  },
+  {
+    "arquivo": "texto200-390-formulario-topo.png",
+    "bytes": 54813
+  },
+  {
+    "arquivo": "texto200-390-formulario.png",
+    "bytes": 63938
+  },
+  {
+    "arquivo": "texto200-390-menu-final.png",
+    "bytes": 61275
+  },
+  {
+    "arquivo": "texto200-390-menu.png",
+    "bytes": 61275
+  },
+  {
+    "arquivo": "texto200-390-modal-controles.png",
+    "bytes": 66012
+  },
+  {
+    "arquivo": "texto200-390-modal.png",
+    "bytes": 66012
+  },
+  {
+    "arquivo": "texto200-390-plantas.png",
+    "bytes": 71880
+  },
+  {
+    "arquivo": "texto200-verificacao.json",
+    "bytes": 18419
+  },
+  {
+    "arquivo": "verificacao-fase4.json",
+    "bytes": 17389
+  }
+]

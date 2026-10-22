@@ -1,0 +1,9 @@
+{
+  "data": "2026-10-21T23:44:45.477Z",
+  "modo": "Navegador local; respostas controladas",
+  "verificacoes": [
+    "Formulário compartilhado do Flow preserva dados em gravado:false e aceita confirmação completa",
+    "Mensagem específica de falta de conexão somente com navigator.onLine=false",
+    "WhatsApp final do Alma mantém consulta em 168 m²"
+  ]
+}

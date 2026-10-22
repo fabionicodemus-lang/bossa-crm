@@ -15,12 +15,13 @@ import { Cookies } from "@/components/Cookies";
 import { JsonLd } from "@/components/Blocos";
 import { organizacaoLd } from "@/lib/seo";
 import { SITE_URL } from "@/content/site";
+import { indexacaoPermitida } from "@/lib/publicacao";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: { default: "Bossa Empreendimentos", template: "%s" },
   icons: { icon: "/icon.png" },
-  robots: { index: process.env.BOSSA_PUBLICADO === "sim", follow: process.env.BOSSA_PUBLICADO === "sim" },
+  robots: { index: indexacaoPermitida, follow: indexacaoPermitida },
 };
 export const viewport: Viewport = { themeColor: "#f1f1ee", width: "device-width", initialScale: 1, viewportFit: "cover" };
 

@@ -1,0 +1,10 @@
+{
+  "data": "2026-10-21T23:44:01.177Z",
+  "modo": "API real do site contra RPC HTTP local simulado; nenhum Supabase ou CRM real acessado",
+  "verificacoes": [
+    "DDI +351, +1 e +49 preservados até p_telefone da RPC",
+    "DDD nacional recebe 55",
+    "Interesse geral, finalidade opcional nula e contrato de sucesso confirmados",
+    "Validação 422 e falha RPC 500 verificadas"
+  ]
+}

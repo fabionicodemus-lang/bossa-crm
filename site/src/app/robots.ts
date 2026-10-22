@@ -1,10 +1,11 @@
 import type { MetadataRoute } from "next";
 import { SITE_URL } from "@/content/site";
+import { indexacaoPermitida } from "@/lib/publicacao";
 
 // Endereços de teste (preview) não são indexados. No ar, buscadores e IAs são bem-vindos.
 export default function robots(): MetadataRoute.Robots {
   // Só libera buscadores quando o site for oficialmente publicado no domínio da Bossa.
-  if (process.env.BOSSA_PUBLICADO !== "sim") return { rules: { userAgent: "*", disallow: "/" } };
+  if (!indexacaoPermitida) return { rules: { userAgent: "*", disallow: "/" } };
   return {
     rules: [
       { userAgent: "*", allow: "/", disallow: ["/api/"] },

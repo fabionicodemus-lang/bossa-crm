@@ -1,0 +1,23 @@
+{
+  "status": 200,
+  "deploy": "dpl_47QekXhF3bed7DbS4fdTCaUdEx45",
+  "commit": "a391be0695a2256f74e1d238992e049422ee0d54",
+  "url": "https://bossa-site-esjmlce7e-elos-os.vercel.app/empreendimentos/alma-seahouses",
+  "marcadores": [
+    "M01",
+    "M05",
+    "M06",
+    "M08",
+    "M07",
+    "M04A",
+    "M04B",
+    "M02",
+    "M03"
+  ],
+  "noindex": true,
+  "boletim": true,
+  "estado": "READY",
+  "target": null,
+  "protecao": "Vercel Authentication mantida",
+  "modo": "HTML remoto autenticado; interações e formulários verificados localmente com respostas controladas"
+}

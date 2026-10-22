@@ -1,0 +1,23 @@
+{
+  "url": "https://bossa-site-h9y5clis5-elos-os.vercel.app/empreendimentos/alma-seahouses",
+  "deploy": "dpl_7FMBRyo3LeXJgZCg62Eb62n1Cr3G",
+  "commit": "72358385e84139aba7e844d95d3754e362f75d61",
+  "estado": "READY",
+  "target": null,
+  "status": 200,
+  "titulo": "Alma Sea Houses em Perequê | Bossa Empreendimentos",
+  "midias": [
+    "M01",
+    "M05",
+    "M06",
+    "M08",
+    "M07",
+    "M04A",
+    "M04B",
+    "M02",
+    "M03"
+  ],
+  "noindex": true,
+  "boletim": true,
+  "metodo": "HTML remoto obtido via acesso autenticado Vercel; interações verificadas no navegador local; nenhuma submissão remota"
+}
