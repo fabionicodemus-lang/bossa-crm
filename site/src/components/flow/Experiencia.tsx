@@ -278,7 +278,7 @@ export function FotoFlow(
           src={props.src}
           alt={props.alt}
           fill
-          sizes={props.sizes || "(max-width:760px) 100vw, 50vw"}
+          sizes={props.sizes || "(max-width:1000px) 100vw, 50vw"}
         />
       </button>
       <figcaption>

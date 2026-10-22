@@ -1303,3 +1303,13 @@ body:has(.fl-comercial) .rodape {
     aspect-ratio: 4/5;
   }
 }
+/* O consentimento continua visível; no Flow desktop, não cobre os CTAs à esquerda. */
+@media(min-width:861px) {body:has(.fl-comercial) .cookies {left:auto;right:16px}}
+body:has(.fl-comercial):has(.cookies) .fl-barra {display:none}
+.fl-entregues {margin-top:64px;border-top:1px solid var(--sal);padding-top:32px}
+.fl-comercial .fl-entregues .fl-dois {grid-template-columns:1fr 1fr;max-width:1000px;margin-inline:auto}
+.fl-entregues .fl-imagem {aspect-ratio:4/5}
+.fl-entregues .fl-dois article {display:grid;gap:12px}
+.fl-comercial .fl-obra-comercial > div:last-child .fl-video-cartao {min-height:300px}
+.fl-comercial .fl-obra-comercial > div:last-child .fl-video-cartao > img {width:140px;height:250px}
+@media(max-width:540px) {.fl-comercial .fl-entregues .fl-dois {gap:20px}.fl-entregues .fl-h3 {font-size:24px}.fl-comercial .fl-obra-comercial > div:last-child .fl-video-cartao {min-height:160px}.fl-comercial .fl-obra-comercial > div:last-child .fl-video-cartao > img {width:92px;height:132px}}

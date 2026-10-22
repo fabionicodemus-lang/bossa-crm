@@ -316,6 +316,15 @@ export function FlowPagina({
                 >
                   Ver a planta de {q.area}
                 </button>
+                <LinkWhatsApp
+                  className="fl-book-link"
+                  empreendimento={e.slug}
+                  planta={q.slug}
+                  botao="flow_duplex"
+                  mensagem={`Olá! Quero conversar sobre o ${q.nome}, ${q.area}, ${q.suites} suítes, do Flow Aptos. ${vista}`}
+                >
+                  Conversar sobre este duplex
+                </LinkWhatsApp>
               </article>
             ))}
           </div>
@@ -500,34 +509,6 @@ export function FlowPagina({
                 <a className="fl-bt fl-bt--linha" href="#visita">
                   Agendar uma visita para conhecer a obra
                 </a>
-                <div className="fl-dois">
-                  <article>
-                    <FotoFlow
-                      src="/img/jazz-1.jpg"
-                      alt="Fotografia do Jazz Residence entregue"
-                      titulo="Jazz Residence"
-                      legenda="Empreendimento entregue · registro real"
-                    />
-                    <h3 className="fl-h3">Jazz</h3>
-                    <p>Entregue em setembro de 2019.</p>
-                    <Link href="/empreendimentos/jazz-residence">
-                      Conhecer o Jazz
-                    </Link>
-                  </article>
-                  <article>
-                    <FotoFlow
-                      src="/img/soul-3.jpg"
-                      alt="Fotografia do Soul Residence entregue"
-                      titulo="Soul Residence"
-                      legenda="Empreendimento entregue · registro real"
-                    />
-                    <h3 className="fl-h3">Soul</h3>
-                    <p>Entregue em dezembro de 2023.</p>
-                    <Link href="/empreendimentos/soul-residence">
-                      Conhecer o Soul
-                    </Link>
-                  </article>
-                </div>
                 <p className="fl-nota">
                   Entregas anteriores são fatos do histórico da Bossa e não
                   garantem antecipação do Flow.
@@ -544,6 +525,37 @@ export function FlowPagina({
               </div>
             </div>
           </ExposicaoFlow>
+          <div className="fl-entregues">
+            <h3 className="fl-h3">Bossa já entregou.</h3>{" "}
+            <div className="fl-dois">
+              <article>
+                <FotoFlow
+                  src="/img/jazz-1.jpg"
+                  alt="Fotografia do Jazz Residence entregue"
+                  titulo="Jazz Residence"
+                  legenda="Empreendimento entregue · registro real"
+                />
+                <h3 className="fl-h3">Jazz</h3>
+                <p>Entregue em setembro de 2019.</p>
+                <Link href="/empreendimentos/jazz-residence">
+                  Conhecer o Jazz
+                </Link>
+              </article>
+              <article>
+                <FotoFlow
+                  src="/img/soul-3.jpg"
+                  alt="Fotografia do Soul Residence entregue"
+                  titulo="Soul Residence"
+                  legenda="Empreendimento entregue · registro real"
+                />
+                <h3 className="fl-h3">Soul</h3>
+                <p>Entregue em dezembro de 2023.</p>
+                <Link href="/empreendimentos/soul-residence">
+                  Conhecer o Soul
+                </Link>
+              </article>
+            </div>
+          </div>
           <div className="fl-clientes">
             <h3 className="fl-h3">Quem já conheceu o Flow</h3>
             <p>Augusto e Natália compartilham suas experiências com o Flow.</p>

@@ -16,6 +16,7 @@ export function GaleriaMove() {
     <div className="fl-move-editorial">
       <FotoFlow
         key={src}
+        sizes="(max-width:1000px) 100vw, 66vw"
         src={`/img/flow/${src}.jpg`}
         alt={`Perspectiva ilustrativa: ${nome}, Flow Move, 5º pavimento`}
         titulo={nome}
