@@ -20,7 +20,7 @@ const waitForHold=async()=>{
  throw Error('First session did not reach lock barrier');
 };
 try {
- await docker('run','--rm','-d','--name',container,'-e','POSTGRES_PASSWORD=isolated-only','-e','POSTGRES_DB=commercial_status_test','postgres:17');
+ await docker('run','--rm','-d','--network','none','--name',container,'-e','POSTGRES_PASSWORD=isolated-only','-e','POSTGRES_DB=commercial_status_test','postgres:17');
  for(let i=0;i<30;i++){try{await sql('select 1;');break;}catch{if(i===29)throw Error('Disposable PostgreSQL did not start');await new Promise(r=>setTimeout(r,100));}}
  for(const statement of sourceRequestSetupSql())await apply(statement);
  for(const migration of ['20261021182758_commercial_recoverable_requests.sql','20261021203000_commercial_proposal_status_once.sql'])

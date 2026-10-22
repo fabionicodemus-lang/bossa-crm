@@ -11,7 +11,7 @@ const call=(source,p)=>`select commercial_record_detected_proposal('${org}','${s
 const service='set role service_role;';
 const waitForHold=async n=>{for(let i=0;i<50;i++){if((await sql(`select exists(select 1 from pg_locks where locktype='advisory' and objid=${n} and granted);`))==='t')return;await new Promise(r=>setTimeout(r,40));}throw Error('Lock barrier unavailable');};
 try{
- await docker('run','--rm','-d','--name',container,'-e','POSTGRES_PASSWORD=isolated-only','-e','POSTGRES_DB=commercial_ai_proposal_test','postgres:17');
+ await docker('run','--rm','-d','--network','none','--name',container,'-e','POSTGRES_PASSWORD=isolated-only','-e','POSTGRES_DB=commercial_ai_proposal_test','postgres:17');
  for(let i=0;i<40;i++){try{await sql('select 1');break;}catch{if(i===39)throw Error('Isolated PostgreSQL unavailable');await new Promise(r=>setTimeout(r,100));}}
  for(const statement of aiProposalSetupSql())await apply(statement);
  for(const n of [9300,9301,9302,9303])await sql(`insert into messages(id,organization_id,lead_id,created_at,body) values('${id(n)}','${org}','${id(30)}','2026-10-21T15:00:00Z','Proposta detectada');`);

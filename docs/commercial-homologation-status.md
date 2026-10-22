@@ -1,5 +1,14 @@
 # Homologação técnica comercial — 22/10/2026
 
+**Continuação com evidência privada:** a rodada iniciada em `af737c6` usou o pacote
+privado fornecido pelo responsável para restaurar o catálogo da aplicação em
+Supabase/PostgreSQL isolado e testar Auth, REST, Storage e telas renderizadas.
+O parecer, a matriz de bloqueios da Versão 1, o ledger e os resultados detalhados
+permanecem na entrega privada, fora do Git. O resultado abaixo descreve a rodada
+anterior e não certifica a equivalência integral da plataforma. Os candidatos de
+permissão independentes estão em `supabase/security/`; não foram aplicados em
+produção. O checklist original permanece em **12/24**, com F1.5 parcial.
+
 **Resultado: integração do schema versionado aprovada; homologação integral do Supabase implantado permanece impedida.** HEAD de entrada: `bebb0dfb44c9f737be10de02845871637ba858e1`, branch `feat/commercial-metrics-foundation`, árvore inicialmente limpa. A referência remota de `main` foi conferida em `d88fdd23d07f78dfe994df8e74445b9340153f14`. O checklist fixo do PR #128 mantém **12/24 macroentregas (50%)**: `████████████░░░░░░░░░░░░`. F1.5 permanece parcial; nenhum dos 24 itens foi acrescentado, removido ou promovido nesta rodada.
 
 ## Ambiente e alcance da evidência

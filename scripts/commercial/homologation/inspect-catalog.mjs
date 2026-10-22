@@ -50,7 +50,7 @@ export async function inspectCatalog(db,report,output,{org,buyer}) {
   assert.equal(ai.prosecdef,false);assert.equal(ai.authenticated_execute,false);assert.equal(ai.service_execute,true);
   const handoff=catalog.functions.find(f=>f.proname==='next_client_handoff_owner');
   assert.equal(handoff.anon_execute,false);assert.equal(handoff.authenticated_execute,false);assert.equal(handoff.service_execute,true);
-  try {await sql('create extension plpgsql_check;');catalog.plpgsqlCheck='available';}
+  try {await sql('create extension if not exists plpgsql_check;');catalog.plpgsqlCheck='available';}
   catch(error) {catalog.plpgsqlCheck={available:false,reason:String(error).split('\n').slice(0,3).join('\n')};}
   fs.writeFileSync(path.join(output,'catalog.json'),JSON.stringify(catalog,null,2)+'\n');
   report.catalog={tables:catalog.tables.length,functions:catalog.functions.length,triggers:catalog.triggers.length,

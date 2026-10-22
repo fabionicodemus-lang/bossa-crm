@@ -34,9 +34,9 @@ export async function validateIntegration(db,report,output) {
 
   await check('actual legacy constraints, enums, triggers and synthetic identities',async()=>{
     await sql(`insert into organizations(id,name,slug) values('${org}','Synthetic organization A','synthetic-a'),('${other}','Synthetic organization B','synthetic-b');
-      insert into auth.users(id,email,raw_user_meta_data) values
-      ('${admin}','admin@example.invalid','{}'),('${editor}','editor@example.invalid','{}'),
-      ('${viewer}','viewer@example.invalid','{}'),('${foreign}','foreign@example.invalid','{}');
+      insert into auth.users(id,email,raw_user_meta_data,created_at,updated_at) values
+      ('${admin}','admin@example.invalid','{}',now(),now()),('${editor}','editor@example.invalid','{}',now(),now()),
+      ('${viewer}','viewer@example.invalid','{}',now(),now()),('${foreign}','foreign@example.invalid','{}',now(),now());
       insert into memberships(organization_id,user_id,role) values
       ('${org}','${admin}','admin'),('${org}','${editor}','comercial'),('${org}','${viewer}','viewer'),('${other}','${foreign}','admin');
       insert into commercial_settings(organization_id) values('${org}'),('${other}');
@@ -258,7 +258,11 @@ export async function validateIntegration(db,report,output) {
     assert.equal((await one('select count(*)::int n from commercial_settings where auto_link_enabled')).n,0);
     assert.equal((await one('select count(*)::int n from client_handoff_alert_jobs')).n,0);
     assert.equal((await one('select count(*)::int n from broker_after_hours_alert_jobs')).n,0);
-    assert.equal(await sql("select to_regclass('cron.job') is null;"),'t');
+    // A managed Supabase baseline includes pg_cron. Its presence is not an
+    // automation: require zero active jobs without removing the platform table.
+    if (await sql("select to_regclass('cron.job') is not null;")==='t') {
+      assert.equal((await one('select count(*)::int n from cron.job where active')).n,0);
+    }
   });
   fs.writeFileSync(path.join(output,'integration-summary.json'),JSON.stringify({checks:report.checks,counts:await counts()},null,2)+'\n');
   const {inspectCatalog} = await import('./inspect-catalog.mjs');
