@@ -21,23 +21,12 @@ import { VerEmpreendimento } from "../VerEmpreendimento";
 import { FotoFlow, ExposicaoFlow } from "./Experiencia";
 import { PlantasFlow } from "./PlantasFlow";
 import { VistaAndares } from "./VistaAndares";
-import { VideoAbertura, VideoVertical } from "./Clientes";
+import { VideoAbertura } from "./Clientes";
+import { NavegacaoFlow } from "./NavegacaoFlow";
+import { GaleriaMove } from "./GaleriaMove";
+import { VideoFlowModal } from "./VideoFlowModal";
 const I = "/img/flow",
   V = "/video/flow";
-const move = [
-  ["fitness", "Fitness", "Cuidar de você"],
-  ["coworking", "Coworking e sala de reuniões", "Trabalhar e se encontrar"],
-  ["flow-store", "Flow Store", "Conveniência no próprio edifício"],
-  ["playground", "Playground e espaço zen", "Brincar e pausar"],
-  ["cine-flow", "Cine Flow", "Aproveitar o tempo livre"],
-];
-const roof = [
-  ["piscina", "Piscina com infraestrutura para aquecimento"],
-  ["rooftop-aereo", "The Roof — vista geral"],
-  ["salao-festas", "Salão de festas"],
-  ["pub", "Pub"],
-  ["brinquedoteca", "Brinquedoteca"],
-];
 function Cab({
   rotulo,
   titulo,
@@ -130,6 +119,7 @@ export function FlowPagina({
           fim &&
           fim.top >= innerHeight &&
           !campo &&
+          !document.querySelector(".fl-nav[data-aberto=true]") &&
           !document.querySelector("dialog[open]") &&
           !document.querySelector(".cabecalho__abrir[aria-expanded=true]"),
         ),
@@ -142,7 +132,7 @@ export function FlowPagina({
       subtree: true,
       attributeFilter: ["aria-expanded"],
     });
-    for (const ev of ["scroll", "resize", "focusin", "focusout", "flow:modal"])
+    for (const ev of ["scroll", "resize", "focusin", "focusout", "flow:modal", "flow:menu"])
       addEventListener(ev, atualizar);
     const ro = new ResizeObserver(conferir);
     ro.observe(document.body);
@@ -155,7 +145,7 @@ export function FlowPagina({
         "resize",
         "focusin",
         "focusout",
-        "flow:modal",
+        "flow:modal", "flow:menu",
       ])
         removeEventListener(ev, atualizar);
     };
@@ -194,21 +184,19 @@ export function FlowPagina({
           <p className="fl-rot">FLOW APTOS · NO RITMO DA NOSSA VIDA.</p>
           <h1 className="fl-h1">Seu apartamento é só o começo.</h1>
           <p className="fl-p">
-            Apartamentos de 62 e 73 m² com duas suítes e unidades duplex com
-            três suítes. Dois pavimentos de lazer e conveniências para
-            aproveitar mais cada momento, no Balneário Perequê, em Porto Belo.
+            Apartamentos de 62 e 73 m² com duas suítes. Duplex com três suítes. Flow Move no 5º pavimento e The Roof no 24º para ampliar as possibilidades de cada dia, no Balneário Perequê, em Porto Belo.
           </p>
           <ul className="fl-fatos">
             <li>57 apartamentos</li>
-            <li>Flow Move + The Roof</li>
+            <li>Lazer em dois pavimentos</li>
             <li>Entrega prevista: novembro de 2027</li>
           </ul>
           <div className="fl-acoes fl-abertura-acoes">
             <a className="fl-bt" href="#opcoes-flow">
-              Conhecer as plantas
+              Explorar as plantas
             </a>
-            <a className="fl-bt fl-bt--linha" href="#construcao">
-              Ver a obra
+            <a className="fl-bt fl-bt--linha" href="#visita">
+              Agendar visita
             </a>
           </div>
           <p className="fl-nota">
@@ -216,169 +204,34 @@ export function FlowPagina({
           </p>
         </div>
       </section>
-      <nav className="fl-nav" aria-label="Navegação do Flow">
-        <a href="#opcoes-flow">Plantas</a>
-        <a href="#lazer">Lazer</a>
-        <a href="#vistas">Vistas</a>
-        <a href="#construcao">Construção</a>
-        <a className="fl-nav-visita" href="#visita">
-          Agendar visita
-        </a>
-      </nav>
+      <NavegacaoFlow />
       <section id="plantas" className="fl-sec fl-clr">
         <div className="fl-wrap">
           <Cab
             rotulo="OS APARTAMENTOS"
             titulo="O espaço certo para o seu jeito de viver."
           >
-            Duas suítes nas plantas tipo. Ambientes integrados e configurações
-            diferentes para você escolher a que combina com sua rotina.
+            Nos apartamentos tipo, são duas suítes e configurações que acompanham rotinas diferentes. Compare as plantas, a orientação solar informada no projeto e escolha o desenho que mais combina com você.
           </Cab>
           <PlantasFlow e={e} indice={indice} escolher={escolher} />
-        </div>
-      </section>
-      <section id="lazer" className="fl-sec fl-esc">
-        <div className="fl-wrap">
-          <Cab
-            rotulo="Dois pavimentos"
-            titulo="A vida acontece dentro e fora do apartamento."
-          >
-            No Flow, os espaços privativos foram planejados para morar bem. E os
-            dois pavimentos de lazer e conveniência oferecem opções para
-            trabalhar, encontrar pessoas, cuidar de você e aproveitar o tempo
-            livre.
-          </Cab>
-          <p className="fl-lead">
-            Mais de 600 m² declarados de lazer e conveniências, em áreas comuns.
-          </p>
-          <div className="fl-dois">
-            <article>
-              <FotoFlow
-                src={`${I}/coworking.jpg`}
-                alt="Perspectiva do coworking do Flow Move"
-                titulo="FLOW MOVE · 5º PAVIMENTO"
-              />
-              <p>Trabalho, conveniência e pausas no próprio edifício.</p>
-              <a className="fl-bt fl-bt--linha" href="#flow-move">
-                Conhecer o Flow Move
-              </a>
-            </article>
-            <article>
-              <FotoFlow
-                src={`${I}/rooftop-aereo.jpg`}
-                alt="Perspectiva ilustrativa do The Roof"
-                titulo="THE ROOF · 24º PAVIMENTO"
-              />
-              <p>Encontros e descanso nas áreas comuns do rooftop.</p>
-              <a className="fl-bt fl-bt--linha" href="#the-roof">
-                Conhecer o The Roof
-              </a>
-            </article>
-          </div>
-        </div>
-      </section>
-      <section id="flow-move" className="fl-sec fl-clr-2">
-        <div className="fl-wrap">
-          <Cab
-            rotulo="FLOW MOVE · 5º PAVIMENTO"
-            titulo="Mais praticidade para a vida acontecer."
-          >
-            Coworking, fitness, Flow Store, lavanderia e espaços para brincar,
-            pausar e encontrar os amigos, tudo no próprio edifício.
-          </Cab>
-          <a href="#ambientes-flow-move" className="fl-bt">
-            Ver os ambientes do Flow Move
-          </a>
-          <div id="ambientes-flow-move" className="fl-galeria">
-            <div className="fl-grade-midias">
-              {move.map(([src, nome, uso]) => (
-                <article key={src}>
-                  <FotoFlow
-                    src={`${I}/${src}.jpg`}
-                    alt={`Perspectiva ilustrativa: ${nome}, Flow Move, 5º pavimento`}
-                    titulo={nome}
-                  />
-                  <p>{uso}</p>
-                </article>
-              ))}
-            </div>
-          </div>
-          <div className="fl-planta-pavimento">
-            <FotoFlow
-              inteira
-              src={`${I}/planta-flow-move.jpg`}
-              alt="Planta ilustrativa dos ambientes do Flow Move, 5º pavimento"
-              titulo="Planta ilustrativa do 5º pavimento"
-              legenda="Áreas comuns do Flow Move. Amplie para consultar a distribuição."
-            />
-          </div>
-          <p className="fl-nota">
-            Os espaços de conveniência não representam promessa de serviços ou
-            horários de operação.
-          </p>
-        </div>
-      </section>
-      <section id="the-roof" className="fl-sec fl-fundo">
-        <div className="fl-wrap">
-          <Cab
-            rotulo="THE ROOF · 24º PAVIMENTO"
-            titulo="Seu tempo livre ganha outra perspectiva."
-          >
-            No 24º pavimento, piscina com infraestrutura para aquecimento,
-            gourmet, pub, brinquedoteca e salão de festas formam os espaços
-            pensados para os encontros e o descanso.
-          </Cab>
-          <div className="fl-grade-midias">
-            {roof.map(([src, nome]) => (
-              <FotoFlow
-                key={src}
-                src={`${I}/${src}.jpg`}
-                alt={`Perspectiva ilustrativa: ${nome}, The Roof, 24º pavimento`}
-                titulo={nome}
-              />
-            ))}
-          </div>
-          <div className="fl-planta-pavimento">
-            <FotoFlow
-              inteira
-              src={`${I}/planta-the-roof.jpg`}
-              alt="Planta ilustrativa dos ambientes do The Roof, 24º pavimento"
-              titulo="Planta ilustrativa do 24º pavimento"
-              legenda="Áreas comuns do The Roof. Amplie para consultar a distribuição."
-            />
-          </div>
-        </div>
-      </section>
-      <section id="vistas" className="fl-sec fl-noite">
-        <div className="fl-wrap">
-          <Cab
-            rotulo="REFERÊNCIAS REAIS DE DRONE"
-            titulo="Cada altura, uma perspectiva."
-          >
-            Explore as imagens realizadas por drone em diferentes alturas e
-            direções. A vista de cada apartamento depende de sua localização na
-            torre e do entorno.
-          </Cab>
-          <VistaAndares />
         </div>
       </section>
       <section id="duplex" className="fl-sec fl-clr">
         <div className="fl-wrap">
           <Cab
             rotulo="DUPLEX · TRÊS SUÍTES"
-            titulo="Dois níveis. Uma nova dimensão para morar."
+            titulo="Dois níveis. Outra forma de morar."
           >
-            As unidades duplex combinam três suítes com living de pé-direito
-            duplo e grandes superfícies envidraçadas. Uma proposta arquitetônica
-            diferente das plantas tipo.
+            Os duplex do Flow reúnem três suítes, living com pé-direito duplo e uma organização em dois níveis. Conheça as opções de 93 e 117,7 m².
           </Cab>
-          <div className="fl-dois">
+          <div className="fl-duplex-editorial">
             {e.plantas.slice(3).map((q, j) => (
               <article key={q.slug}>
                 <FotoFlow
                   src={`${I}/${j === 0 ? "duplex-tipo23-living" : "duplex-490"}.jpg`}
                   alt={`Perspectiva ilustrativa de living duplex do acervo do Flow`}
-                  titulo={`${q.nome} · ${q.area}`}
+                  titulo="Living duplex · perspectiva ilustrativa"
+                  legenda="Imagem do acervo de duplex do Flow. Confirme com a equipe sua correspondência à configuração consultada."
                 />
                 <h3 className="fl-h3">{q.area} · 3 suítes</h3>
                 <p>
@@ -401,7 +254,7 @@ export function FlowPagina({
             ))}
           </div>
           <div className="fl-video-destaque">
-            <VideoVertical
+            <VideoFlowModal
               src={`${V}/unidade-1601.mp4`}
               poster={`${I}/poster-unidade-1601.jpg`}
               nome="Registro da unidade 1601"
@@ -413,6 +266,32 @@ export function FlowPagina({
               representa necessariamente todas as configurações de duplex.
             </p>
           </div>
+        </div>
+      </section>
+      <div id="lazer" className="fl-distancia"><div className="fl-wrap"><p>Balneário Perequê, Porto Belo <span>·</span> Aproximadamente 800 m da Praia do Perequê, conforme distância divulgada <span>·</span> Entrega prevista para novembro de 2027.</p><a href="#localizacao-flow">Ver localização ↗</a></div></div>
+      <section id="the-roof" className="fl-sec fl-fundo"><div className="fl-wrap">
+        <Cab rotulo="THE ROOF · 24º PAVIMENTO" titulo="Lá em cima, o dia ganha outro ritmo.">Piscina com infraestrutura para aquecimento, salão de festas, pub, brinquedoteca e espaço gourmet formam um pavimento para encontros, descanso e bons momentos.</Cab>
+        <div className="fl-roof-editorial"><FotoFlow src={`${I}/piscina.jpg`} alt="Perspectiva ilustrativa da piscina do The Roof, 24º pavimento" titulo="Piscina · The Roof"/>
+        <div className="fl-roof-apoio">{[["salao-festas","Salão de festas"],["pub","Pub"],["brinquedoteca","Brinquedoteca"],["rooftop-aereo","The Roof — vista geral"]].map(([src,nome]) => <FotoFlow key={src} src={`${I}/${src}.jpg`} alt={`Perspectiva ilustrativa: ${nome}, 24º pavimento`} titulo={nome}/>)}</div></div>
+        <details className="fl-distribuicao"><summary>Ver distribuição do 24º pavimento</summary><FotoFlow inteira src={`${I}/planta-the-roof.jpg`} alt="Planta ilustrativa dos ambientes do The Roof, 24º pavimento" titulo="Planta ilustrativa do 24º pavimento" legenda="Áreas comuns do The Roof. Amplie para consultar a distribuição."/></details>
+        <a className="fl-bt" href="#visita">Quero conhecer o The Roof</a>
+      </div></section>
+      <section id="flow-move" className="fl-sec fl-clr-2"><div className="fl-wrap">
+        <Cab rotulo="FLOW MOVE · 5º PAVIMENTO" titulo="Mais espaço para o dia acontecer.">Coworking, fitness, Flow Store, lavanderia, Cine Flow e ambientes para brincar e pausar ampliam as possibilidades da rotina, dentro do próprio edifício.</Cab>
+        <GaleriaMove/>
+        <details className="fl-distribuicao"><summary>Ver planta do Flow Move</summary><FotoFlow inteira src={`${I}/planta-flow-move.jpg`} alt="Planta ilustrativa dos ambientes do Flow Move, 5º pavimento" titulo="Planta ilustrativa do 5º pavimento" legenda="Áreas comuns do Flow Move. Amplie para consultar a distribuição."/></details>
+        <p className="fl-nota">Os espaços de conveniência não representam promessa de serviços ou horários de operação.</p>
+        <a className="fl-bt" href="#visita">Quero visitar o Flow</a>
+      </div></section>
+      <section id="vistas" className="fl-sec fl-noite">
+        <div className="fl-wrap">
+          <Cab
+            rotulo="REFERÊNCIAS REAIS DE DRONE"
+            titulo="Cada altura revela uma perspectiva."
+          >
+            Explore referências reais de drone em diferentes direções e alturas. Compare o que se vê em cada posição e escolha as perspectivas sobre as quais deseja conversar com a Bossa.
+          </Cab>
+          <VistaAndares />
         </div>
       </section>
       <section id="engenharia" className="fl-sec fl-clr-2">
@@ -495,7 +374,7 @@ export function FlowPagina({
                 </p>
               </div>
               <div>
-                <VideoVertical
+                <VideoFlowModal
                   src={`${V}/obra.mp4`}
                   poster={`${I}/poster-obra.jpg`}
                   nome="Fábio apresenta a obra do Flow"
@@ -511,14 +390,14 @@ export function FlowPagina({
               Depoimentos de clientes, com uso autorizado registrado no projeto.
             </p>
             <div className="fl-dois">
-              <VideoVertical
+              <VideoFlowModal
                 src={`${V}/augusto.mp4`}
                 poster={`${I}/poster-augusto.jpg`}
                 nome="Augusto"
                 legenda="Cliente Flow"
                 video="depoimento-augusto"
               />
-              <VideoVertical
+              <VideoFlowModal
                 src={`${V}/natalia.mp4`}
                 poster={`${I}/poster-natalia.jpg`}
                 nome="Natália"

@@ -86,7 +86,7 @@ export function PlantasFlow({
           }
         }}
       >
-        {e.plantas.map((q, j) => (
+        {[false, true].map(duplex => <div className="fl-opcoes-grupo" key={String(duplex)}><p className="fl-rot">{duplex ? "Duplex" : "Apartamentos tipo"}</p><div>{e.plantas.map((q, j) => (q.suites === 3) === duplex && (
           <button
             type="button"
             key={q.slug}
@@ -102,7 +102,7 @@ export function PlantasFlow({
             <span>{q.suites} suítes</span>
             <small>{q.nome}</small>
           </button>
-        ))}
+        ))}</div></div>)}
       </div>
       <div ref={ref} id="fl-planta-painel" className="fl-planta-painel">
         <div>
@@ -134,7 +134,7 @@ export function PlantasFlow({
             {p.area} · {p.suites} suítes
           </h3>
           <p className="fl-p">{p.descricao}</p>
-          <p>Área privativa · Áreas comuns apresentadas separadamente.</p>
+          <p>Área privativa</p>
           <LinkWhatsApp
             className="fl-bt"
             empreendimento={e.slug}
