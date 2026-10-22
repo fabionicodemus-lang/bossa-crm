@@ -1313,3 +1313,62 @@ body:has(.fl-comercial):has(.cookies) .fl-barra {display:none}
 .fl-comercial .fl-obra-comercial > div:last-child .fl-video-cartao {min-height:300px}
 .fl-comercial .fl-obra-comercial > div:last-child .fl-video-cartao > img {width:140px;height:250px}
 @media(max-width:540px) {.fl-comercial .fl-entregues .fl-dois {gap:20px}.fl-entregues .fl-h3 {font-size:24px}.fl-comercial .fl-obra-comercial > div:last-child .fl-video-cartao {min-height:160px}.fl-comercial .fl-obra-comercial > div:last-child .fl-video-cartao > img {width:92px;height:132px}}
+
+/* Etapa 7B · controles móveis próximos à mídia, sem rolagem programática. */
+.fl-move-seletor,.fl-vista-seletor {display:none}
+.fl-duplex-resumo {display:grid;grid-template-columns:minmax(0,7fr) minmax(0,5fr);gap:40px;align-items:start}
+.fl-comercial .fl-duplex-resumo .fl-imagem {aspect-ratio:16/9}
+.fl-comercial .fl-duplex-resumo .fl-duplex-editorial {grid-template-columns:1fr;gap:24px;margin-top:0}
+.fl-duplex-resumo .fl-duplex-editorial article {gap:12px}
+.fl-duplex-resumo .fl-book-link {margin:0}
+.fl-duplex-resumo .fl-bt {justify-self:start}
+.fl-visor-topo h2 {min-width:0;overflow-wrap:anywhere}
+.fl-visor-topo > button {flex:0 0 auto;white-space:nowrap;align-self:start}
+.fl-comercial .fl-planta-painel[data-tipo=tipo-1] .fl-planta-quadro {aspect-ratio:3000/1758}
+@media(min-width:541px) and (max-width:860px) {
+  .fl-comercial .fl-planta-painel .fl-planta-quadro {height:clamp(300px,50svh,460px);aspect-ratio:auto}
+}
+@media(max-width:860px) {
+  /* Consentimento visível no fluxo, antes da abertura; nenhuma camada sobre os CTAs. */
+  #fl-consentimento .cookies {position:static;max-width:none;margin:0;padding:14px 16px;box-shadow:none;gap:10px;border:0;border-bottom:1px solid var(--sal)}
+  #fl-consentimento .cookies p {font-size:13px;line-height:1.45}
+  #fl-consentimento .cookies .linha-acoes {gap:10px}
+  #fl-consentimento .cookies .botao {flex:1;justify-content:center}
+  .fl-move-seletor,.fl-vista-seletor {display:grid;gap:8px;font-size:15px}
+  .fl-move-seletor select,.fl-vista-seletor select {width:100%;min-width:0;min-height:48px;padding:10px 12px;border:1px solid currentColor;border-radius:4px;background:var(--nev);color:var(--g)}
+  .fl-move-editorial {gap:16px}
+  .fl-move-editorial .fl-move-escolhas {display:none}
+  .fl-move-editorial > .fl-pilha {margin-top:0}
+  .fl-comercial .fl-vista {gap:12px}
+  .fl-comercial .fl-vista__painel {display:flex;flex-direction:column;gap:12px}
+  .fl-vista-seletor {order:1;grid-template-columns:auto minmax(0,1fr);align-items:center}
+  .fl-comercial .fl-abas {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+  .fl-comercial .fl-aba {padding:10px 6px;min-height:48px;font-size:14px;text-align:center}
+  .fl-comercial .fl-aba small {display:none}
+  .fl-comercial .fl-vista__painel .fl-vista-aviso {order:2;margin:0}
+  .fl-comercial .fl-vista__painel > .fl-bt {order:3;min-height:44px;padding:10px 14px}
+  .fl-comercial .fl-vista__painel :is(.fl-faixa,.fl-andares) {display:none}
+  .fl-comercial .fl-vista-rodape {margin-top:24px;gap:16px}
+  .fl-duplex-resumo {grid-template-columns:1fr;gap:24px}
+  .fl-duplex-resumo .fl-duplex-escolhas {margin-top:0;margin-bottom:20px}
+  .fl-comercial .fl-video-destaque {margin-top:24px}
+}
+@media(max-width:540px) {
+  .fl-comercial .fl-duplex-resumo .fl-imagem {aspect-ratio:16/9}
+  .fl-comercial .fl-visor-topo {gap:10px}
+}
+@media(max-width:540px) {
+  body:has(#fl-consentimento .cookies) .fl-abertura {min-height:0}
+  body:has(#fl-consentimento .cookies) .fl-abertura__conteudo {padding-block:24px;gap:12px}
+  body:has(#fl-consentimento .cookies) .fl-abertura__conteudo > .fl-abertura__logo {order:0}
+  body:has(#fl-consentimento .cookies) .fl-abertura__conteudo > .fl-rot {order:1}
+  body:has(#fl-consentimento .cookies) .fl-abertura__conteudo > .fl-h1 {order:2}
+  body:has(#fl-consentimento .cookies) .fl-abertura__conteudo > .fl-abertura-acoes {order:3}
+  body:has(#fl-consentimento .cookies) .fl-abertura__conteudo > .fl-p {order:4}
+  body:has(#fl-consentimento .cookies) .fl-abertura__conteudo > .fl-fatos {order:5}
+  body:has(#fl-consentimento .cookies) .fl-abertura__conteudo > .fl-nota {order:6}
+  .fl-comercial .fl-abertura-acoes .fl-bt {font-size:14px;padding-inline:20px}
+  .fl-comercial .fl-abertura-acoes .fl-bt--linha {padding-inline:8px}
+  .fl-comercial .fl-abertura-acoes {gap:8px}
+}
+.fl-planta-destaques {margin:0;padding-left:20px;line-height:1.5}

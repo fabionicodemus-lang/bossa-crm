@@ -9,6 +9,7 @@ import {
   flowMetaPlanta,
   mensagemFlow,
   engenhariaFlow,
+  fotosEngenhariaFlow,
 } from "@/content/flow";
 import { notaLegal, SITE_URL } from "@/content/site";
 import { empreendimentoLd, perguntasLd, migalhasLd } from "@/lib/seo";
@@ -207,6 +208,7 @@ export function FlowPagina({
         ])}
       />
       <JsonLd dados={perguntasLd(faqFlow)} />
+      <div id="fl-consentimento" />
       <section id="inicio-flow" className="fl-abertura">
         <VideoAbertura
           src={`${V}/abertura.mp4`}
@@ -265,84 +267,6 @@ export function FlowPagina({
           />
         </div>
       </section>
-      <section id="duplex" className="fl-sec fl-clr">
-        <div className="fl-wrap">
-          <Cab
-            rotulo="DUPLEX · TRÊS SUÍTES"
-            titulo="Dois níveis. Outra forma de morar."
-          >
-            Os duplex do Flow reúnem três suítes, living com pé-direito duplo e
-            uma organização em dois níveis. Conheça as opções de 93 e 117,7 m².
-          </Cab>
-          <FotoFlow
-            sizes="(max-width:1200px) 100vw, 1100px"
-            src={`${I}/duplex-490.jpg`}
-            alt="Perspectiva ilustrativa de living duplex do acervo do Flow"
-            titulo="Living duplex · perspectiva ilustrativa"
-            legenda="Imagem do acervo do Flow. Consulte a configuração de cada planta com a equipe."
-          />
-          <div
-            className="fl-duplex-escolhas"
-            role="group"
-            aria-label="Visualizar opções de duplex"
-          >
-            {e.plantas.slice(3).map((q, j) => (
-              <button
-                key={q.slug}
-                aria-pressed={j === duplexVitrine}
-                onClick={() => setDuplexVitrine(j)}
-              >
-                {q.area}
-              </button>
-            ))}
-          </div>
-          <div className="fl-duplex-editorial">
-            {e.plantas.slice(3).map((q, j) => (
-              <article key={q.slug} data-ativo={j === duplexVitrine}>
-                <h3 className="fl-h3">{q.area} · 3 suítes</h3>
-                <p>
-                  {j === 0
-                    ? "Living de pé-direito duplo."
-                    : "Living com 4,90 m de pé-direito na configuração aprovada."}
-                </p>
-                <button
-                  className="fl-bt"
-                  onClick={() => {
-                    escolher(j + 3);
-                    document
-                      .getElementById("opcoes-flow")
-                      ?.scrollIntoView({ block: "start" });
-                  }}
-                >
-                  Ver a planta de {q.area}
-                </button>
-                <LinkWhatsApp
-                  className="fl-book-link"
-                  empreendimento={e.slug}
-                  planta={q.slug}
-                  botao="flow_duplex"
-                  mensagem={`Olá! Quero conversar sobre o ${q.nome}, ${q.area}, ${q.suites} suítes, do Flow Aptos. ${vista}`}
-                >
-                  Conversar sobre este duplex
-                </LinkWhatsApp>
-              </article>
-            ))}
-          </div>
-          <div className="fl-video-destaque">
-            <VideoFlowModal
-              src={`${V}/unidade-1601.mp4`}
-              poster={`${I}/poster-unidade-1601.jpg`}
-              nome="Registro da unidade 1601"
-              legenda="Registro real na obra"
-              video="unidade-1601"
-            />
-            <p className="fl-nota">
-              O vídeo mostra a unidade 1601. Não indica disponibilidade nem
-              representa necessariamente todas as configurações de duplex.
-            </p>
-          </div>
-        </div>
-      </section>
       <div id="lazer" className="fl-distancia">
         <div className="fl-wrap">
           <p>
@@ -353,6 +277,88 @@ export function FlowPagina({
           <a href="#localizacao-flow">Ver localização ↗</a>
         </div>
       </div>
+      <section id="duplex" className="fl-sec fl-clr">
+        <div className="fl-wrap">
+          <Cab
+            rotulo="DUPLEX · TRÊS SUÍTES"
+            titulo="Dois níveis. Outra forma de morar."
+          >
+            Os duplex do Flow reúnem três suítes, living com pé-direito duplo e
+            uma organização em dois níveis. Conheça as opções de 93 e 117,7 m².
+          </Cab>
+          <div className="fl-duplex-resumo">
+            <FotoFlow
+              sizes="(max-width:860px) 100vw, 60vw"
+              src={`${I}/duplex-490.jpg`}
+              alt="Perspectiva ilustrativa de living duplex do acervo do Flow"
+              titulo="Living duplex · perspectiva ilustrativa"
+              legenda="Imagem do acervo do Flow. Consulte a configuração de cada planta com a equipe."
+            />
+            <div>
+              <div
+                className="fl-duplex-escolhas"
+                role="group"
+                aria-label="Visualizar opções de duplex"
+              >
+                {e.plantas.slice(3).map((q, j) => (
+                  <button
+                    key={q.slug}
+                    aria-pressed={j === duplexVitrine}
+                    onClick={() => setDuplexVitrine(j)}
+                  >
+                    {q.area}
+                  </button>
+                ))}
+              </div>
+              <div className="fl-duplex-editorial">
+                {e.plantas.slice(3).map((q, j) => (
+                  <article key={q.slug} data-ativo={j === duplexVitrine}>
+                    <h3 className="fl-h3">{q.area} · 3 suítes</h3>
+                    <p>
+                      {j === 0
+                        ? "Living de pé-direito duplo."
+                        : "Living com 4,90 m de pé-direito no Tipo 1."}
+                    </p>
+                    <button
+                      className="fl-bt"
+                      onClick={() => {
+                        escolher(j + 3);
+                        document
+                          .getElementById("opcoes-flow")
+                          ?.scrollIntoView({ block: "start" });
+                      }}
+                    >
+                      Ver a planta de {q.area}
+                    </button>
+                    <LinkWhatsApp
+                      className="fl-book-link"
+                      empreendimento={e.slug}
+                      planta={q.slug}
+                      botao="flow_duplex"
+                      mensagem={`Olá! Quero conversar sobre o ${q.nome}, ${q.area}, ${q.suites} suítes, do Flow Aptos. ${vista}`}
+                    >
+                      Conversar sobre este duplex
+                    </LinkWhatsApp>
+                  </article>
+                ))}
+              </div>
+            </div>
+          </div>
+          <div className="fl-video-destaque">
+            <VideoFlowModal
+              src={`${V}/unidade-1601.mp4`}
+              poster={`${I}/poster-unidade-1601.jpg`}
+              nome="Registro da unidade 1601"
+              legenda="Registro real na obra"
+              video="unidade-1601"
+            />
+            <p className="fl-nota">
+              Registro da unidade 1601, sem indicação de disponibilidade. As
+              configurações variam conforme a planta.
+            </p>
+          </div>
+        </div>
+      </section>
       <section id="the-roof" className="fl-sec fl-fundo">
         <div className="fl-wrap">
           <Cab
@@ -456,20 +462,31 @@ export function FlowPagina({
               impermeabilização, esquadrias e exaustão no Flow.
             </Cab>
             <div className="fl-engenharia">
-              {engenhariaFlow.map(([t, b, r]) => (
-                <article key={t}>
-                  <h3 className="fl-h3">{t}</h3>
-                  <p className="fl-p">{b}</p>
-                  <p className="fl-nota">{r}</p>
-                  {t.startsWith("Áreas") || t.startsWith("Esquadrias") ? (
-                    <Link href="/obras/flow-aptos/2026-09">
-                      Ver etapa no boletim ↗
-                    </Link>
-                  ) : (
-                    <a href="#visita">Conhecer o detalhamento ↗</a>
-                  )}
-                </article>
-              ))}
+              {engenhariaFlow.map(([t, b, r]) => {
+                const foto = fotosEngenhariaFlow[t];
+                return (
+                  <article key={t}>
+                    {foto && (
+                      <FotoFlow
+                        src={foto.src}
+                        alt={foto.alt}
+                        titulo={t}
+                        legenda={`Registro real · ${foto.mesAno} · ${foto.pavimento}. ${foto.atividade}`}
+                      />
+                    )}
+                    <h3 className="fl-h3">{t}</h3>
+                    <p className="fl-p">{b}</p>
+                    <p className="fl-nota">{r}</p>
+                    {t.startsWith("Áreas") || t.startsWith("Esquadrias") ? (
+                      <Link href="/obras/flow-aptos/2026-09">
+                        Ver etapa no boletim ↗
+                      </Link>
+                    ) : (
+                      <a href="#visita">Conhecer o detalhamento ↗</a>
+                    )}
+                  </article>
+                );
+              })}
             </div>
             <a href="#visita" className="fl-bt">
               Conhecer a obra e os acabamentos

@@ -155,6 +155,13 @@ export function PlantasFlow({
             {p.area} · {p.suites} suítes
           </h3>
           <p className="fl-p">{p.descricao}</p>
+          {p.slug === "tipo-1" && (
+            <ul className="fl-planta-destaques">
+              <li>Duas suítes com banheiros privativos.</li>
+              <li>Living e cozinha integrados.</li>
+              <li>Lavabo junto à circulação.</li>
+            </ul>
+          )}
           <p>Área comercial divulgada</p>
           <LinkWhatsApp
             className="fl-bt"

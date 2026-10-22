@@ -65,7 +65,7 @@ export const engenhariaFlow = [
   ],
   [
     "Churrasqueira: exaustão prevista em projeto.",
-    "O sistema inclui coifa, damper e exaustão, conforme detalhamento a validar.",
+    "A churrasqueira a carvão possui coifa e sistema de exaustão previstos no projeto. Conheça o detalhamento com a equipe.",
     "Conheça o detalhamento com a equipe.",
   ],
   [
@@ -74,3 +74,15 @@ export const engenhariaFlow = [
     "Esquadrias metálicas: 18% no boletim de setembro de 2026.",
   ],
 ];
+
+/** Preencher somente com registros reais aprovados e identificação completa da execução. */
+export const fotosEngenhariaFlow: Record<
+  string,
+  {
+    src: string;
+    alt: string;
+    mesAno: string;
+    pavimento: string;
+    atividade: string;
+  }
+> = {};

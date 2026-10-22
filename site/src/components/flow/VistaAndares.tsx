@@ -122,6 +122,19 @@ export function VistaAndares({
           </p>
         </div>
         <div className="fl-vista__painel">
+          <label className="fl-vista-seletor">
+            Pavimento
+            <select
+              value={altura}
+              onChange={(e) => selecionar(Number(e.target.value))}
+            >
+              {ordem.map((n) => (
+                <option key={n} value={n}>
+                  {nome(n)}
+                </option>
+              ))}
+            </select>
+          </label>
           <div className="fl-abas" role="group" aria-label="Direção da vista">
             {DIRECOES.map((x, i) => (
               <button

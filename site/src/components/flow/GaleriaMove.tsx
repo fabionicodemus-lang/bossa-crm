@@ -12,15 +12,38 @@ const ambientes = [
 export function GaleriaMove() {
   const [atual, setAtual] = useState(0);
   const [src, nome, uso] = ambientes[atual];
+  function escolher(i: number) {
+    setAtual(i);
+    rastrear("gallery_interact", {
+      empreendimento: "flow-aptos",
+      ambiente: ambientes[i][1],
+    });
+  }
   return (
     <div className="fl-move-editorial">
-      <FotoFlow
-        key={src}
-        sizes="(max-width:1000px) 100vw, 66vw"
-        src={`/img/flow/${src}.jpg`}
-        alt={`Perspectiva ilustrativa: ${nome}, Flow Move, 5º pavimento`}
-        titulo={nome}
-      />
+      <label className="fl-move-seletor">
+        Escolha um ambiente
+        <select
+          aria-controls="fl-move-foto"
+          value={atual}
+          onChange={(e) => escolher(Number(e.target.value))}
+        >
+          {ambientes.map(([, nome], i) => (
+            <option key={nome} value={i}>
+              {nome}
+            </option>
+          ))}
+        </select>
+      </label>
+      <div id="fl-move-foto">
+        <FotoFlow
+          key={src}
+          sizes="(max-width:1000px) 100vw, 66vw"
+          src={`/img/flow/${src}.jpg`}
+          alt={`Perspectiva ilustrativa: ${nome}, Flow Move, 5º pavimento`}
+          titulo={nome}
+        />
+      </div>
       <div className="fl-pilha">
         <p className="fl-lead" aria-live="polite">
           {uso}
@@ -34,13 +57,7 @@ export function GaleriaMove() {
             <button
               key={s}
               aria-pressed={i === atual}
-              onClick={() => {
-                setAtual(i);
-                rastrear("gallery_interact", {
-                  empreendimento: "flow-aptos",
-                  ambiente: n,
-                });
-              }}
+              onClick={() => escolher(i)}
             >
               <span>{n}</span>
               <small>{u}</small>

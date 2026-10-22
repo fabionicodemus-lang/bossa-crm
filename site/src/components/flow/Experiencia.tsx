@@ -247,7 +247,7 @@ export function VisorFlow({
             src={foto.src}
             alt={foto.alt}
             fill
-            sizes={`${Math.min(zoom * 100, 200)}vw`}
+            sizes={`${zoom * 100}vw`}
             style={{ objectFit: "contain", pointerEvents: "none" }}
             draggable={false}
           />
