@@ -4,7 +4,9 @@
 
 **Resultado:** R01 e R02 corrigidos e verificados no navegador local. Revisão móvel e ampliação efetiva de texto a 200% realizadas, com capturas das barras reais. A variante pública foi navegada localmente. As limitações de escuta, compartilhamento nativo e integração real continuam discriminadas abaixo; esta entrega não autoriza publicação em produção.
 
-A URL e o commit da nova prévia protegida serão registrados após o deploy.
+**Prévia atualizada:** https://bossa-site-h9y5clis5-elos-os.vercel.app/empreendimentos/alma-seahouses
+**Commit de código e evidências:** `72358385e84139aba7e844d95d3754e362f75d61`.
+**Deploy:** `dpl_7FMBRyo3LeXJgZCg62Eb62n1Cr3G`, estado **READY**, ambiente Preview (`target: null`). Login da Vercel preservado. O HTML remoto respondeu **200**, com título geral correto, nove espaços de mídia, boletim datado e `noindex`. Ver [evidência remota](docs/alma/fase4/previa-verificacao.json). A navegação/interação detalhada e as capturas desta rodada são locais; não são apresentadas como testes interativos remotos.
 
 ## 1. Base preservada e escopo
 
@@ -121,6 +123,8 @@ A pasta também inclui as demais seções, parte superior/final do formulário, 
 
 ## 7. Evidências, reprodução e limites
 
+`npm run typecheck`, builds locais Preview e variante pública, testes de navegador e `git diff --check`: concluídos sem falha na versão entregue. Os ajustes não exigiram mudança de dependências, API, banco ou componente compartilhado de formulário.
+
 - [verificacao-fase4.json](docs/alma/fase4/verificacao-fase4.json): Chromium 154.0.8037.57, 33 registros de R01, medidas de R02, dez seções em cada viewport, estados da barra, cópia e testes controlados.
 - [texto200-verificacao.json](docs/alma/fase4/texto200-verificacao.json): 12 estados, fontes antes/depois e dimensões efetivas.
 - [publica-visual-verificacao.json](docs/alma/fase4/publica-visual-verificacao.json): navegação pública local, 30 registros.
@@ -150,3 +154,5 @@ Arquivos de verificação/entrega:
 - `Alma_Fase4_Complementacao_e_Correcoes.md`: este relatório.
 
 **Publicação permitida:** somente nova prévia protegida em `bossa-site`. Nenhum merge em `main`, promoção, deploy de produção, alteração de domínio, DNS, proteção, credenciais, estado comercial, CRM, banco ou Nara. Nenhuma mensagem, lead ou solicitação real de apresentação foi enviada. O encerramento da fase 4 permanece para decisão de Fábio à luz das evidências e limites acima.
+
+O commit posterior que preenche a URL deste relatório altera somente documentação e evidências de deploy; a prévia revisável permanece ligada ao commit de código indicado acima.
