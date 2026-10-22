@@ -1,0 +1,122 @@
+{
+  "data": "2026-10-22T14:45:10.666Z",
+  "barra": [
+    {
+      "estado": "abertura",
+      "visivel": false
+    },
+    {
+      "estado": "fora da abertura",
+      "visivel": true
+    },
+    {
+      "estado": "menu aberto",
+      "visivel": false
+    },
+    {
+      "estado": "menu fechado",
+      "visivel": true
+    },
+    {
+      "estado": "planta trocada",
+      "visivel": true
+    },
+    {
+      "estado": "modal aberto",
+      "visivel": false
+    },
+    {
+      "estado": "modal fechado",
+      "visivel": true
+    },
+    {
+      "estado": "contato visível",
+      "visivel": false
+    },
+    {
+      "estado": "campo focado",
+      "visivel": false
+    }
+  ],
+  "texto": [
+    {
+      "estado": "plantas",
+      "antes": "38px",
+      "depois": "76px",
+      "width": 390,
+      "dpr": 1,
+      "scrollWidth": 390
+    },
+    {
+      "estado": "menu",
+      "antes": "38px",
+      "depois": "76px",
+      "width": 390,
+      "dpr": 1,
+      "scrollWidth": 390
+    },
+    {
+      "estado": "formulario",
+      "antes": "38px",
+      "depois": "76px",
+      "width": 390,
+      "dpr": 1,
+      "scrollWidth": 390
+    },
+    {
+      "estado": "modal",
+      "antes": "38px",
+      "depois": "76px",
+      "width": 390,
+      "dpr": 1,
+      "scrollWidth": 390
+    }
+  ],
+  "videos": [
+    {
+      "video": "unidade-1601",
+      "tempo": 0.424844,
+      "width": 540,
+      "height": 960,
+      "erro": null
+    },
+    {
+      "video": "obra",
+      "tempo": 0.429786,
+      "width": 540,
+      "height": 960,
+      "erro": null
+    },
+    {
+      "video": "augusto",
+      "tempo": 0.469646,
+      "width": 540,
+      "height": 960,
+      "erro": null
+    },
+    {
+      "video": "natalia",
+      "tempo": 0.441486,
+      "width": 540,
+      "height": 960,
+      "erro": null
+    }
+  ],
+  "limites": "Emulação Chromium, sem aparelho físico, teclado virtual, escuta integral ou zoom nativo.",
+  "pinca": {
+    "metodo": "dois contatos emulados pelo CDP do Chromium",
+    "zoom": "217%"
+  },
+  "inicial": {
+    "cls": 0.003835635905614118,
+    "lcp": 296,
+    "bytes": 1832051,
+    "videosBaixados": [
+      "/video/flow/abertura.mp4"
+    ],
+    "imagens": 26,
+    "carregadas": 3,
+    "videoPausado": false
+  },
+  "pausaManualPreservada": true
+}

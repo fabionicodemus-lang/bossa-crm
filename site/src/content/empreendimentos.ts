@@ -145,9 +145,9 @@ const flow: Empreendimento = {
   bairro: "Balneário Perequê",
   endereco: "Rua São José, 163",
   rotulo: "Em obra · Balneário Perequê, Porto Belo",
-  resumo: "No ritmo da nossa vida. 57 apartamentos, dois andares de lazer e a torre já fechada de baixo a cima.",
+  resumo: "No ritmo da nossa vida. 57 apartamentos, duas suítes nas plantas tipo e três nos duplex, com lazer e conveniências em dois pavimentos.",
   linhaCartao: "800 m do mar · 2 e 3 suítes · entrega nov/2027",
-  statusCartao: "Em obra · 57,87%",
+  statusCartao: "Em obra · 57,87% · set/2026",
   inicioObra: "nov/2023",
   entrega: "nov/2027",
   entregaIso: "2027-11",
@@ -170,7 +170,7 @@ const flow: Empreendimento = {
     { src: "/img/flow-academia.jpg", alt: "Espaço fitness do Flow Aptos", legenda: "Espaço fitness" },
     { src: "/img/flow-pub.jpg", alt: "Pub do Flow Aptos", legenda: "Pub" },
     { src: "/img/flow-duplex-living.jpg", alt: "Living com pé-direito duplo de um duplex do Flow", legenda: "Living · duplex" },
-    { src: "/img/flow-apto.jpg", alt: "Living de um apartamento tipo do Flow", legenda: "Living · apartamento tipo" },
+    { src: "/img/flow-apto.jpg", alt: "Perspectiva ilustrativa de interior do acervo do Flow, tipologia não confirmada", legenda: "Interior · perspectiva ilustrativa" },
   ],
   plantas: [
     { slug: "tipo-2", nome: "Tipo 2", area: "62 m²", areaNum: 62, suites: 2, vagas: null, descricao: "Sol da manhã.", imagens: [{ src: "/img/flow-planta-tipo2.jpg", alt: "Planta humanizada do apartamento Tipo 2 do Flow Aptos, 62 m²" }] },
@@ -183,8 +183,8 @@ const flow: Empreendimento = {
     {
       numero: 25, mes: "2026-09", mesExtenso: "setembro de 2026", percentual: 57.87, avanco: 2.39,
       titulo: "A alvenaria chegou ao Rooftop.",
-      subtitulo: "Com a torre fechada de baixo a cima, a obra deixa de depender do tempo e passa a depender só do ritmo.",
-      resumo: "A alvenaria chegou ao Rooftop e o Flow é hoje um edifício fechado de baixo a cima. O reboco interno está no 20º pavimento, o forro no 11º e o porcelanato no 6º. Em outubro, as equipes de reboco externo e de piso dobram.",
+      subtitulo: "Alvenaria e acabamentos avançam em etapas diferentes, conforme o boletim de setembro de 2026.",
+      resumo: "A alvenaria chegou ao Rooftop e estava em 94,55%, com esquadrias metálicas em 18%, em setembro de 2026. O reboco interno está no 20º pavimento, o forro no 11º e o porcelanato no 6º. Em outubro, as equipes de reboco externo e de piso dobram.",
       etapas: [
         { nome: "Fundação", pct: 100 }, { nome: "Estrutura", pct: 100 }, { nome: "Alvenaria", pct: 94.55 }, { nome: "Infraestrutura", pct: 80 },
         { nome: "Instalações", pct: 53.2 }, { nome: "Revestimento interno", pct: 46.81 }, { nome: "Pavimentação interna", pct: 33.5 }, { nome: "Forro de gesso", pct: 29.91 },
@@ -195,7 +195,7 @@ const flow: Empreendimento = {
         { pav: "8º", servico: "impermeabilização dos banheiros" }, { pav: "6º", servico: "cerâmica e porcelanato" }, { pav: "Garagens", servico: "reboco interno" },
       ],
       carta: [
-        "Prezados clientes e investidores, setembro fechou a torre. A alvenaria executou os pavimentos 22 e 23 e já iniciou o Rooftop: o serviço chega a 94,55% e o Flow Aptos está, na prática, todo fechado.",
+        "Prezados clientes e investidores, o boletim de setembro registra o avanço da alvenaria. A alvenaria executou os pavimentos 22 e 23 e já iniciou o Rooftop: o serviço chega a 94,55% enquanto as esquadrias metálicas estão em 18% nesse boletim.",
         "O reboco interno concluiu o 19º e passou da metade do 20º, seguindo também nas garagens. O forro de gesso finalizou dois pavimentos no mês, o 10º e o 11º. A impermeabilização dos banheiros chegou ao 8º, e o revestimento, cerâmica de parede e porcelanato de piso, está no 6º. Do lado de fora, o reboco externo já executa a fachada leste.",
       ],
       reportagem: {
@@ -213,8 +213,8 @@ const flow: Empreendimento = {
       proximo: "Outubro dobra as equipes de reboco externo e de piso para acelerar os acabamentos.",
     },
   ],
-  metaTitle: "Flow Aptos · 2 suítes e duplex no Perequê, Porto Belo",
-  metaDescription: "57 apartamentos de 62 a 117,7 m², lazer em dois andares e rooftop. Obra em 57,87% (set/2026), entrega em novembro de 2027.",
+  metaTitle: "Flow Aptos | 2 suítes, lazer em dois pavimentos e entrega 2027 | Bossa",
+  metaDescription: "Conheça o Flow Aptos em Balneário Perequê, Porto Belo. Plantas de 62 e 73 m² com duas suítes, duplex, Flow Move e rooftop no 24º pavimento. Entrega prevista novembro de 2027.",
 };
 
 const soul: Empreendimento = {

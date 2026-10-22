@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { emObra, getEmpreendimento } from "@/content/empreendimentos";
 import { almaMetaPlanta } from "@/content/alma";
+import { flowMetaPlanta } from "@/content/flow";
 import { meta } from "@/lib/seo";
 import { PaginaEmpreendimento } from "@/components/PaginaEmpreendimento";
 import { FlowLanding } from "@/components/flow/FlowLanding";
@@ -16,6 +17,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   const e = getEmpreendimento(slug); const p = e?.plantas.find((x) => x.slug === planta);
   if (!e || !p) return {};
   if (e.slug === "alma-seahouses") return meta({ ...almaMetaPlanta(p), caminho: `/empreendimentos/${e.slug}/plantas/${p.slug}` });
+  if (e.slug === "flow-aptos") return meta({ ...flowMetaPlanta(p), caminho: `/empreendimentos/${e.slug}/plantas/${p.slug}` });
   const suites = p.suites ? `${p.suites} suítes ` : "";
   return meta({
     titulo: `${p.nome} · ${suites}${p.area} · ${e.nome}`,

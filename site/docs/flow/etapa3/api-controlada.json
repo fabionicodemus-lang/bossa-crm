@@ -1,0 +1,13 @@
+{
+  "data": "2026-10-22T14:44:16.882Z",
+  "modo": "API real contra RPC HTTP fictícia local; sem Supabase/CRM real",
+  "aprovados": [
+    "Visita e book mantêm contrato RPC existente",
+    "Telefones +351, +49, +1 e nacional preservados até RPC",
+    "UTMs verdadeiras preservadas",
+    "Data não faz parte do contrato, UI não solicita data",
+    "Sucesso somente com gravação confirmada; validação 422 e RPC 500",
+    "request_material permitido pela API e transportado até RPC local"
+  ],
+  "requisicoesRPC": 8
+}

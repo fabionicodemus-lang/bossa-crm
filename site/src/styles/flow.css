@@ -222,3 +222,91 @@
 .fl-clr .fl-esc .fl-rot, .fl-clr-2 .fl-esc .fl-rot { color: var(--sal); }
 .fl-clr .fl-esc .fl-nota, .fl-clr-2 .fl-esc .fl-nota { color: var(--sal); }
 @media (max-width: 700px) { .fl-vista__tela { aspect-ratio: 4 / 3; } }
+
+/* Evolução comercial 2026: componentes delimitados ao Flow. */
+.fl-comercial {color:var(--g);overflow-wrap:anywhere;font-size:17px;line-height:1.6}
+.fl-comercial * {box-sizing:border-box}
+.fl-comercial :is(section,[id="opcoes-flow"],[id="ambientes-flow-move"]) {scroll-margin-top:160px}
+.fl-comercial :is(button,input,select,textarea) {font:inherit}
+.fl-comercial :is(button,a,input,select,summary,[tabindex]):focus-visible {outline:3px solid currentColor;outline-offset:4px}
+.fl-comercial button {cursor:pointer}
+.fl-comercial figure {margin:0}
+.fl-comercial .fl-abertura__logo {width:clamp(150px,23vw,300px)}
+.fl-comercial .fl-abertura__conteudo {padding-block:64px 40px;gap:24px}
+.fl-comercial .fl-abertura .fl-h1 {max-width:18ch;font-size:clamp(42px,6.2vw,94px);line-height:1.05}
+.fl-comercial .fl-abertura .fl-p {color:var(--nev);max-width:65ch}
+.fl-fatos {display:flex;gap:12px 24px;list-style:none;padding:0;margin:0;flex-wrap:wrap}
+.fl-nav {position:sticky;top:73px;z-index:20;display:flex;gap:8px;justify-content:center;overflow-x:auto;padding:10px 16px;background:var(--nev);border-bottom:1px solid var(--sal);color:var(--g)}
+.fl-nav a {display:inline-flex;align-items:center;min-height:44px;padding:6px 16px;white-space:nowrap;text-decoration:none;border-radius:30px}
+.fl-nav-visita {background:var(--g);color:var(--nev)}
+.fl-cab-comercial {display:grid;gap:24px;max-width:1000px;margin-bottom:40px}
+.fl-cab-comercial .fl-p {max-width:68ch}
+.fl-dois,.fl-engenharia {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:32px;margin-block:32px}
+.fl-dois article {min-width:0;display:grid;align-content:start;gap:16px}
+.fl-grade-midias {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:32px 24px;margin-block:40px}
+.fl-galeria .fl-grade-midias {grid-template-columns:repeat(5,minmax(0,1fr))}
+.fl-imagem {border:0;padding:0;display:block;width:100%;aspect-ratio:16/10;border-radius:6px}
+.fl-imagem img {object-fit:cover}
+.fl-imagem-inteira {aspect-ratio:4/3;background:#fff}
+.fl-imagem-inteira img {object-fit:contain}
+.fl-figura figcaption {display:grid;gap:6px;padding-block:12px;font-size:16px;line-height:1.5}
+.fl-planta-pavimento {max-width:900px;margin:40px auto 0}
+.fl-planta-pavimento .fl-imagem {aspect-ratio:3/2}
+.fl-planta-pavimento:has(img[alt*="The Roof"]) .fl-imagem {aspect-ratio:4/5;max-height:650px}
+.fl-opcoes {display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;margin-block:32px}
+.fl-opcoes button {min-height:132px;display:grid;gap:4px;text-align:left;align-content:center;border:1px solid var(--g);border-radius:4px;padding:16px;background:transparent;color:var(--g)}
+.fl-opcoes b {font:400 clamp(22px,2.4vw,32px)/1.3 var(--saira)}
+.fl-opcoes span,.fl-opcoes small {font-size:16px}
+.fl-opcoes button[aria-pressed=true] {background:var(--g);color:var(--nev);outline:2px solid var(--g);outline-offset:3px}
+.fl-planta-painel {display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:40px;align-items:start}
+.fl-planta-quadro {display:block;position:relative;width:100%;aspect-ratio:4/3;background:#fff;border:0;border-radius:6px}
+.fl-planta-painel .fl-nota {margin-top:16px}
+.fl-engenharia article {padding:24px;border:1px solid var(--sal);display:grid;gap:20px}
+.fl-video-destaque {max-width:420px;margin:48px auto 0}
+.fl-video-destaque .fl-nota {margin-top:20px}
+.fl-obra-comercial {display:grid;grid-template-columns:1.4fr .6fr;gap:56px;align-items:start}
+.fl-medicao {font:300 clamp(40px,5vw,72px)/1.2 var(--saira);margin:0}
+.fl-medicao span {display:block;font-size:20px;margin-top:12px}
+.fl-clientes {margin-top:72px;border-top:1px solid var(--sal);padding-top:32px}
+.fl-clientes .fl-dois {max-width:800px;gap:40px}
+.fl-conversao {display:grid;grid-template-columns:1fr 1fr;gap:48px;align-items:start}
+.fl-form-comercial {padding:28px;background:var(--nev);color:var(--g);border-radius:6px}
+.fl-form-escolhas {display:flex;gap:12px;flex-wrap:wrap;margin-bottom:24px}
+.fl-form-escolhas button {min-height:48px;background:transparent;color:var(--g);border:1px solid var(--g);padding:10px 16px;border-radius:4px}
+.fl-form-escolhas button[aria-pressed=true] {background:var(--g);color:var(--nev)}
+.fl-form-comercial .form {margin-top:24px}
+.fl-form-comercial [hidden] {display:none}
+.fl-form-comercial .form__ok {background:transparent;color:var(--g);padding:16px 0}
+.fl-faq-comercial {margin-bottom:40px}
+.fl-faq-comercial details {border-bottom:1px solid var(--sal);padding-block:20px}
+.fl-faq-comercial summary {cursor:pointer;min-height:44px;font-size:20px;padding-right:20px}
+.fl-faq-comercial .fl-p {padding-block:20px}
+.fl-comercial .fl-vista__tela {aspect-ratio:1200/544}
+.fl-comercial .fl-vista__tela img {object-fit:contain}
+.fl-comercial .fl-aba[aria-pressed=true] {border-color:var(--nev);background:var(--g);color:var(--nev)}
+.fl-comercial .fl-andares button {min-height:44px}
+.fl-comercial .fl-vista__andar {font-size:clamp(18px,3vw,34px);background:rgba(43,42,51,.85);padding:10px;margin:0;left:8px;top:8px}
+.fl-comercial .fl-vista__andar small {line-height:1.4;font-size:10px}
+.fl-barra {display:none}
+.fl-visor {width:96vw;max-width:1500px;height:94dvh;max-height:96dvh;margin:auto;padding:20px;background:#ededed;color:#3d3c48;border:0;overflow:auto}
+.fl-visor[open] {display:flex;flex-direction:column;gap:12px}
+.fl-visor::backdrop {background:rgba(20,20,24,.85)}
+.fl-visor-topo {display:flex;justify-content:space-between;align-items:start;gap:20px}
+.fl-visor h2 {font:400 clamp(20px,3vw,28px)/1.4 'Saira Variable',sans-serif;margin:0}
+.fl-visor p {margin:0;line-height:1.5}
+.fl-visor button {min-height:44px;padding:8px 16px;font:inherit;background:#fff;color:#3d3c48;border:1px solid #4e4d5b;border-radius:4px}
+.fl-visor :focus-visible {outline:3px solid #4e4d5b;outline-offset:3px}
+.fl-visor-controles {display:flex;flex-wrap:wrap;align-items:center;gap:12px}
+.fl-visor-imagem {flex:1;min-height:160px;overflow:auto;background:white;touch-action:none}
+.fl-visor-ajuda {font-size:14px}
+@media(max-width:1024px) {.fl-galeria .fl-grade-midias {grid-template-columns:repeat(3,minmax(0,1fr))}.fl-obra-comercial {grid-template-columns:1fr 1fr}}
+@media(max-width:860px) {.fl-comercial .fl-sec {padding-block:64px}.fl-nav {justify-content:flex-start}.fl-opcoes {grid-template-columns:repeat(2,minmax(0,1fr))}.fl-opcoes button:last-child {grid-column:1/-1}.fl-planta-painel,.fl-conversao,.fl-obra-comercial {grid-template-columns:1fr}.fl-grade-midias,.fl-galeria .fl-grade-midias {grid-template-columns:repeat(2,minmax(0,1fr))}.fl-comercial .fl-abertura__conteudo {gap:18px;padding-block:56px 32px}.fl-comercial .fl-abertura__logo {width:160px}.fl-comercial .fl-abertura .fl-h1 {font-size:42px}.fl-comercial .fl-abertura {min-height:calc(100svh - 73px)}.fl-comercial .fl-abertura .fl-rot {font-size:9px;letter-spacing:.12em}.fl-fatos {font-size:15px;gap:4px 16px}.fl-barra {position:fixed;display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:12px 16px calc(12px + env(safe-area-inset-bottom));bottom:0;left:0;right:0;z-index:35;background:var(--nev);border-top:1px solid var(--sal)}.fl-barra .fl-bt {background:var(--g);color:var(--nev);padding-inline:12px}.fl-comercial {padding-bottom:92px}.fl-visor {padding:14px}}
+@media(max-width:540px) {.fl-dois,.fl-engenharia,.fl-grade-midias,.fl-galeria .fl-grade-midias {grid-template-columns:1fr}.fl-form-comercial {padding:20px}.fl-conversao {gap:32px}.fl-comercial .fl-abertura__conteudo {padding-top:32px}.fl-comercial .fl-abertura .fl-h1 {font-size:38px}.fl-visor-topo {gap:12px}}
+@media(prefers-reduced-motion:reduce) {.fl-comercial * {scroll-behavior:auto!important;animation:none!important;transition:none!important}}
+body:has(.fl-comercial) .menu-cel {max-height:calc(100dvh - 73px);overflow-y:auto;overflow-wrap:anywhere}
+body:has(.fl-comercial) .rodape {overflow-wrap:anywhere}
+/* Contraste de textos pequenos usando as cores já presentes na marca. */
+.fl-comercial :is(.fl-clr,.fl-clr-2) :is(.fl-rot,.fl-nota) {color:var(--g)}
+.fl-comercial :is(.fl-esc,.fl-fundo) :is(.fl-rot,.fl-nota),.fl-comercial .fl-aba[aria-pressed=true] small {color:var(--nev)}
+.fl-form-comercial > .fl-bt {background:var(--g);border-color:var(--g);color:var(--nev);margin-top:24px}
+@media(max-width:540px) {.fl-grade-midias,.fl-galeria .fl-grade-midias {grid-template-columns:repeat(2,minmax(0,1fr))}#the-roof .fl-grade-midias > :first-child {grid-column:1/-1}}
