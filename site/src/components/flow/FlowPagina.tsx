@@ -299,11 +299,9 @@ export function FlowPagina({
           <ExposicaoFlow evento="view_engineering">
             <Cab
               rotulo="ENGENHARIA · JEITO BOSSA"
-              titulo="O cuidado está nos detalhes. Inclusive nos que não aparecem."
+              titulo="O conforto começa antes dos acabamentos."
             >
-              Além dos acabamentos apresentados, a Bossa prevê soluções para
-              conforto acústico e térmico, esquadrias normatizadas e detalhes de
-              execução que merecem ser vistos de perto.
+              Há decisões de projeto e execução que fazem diferença no uso diário. Conheça as soluções previstas para acústica, impermeabilização, esquadrias e exaustão no Flow.
             </Cab>
             <div className="fl-engenharia">
               {engenhariaFlow.map(([t, b, r]) => (
@@ -311,6 +309,7 @@ export function FlowPagina({
                   <h3 className="fl-h3">{t}</h3>
                   <p className="fl-p">{b}</p>
                   <p className="fl-nota">{r}</p>
+                  <Link href="/obras/flow-aptos/2026-09">Ver etapa no boletim ↗</Link>
                 </article>
               ))}
             </div>
@@ -325,11 +324,9 @@ export function FlowPagina({
           <ExposicaoFlow evento="view_construction">
             <Cab
               rotulo="ACOMPANHE A OBRA"
-              titulo="O projeto está no papel. E a obra está acontecendo."
+              titulo="A obra avança. Você acompanha cada etapa."
             >
-              O Flow tem entrega prevista para novembro de 2027. Acompanhe a
-              execução em fotos, vídeos e edições periódicas divulgadas pela
-              Bossa.
+              O Flow tem entrega prevista para novembro de 2027. A Bossa publica boletins para acompanhar o andamento dos serviços e mostrar como o empreendimento está sendo executado.
             </Cab>
             <div className="fl-obra-comercial">
               <div className="fl-pilha">
@@ -354,6 +351,7 @@ export function FlowPagina({
                 </a>
                 <div className="fl-dois">
                   <article>
+                    <FotoFlow src="/img/jazz-1.jpg" alt="Fotografia do Jazz Residence entregue" titulo="Jazz Residence" legenda="Empreendimento entregue · registro real"/>
                     <h3 className="fl-h3">Jazz</h3>
                     <p>Entregue em setembro de 2019.</p>
                     <Link href="/empreendimentos/jazz-residence">
@@ -361,6 +359,7 @@ export function FlowPagina({
                     </Link>
                   </article>
                   <article>
+                    <FotoFlow src="/img/soul-3.jpg" alt="Fotografia do Soul Residence entregue" titulo="Soul Residence" legenda="Empreendimento entregue · registro real"/>
                     <h3 className="fl-h3">Soul</h3>
                     <p>Entregue em dezembro de 2023.</p>
                     <Link href="/empreendimentos/soul-residence">
@@ -378,7 +377,7 @@ export function FlowPagina({
                   src={`${V}/obra.mp4`}
                   poster={`${I}/poster-obra.jpg`}
                   nome="Fábio apresenta a obra do Flow"
-                  legenda="Registro real da obra; data de captura a confirmar"
+                  legenda="Registro real da obra do Flow"
                   video="obra-flow"
                 />
               </div>
@@ -412,14 +411,12 @@ export function FlowPagina({
         <div className="fl-wrap">
           <Cab
             rotulo="LOCALIZAÇÃO"
-            titulo="Balneário Perequê. O endereço para a sua rotina."
+            titulo="Balneário Perequê. O endereço do Flow."
           >
-            Rua São José, 163, em Porto Belo, com acessos previstos pela Rua São
-            José e pela Rua Santa Terezinha. A distância divulgada até a Praia
-            do Perequê é de aproximadamente 800 metros; o percurso efetivo
-            depende do acesso utilizado.
+            Na Rua São José, 163, em Porto Belo, o Flow está a aproximadamente 800 metros da Praia do Perequê, conforme distância divulgada. O percurso efetivo depende do acesso utilizado.
           </Cab>
           <ExposicaoFlow evento="view_location">
+            <p className="fl-local-contexto fl-p">Conheça o endereço, os ambientes do edifício e a posição do apartamento para decidir o que faz mais sentido para a sua rotina.</p>
             <FotoFlow
               src={`${I}/localizacao-aereo.jpg`}
               alt="Imagem aérea do entorno do Flow Aptos no Balneário Perequê"
@@ -441,54 +438,28 @@ export function FlowPagina({
       <section id="visita" className="fl-sec fl-noite">
         <div className="fl-wrap">
           <Cab
-            rotulo="NO RITMO DA NOSSA VIDA."
-            titulo="Conheça o Flow de perto."
+            rotulo="CONHEÇA DE PERTO"
+            titulo="Vamos conhecer o Flow de perto?"
           >
-            Veja as plantas, escolha a unidade que mais combina com você e
-            converse com a equipe sobre visita e condições atuais.
+            Escolha a planta que mais chamou sua atenção e converse com a equipe Bossa. Vamos combinar uma visita e esclarecer as condições atuais para as opções de seu interesse.
           </Cab>
           <div className="fl-conversao">
-            <div className="fl-pilha">
-              <p>
-                O escritório da Bossa fica no térreo do Flow, na Rua São José,
-                163. A equipe confirma data, horário e condições de acesso à
-                obra.
-              </p>
-              {wa("Agendar visita", "flow_visita", true)}
-              {wa("Conversar pelo WhatsApp", "flow_contato", false, true)}
-              <p className="fl-nota">
-                A solicitação não confirma um agendamento. A planta consultada
-                segue na mensagem de WhatsApp; o formulário registra o pedido
-                geral.
-              </p>
+            <div className="fl-pilha fl-conversao-foto">
+              <FotoFlow src={`${I}/hall.jpg`} alt="Perspectiva ilustrativa do hall do Flow Aptos" titulo="Seu próximo passo começa aqui."/>
+              <p>O escritório da Bossa fica no térreo do Flow, na Rua São José, 163. A equipe confirma data, horário e condições de acesso à obra.</p>
             </div>
             <div className="fl-form-comercial">
-              <div className="fl-form-escolhas">
-                <button
-                  aria-pressed={modo === "visita"}
-                  onClick={() => setModo("visita")}
-                >
-                  Solicitar visita
-                </button>
-                <button
-                  aria-pressed={modo === "book"}
-                  onClick={() => setModo("book")}
-                >
-                  Solicitar apresentação do Flow
-                </button>
-              </div>
               <div hidden={modo !== "visita"}>
                 <h3 className="fl-h3">Solicitar visita</h3>
                 <p>
-                  Deixe seu contato. Data e horário serão combinados pela
-                  equipe.
+                  Deixe seu contato. Nossa equipe retorna para combinar data e horário.
                 </p>
                 <FormLead
                   formulario="visita"
                   empreendimento={e.slug}
                   solicitacao
                   botao="Enviar pedido de visita"
-                  sucesso="Pedido recebido. Nossa equipe entrará em contato para combinar data e horário. A visita ainda não está confirmada."
+                  sucesso="Recebemos seu pedido. Nossa equipe entrará em contato para combinar a visita."
                 />
               </div>
               <div hidden={modo !== "book"}>
@@ -502,17 +473,19 @@ export function FlowPagina({
                   empreendimento={e.slug}
                   solicitacao
                   botao="Solicitar apresentação do Flow"
-                  sucesso="Recebemos seu pedido. Nossa equipe entrará em contato para compartilhar o material."
+                  sucesso="Recebemos seu pedido. Nossa equipe entrará em contato para compartilhar a apresentação do Flow."
                 />
               </div>
-              {wa("Conversar com a equipe", "flow_form_alternativa")}
+              {wa("Conversar pelo WhatsApp", "flow_form_alternativa", true)}
+              <button className="fl-book-link" onClick={() => setModo(modo === "book" ? "visita" : "book")} aria-expanded={modo === "book"}>{modo === "book" ? "Voltar ao pedido de visita" : "Prefiro solicitar a apresentação do Flow"}</button>
+              <p className="fl-nota">A solicitação não confirma agendamento. A equipe combina data e horário.</p>
             </div>
           </div>
         </div>
       </section>
       <section id="duvidas-flow" className="fl-sec fl-clr-2">
         <div className="fl-wrap">
-          <Cab rotulo="DÚVIDAS" titulo="O que você quer saber sobre o Flow?">
+          <Cab rotulo="DÚVIDAS" titulo="O que vale saber antes de visitar.">
             Informações para conhecer o projeto e conversar com a equipe.
           </Cab>
           <div className="fl-faq-comercial">
@@ -533,6 +506,7 @@ export function FlowPagina({
               </details>
             ))}
           </div>
+          <a className="fl-bt" href="#visita">Solicitar visita</a>
           <p className="fl-nota">
             {notaLegal} Perspectivas ilustrativas do projeto. Andamento
             histórico: {ed.percentual.toLocaleString("pt-BR")}% em{" "}

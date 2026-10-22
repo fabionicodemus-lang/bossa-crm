@@ -23,50 +23,17 @@ export const flowMetaPlanta = (p: Planta) => ({
 export const mensagemFlow = (p?: Planta, visita = false) =>
   `Olá! ${visita ? "Quero solicitar uma visita para conhecer o Flow Aptos. Sei que data, horário e acesso serão confirmados pela equipe." : "Estou conhecendo o Flow Aptos e gostaria de conversar."}${p ? ` Estou consultando ${p.nome}, ${p.area}, ${p.suites} suítes.` : ""}`;
 export const faqFlow = [
-  {
-    p: "A que distância fica da praia?",
-    r: "A distância divulgada até a Praia do Perequê é de aproximadamente 800 metros. O percurso efetivo depende do acesso utilizado. O Flow fica na Rua São José, 163, em Porto Belo. A consulta de endereço no mapa não representa uma rota pedonal aferida.",
-  },
-  {
-    p: "Quais plantas existem?",
-    r: "São cinco opções: Tipo 2 e Tipo 3, de 62 m², e Tipo 1, de 73 m², com duas suítes; Duplex Tipo 2 e 3, de 93 m², e Duplex Tipo 1, de 117,7 m², com três suítes e living de pé-direito duplo. Consulte a equipe sobre as condições atuais. Vagas não estão confirmadas nesta apresentação.",
-  },
-  {
-    p: "O que há no Flow Move e no The Roof?",
-    r: "No 5º pavimento, o Flow Move reúne coworking, fitness, Flow Store, lavanderia, playground, espaço zen e Cine Flow. No 24º, o The Roof tem piscina com infraestrutura para aquecimento, gourmet, pub, brinquedoteca e salão de festas. São áreas comuns, diferentes da área privativa do apartamento.",
-  },
-  {
-    p: "Quando está prevista a entrega?",
-    r: "A entrega do Flow está prevista para novembro de 2027. Acompanhe as informações atualizadas com a Bossa; a previsão não é promessa de antecipação.",
-  },
-  {
-    p: "Como acompanhar a obra?",
-    r: "Pelas edições periódicas publicadas pela Bossa. O boletim disponível nesta apresentação é a edição 25, de setembro de 2026, com 57,87%. Esse percentual é histórico e não representa uma nova medição em outubro.",
-  },
-  {
-    p: "Posso visitar?",
-    r: "Sim. Solicite uma visita à equipe. O escritório da Bossa fica na Rua São José, 163, no térreo do Flow. Data, horário e eventual acesso à obra dependem de confirmação da equipe e das condições de segurança. O pedido pelo site não confirma agendamento.",
-  },
+ {p:"A que distância fica da Praia do Perequê?",r:"A distância divulgada é de aproximadamente 800 metros. O percurso depende do acesso utilizado. Você pode consultar o endereço no mapa."},
+ {p:"Quais apartamentos existem?",r:"As plantas tipo têm 62 ou 73 m² e duas suítes. Os duplex têm 93 ou 117,7 m² e três suítes."},
+ {p:"Como funcionam as áreas de lazer?",r:"O Flow Move fica no 5º pavimento e o The Roof no 24º. Ambos reúnem os ambientes descritos nesta página."},
+ {p:"Quando está prevista a entrega?",r:"Novembro de 2027. A equipe pode esclarecer o cronograma e as condições contratuais da unidade de interesse."},
+ {p:"Como acompanho a construção?",r:"Pelos boletins divulgados pela Bossa. A edição nº 25, de setembro de 2026, registrou avanço geral de 57,87%."},
+ {p:"Como confirmo unidade, andar, vagas e condições comerciais?",r:"A equipe consulta as informações atuais da unidade de seu interesse e apresenta os detalhes confirmados."},
+ {p:"Posso visitar?",r:"Sim. Solicite uma visita; nossa equipe combina data, horário e as condições de acesso."},
 ];
 export const engenhariaFlow = [
-  [
-    "Conforto entre os ambientes",
-    "Isolamento acústico e térmico entre lajes e paredes de divisa, conforme as especificações de acabamentos do Flow. Uma solução de projeto para conforto, sem promessa de silêncio absoluto.",
-    "Referência: especificações de acabamentos do Flow, aprovadas no conteúdo do site.",
-  ],
-  [
-    "Materiais e execução",
-    "Porcelanato no living e piso vinílico nas suítes. O boletim de setembro de 2026 descreve impermeabilização e dupla colagem no box.",
-    "Referência: acabamentos do Flow e boletim nº 25, setembro/2026.",
-  ],
-  [
-    "Churrasqueira com exaustão",
-    "Churrasqueira a carvão com coifa, damper e sistema de exaustão previsto no projeto. Conheça os detalhes de execução com a equipe.",
-    "Referência: especificações de instalações e acabamentos do Flow.",
-  ],
-  [
-    "Esquadrias e aberturas",
-    "Esquadrias normatizadas e aberturas que fazem parte das decisões de conforto do projeto. A equipe pode esclarecer especificações e abrangência.",
-    "Referência: especificação aprovada da Etapa 2; detalhamento técnico a consultar com a Bossa.",
-  ],
+ ["Acústica: cuidado entre os ambientes.","As soluções especificadas entre lajes e divisas integram o projeto de conforto do Flow.","Consulte a equipe sobre as especificações de projeto."],
+ ["Áreas molhadas: atenção antes do revestimento.","O boletim de setembro detalha impermeabilização e assentamento do box.","Boletim nº 25 · setembro de 2026."],
+ ["Churrasqueira: exaustão prevista em projeto.","O sistema inclui coifa, damper e exaustão, conforme detalhamento a validar.","Conheça o detalhamento com a equipe."],
+ ["Esquadrias: projeto e instalação.","Conheça a especificação e o estágio de execução das aberturas.","Esquadrias metálicas: 18% no boletim de setembro de 2026."],
 ];
