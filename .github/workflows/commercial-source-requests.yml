@@ -41,6 +41,8 @@ jobs:
         run: node scripts/commercial/check-source-requests.mjs
       - name: Test retry helper and Microsoft event options
         run: node --experimental-strip-types scripts/commercial/check-source-request-client.mjs
+      - name: Test proposal business conflict SQLSTATE compatibility
+        run: node scripts/commercial/check-http-conflict-compatibility.mjs
       - name: Test human agenda API recovery
         run: node --experimental-strip-types --loader ./scripts/agenda/loader.mjs scripts/agenda/check-route.mjs
       - name: Ensure PostgreSQL client

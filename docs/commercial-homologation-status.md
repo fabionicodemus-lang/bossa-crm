@@ -9,6 +9,20 @@ anterior e não certifica a equivalência integral da plataforma. Os candidatos 
 permissão independentes estão em `supabase/security/`; não foram aplicados em
 produção. O checklist original permanece em **12/24**, com F1.5 parcial.
 
+**Fechamento da V1:** as correções locais até `e56ac65` foram publicadas na
+branch existente, sem merge. A regressão dos conflitos de negócio HTTP agora
+integra o workflow permanente de pedidos de origem; seu teste SQL permanece
+separado da validação do serviço REST e do navegador. Nenhuma das 13 migrações
+comerciais foi reescrita. A revisão das permissões usa os candidatos independentes
+SECURITY INVOKER, sem ampliar grants.
+
+A matriz privada mantém **12/16 verificações de preparação da V1**. Equivalência
+estrutural atual não comprova SQL histórico ausente; chamadores encontrados no
+código não encerram o inventário do ambiente implantado. O roteiro humano e o
+pré-voo ficam na entrega privada, com automações e envios desativados. Testes
+automáticos no preview não constituem aprovação operacional. A consulta remota
+ao PR/Actions retornou 403; não se declara CI remoto aprovado para a nova revisão.
+
 **Resultado: integração do schema versionado aprovada; homologação integral do Supabase implantado permanece impedida.** HEAD de entrada: `bebb0dfb44c9f737be10de02845871637ba858e1`, branch `feat/commercial-metrics-foundation`, árvore inicialmente limpa. A referência remota de `main` foi conferida em `d88fdd23d07f78dfe994df8e74445b9340153f14`. O checklist fixo do PR #128 mantém **12/24 macroentregas (50%)**: `████████████░░░░░░░░░░░░`. F1.5 permanece parcial; nenhum dos 24 itens foi acrescentado, removido ou promovido nesta rodada.
 
 ## Ambiente e alcance da evidência
