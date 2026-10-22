@@ -1,7 +1,7 @@
 "use client";
 import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
-import type { Empreendimento, Planta } from "@/content/empreendimentos";
+import type { Empreendimento } from "@/content/empreendimentos";
 import { LinkWhatsApp } from "../LinkWhatsApp";
 import { rastrear } from "@/lib/rastreio";
 import { useExposicaoFlow, VisorFlow } from "./Experiencia";
@@ -28,11 +28,15 @@ export function PlantasFlow({
     [retorno, setRetorno] = useState("");
   useEffect(() => setRetorno(""), [p.slug]);
   const aviso =
-    p.slug === "duplex-tipo-1"
-      ? "Prancha ilustrativa do Duplex Tipo 1, com os pisos inferior e superior e área privativa total de 117,7 m². Amplie para consultar o desenho."
-      : p.suites === 3
-        ? "Prancha ilustrativa com os pisos inferior e superior. Consulte a equipe para esclarecer a distribuição."
-        : "Planta humanizada ilustrativa. Consulte a equipe sobre o detalhamento do projeto.";
+    p.slug === "tipo-1"
+      ? "Planta comercial ilustrativa. Mobiliário, decoração e acabamentos sugeridos. Consulte as especificações da unidade."
+      : p.slug === "tipo-2" || p.slug === "tipo-3"
+        ? "Referência ilustrativa provisória de 62 m². Conjuntos técnicos em revisão; não representa desenho executivo validado. Consulte a versão vigente com a equipe."
+        : p.slug === "duplex-tipo-1"
+          ? "Prancha ilustrativa do Duplex Tipo 1, com os pisos inferior e superior e área privativa total de 117,7 m². Amplie para consultar o desenho."
+          : p.suites === 3
+            ? "Prancha ilustrativa com os pisos inferior e superior. Consulte a equipe para esclarecer a distribuição."
+            : "Planta humanizada ilustrativa. Consulte a equipe sobre o detalhamento do projeto.";
   const foto = {
     src: p.imagens[0].src,
     alt: p.imagens[0].alt,
@@ -116,7 +120,12 @@ export function PlantasFlow({
           </div>
         ))}
       </div>
-      <div ref={ref} id="fl-planta-painel" className="fl-planta-painel">
+      <div
+        ref={ref}
+        id="fl-planta-painel"
+        data-tipo={p.slug}
+        className="fl-planta-painel"
+      >
         <div>
           <button
             className="fl-planta-quadro"
@@ -146,7 +155,7 @@ export function PlantasFlow({
             {p.area} · {p.suites} suítes
           </h3>
           <p className="fl-p">{p.descricao}</p>
-          <p>Área privativa</p>
+          <p>Área comercial divulgada</p>
           <LinkWhatsApp
             className="fl-bt"
             empreendimento={e.slug}

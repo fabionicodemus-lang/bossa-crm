@@ -1,0 +1,32 @@
+FLOW APTOS - VALIDAÇÃO VISUAL E DOCUMENTAL - 22/10/2026
+
+PARECER
+Tipo 1: aprovado para representação comercial ilustrativa de 73 m², pela comparação visual com o executivo R8 e a apresentação comercial (página 22). Não é certificação municipal, registral ou de as-built.
+Tipos 2 e 3: identidade comercial confirmada como 62 m², mas não liberados para inclusão definitiva antes de compatibilizar os conjuntos técnicos junto à fachada com R8 e a execução vigente.
+Living: não liberado como Tipo 2. Abertura lateral estreita e distribuição não permitem confirmar a correspondência ao Tipo 2. Existe afinidade parcial com a geometria do Tipo 1, insuficiente para renomear automaticamente.
+
+ÚNICO ARQUIVO LIBERADO NESTA RODADA
+liberado-para-implementacao/tipo1-73m2.webp - 3000 x 1758 px; 289054 bytes; transparência preservada. Original 3630 x 2127 px, sem reconstrução ou geração por IA.
+Destino sugerido: site/public/img/flow/plantas/tipo1-73m2.webp.
+No conteúdo do Flow em site/src/content/empreendimentos.ts, atualizar somente a imagem da entrada slug tipo-1 após o responsável iniciar a implementação. Preservar a rota tipo-1, a área comercial de 73 m² e os demais campos. A revisão atual não alterou esse arquivo.
+Texto alternativo sugerido: Planta humanizada ilustrativa do apartamento Tipo 1 do Flow Aptos, com duas suítes e área comercial divulgada de 73 m².
+Legenda: Planta ilustrativa. Mobiliário e decoração sugeridos. Consulte as especificações da unidade.
+
+CANDIDATOS NÃO LIBERADOS
+Os três arquivos em candidatos-NAO-PUBLICAR são os WebPs já existentes no pacote recuperado, mantidos para referência e correção. Não integram o catálogo liberado. Compressão e boa resolução não resolvem divergência arquitetônica.
+Não substituir automaticamente os atuais Tipo 2/3 por esses derivados. O acervo anterior também precisa da mesma compatibilização; esta decisão não certifica os arquivos anteriores.
+
+ANTES DA RODADA FINAL COMPLETA
+1. Fixar a revisão arquitetônica que corresponde à execução e identificar sua aprovação municipal. As cópias R7 e R8 vistas têm campo de carimbos vazio; R8 é emissão de executivo em 04/07/2024. O PDF assinado R6 de 2022 comprova assinaturas dos autores, não carimbo municipal vigente.
+2. Compatibilizar os dois conjuntos técnicos das plantas de 62 m²; exportar novamente, sem deformar a imagem ou reconstruir com IA. Confrontar também vãos, portas, áreas técnicas e instalações com o executivo.
+3. Resolver o vínculo do living por planta marcada com ponto de câmera e/ou pelo modelo original compatibilizado; confirmar paredes e aberturas. Não basta o nome do JPG nem o uso em apresentação anterior.
+4. Receber 3-6 fotos reais identificadas de engenharia; quatro VTTs e transcrições revisadas (obra, unidade-1601, Augusto, Natália); data de filmagem do vídeo da obra confirmada pela fonte.
+
+PODE COMEÇAR AGORA, EM IMPLEMENTAÇÃO SEPARADA
+Correções de cookies em tela baixa, percepção da troca do Flow Move, proximidade de controles/fotos de vistas, altura das plantas em tablet e ritmo da página. Também pode preparar o Tipo 1 liberado. Nada disso exige novos renders de lazer.
+
+ANTES DE PUBLICAR
+Revisão independente da página renderizada nas cinco larguras e tela baixa; conferência das cinco plantas/zoom/teclado, comparação de vistas e vídeos; homologação operacional autorizada de captação/retorno em ambiente apropriado; proteção e noindex preservados até decisão explícita de publicação.
+Não houve nova nota editorial nesta conferência de materiais. A nota de 8,1/10 é a referência da Etapa 6; os materiais não garantem 9/10 sem nova auditoria.
+
+Leia o PDF para evidências, fontes, limites e correções exatas. O CSV guarda dimensões, status, URLs e hashes. Nenhum código, projeto arquitetônico ou original foi alterado; nenhum merge ou publicação foi realizado.
