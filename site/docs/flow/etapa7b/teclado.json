@@ -1,0 +1,13 @@
+{
+  "metodo": "Chromium emulado 390×844 CSS px; teclado via Playwright; sem aparelho físico.",
+  "plantas": "ArrowRight/ArrowLeft: seleção e foco preservados",
+  "move": "ArrowDown/Enter: imagem coworking",
+  "vistas": "ArrowDown/Enter: 15º e contato coerentes",
+  "zoom": {
+    "atual": "http://localhost:3220/_next/image?url=%2Fimg%2Fflow%2Fplantas%2Ftipo1-73m2.webp&w=1920&q=70",
+    "naturalWidth": 1559,
+    "naturalHeight": 914,
+    "objectFit": "contain"
+  },
+  "retornoFoco": true
+}

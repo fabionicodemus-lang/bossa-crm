@@ -1,0 +1,15 @@
+{
+  "arquivo": "public/img/flow/plantas/tipo1-73m2.webp",
+  "largura": 3000,
+  "altura": 1758,
+  "modo": "RGBA",
+  "bytes": 289054,
+  "sha256": "f41defb65a1a7f5bad65b9ee2975607f544d03ebb02eea6e0f44778885b62a68",
+  "tratamento": "Cópia exata do único arquivo liberado no dossiê. Sem recorte, rotação, recompressão ou geração de geometria.",
+  "limite": "Planta comercial ilustrativa; não é certificação executiva, registral, municipal ou de execução.",
+  "naoInstalados": [
+    "tipo2-62m2.webp",
+    "tipo3-62m2.webp",
+    "living-tipo02.webp"
+  ]
+}
