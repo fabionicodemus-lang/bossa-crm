@@ -44,6 +44,8 @@
 .al-estreito .al-p, .al-estreito .al-lead { margin-inline: auto; }
 .al-nota { font: 400 13px/19px var(--sans); color: var(--tau); margin: 0; }
 .al-sal .al-nota, .al-noite .al-nota { color: var(--are); }
+/* Textos pequenos sobre sálvia: contraste AA com o claro da própria paleta. */
+.al-fase3 .al-sal :is(.al-rot, .al-p, .al-nota, .al-midia-prevista) { color: var(--cla); }
 .al-num { font: 200 clamp(56px, 8vw, 120px)/.9 var(--serif); letter-spacing: -.03em; margin: 0; }
 .al-num small { font: 400 .2em/1 var(--sans); letter-spacing: .2em; text-transform: uppercase; margin-left: .5em; }
 .al-pilha { display: grid; gap: 20px; align-content: start; }

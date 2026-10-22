@@ -21,6 +21,6 @@ const fs = require('node:fs');
   assert.equal((await enviar({whatsapp:'123'})).status,422);assert.equal((await enviar({whatsapp:'+351912345678',consentimento:false})).status,422);
   falhar=true;const falha=await enviar({whatsapp:'+351912345678'});assert.equal(falha.status,500);assert.equal((await falha.json()).gravado,undefined);
   const evidencia={data:new Date().toISOString(),modo:'API real do site contra RPC HTTP local simulado; nenhum Supabase ou CRM real acessado',verificacoes:['DDI +351, +1 e +49 preservados até p_telefone da RPC','DDD nacional recebe 55','Interesse geral, finalidade opcional nula e contrato de sucesso confirmados','Validação 422 e falha RPC 500 verificadas']};
-  fs.mkdirSync('docs/alma/capturas',{recursive:true});fs.writeFileSync('docs/alma/capturas/api-verificacao.json',JSON.stringify(evidencia,null,2));console.log(evidencia);
+  const pasta=process.env.EVIDENCIAS_DIR || 'docs/alma/capturas';fs.mkdirSync(pasta,{recursive:true});fs.writeFileSync(`${pasta}/api-verificacao.json`,JSON.stringify(evidencia,null,2));console.log(evidencia);
  }finally{next.kill('SIGTERM');rpc.close();}
 })().catch(e=>{console.error(e);process.exitCode=1});

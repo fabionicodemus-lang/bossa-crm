@@ -1,0 +1,45 @@
+{
+  "data": "2026-10-22T01:04:46.289Z",
+  "matriz": [
+    {
+      "ambiente": "preview",
+      "liberacao": "sim",
+      "indexavel": false
+    },
+    {
+      "ambiente": "preview",
+      "liberacao": "nao",
+      "indexavel": false
+    },
+    {
+      "ambiente": "production",
+      "liberacao": "sim",
+      "indexavel": true
+    },
+    {
+      "ambiente": "production",
+      "liberacao": "nao",
+      "indexavel": false
+    },
+    {
+      "ambiente": "development",
+      "liberacao": "sim",
+      "indexavel": true
+    },
+    {
+      "ambiente": "development",
+      "liberacao": "nao",
+      "indexavel": false
+    },
+    {
+      "ambiente": "local",
+      "liberacao": "sim",
+      "indexavel": true
+    },
+    {
+      "ambiente": "local",
+      "liberacao": "nao",
+      "indexavel": false
+    }
+  ]
+}

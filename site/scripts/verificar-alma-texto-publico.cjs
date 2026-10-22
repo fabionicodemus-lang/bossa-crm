@@ -5,7 +5,8 @@ const assert = require("node:assert/strict"),
   fs = require("node:fs");
 const base = process.env.BASE_URL || "http://localhost:3200";
 assert.match(base, /^http:\/\/(localhost|127\.0\.0\.1):\d+$/);
-const pasta = "docs/alma/fase4";
+const pasta = process.env.EVIDENCIAS_DIR || "docs/alma/fase4";
+fs.mkdirSync(pasta, { recursive: true });
 const publica = process.argv.includes("--publica");
 const slug = "/empreendimentos/alma-seahouses";
 let b;
