@@ -1,0 +1,1203 @@
+{
+  "scope": "repository-schema-with-explicit-platform-adapter",
+  "productionSchemaVerified": false,
+  "baseRevision": "bebb0dfb44c9f737be10de02845871637ba858e1",
+  "migrations": [
+    {
+      "file": "001_bossa_crm.sql",
+      "sha256": "d3e472f16cc1a2fa18e84ddc058c8c6a3b60656dab4cdeda77f1383ba6caccd0",
+      "skipped": [],
+      "statementsApplied": 115
+    },
+    {
+      "file": "002_openai_personas_classificacao.sql",
+      "sha256": "b1814769a32b1542fed664823e6ba10fefbcbf96244a17f2606f7fedb67516ec",
+      "skipped": [
+        {
+          "line": 31,
+          "reason": "legacy-data-or-backfill",
+          "sha256": "2fa58db37d0cd10facc7752e0d75a8a85596107d73065eadf930db4747b0bca5"
+        },
+        {
+          "line": 38,
+          "reason": "legacy-data-or-backfill",
+          "sha256": "46c366382b77b38ccb55dbcca1b2b76fdc747b6df844eac8d5065e8dce47977a"
+        }
+      ],
+      "statementsApplied": 3
+    },
+    {
+      "file": "002_treinamento_nara_plantao.sql",
+      "sha256": "4050d8302cd2d918b08ee3b471641f9cb190608e2532d7e2e33d8c1c053464cb",
+      "skipped": [],
+      "statementsApplied": 26
+    },
+    {
+      "file": "003_arquivos_ia.sql",
+      "sha256": "6cafe51b193d0ac19af83e279d1d3d4f21215f6eb69f50defcf94bfb6d95c7fe",
+      "skipped": [
+        {
+          "line": 57,
+          "reason": "legacy-data-or-backfill",
+          "sha256": "2c9cece21b90790e47b5fe9dd299c7c7c2c2ede519130e081fff4ef4d34f8d83"
+        }
+      ],
+      "statementsApplied": 23
+    },
+    {
+      "file": "004_consumo_ia_gpt56.sql",
+      "sha256": "89c711adac8d74876ba7a2f42963bc22f0ffd510fd9693947e3498e85a9f0735",
+      "skipped": [],
+      "statementsApplied": 8
+    },
+    {
+      "file": "005_sistema_hibrido_followup.sql",
+      "sha256": "166053a8a41dd4e119818e01de29a781d491bc8163decfd3e409429a6a54ddc3",
+      "skipped": [
+        {
+          "line": 35,
+          "reason": "legacy-data-or-backfill",
+          "sha256": "39809dca8166939dda71bfd0fe8e1b113c9d9b25a1131422bca8847582e05f86"
+        },
+        {
+          "line": 51,
+          "reason": "legacy-data-or-backfill",
+          "sha256": "857f0433a22c4d53ac5a4d2a402aa4498e7547dd8b14df6b6e310945c201a342"
+        },
+        {
+          "line": 57,
+          "reason": "legacy-data-or-backfill",
+          "sha256": "7fffe36e4ebc74f9d2a3345c17bbd74f6c0d81fe851d1da2bb6656b539d9f32d"
+        },
+        {
+          "line": 232,
+          "reason": "legacy-data-or-backfill",
+          "sha256": "c0d7b8a1c7fdf7367a0c5473d7163b0baee336878cca207682e6d2a5405abd08"
+        }
+      ],
+      "statementsApplied": 50
+    },
+    {
+      "file": "006_agendar_worker_followup.sql",
+      "sha256": "9784bf7a7574b9c011704f256c66d9a3e499c9cac56fa05a01dbe4d4a9ec3454",
+      "skipped": [
+        {
+          "line": 1,
+          "reason": "disabled-automation-extension",
+          "sha256": "532908948fb8b1fda1c31f1cae7e9a6786ce2d860bfd21a44ff2d2939353a6f0"
+        },
+        {
+          "line": 10,
+          "reason": "disabled-automation-extension",
+          "sha256": "767c037d834e6bc2c451c32486d80356d0084ee633cc83f8a56dafdd967b5f3e"
+        },
+        {
+          "line": 11,
+          "reason": "operational-vault-or-scheduling",
+          "sha256": "12b34473679e5779859ba092d30b8a9c78e3d8df464d4ab617159cc896c4a6df"
+        },
+        {
+          "line": 26,
+          "reason": "operational-select-or-scheduling",
+          "sha256": "bd16c07181fd2f101adcfb9609c35f211fb72fbccf80ef865c16e4647c2d9209"
+        },
+        {
+          "line": 52,
+          "reason": "operational-select-or-scheduling",
+          "sha256": "b57bc9f5dc9d782d2798e114cfed4ff8e0a99ccbd9a456ed5901453322916d85"
+        }
+      ],
+      "statementsApplied": 0
+    },
+    {
+      "file": "007_empreendimentos_estoque_propostas.sql",
+      "sha256": "f0b309843d0ad5f4bf47a451d44b141d4057d51ca36e0e1576a73b19876a9c6d",
+      "skipped": [
+        {
+          "line": 295,
+          "reason": "legacy-data-or-backfill",
+          "sha256": "3883526779733b93df78af25259a89fd5cba2258fd71bb8708198cec49c92c7c"
+        },
+        {
+          "line": 339,
+          "reason": "legacy-data-or-backfill",
+          "sha256": "18b234cfffe4dd65c4f0219c8238d56f86fd4a87de1e100983e5701632148bdc"
+        },
+        {
+          "line": 364,
+          "reason": "legacy-data-or-backfill",
+          "sha256": "eafcc727f652f70149903bb9d49bb8dbb519d629c0b0786b711fa897ffc0bdd6"
+        },
+        {
+          "line": 388,
+          "reason": "legacy-data-or-backfill",
+          "sha256": "3dd54bc1ab7e60a6bcaa7faa6bf460b2b8752609dad554c2fe30422ec43c165b"
+        },
+        {
+          "line": 410,
+          "reason": "legacy-data-or-backfill",
+          "sha256": "88808cb01c73bce8924e42b176eae5b486de15680575fe48e052874b9c4f5dc7"
+        },
+        {
+          "line": 435,
+          "reason": "legacy-data-or-backfill",
+          "sha256": "c38e24573311a37a66ef2cd2aed44c1b7633d521c1aedd523828d01996c16cdd"
+        },
+        {
+          "line": 527,
+          "reason": "legacy-data-or-backfill",
+          "sha256": "e799ab015d945598a7f3a6c1b1419391e5dc3c4bdf7b75389e003fe5db798dcf"
+        }
+      ],
+      "statementsApplied": 57
+    },
+    {
+      "file": "008_arquivamento_exclusao_leads.sql",
+      "sha256": "843922ee3ef1f206e8436ede30c1cd3aeb1f2b2e2a7d79fed80790c8880d0a42",
+      "skipped": [],
+      "statementsApplied": 9
+    },
+    {
+      "file": "009_transmissoes_whatsapp.sql",
+      "sha256": "4d8eadd07925047021132d91ddc418a48d875b2edde5db48a21ea3b8c78cf76f",
+      "skipped": [
+        {
+          "line": 95,
+          "reason": "legacy-data-or-backfill",
+          "sha256": "e6cde737092b58e40e5a035a045936c117981f51398eff87971c73f23e1e9ec3"
+        }
+      ],
+      "statementsApplied": 43
+    },
+    {
+      "file": "010_propostas_cronograma_pdf.sql",
+      "sha256": "1a37e12817b523a5db1c9d1f7f059d543d81f581e93fac24b7e804315dafccf6",
+      "skipped": [],
+      "statementsApplied": 4
+    },
+    {
+      "file": "011_modelos_meta.sql",
+      "sha256": "388e997b1b70edc87f1f0e5c99fdece81782b2c11895d26fa068b3e48f657dfd",
+      "skipped": [],
+      "statementsApplied": 6
+    },
+    {
+      "file": "012_whatsapp_desenvolvedor_direto.sql",
+      "sha256": "6193dee4364a1f9baec2839945e4b9d68eedc914078140dbaae7c2700f713dad",
+      "skipped": [
+        {
+          "line": 42,
+          "reason": "legacy-data-or-backfill",
+          "sha256": "69fa681d61c617e13897339156b73ffb52d69ea74ff6a27b8a2affc19e2552f4"
+        },
+        {
+          "line": 128,
+          "reason": "legacy-data-or-backfill",
+          "sha256": "20067ec3f4ab387f44f68ae8bbe2567f2d417d10c11c267d016e112ba9adb38e"
+        },
+        {
+          "line": 210,
+          "reason": "legacy-data-or-backfill",
+          "sha256": "9045db792a1a205499b3da13f7643765751f4fc64d892ef9e4b5a6409dc2ace6"
+        },
+        {
+          "line": 216,
+          "reason": "legacy-data-or-backfill",
+          "sha256": "33ba7e05faa349044a46223ebd9834014cca6dc7d0719d63577bbb44396911c9"
+        },
+        {
+          "line": 223,
+          "reason": "legacy-data-or-backfill",
+          "sha256": "40845c8e383fcf7be441c4247d20742524efd6400de31692417902377fe13484"
+        },
+        {
+          "line": 276,
+          "reason": "legacy-data-or-backfill",
+          "sha256": "0e51fd8351a940ae1278b88d1e7085c2fafe7c546fcddacdbdb60c1f655fd6da"
+        },
+        {
+          "line": 293,
+          "reason": "legacy-data-or-backfill",
+          "sha256": "f6761eb7b1ecc1296087ccfca61098086e74536e9a7f567a505778ffb8fc65a9"
+        },
+        {
+          "line": 367,
+          "reason": "legacy-data-or-backfill",
+          "sha256": "d48a8ff7c8d37282c2e1e8bfac5dd3c34652fc79effd106bec113748d19cd491"
+        }
+      ],
+      "statementsApplied": 64
+    },
+    {
+      "file": "013_agendar_worker_whatsapp.sql",
+      "sha256": "e4c134a1d0b5a6178145f95d473fe4f409a06d3421f7f7d0c8b20b1607cfa88d",
+      "skipped": [
+        {
+          "line": 62,
+          "reason": "disabled-automation-extension",
+          "sha256": "65417035686a2ff56773906a7d323419b09b01a55438b8fa439702a83568cec8"
+        },
+        {
+          "line": 64,
+          "reason": "disabled-automation-extension",
+          "sha256": "767c037d834e6bc2c451c32486d80356d0084ee633cc83f8a56dafdd967b5f3e"
+        },
+        {
+          "line": 65,
+          "reason": "operational-vault-or-scheduling",
+          "sha256": "910fd9aba3ef0efa6fe570c3711c541805f954b02e5a031f575bd7ed76a4c7c2"
+        },
+        {
+          "line": 82,
+          "reason": "operational-vault-or-scheduling",
+          "sha256": "0f157d0f1d9695f7944456db6b0695b7be5befc05d2dc17a88d831e80c81a26b"
+        },
+        {
+          "line": 97,
+          "reason": "operational-select-or-scheduling",
+          "sha256": "3893921257c3ea3614fb8ba7bfbc93bc12862b70ae3da6a969563d78e8868652"
+        },
+        {
+          "line": 122,
+          "reason": "operational-select-or-scheduling",
+          "sha256": "055e861188b53f60833ff52f5d88c5da78493482ff47c1edc91815a044b975f6"
+        }
+      ],
+      "statementsApplied": 4
+    },
+    {
+      "file": "014_whatsapp_coexistencia.sql",
+      "sha256": "f0351eb47cfb0de2a98765e1285ca8bca684ba304b6a019fe3599dafb3466b61",
+      "skipped": [],
+      "statementsApplied": 7
+    },
+    {
+      "file": "015_meta_ad_referral_attribution.sql",
+      "sha256": "52e680a3de97bf1c055ceb7ec357e4719e923b384fabe85cbb727c2e8bf798bd",
+      "skipped": [],
+      "statementsApplied": 2
+    },
+    {
+      "file": "016_nara_prompt_final.sql",
+      "sha256": "bac3d49a66ad680f4e37816584d8f291143082ce012873992dcbba27b73582bd",
+      "skipped": [
+        {
+          "line": 4,
+          "reason": "legacy-data-or-backfill",
+          "sha256": "6882d9476ed058102052a0271c0a35146f6d62842093309ae3ff7bf1004735a5"
+        }
+      ],
+      "statementsApplied": 2
+    },
+    {
+      "file": "017_nara_offer_logs.sql",
+      "sha256": "cec748577235d04579f03b90b1e690b4a2a878ee9907f045b8dde94266240c94",
+      "skipped": [],
+      "statementsApplied": 9
+    },
+    {
+      "file": "018_nara_dynamic_context.sql",
+      "sha256": "b412a9276904d89c11c674353d4bcbf9b3d1921b1cc19ede1246233147820e1b",
+      "skipped": [],
+      "statementsApplied": 13
+    },
+    {
+      "file": "019_nara_prompt_versions.sql",
+      "sha256": "77114e8ebf1e4284508bc98313f390b084a1be117a3cd8dd70f193a709e48887",
+      "skipped": [],
+      "statementsApplied": 8
+    },
+    {
+      "file": "020_nara_prompt_score_enum.sql",
+      "sha256": "5b098866b78398b77fd3677de293825ae2add00e97e299ba9cb99f79076cbd15",
+      "skipped": [
+        {
+          "line": 5,
+          "reason": "legacy-data-or-backfill",
+          "sha256": "85a7676e438a08b15162c7811c771676e919e9044fb7907c8d6299f7df17cc39"
+        }
+      ],
+      "statementsApplied": 2
+    },
+    {
+      "file": "021_ai_files_commercial_access.sql",
+      "sha256": "fb4ad1fa38043ec805ca3496569df6f1f6b9137f80e20856add3ab47e535de3a",
+      "skipped": [],
+      "statementsApplied": 26
+    },
+    {
+      "file": "022_multiple_whatsapp_channels.sql",
+      "sha256": "4cb80e0cb22142809ef119e96b27409f88f29545ce84f3fcabcd442287c35b8b",
+      "skipped": [
+        {
+          "line": 15,
+          "reason": "legacy-data-or-backfill",
+          "sha256": "27e88d2f3df0ce27924f867182966f802cc1c82819c71f243129a1d8df88ad2d"
+        }
+      ],
+      "statementsApplied": 9
+    },
+    {
+      "file": "022_unit_status_em_contrato.sql",
+      "sha256": "fe21f476912a4592c20f45475057096dd7051db444fbed53bb39f582474124ae",
+      "skipped": [],
+      "statementsApplied": 4
+    },
+    {
+      "file": "023_whatsapp_history_sync.sql",
+      "sha256": "79d142dc2182adeca74e46f1c87a5e22636b58c1af0209e30a7046fdd024f979",
+      "skipped": [],
+      "statementsApplied": 5
+    },
+    {
+      "file": "024_coexistence_webhook_fields.sql",
+      "sha256": "7a768f0372ceda34cbe12855d312ead7d359cb3bdbeacae6f11ddbf2b6ccd781",
+      "skipped": [],
+      "statementsApplied": 1
+    },
+    {
+      "file": "025_plantao_schedule.sql",
+      "sha256": "7896c8fab32b4e9b68718df5255905f64aedb8f4d7c27515474cf4b7c1384b21",
+      "skipped": [
+        {
+          "line": 5,
+          "reason": "legacy-data-or-backfill",
+          "sha256": "b821a4373e158a4a47b2fcdf48a3f6d5f3ee2af5d1c18522a8820dca56a44dda"
+        }
+      ],
+      "statementsApplied": 4
+    },
+    {
+      "file": "026_general_lead_kind.sql",
+      "sha256": "32fbb3d63d0bf5544549f7bbbd23f559ecc588bceeb0c137184cfb9d49cd85cb",
+      "skipped": [],
+      "statementsApplied": 1
+    },
+    {
+      "file": "026_whatsapp_ai_turn_claims.sql",
+      "sha256": "7e877118f55536fccfbb3393fb977c8b8e18f477011958a22f7a7744ea90588a",
+      "skipped": [],
+      "statementsApplied": 13
+    },
+    {
+      "file": "026_whatsapp_broker_inbox_performance.sql",
+      "sha256": "113d8e787d2bfc362b7b2e839a4f93f563c09c1c406ea751f834c362f69c658d",
+      "skipped": [
+        {
+          "line": 66,
+          "reason": "legacy-data-or-backfill",
+          "sha256": "853462800543b679adb84876f9cc40f592dcfa7ea5518d3e83b021c49094d5ac"
+        }
+      ],
+      "statementsApplied": 5
+    },
+    {
+      "file": "027_general_pipeline.sql",
+      "sha256": "d3fecd325d331412b05239ea9d45ae3034679aa0285e6d38c2fcdadc5f1bf506",
+      "skipped": [
+        {
+          "line": 18,
+          "reason": "legacy-data-or-backfill",
+          "sha256": "8c8a612148622fa5107b3acea94eb70484b16c704c2838b9992b971419e2da6d"
+        }
+      ],
+      "statementsApplied": 3
+    },
+    {
+      "file": "027_whatsapp_ai_conversation_memory.sql",
+      "sha256": "7e329a5a1669d0a150920d1baad6cbe483fac6dde055b87d1acb37caa204b9e3",
+      "skipped": [],
+      "statementsApplied": 4
+    },
+    {
+      "file": "028_agenda_crm.sql",
+      "sha256": "6845b6043759a749c4cb17ceec9679bc782dacac8f389a49bf93d5f09c4b59da",
+      "skipped": [],
+      "statementsApplied": 16
+    },
+    {
+      "file": "028_ai_files_validity_versioning.sql",
+      "sha256": "e1f5f7e7ca2630097618bfa3d77857536e28e5b5450fbaf7ce0c3e9db28ea898",
+      "skipped": [],
+      "statementsApplied": 6
+    },
+    {
+      "file": "029_microsoft_calendar_connections.sql",
+      "sha256": "809fcbd1e148faa877e40f3342b7a4552ea229e1f56a45d7230e0107567494b4",
+      "skipped": [],
+      "statementsApplied": 11
+    },
+    {
+      "file": "031_broker_human_conversation_pipeline.sql",
+      "sha256": "1cfe8db9ab4ad8706f3ec219a725d8da24ce5386bcd78e0d49f0da1957ef383a",
+      "skipped": [],
+      "statementsApplied": 5
+    },
+    {
+      "file": "032_meta_lead_ads_connections.sql",
+      "sha256": "d78b383cde05b9ed358d7c259316d088d189ae59376a06030bf90bbde1c7bf24",
+      "skipped": [],
+      "statementsApplied": 3
+    },
+    {
+      "file": "033_lead_intake_automation.sql",
+      "sha256": "9aeb771a6eecb584c5b1c23be06608694842bdbdccf3cdd6c444b71e4c50243b",
+      "skipped": [
+        {
+          "line": 50,
+          "reason": "legacy-data-or-backfill",
+          "sha256": "22a09e1290fba185ae6ceba9aca9beec02f6528d5a49e66853ecaf850640e2bd"
+        },
+        {
+          "line": 88,
+          "reason": "disabled-automation-extension",
+          "sha256": "c1e1b1f56a8dd5a1f1d87436d4eab2c84f544877061c132d4adc9d73b1b6513b"
+        },
+        {
+          "line": 91,
+          "reason": "disabled-automation-extension",
+          "sha256": "767c037d834e6bc2c451c32486d80356d0084ee633cc83f8a56dafdd967b5f3e"
+        },
+        {
+          "line": 92,
+          "reason": "operational-vault-or-scheduling",
+          "sha256": "1309881a386a2dc952cb3e7476237206310baecfd24ecd71dc4b895b78f94aae"
+        },
+        {
+          "line": 106,
+          "reason": "operational-select-or-scheduling",
+          "sha256": "d2d98a297b5b9555248e9b4d80f116c9f38653daea56a21b6073716561d438b6"
+        }
+      ],
+      "statementsApplied": 7
+    },
+    {
+      "file": "034_marketing_funnel_milestones.sql",
+      "sha256": "c697abcbf2fba3d70dc8916b9f7d2f36807bc01ae430e1065c8489121b74b3ee",
+      "skipped": [
+        {
+          "line": 5,
+          "reason": "legacy-data-or-backfill",
+          "sha256": "79c5364c55cd37f1123f8da036a727548b0a64f8c2d6dac97e7bb9870deb4e06"
+        },
+        {
+          "line": 149,
+          "reason": "legacy-data-or-backfill",
+          "sha256": "ee22f04f4cbd2b474a092e9df782ad05a52a875b0532ce85e78b983cbab789be"
+        }
+      ],
+      "statementsApplied": 19
+    },
+    {
+      "file": "035_nara_handoff_tais_alerts.sql",
+      "sha256": "2f84d77b46ab5cca7e3338cb28e7df171da1fe2ecb10e53218fcc5f38d5fd791",
+      "skipped": [
+        {
+          "line": 47,
+          "reason": "legacy-data-or-backfill",
+          "sha256": "16d6e039501b1d5e4fab8695c9fdccb28b3acb8b6ca8df9cfc6b57e019f9fa1f"
+        },
+        {
+          "line": 82,
+          "reason": "disabled-automation-extension",
+          "sha256": "65417035686a2ff56773906a7d323419b09b01a55438b8fa439702a83568cec8"
+        },
+        {
+          "line": 84,
+          "reason": "disabled-automation-extension",
+          "sha256": "767c037d834e6bc2c451c32486d80356d0084ee633cc83f8a56dafdd967b5f3e"
+        },
+        {
+          "line": 85,
+          "reason": "operational-vault-or-scheduling",
+          "sha256": "e381128a4ceacfa598e7a3f502c7022c77eef22b3c18e4402750d251253d8c4f"
+        },
+        {
+          "line": 98,
+          "reason": "operational-select-or-scheduling",
+          "sha256": "85c79bb55eac9e64e95339c860ce3fb92ce8833c984313d1ff15596e8d1cdeb5"
+        }
+      ],
+      "statementsApplied": 7
+    },
+    {
+      "file": "036_nara_2409_exterior_reset.sql",
+      "sha256": "6a38e7a30acb857e2d77d53594a76f8487c327fa2a6a800a40ad2b7f4e4cfaed",
+      "skipped": [
+        {
+          "line": 42,
+          "reason": "legacy-data-or-backfill",
+          "sha256": "f7692bf6dfb0969dee03abef896aae4d10b01e97b86e253e9fe3c7975b74e711"
+        },
+        {
+          "line": 55,
+          "reason": "legacy-data-or-backfill",
+          "sha256": "144cae917b8879fa76c5a42a1482404451d6e63beed7a712ffac8f4f397468f1"
+        }
+      ],
+      "statementsApplied": 9
+    },
+    {
+      "file": "037_nara_prompt_2409.sql",
+      "sha256": "4cbb58e9285f1605c2c0a660d7b882d40d56681d098995cb6d2eabffb5c86bc8",
+      "skipped": [
+        {
+          "line": 1,
+          "reason": "legacy-data-or-backfill",
+          "sha256": "8ed011bfaed6b51e3f16fb8e691a168956cfb0ebb39afe9a3782a80255f91ce3"
+        }
+      ],
+      "statementsApplied": 0
+    },
+    {
+      "file": "038_nara_round2_2409.sql",
+      "sha256": "be26f34bc6c2c5d1535a1c3c5a8b1627b546c3ee7a521bf0bf40e3e01ce064bb",
+      "skipped": [
+        {
+          "line": 1,
+          "reason": "legacy-data-or-backfill",
+          "sha256": "189c5b15160eac796348e5227f72c7006c4cc8bf46d6db87a6d55a4fb7ce3edb"
+        },
+        {
+          "line": 45,
+          "reason": "legacy-data-or-backfill",
+          "sha256": "1f06c7cabbe5cec8c4363abd47af0b7fbcc69e2717bf28caa32eba139478e4f8"
+        },
+        {
+          "line": 54,
+          "reason": "legacy-data-or-backfill",
+          "sha256": "4f6a096e4a8938def95fbfa5b23155adccf0f27e4c78e71b7f9ef47a41967100"
+        }
+      ],
+      "statementsApplied": 0
+    },
+    {
+      "file": "039_nara_produtos_bossa.sql",
+      "sha256": "9e190968e8aee6d30daacbd99507704406a7bcb2fe4bf217949f11f201cb4c3b",
+      "skipped": [
+        {
+          "line": 1,
+          "reason": "legacy-data-or-backfill",
+          "sha256": "23c131745c70525085d05f0cbcb7379cd5411af895646b850c68ff3b4adc34ab"
+        }
+      ],
+      "statementsApplied": 0
+    },
+    {
+      "file": "040_nara_no_reply_cadence.sql",
+      "sha256": "a79e8c7a2424bc305eb8cfb777746b2319f20a4e8b71a8558eae469423202c27",
+      "skipped": [],
+      "statementsApplied": 17
+    },
+    {
+      "file": "041_nara_post_sale_and_commercial_facts.sql",
+      "sha256": "518df2b2097da41de50b0cef8517d5c74c3393f344ca527783b834f122ea72e5",
+      "skipped": [
+        {
+          "line": 6,
+          "reason": "legacy-data-or-backfill",
+          "sha256": "3e87b3cf8f6ceeefb485b33e79acb4fb3018b3288d7dd46410282fa34e6a9a6f"
+        },
+        {
+          "line": 10,
+          "reason": "legacy-data-or-backfill",
+          "sha256": "01acfce111bffad88645e889c312d54a325bedf22a71ed2399f8c795f26d0050"
+        }
+      ],
+      "statementsApplied": 2
+    },
+    {
+      "file": "042_merge_duplicate_leads.sql",
+      "sha256": "299be58203fce86c81bc256dfda139e88cc514d91a83ae0c78e5685cdd8c8003",
+      "skipped": [],
+      "statementsApplied": 4
+    },
+    {
+      "file": "043_allow_verified_client_broker_transfer.sql",
+      "sha256": "03cf60c0d223c70d91e3afad2dbca376bf85e1b4ba03fab2e269e47335b21d74",
+      "skipped": [],
+      "statementsApplied": 1
+    },
+    {
+      "file": "20261001190000_broker_performance.sql",
+      "sha256": "511814688c68a3d6cd6b13a481d0d84254a7b8ae2a32dc2e39df43e9a932f537",
+      "skipped": [],
+      "statementsApplied": 21
+    },
+    {
+      "file": "20261001194854_add_broker_interactions_to_ranking.sql",
+      "sha256": "3243c9570283c7406a9df14c2d40781f046af93ab7146e3240168e624b928fd4",
+      "skipped": [],
+      "statementsApplied": 2
+    },
+    {
+      "file": "20261001211000_canonical_whatsapp_identity.sql",
+      "sha256": "420d127a02fe0a0d9fce2bebbeb1bac1fe977c99894ae989a4b969de9f1ace31",
+      "skipped": [],
+      "statementsApplied": 2
+    },
+    {
+      "file": "20261001212500_optimize_leads_ranking_and_broker_inbox.sql",
+      "sha256": "0db570ff5d8618201931332629eed71e513055a558a16a88e7b36aac6b9be0d9",
+      "skipped": [],
+      "statementsApplied": 4
+    },
+    {
+      "file": "20261002101500_user_notification_center.sql",
+      "sha256": "775c5c54ee86f93e5df17a0fe967dadf4d946ae083e200578db61ff33e4f4faa",
+      "skipped": [
+        {
+          "line": 179,
+          "reason": "legacy-data-or-backfill",
+          "sha256": "8a30269e753f8fcdd56ee30e8c593eccfbe3b651e61cd05294083c94c40c402a"
+        },
+        {
+          "line": 201,
+          "reason": "legacy-data-or-backfill",
+          "sha256": "77306be67ba4e4d7bd63c2c42497997c3d111bb74ec54bcf167e7883f04209f8"
+        }
+      ],
+      "statementsApplied": 18
+    },
+    {
+      "file": "20261002150000_nara_round_robin_tais_cintia.sql",
+      "sha256": "290ec79219384fc1859663e59b19992b1671bd332595ce14d4646f1aefba26b0",
+      "skipped": [
+        {
+          "line": 6,
+          "reason": "legacy-data-or-backfill",
+          "sha256": "a73431ae35ac762e0511d5fdeba27896b177f70f4f155ea631cfc37610029eed"
+        }
+      ],
+      "statementsApplied": 3
+    },
+    {
+      "file": "20261002170000_broker_after_hours_alert_jobs.sql",
+      "sha256": "a6c685e0fe1149098f61f4debb1f5cf382e648e8f0e02dcfb6075be4bf84a649",
+      "skipped": [],
+      "statementsApplied": 5
+    },
+    {
+      "file": "20261012224500_fix_stale_broker_plantao_state.sql",
+      "sha256": "d795bd7ba60fb3c7b3d4a0fa5fbed3e076d756813dcf6ec801034f64f7691196",
+      "skipped": [
+        {
+          "line": 51,
+          "reason": "legacy-data-or-backfill",
+          "sha256": "138fcc53c66592d1cc6732b3ff26d416b2669896bd31fa600e507ba30a04e894"
+        }
+      ],
+      "statementsApplied": 1
+    },
+    {
+      "file": "20261021011240_commercial_metrics_foundation.sql",
+      "sha256": "627e58e4a6aae81857f4335b1284d8fcc9a99f4524b4eb0d7ce69f208a8b33a2",
+      "skipped": [],
+      "introducedIn": "d6ab1a799201ca3386582d30fe863e978b3e8bb8",
+      "changedIn": [],
+      "introducedSha256": "627e58e4a6aae81857f4335b1284d8fcc9a99f4524b4eb0d7ce69f208a8b33a2"
+    },
+    {
+      "file": "20261021011422_commercial_metrics_queries.sql",
+      "sha256": "8f1fd0027aebb151783983028300b09925fee67f8e2977b873426a2b7acf6944",
+      "skipped": [],
+      "introducedIn": "d6ab1a799201ca3386582d30fe863e978b3e8bb8",
+      "changedIn": [],
+      "introducedSha256": "8f1fd0027aebb151783983028300b09925fee67f8e2977b873426a2b7acf6944"
+    },
+    {
+      "file": "20261021012121_commercial_operations_insights.sql",
+      "sha256": "766bb2cd0baf6cd03faccd62b7ee0a0e76dcb20c905d0344e375a407305d07a4",
+      "skipped": [],
+      "introducedIn": "d6ab1a799201ca3386582d30fe863e978b3e8bb8",
+      "changedIn": [],
+      "introducedSha256": "766bb2cd0baf6cd03faccd62b7ee0a0e76dcb20c905d0344e375a407305d07a4"
+    },
+    {
+      "file": "20261021094500_commercial_development_attribution.sql",
+      "sha256": "b55d4bdccafd1b7021540de3fa1f50422ac1ab0783abd328748f3eb0dcb0eb07",
+      "skipped": [],
+      "introducedIn": "0837d7099d0c5b9fac41a8159ecd0ce7397e668f",
+      "changedIn": [
+        "7334b72bfb2a68b2acf4024cd7dbe47d684e94c6",
+        "4d03afc1a1e233a53517358dd6769f42f21b4366",
+        "b961afc688489dd4e9debe42bd687c35b999e854",
+        "21e640b253d22b7498b4b09675ee17d8cfb4df71"
+      ],
+      "introducedSha256": "9dbbff219008744e4efe37441519e084f3b2d5a478756152eff25c21e4d6f18d"
+    },
+    {
+      "file": "20261021155436_commercial_verified_intent.sql",
+      "sha256": "a8a60c23a28ad91af193c3e8de941605644a04e4ac330cf57ff50776cabc1b3f",
+      "skipped": [],
+      "introducedIn": "febfb72c0d317d50db1653adae28ace91d8354fe",
+      "changedIn": [],
+      "introducedSha256": "a8a60c23a28ad91af193c3e8de941605644a04e4ac330cf57ff50776cabc1b3f"
+    },
+    {
+      "file": "20261021162332_commercial_fact_stage_sync.sql",
+      "sha256": "019556155397a72b641905271fa83c92aade06e85b02218dcee16370d8b162be",
+      "skipped": [],
+      "introducedIn": "415b73ae89ce3ff2fb45eeab2783fb1b295724e2",
+      "changedIn": [],
+      "introducedSha256": "019556155397a72b641905271fa83c92aade06e85b02218dcee16370d8b162be"
+    },
+    {
+      "file": "20261021165139_commercial_contact_integrity.sql",
+      "sha256": "d9daa262e643c622f7b72a1bdbdefc1ccde4a29295b89c034366e1eac9a156f4",
+      "skipped": [],
+      "introducedIn": "74753e75d728c187c74f5a39818a63a59bdc0aeb",
+      "changedIn": [
+        "16e0f4909b5065fd034a4e7b7258f344f1489e67"
+      ],
+      "introducedSha256": "ed5ccabbffa8725e6b2a2a273c793965e124108315325ace6b4253719dfb55f0"
+    },
+    {
+      "file": "20261021172930_commercial_source_idempotency.sql",
+      "sha256": "f97ab9ec44109ed2a25953716828485cd353a12e3d489bdae4e37c417fd042d3",
+      "skipped": [],
+      "introducedIn": "088db98ef4f3de00bcfeea55acb9fb0b6235c9a0",
+      "changedIn": [],
+      "introducedSha256": "f97ab9ec44109ed2a25953716828485cd353a12e3d489bdae4e37c417fd042d3"
+    },
+    {
+      "file": "20261021182758_commercial_recoverable_requests.sql",
+      "sha256": "0bbe963a3c99dd3d380d5410594f11ce9e8bf6a5b9ec4a19af93c473aa93f3cf",
+      "skipped": [],
+      "introducedIn": "53d7591c33d62809f03010fb0576b910c9d94568",
+      "changedIn": [],
+      "introducedSha256": "0bbe963a3c99dd3d380d5410594f11ce9e8bf6a5b9ec4a19af93c473aa93f3cf"
+    },
+    {
+      "file": "20261021190000_commercial_contact_reconciliation.sql",
+      "sha256": "39f303062aa425d5dc6b802a25df73e6a8da2a50781fbb4bd300441c062c82d6",
+      "skipped": [],
+      "introducedIn": "2e5c5eb78d78ec31e0ec03be61a702d3dad2e3b9",
+      "changedIn": [
+        "5034421562c56cadb15babe29e9a6fed31218184"
+      ],
+      "introducedSha256": "513a1b7b3ec1d9170fd6fcc8510dd27f9bd41c72d593a5f7922c1a7ec5d7f678"
+    },
+    {
+      "file": "20261021203000_commercial_proposal_status_once.sql",
+      "sha256": "018c28d34985f13e6952ee2ee6ce34df7202b818920244e75f6f5f08f5ed189f",
+      "skipped": [],
+      "introducedIn": "c3384dfe23076d893223d3ece1f1c92c7b1e61dc",
+      "changedIn": [],
+      "introducedSha256": "018c28d34985f13e6952ee2ee6ce34df7202b818920244e75f6f5f08f5ed189f"
+    },
+    {
+      "file": "20261021213000_commercial_ai_proposal_detection.sql",
+      "sha256": "5829de6b4a21727ae28970a6785f61d261769d239caa8705a91515ab5db3f324",
+      "skipped": [],
+      "introducedIn": "bebb0dfb44c9f737be10de02845871637ba858e1",
+      "changedIn": [],
+      "introducedSha256": "5829de6b4a21727ae28970a6785f61d261769d239caa8705a91515ab5db3f324"
+    },
+    {
+      "file": "20261022123000_commercial_source_scope_integrity.sql",
+      "sha256": "e77dd6fd1a219881e2fdf9c0d3804d6c4fe0da8b2b1b3e927dbc9765b8ccf698",
+      "skipped": [],
+      "introducedIn": "working-tree",
+      "changedIn": []
+    }
+  ],
+  "checks": [
+    {
+      "name": "actual legacy constraints, enums, triggers and synthetic identities",
+      "status": "passed"
+    },
+    {
+      "name": "human proposal, installments, recovery receipt and activity commit once",
+      "status": "passed"
+    },
+    {
+      "name": "verified intention links original proposal and snapshots in the same database",
+      "status": "passed"
+    },
+    {
+      "name": "quick status preserves finances and keeps sending evidence pending",
+      "status": "passed"
+    },
+    {
+      "name": "activity failure rolls linked proposal, ledger, version and receipt back",
+      "status": "passed"
+    },
+    {
+      "name": "agenda recovery, opportunity link and actual legacy overlap exclusion",
+      "status": "passed"
+    },
+    {
+      "name": "documented sending, admin contract and receipt appear in scoped indicators",
+      "status": "passed"
+    },
+    {
+      "name": "WhatsApp detection uses full lead/message schema and protects subsequent human edits",
+      "status": "passed"
+    },
+    {
+      "name": "reviewed contact alias preserves source IDs, events and snapshots",
+      "status": "passed"
+    },
+    {
+      "name": "organization boundaries, viewers and anonymous callers cannot write or see foreign evidence",
+      "status": "passed"
+    },
+    {
+      "name": "direct legacy proposal and installment writes cannot reference a foreign organization",
+      "status": "passed"
+    },
+    {
+      "name": "independent concurrent quick status commands have one winner and one stale-version conflict",
+      "status": "passed"
+    },
+    {
+      "name": "simultaneous identical AI sources create one receipt, item set and activity",
+      "status": "passed"
+    },
+    {
+      "name": "concurrent human edit wins over a delayed AI update on the complete repository schema",
+      "status": "passed"
+    },
+    {
+      "name": "AI activity failure rolls the whole detection back and the same source remains retryable",
+      "status": "passed"
+    },
+    {
+      "name": "all commercial automation remains disabled and no delivery job was created",
+      "status": "passed"
+    }
+  ],
+  "postgres": "PostgreSQL 17.11 (Debian 17.11-1.pgdg13+2) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit",
+  "image": "sha256:82903352d6faf8f8a318bc4353d1cb1db67d4a5ff968d2799b2718e2cb00afa2",
+  "platformAdapterSha256": "57346589e16dffb959830296be148a4614851b076154be5ab7d38d7778a8a6bd",
+  "schemaDumpSha256": "df5018c85a24784b74c042fe6c26f4238b4c225a62dc109fc4cd00525789ae50",
+  "scopeProbes": [
+    {
+      "name": "unlinked-proposal-foreign-product",
+      "refused": true
+    },
+    {
+      "name": "installment-foreign-proposal",
+      "refused": true
+    },
+    {
+      "name": "agenda-foreign-assignee",
+      "refused": true
+    }
+  ],
+  "catalog": {
+    "tables": 72,
+    "functions": 303,
+    "triggers": 87,
+    "constraints": 447,
+    "indexes": 239,
+    "policies": 156,
+    "commercialTables": 20,
+    "commercialSecurityDefiners": [
+      "commercial_propose_contact_reconciliation(uuid,uuid,uuid,uuid,text,text)",
+      "commercial_review_contact_reconciliation(uuid,uuid,boolean,text)"
+    ],
+    "legacySecurityDefiners": [
+      "advance_broker_pipeline_for_human_message()",
+      "apply_broker_plantao_schedule_on_inbound()",
+      "claim_whatsapp_ai_turn(uuid,uuid)",
+      "claim_whatsapp_webhook_event(uuid)",
+      "create_workspace(text)",
+      "handle_new_auth_user()",
+      "log_development_unit_price_change()",
+      "log_lead_insert()",
+      "log_lead_stage_change()",
+      "next_client_handoff_owner(uuid,uuid)",
+      "private.can_edit_org(uuid)",
+      "private.commercial_legacy_merge_duplicate_lead(uuid,uuid)",
+      "private.is_org_admin(uuid)",
+      "private.is_org_member(uuid)",
+      "private.shares_organization(uuid)",
+      "refresh_broadcast_delivery_counts()",
+      "sync_handoff_user_notification()",
+      "sync_task_user_notification()",
+      "sync_whatsapp_conversation_last_message()",
+      "whatsapp_ai_turn_is_current(uuid,uuid)",
+      "whatsapp_ai_turn_mark_sent(uuid,uuid)"
+    ],
+    "foreignKeysWithoutUnconditionalLeadingIndex": 29,
+    "plpgsqlCheck": {
+      "available": false,
+      "reason": "Error: ERROR:  0A000: extension \"plpgsql_check\" is not available\nDETAIL:  Could not open extension control file \"/usr/share/postgresql/17/extension/plpgsql_check.control\": No such file or directory.\nHINT:  The extension must first be installed on the system where PostgreSQL is running."
+    }
+  },
+  "preflightViolations": [],
+  "performance": {
+    "syntheticOpportunities": 2000,
+    "plans": {
+      "contact-history-negative": {
+        "executionMs": 53.147,
+        "planningMs": 0.009,
+        "plan": "Result"
+      },
+      "snapshot-history-scan": {
+        "executionMs": 36.446,
+        "planningMs": 0.503,
+        "plan": "Seq Scan"
+      },
+      "dashboard": {
+        "executionMs": 147.653,
+        "planningMs": 0.011,
+        "plan": "Result"
+      },
+      "opportunity-contact-lookup": {
+        "executionMs": 1.008,
+        "planningMs": 0.575,
+        "plan": "Index Scan"
+      }
+    }
+  },
+  "beforeCorrection": {
+    "revision": "bebb0dfb44c9f737be10de02845871637ba858e1",
+    "scopeProbes": [
+      {
+        "name": "unlinked-proposal-foreign-product",
+        "refused": false
+      },
+      {
+        "name": "installment-foreign-proposal",
+        "refused": false
+      },
+      {
+        "name": "agenda-foreign-assignee",
+        "refused": false
+      }
+    ],
+    "failedCheck": {
+      "name": "direct legacy proposal and installment writes cannot reference a foreign organization",
+      "status": "failed",
+      "error": "AssertionError [ERR_ASSERTION]: [{\"name\":\"unlinked-proposal-foreign-product\",\"refused\":false},{\"name\":\"installment-foreign-proposal\",\"refused\":false},{\"name\":\"agenda-foreign-assignee\",\"refused\":false}]"
+    },
+    "handoffAnonymousExecuteObserved": true
+  },
+  "catalogFindings": {
+    "foreignKeysWithoutUnconditionalLeadingIndex": [
+      {
+        "relation": "commercial_ai_proposal_detections",
+        "conname": "commercial_ai_proposal_detect_organization_id_origin_signa_fkey",
+        "definition": "FOREIGN KEY (organization_id, origin, signature) REFERENCES commercial_ai_proposal_origins(organization_id, origin, signature)"
+      },
+      {
+        "relation": "commercial_contact_reconciliations",
+        "conname": "commercial_contact_reconciliations_contact_high_id_fkey",
+        "definition": "FOREIGN KEY (contact_high_id) REFERENCES leads(id)"
+      },
+      {
+        "relation": "commercial_contact_reconciliations",
+        "conname": "commercial_contact_reconciliations_contact_low_id_fkey",
+        "definition": "FOREIGN KEY (contact_low_id) REFERENCES leads(id)"
+      },
+      {
+        "relation": "commercial_contact_reconciliations",
+        "conname": "commercial_contact_reconciliations_preferred_contact_id_fkey",
+        "definition": "FOREIGN KEY (preferred_contact_id) REFERENCES leads(id)"
+      },
+      {
+        "relation": "commercial_contracts",
+        "conname": "commercial_contracts_organization_id_opportunity_id_fkey",
+        "definition": "FOREIGN KEY (organization_id, opportunity_id) REFERENCES commercial_opportunities(organization_id, id)"
+      },
+      {
+        "relation": "commercial_contracts",
+        "conname": "commercial_contracts_proposal_id_fkey",
+        "definition": "FOREIGN KEY (proposal_id) REFERENCES proposals(id)"
+      },
+      {
+        "relation": "commercial_contracts",
+        "conname": "commercial_contracts_unit_id_fkey",
+        "definition": "FOREIGN KEY (unit_id) REFERENCES development_units(id)"
+      },
+      {
+        "relation": "commercial_conversation_reviews",
+        "conname": "commercial_conversation_reviews_lead_id_fkey",
+        "definition": "FOREIGN KEY (lead_id) REFERENCES leads(id)"
+      },
+      {
+        "relation": "commercial_conversation_reviews",
+        "conname": "commercial_conversation_reviews_reviewed_by_fkey",
+        "definition": "FOREIGN KEY (reviewed_by) REFERENCES profiles(id)"
+      },
+      {
+        "relation": "commercial_events",
+        "conname": "commercial_events_organization_id_opportunity_id_fkey",
+        "definition": "FOREIGN KEY (organization_id, opportunity_id) REFERENCES commercial_opportunities(organization_id, id)"
+      },
+      {
+        "relation": "commercial_expenses",
+        "conname": "commercial_expenses_created_by_fkey",
+        "definition": "FOREIGN KEY (created_by) REFERENCES profiles(id)"
+      },
+      {
+        "relation": "commercial_goals",
+        "conname": "commercial_goals_development_id_fkey",
+        "definition": "FOREIGN KEY (development_id) REFERENCES developments(id)"
+      },
+      {
+        "relation": "commercial_goals",
+        "conname": "commercial_goals_organization_id_fkey",
+        "definition": "FOREIGN KEY (organization_id) REFERENCES organizations(id)"
+      },
+      {
+        "relation": "commercial_goals",
+        "conname": "commercial_goals_owner_id_fkey",
+        "definition": "FOREIGN KEY (owner_id) REFERENCES profiles(id)"
+      },
+      {
+        "relation": "commercial_intent_confirmations",
+        "conname": "commercial_intent_confirmations_buyer_id_fkey",
+        "definition": "FOREIGN KEY (buyer_id) REFERENCES leads(id)"
+      },
+      {
+        "relation": "commercial_intent_confirmations",
+        "conname": "commercial_intent_confirmations_confirmed_by_fkey",
+        "definition": "FOREIGN KEY (confirmed_by) REFERENCES profiles(id)"
+      },
+      {
+        "relation": "commercial_interests",
+        "conname": "commercial_interests_development_id_fkey",
+        "definition": "FOREIGN KEY (development_id) REFERENCES developments(id)"
+      },
+      {
+        "relation": "commercial_interests",
+        "conname": "commercial_interests_organization_id_opportunity_id_fkey",
+        "definition": "FOREIGN KEY (organization_id, opportunity_id) REFERENCES commercial_opportunities(organization_id, id)"
+      },
+      {
+        "relation": "commercial_interests",
+        "conname": "commercial_interests_unit_id_fkey",
+        "definition": "FOREIGN KEY (unit_id) REFERENCES development_units(id)"
+      },
+      {
+        "relation": "commercial_link_reviews",
+        "conname": "commercial_link_reviews_contact_id_fkey",
+        "definition": "FOREIGN KEY (contact_id) REFERENCES leads(id)"
+      },
+      {
+        "relation": "commercial_link_reviews",
+        "conname": "commercial_link_reviews_organization_id_opportunity_id_fkey",
+        "definition": "FOREIGN KEY (organization_id, opportunity_id) REFERENCES commercial_opportunities(organization_id, id)"
+      },
+      {
+        "relation": "commercial_opportunities",
+        "conname": "commercial_opportunities_broker_id_fkey",
+        "definition": "FOREIGN KEY (broker_id) REFERENCES leads(id)"
+      },
+      {
+        "relation": "commercial_opportunities",
+        "conname": "commercial_opportunities_owner_id_fkey",
+        "definition": "FOREIGN KEY (owner_id) REFERENCES profiles(id)"
+      },
+      {
+        "relation": "commercial_opportunities",
+        "conname": "commercial_opportunities_primary_contact_id_fkey",
+        "definition": "FOREIGN KEY (primary_contact_id) REFERENCES leads(id)"
+      },
+      {
+        "relation": "commercial_participants",
+        "conname": "commercial_participants_contact_id_fkey",
+        "definition": "FOREIGN KEY (contact_id) REFERENCES leads(id)"
+      },
+      {
+        "relation": "commercial_participants",
+        "conname": "commercial_participants_organization_id_opportunity_id_fkey",
+        "definition": "FOREIGN KEY (organization_id, opportunity_id) REFERENCES commercial_opportunities(organization_id, id)"
+      },
+      {
+        "relation": "commercial_proposal_versions",
+        "conname": "commercial_proposal_versions_organization_id_opportunity_i_fkey",
+        "definition": "FOREIGN KEY (organization_id, opportunity_id) REFERENCES commercial_opportunities(organization_id, id)"
+      },
+      {
+        "relation": "commercial_receipts",
+        "conname": "commercial_receipts_organization_id_contract_id_fkey",
+        "definition": "FOREIGN KEY (organization_id, contract_id) REFERENCES commercial_contracts(organization_id, id)"
+      },
+      {
+        "relation": "commercial_stage_decisions",
+        "conname": "commercial_stage_decisions_organization_id_opportunity_id_fkey",
+        "definition": "FOREIGN KEY (organization_id, opportunity_id) REFERENCES commercial_opportunities(organization_id, id)"
+      }
+    ],
+    "commercialTriggerFunctionsWithPublicExecute": [
+      "commercial_immutable()",
+      "commercial_protect_history()",
+      "commercial_require_trigger()",
+      "commercial_review_evidence()",
+      "commercial_track_entity()",
+      "commercial_validate_links()",
+      "commercial_visit_outcome()"
+    ],
+    "handoffAclAfterCorrection": {
+      "identity": "next_client_handoff_owner(uuid,uuid)",
+      "schema": "public",
+      "proname": "next_client_handoff_owner",
+      "prosecdef": true,
+      "provolatile": "v",
+      "proconfig": [
+        "search_path=pg_catalog, public, pg_temp"
+      ],
+      "anon_execute": false,
+      "authenticated_execute": false,
+      "service_execute": true
+    }
+  },
+  "limits": [
+    "No deployed schema dump, migration ledger, Supabase connection or credential was available.",
+    "Legacy business DDL is replayed, with 65 data/operational statements excluded and individually hashed.",
+    "Auth and Storage are explicit adapters, not the deployed Supabase schema.",
+    "Only public service-role default object grants are modeled; actual platform default privileges remain unverified.",
+    "No rendered browser, deployed JWT authentication, real providers or production workload were certified.",
+    "Supabase image extraction failed for insufficient Docker storage; plpgsql_check and Supabase advisors were unavailable."
+  ],
+  "validation": {
+    "node": "v22.23.3",
+    "dependencyInstall": "npm ci --cache /tmp/bossa-npm-cache --no-audit --no-fund: passed",
+    "repositoryIntegration": "69 files, 13 commercial migrations, 16 scenarios: passed",
+    "isolatedSuites": {
+      "status": "passed",
+      "groups": [
+        "commercial",
+        "linking",
+        "verified intent",
+        "stage synchronization",
+        "agenda session/API",
+        "contact integrity",
+        "contact reconciliation/actions",
+        "quick proposal status/recovery route",
+        "durable recovery/route",
+        "source requests/client",
+        "AI proposal SQL/producer"
+      ]
+    },
+    "postgresConcurrency": {
+      "status": "passed",
+      "scripts": [
+        "check-intake-concurrency.mjs",
+        "check-stage-concurrency.mjs",
+        "check-integrity-concurrency.mjs",
+        "check-recovery-concurrency.mjs",
+        "check-source-request-concurrency.mjs",
+        "check-reconciliation-concurrency.mjs",
+        "check-proposal-status-concurrency.mjs",
+        "check-ai-proposal-concurrency.mjs"
+      ]
+    },
+    "lint": {
+      "status": "passed",
+      "errors": 0,
+      "preexistingWarnings": 11
+    },
+    "typecheck": "passed",
+    "build": "passed with documented dummy CI variables",
+    "applicationRegressions": "passed: Hoje, Meta, Alma, Flow, AI file access, Nara prompt/fixed layer/prices/units/guardrails/context/phase8/phase9; build also ran model routing, language, round3, phase10/2409",
+    "renderedBrowser": "not executed",
+    "deployedAuthentication": "not verified",
+    "remoteCI": "not verified"
+  }
+}

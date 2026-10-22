@@ -2,6 +2,8 @@
 
 ## Situação exata
 
+A [homologação técnica integrada de 22/10/2026](commercial-homologation-status.md) validou a reconstrução do schema versionado e documentou correções de isolamento/autorização. A equivalência com o Supabase implantado continua impedida; esse resultado não altera a contagem de macroentregas.
+
 **Em branch de trabalho; não implantada em produção.** Este documento acompanha o pedido original de 19 seções e suas quatro fases. O checklist fixo no comentário #6316857234 do PR #128 mantém **12/24 macroentregas (50%)**; entregas parciais não aumentam a barra. Os resultados de CI são registrados por SHA no PR; não herdar aprovação de revisões anteriores.
 
 Base inspecionada: `d88fdd2` de `fabionicodemus-lang/bossa-crm`, Next.js 16/React 19/Supabase. Projeto de produção identificado: `bossa-site`. Nenhum dado, schema ou configuração de produção foi alterado nas continuações descritas aqui.

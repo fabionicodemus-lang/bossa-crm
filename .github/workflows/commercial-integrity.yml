@@ -63,6 +63,15 @@ jobs:
           node --experimental-strip-types --loader ./scripts/commercial/ai-proposal-loader.mjs scripts/commercial/check-ai-proposal-producer.mjs
       - name: Test concurrent WhatsApp AI detections in disposable PostgreSQL
         run: node scripts/commercial/check-ai-proposal-concurrency.mjs
+      - name: Rebuild complete repository business schema and validate integrated commercial flows
+        run: node scripts/commercial/check-integrated-schema.mjs
+      - name: Preserve repository integration evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: commercial-repository-schema-evidence
+          path: /tmp/bossa-commercial-homologation/*.json
+          if-no-files-found: ignore
       - name: Ensure PostgreSQL client
         run: command -v psql || (sudo apt-get update -qq && sudo apt-get install -y postgresql-client)
       - name: Test real concurrent identity mutations
