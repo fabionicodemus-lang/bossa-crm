@@ -4,10 +4,12 @@
 
 **Resultado:** página funcional implementada com o acervo existente, testes seguros e prévia protegida para revisão. Não é autorização de publicação.
 
-**Prévia:** A_GERAR.
-**Commit da implementação:** COMMIT_FLOW.
-**PR em rascunho:** A_REGISTRAR.
+**Prévia:** https://bossa-site-3ika5rf4s-elos-os.vercel.app/empreendimentos/flow-aptos.
+**Commit da implementação:** b98cc77f2cc70969287f1250ddd7a92c2e78d0d7.
+**PR em rascunho:** https://github.com/fabionicodemus-lang/bossa-crm/pull/130.
 **Capturas:** [índice](docs/flow/etapa3/Capturas.md).
+
+**Deployment:** `dpl_G4Lmy4Nja2hJBiELfVCAfeAAR6Wd`, READY, Preview (`target: null`). [Conferência remota](docs/flow/etapa3/previa-verificacao.json): página geral e rota do duplex Tipo 1 respondem HTTP 200 com título correto, cinco opções e `noindex, nofollow`; SSO preservado. A conferência remota foi do HTML. Navegação, mídia, capturas e testes de formulário foram locais/controlados, não integração real. Uma atualização documental posterior registra essa URL sem alterar o código da prévia.
 
 ## 1. Base e proteção dos trabalhos paralelos
 

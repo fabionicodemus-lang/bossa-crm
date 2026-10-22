@@ -1,1 +1,32 @@
-{"estado":"Aguardando deploy protegido do commit desta implementação."}
+{
+  "data": "2026-10-22T14:57:18.515Z",
+  "url": "https://bossa-site-3ika5rf4s-elos-os.vercel.app/empreendimentos/flow-aptos",
+  "deployment": "dpl_G4Lmy4Nja2hJBiELfVCAfeAAR6Wd",
+  "estado": "READY",
+  "ambiente": "Preview (target null)",
+  "commit": "b98cc77f2cc70969287f1250ddd7a92c2e78d0d7",
+  "protecao": "SSO Vercel em todos os ambientes, preservada",
+  "rotas": [
+    {
+      "path": "/empreendimentos/flow-aptos",
+      "http": 200,
+      "titulo": "Flow Aptos | 2 suítes, lazer em dois pavimentos e entrega 2027 | Bossa",
+      "robots": "noindex, nofollow",
+      "h1": true,
+      "cincoOpcoes": 5,
+      "medicaoDatada": true,
+      "semOferta": true
+    },
+    {
+      "path": "/empreendimentos/flow-aptos/plantas/duplex-tipo-1",
+      "http": 200,
+      "titulo": "Flow Aptos: Duplex Tipo 1, 117,7 m², 3 suítes | Bossa",
+      "robots": "noindex, nofollow",
+      "h1": true,
+      "cincoOpcoes": 5,
+      "medicaoDatada": true,
+      "semOferta": true
+    }
+  ],
+  "limites": "HTML remoto lido com autenticação existente do conector. Navegação, capturas e formulários controlados locais; não foram enviados contatos/eventos de teste ao atendimento real."
+}
