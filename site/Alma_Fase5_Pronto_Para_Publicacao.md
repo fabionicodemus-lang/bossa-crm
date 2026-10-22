@@ -4,9 +4,11 @@
 
 **Resultado:** candidata preparada para revisão final. Produção não autorizada nesta fase. A aprovação visual de Fábio e a validação real controlada do atendimento são portas de liberação da fase 6; os testes desta entrega não geraram contatos reais.
 
-**Prévia protegida:** EM_GERACAO.
-**Commit da candidata:** COMMIT_CANDIDATA.
-**Commit final documental:** consultar o histórico deste arquivo; não altera o código da candidata.
+**Prévia protegida:** https://bossa-site-61udy6ira-elos-os.vercel.app/empreendimentos/alma-seahouses.
+**Commit da candidata:** 223326ed426cab6f65dd094a3423427746e4fdec.
+**Commit final de código/testes:** `223326ed426cab6f65dd094a3423427746e4fdec`. A atualização documental posterior apenas registra a URL e este encerramento; seu SHA consta no histórico Git e na entrega.
+**PR em rascunho, sem merge:** https://github.com/fabionicodemus-lang/bossa-crm/pull/129
+**Deploy:** `dpl_8yZJitAtrQpWXrLxPU1G2FePLUfj`, READY, Preview (`target: null`), SSO Vercel preservado. [Evidência remota](docs/alma/fase5/previa-verificacao.json): HTTP 200, `noindex, nofollow`, nove espaços identificados e boletim datado. Somente HTML verificado remotamente; interações/capturas foram locais.
 **Capturas:** [índice visual](docs/alma/fase5/Capturas.md). Todas são capturas do Chromium local, com as barras reais visíveis.
 
 ## 1. Base, preservações e mudanças
@@ -54,7 +56,7 @@ Fases anteriores incluídas na candidata: fase 3 reorganizou a página completa,
 | T7: Flow, formulário, navegação e links | APROVADO | Regressão controlada do Flow e links internos; diff exclusivamente `site/`, sem mudança de dados de produto do Flow. |
 | T7: CRM, Nara, banco, DNS e domínio | APROVADO | Nenhum arquivo ou configuração desses sistemas alterado; nenhuma migração. |
 | T8: manifesto, dependências e reversão | APROVADO | Relação completa de arquivos e plano operacional, abaixo. |
-| T8: nova prévia protegida | STATUS_PREVIA | Deploy da candidata no projeto existente; proteção preservada. |
+| T8: nova prévia protegida | APROVADO | Deploy da candidata no projeto existente; proteção preservada. |
 | T9: aprovação final de Fábio | BLOQUEADOR PARA PUBLICAÇÃO | Pendente da sua avaliação desta candidata. Nenhuma publicação em produção deve ocorrer antes disso. |
 
 ### Critérios A01–A17 da fase 2
