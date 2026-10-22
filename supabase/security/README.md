@@ -15,11 +15,13 @@ grant an administrative fallback. Both scripts are transactional and repeatable.
   Restricting EXECUTE does not approve automated contact merging.
 
 The candidates preserve the bodies, defaults, return types and existing owners.
-They retain the existing SECURITY DEFINER setting to avoid combining a permission
-release with unverified execution-context changes, while removing PUBLIC, anon
-and authenticated entry points and fixing the search path. Only the existing
-trusted service integration retains execution. No additional table or schema
-privileges are granted. A review of remaining legacy definers is still required.
+They use SECURITY INVOKER: isolated tests of the existing service caller show
+that owner escalation is unnecessary, both before and after the commercial
+migrations. PUBLIC, anon and authenticated entry points are removed and the
+search path is fixed. Only the existing trusted service integration retains
+execution. No additional table or schema privileges are granted. This change
+does not settle the inventory of external consumers or the review of remaining
+legacy definers.
 
 Validate effective privileges, not only explicit ACL strings: PUBLIC grants can
 otherwise make a per-role REVOKE ineffective. Check both candidates before and
@@ -32,3 +34,10 @@ any body correction belong in the private homologation delivery. Do not publish
 private catalog exports, dumps or ledger contents here. A legacy batch that
 ignores an `ok:false` merge result must not be represented as successful or enabled
 merely because its permissions are restricted.
+
+Apply any separately reviewed batch-body correction only after the permission
+candidate. It must preserve SECURITY INVOKER, the restricted effective ACL and
+the fixed search path, reject an unexpected existing body, and avoid counting an
+idempotent replay as a new merge. Test those properties together; CREATE OR
+REPLACE must not silently reintroduce SECURITY DEFINER. Unknown consumers remain
+unknown until positively inventoried, even when all local tests pass.

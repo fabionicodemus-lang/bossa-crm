@@ -4,5 +4,7 @@
 begin;
 revoke execute on function public.merge_duplicate_leads_batch(integer) from public,anon,authenticated;
 grant execute on function public.merge_duplicate_leads_batch(integer) to service_role;
+-- Do not acquire the function owner's identity for a service-only operation.
+alter function public.merge_duplicate_leads_batch(integer) security invoker;
 alter function public.merge_duplicate_leads_batch(integer) set search_path=pg_catalog,public,pg_temp;
 commit;
