@@ -124,6 +124,12 @@ async function foto(p, n) {
   await p.locator("#fl-andar").focus();
   await p.keyboard.press("ArrowRight");
   assert.match(await p.locator(".fl-vista__andar").innerText(), /15º/);
+  await p.waitForFunction(() =>
+    decodeURIComponent(
+      document.querySelector("#visita .fl-form-comercial a[target=_blank]")
+        .href,
+    ).includes("15º pavimento"),
+  );
   const msg = decodeURIComponent(
     await p
       .locator("#visita .fl-form-comercial a[target=_blank]")
@@ -248,20 +254,70 @@ async function foto(p, n) {
   await pc.evaluate(() => document.fonts.ready);
   await pc.waitForTimeout(200);
   out.cookies = await pc.evaluate(() => {
-    const c = document.querySelector(".cookies").getBoundingClientRect(),
-      a = document.querySelector(".fl-abertura-acoes").getBoundingClientRect();
+    const c = document.querySelector(".cookies").getBoundingClientRect();
+    const acoes = [...document.querySelectorAll(".fl-abertura-acoes a")].map(
+      (el) => {
+        const a = el.getBoundingClientRect();
+        return {
+          texto: el.textContent.trim(),
+          left: a.left,
+          right: a.right,
+          top: a.top,
+          bottom: a.bottom,
+          sobreposicao:
+            c.top < a.bottom &&
+            c.bottom > a.top &&
+            c.left < a.right &&
+            c.right > a.left,
+        };
+      },
+    );
     return {
-      cookies: { top: c.top, height: c.height },
-      acoes: { top: a.top, bottom: a.bottom },
-      sobreposicao:
-        c.top < a.bottom &&
-        c.bottom > a.top &&
-        c.left < a.right &&
-        c.right > a.left,
+      cookies: { left: c.left, top: c.top, right: c.right, bottom: c.bottom },
+      acoes,
+      sobreposicao: acoes.some((a) => a.sobreposicao),
     };
   });
+  assert.equal(out.cookies.sobreposicao, false);
   await foto(pc, "1440-primeiro-acesso-cookies");
   await cc.close();
+  await p.setViewportSize({ width: 390, height: 844 });
+  await p.goto(base);
+  await p.locator("#fl-explorar").click();
+  out.menuTexto200 = await p.evaluate(() => {
+    const links = [...document.querySelectorAll(".fl-nav-itens a")];
+    const antes = getComputedStyle(links[0]).fontSize;
+    const valores = [...document.querySelectorAll("body *")]
+      .filter(
+        (e) =>
+          e instanceof HTMLElement &&
+          !["STYLE", "SCRIPT", "LINK"].includes(e.tagName),
+      )
+      .map((e) => ({
+        e,
+        f: parseFloat(getComputedStyle(e).fontSize),
+        l: parseFloat(getComputedStyle(e).lineHeight),
+      }));
+    for (const { e, f, l } of valores) {
+      e.style.setProperty("font-size", f * 2 + "px", "important");
+      if (Number.isFinite(l))
+        e.style.setProperty("line-height", l * 2 + "px", "important");
+    }
+    return {
+      antes,
+      depois: getComputedStyle(links[0]).fontSize,
+      width: innerWidth,
+      dpr: devicePixelRatio,
+      scrollWidth: document.documentElement.scrollWidth,
+    };
+  });
+  assert.equal(out.menuTexto200.scrollWidth, 390);
+  for (const link of await p.locator(".fl-nav-itens a").all()) {
+    await link.focus();
+    const r = await link.boundingBox();
+    assert(r.y >= 73 && r.y + r.height <= 844);
+  }
+  await foto(p, "390-texto200-explorar-flow");
   // Três navegações locais, contextos novos, sem throttling: números exploratórios, não Lighthouse/CWV de campo.
   for (let i = 0; i < 3; i++) {
     const cx = await b.newContext({

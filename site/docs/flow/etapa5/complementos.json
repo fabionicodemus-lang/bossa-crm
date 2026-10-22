@@ -1,0 +1,130 @@
+{
+  "data": "2026-10-22T18:01:32.409Z",
+  "barra": [
+    {
+      "estado": "abertura",
+      "visivel": false
+    },
+    {
+      "estado": "fora da abertura",
+      "visivel": true
+    },
+    {
+      "estado": "menu aberto",
+      "visivel": false
+    },
+    {
+      "estado": "menu fechado",
+      "visivel": true
+    },
+    {
+      "estado": "planta trocada",
+      "visivel": true
+    },
+    {
+      "estado": "modal aberto",
+      "visivel": false
+    },
+    {
+      "estado": "modal fechado",
+      "visivel": true
+    },
+    {
+      "estado": "contato visível",
+      "visivel": false
+    },
+    {
+      "estado": "campo focado",
+      "visivel": false
+    },
+    {
+      "estado": "explorar Flow aberto",
+      "visivel": false
+    },
+    {
+      "estado": "explorar Flow fechado",
+      "visivel": true
+    }
+  ],
+  "texto": [
+    {
+      "estado": "plantas",
+      "antes": "38px",
+      "depois": "76px",
+      "width": 390,
+      "dpr": 1,
+      "scrollWidth": 390
+    },
+    {
+      "estado": "menu",
+      "antes": "38px",
+      "depois": "76px",
+      "width": 390,
+      "dpr": 1,
+      "scrollWidth": 390
+    },
+    {
+      "estado": "formulario",
+      "antes": "38px",
+      "depois": "76px",
+      "width": 390,
+      "dpr": 1,
+      "scrollWidth": 390
+    },
+    {
+      "estado": "modal",
+      "antes": "38px",
+      "depois": "76px",
+      "width": 390,
+      "dpr": 1,
+      "scrollWidth": 390
+    }
+  ],
+  "videos": [
+    {
+      "video": "unidade-1601",
+      "tempo": 0.422627,
+      "width": 540,
+      "height": 960,
+      "erro": null
+    },
+    {
+      "video": "obra",
+      "tempo": 0.419476,
+      "width": 540,
+      "height": 960,
+      "erro": null
+    },
+    {
+      "video": "augusto",
+      "tempo": 0.428553,
+      "width": 540,
+      "height": 960,
+      "erro": null
+    },
+    {
+      "video": "natalia",
+      "tempo": 0.469503,
+      "width": 540,
+      "height": 960,
+      "erro": null
+    }
+  ],
+  "limites": "Emulação Chromium, sem aparelho físico, teclado virtual, escuta integral ou zoom nativo.",
+  "pinca": {
+    "metodo": "dois contatos emulados pelo CDP do Chromium",
+    "zoom": "217%"
+  },
+  "inicial": {
+    "cls": 0.0033127625165652167,
+    "lcp": 232,
+    "bytes": 1835768,
+    "videosBaixados": [
+      "/video/flow/abertura.mp4"
+    ],
+    "imagens": 22,
+    "carregadas": 3,
+    "videoPausado": false
+  },
+  "pausaManualPreservada": true
+}
