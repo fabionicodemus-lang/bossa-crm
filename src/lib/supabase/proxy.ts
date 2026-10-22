@@ -1,15 +1,18 @@
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
+import { serverSupabaseOptions } from '../homologation/server';
 
 const AUTH_PATHS = ['/login', '/cadastro', '/recuperar-senha'];
 
 export async function updateSession(request: NextRequest) {
+  const homologation = serverSupabaseOptions();
   let response = NextResponse.next({ request });
 
   const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
+    homologation?.url ?? process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    homologation?.key ?? process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
     {
+      ...(homologation ? { global: homologation.global } : {}),
       cookies: {
         getAll: () => request.cookies.getAll(),
         setAll(cookiesToSet) {

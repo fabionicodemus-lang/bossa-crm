@@ -41,6 +41,8 @@ jobs:
           cache: npm
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
+      - name: Test fail-closed preview isolation
+        run: npm run test:homologation-isolation
       - name: Test commercial ledger and metrics
         run: npm run test:commercial
       - name: Test conservative commercial linking

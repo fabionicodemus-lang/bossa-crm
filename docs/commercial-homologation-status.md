@@ -110,3 +110,7 @@ A busca por contato dentro de snapshots JSON não tem índice específico utiliz
 Para homologação integral faltam: DDL sanitizado e ledger real de migrações; comparação dos hashes/objetos/políticas/grants; ambiente Supabase isolado com as extensões correspondentes; preflight de referências existentes; fluxo autenticado implantado e análise de desempenho com distribuição representativa. Nenhuma produção foi alterada e não houve merge, deploy, automação ativada ou mensagem real.
 
 A integração técnica do **repositório** passou após as correções; a homologação integral está pendente desses impedimentos. A próxima tarefa funcional fica registrada, condicionada ao fechamento dessa homologação: **integração transacional dos compromissos detectados pelo WhatsApp**. Ela não foi iniciada. A barra permanece **12/24**, com F1.5 parcial.
+
+## Continuação: isolamento obrigatório da prévia
+
+A proteção e os limites da liberação foram registrados em [Prévia de homologação](commercial-preview-isolation.md). Preview gerenciado permanece bloqueado nesta revisão; o laboratório automatizado local não autoriza o roteiro humano. Não foram alteradas as 13 migrações ou a configuração de produção. Mantêm-se **12/24** macroentregas e **12/16** verificações de preparação V1.

@@ -1,3 +1,5 @@
+import { inspectConfiguration, isHomologation, LOCAL_SUPABASE_ORIGIN } from './lib/homologation/policy';
+
 type OpenAiContentBlock = {
   type?: string;
   [key: string]: unknown;
@@ -47,6 +49,19 @@ function normalizeOpenAiBody(body: BodyInit | null | undefined): BodyInit | null
 
 export async function register() {
   if (process.env.NEXT_RUNTIME !== 'nodejs') return;
+
+  if (isHomologation()) {
+    const original = globalThis.fetch;
+    globalThis.fetch = async (input, init) => {
+      const config = inspectConfiguration();
+      const url = new URL(requestUrl(input));
+      if (config.blockers.length || url.origin !== LOCAL_SUPABASE_ORIGIN || url.username || url.password) {
+        throw new Error('HOMOLOGATION_EGRESS_BLOCKED');
+      }
+      return original(input, { ...init, redirect: 'error' });
+    };
+    return;
+  }
 
   const originalFetch = globalThis.fetch;
   const marker = '__bossaOpenAiHistoryPatched';
