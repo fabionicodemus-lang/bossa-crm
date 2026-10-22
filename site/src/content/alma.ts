@@ -1,4 +1,10 @@
 import type { Planta } from "./empreendimentos";
+export const almaMeta = {
+  titulo: "Alma Sea Houses em Perequê | Bossa Empreendimentos",
+  descricao:
+    "Apartamentos de 3 suítes e duplex de 4 suítes em Perequê, Porto Belo. Conheça as plantas, os espaços de convivência e o projeto do Alma.",
+  imagem: "/img/alma/fachada.jpg",
+};
 export const almaFaq = [
   {
     id: "1",

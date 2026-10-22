@@ -1,0 +1,10 @@
+{
+  "arquivo": "public/video/alma/trajeto.mp4",
+  "sha256": "d69cc46287907d3546cbb46e1c21e53a18d7d2d671772bb95c181085197a3ab7",
+  "metodo": "FFmpeg decodifica integralmente a faixa AAC para PCM float32 estéreo, sem filtro de volume",
+  "total_amostras_incluindo_canais": 5662720,
+  "amostras_nao_zero": 0,
+  "minimo": 0.0,
+  "maximo": 0.0,
+  "resultado": "Faixa presente, mas todas as amostras decodificadas são zero: silêncio digital integral. Nenhuma escuta ou transcrição foi realizada."
+}

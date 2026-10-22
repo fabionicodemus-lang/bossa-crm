@@ -241,6 +241,17 @@
   background: var(--cla);
   font-size: 17px;
   line-height: 1.6;
+  /* Permite reflow de palavras longas quando o texto é ampliado a 200%. */
+  overflow-wrap: anywhere;
+}
+/* O rodapé institucional também precisa reflow no Alma com texto ampliado. */
+body:has(.al-fase3) .rodape {
+  overflow-wrap: anywhere;
+}
+body:has(.al-fase3) .menu-cel {
+  overflow-wrap: anywhere;
+  max-height: calc(100dvh - 73px);
+  overflow-y: auto;
 }
 .al-fase3 *,
 .al-visor * {
@@ -669,6 +680,7 @@ details[open] > summary .al-expandido {
 }
 .al-contato-final .al-form {
   padding: 24px;
+  align-self: start;
 }
 .al-contato-final .al-form h3 {
   margin-top: 24px;

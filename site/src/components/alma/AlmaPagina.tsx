@@ -6,6 +6,8 @@ import type { Empreendimento, Planta } from "@/content/empreendimentos";
 import { ALMA_ESTADO, notaAlmaPreRegistro, notaLegal } from "@/content/site";
 import {
   almaFaq,
+  almaMeta,
+  almaMetaPlanta,
   confortoAlma,
   especificacoesAlma,
   mensagemAlma,
@@ -120,6 +122,11 @@ export function AlmaPagina({
     () => e.plantas.find((q) => q.slug === plantaInicial) ?? e.plantas[0],
   );
   const [contexto, setContexto] = useState(!!plantaInicial);
+  // A URL muda sem navegação do Next; o título acompanha a mesma seleção e fonte das rotas.
+  // A opção padrão da página geral continua sendo apenas exibição, sem contexto atribuído.
+  useEffect(() => {
+    document.title = contexto ? almaMetaPlanta(p).titulo : almaMeta.titulo;
+  }, [contexto, p]);
   const [ativa, setAtiva] = useState("");
   const [barra, setBarra] = useState(false);
   const [mapa, setMapa] = useState(false);
@@ -260,7 +267,7 @@ export function AlmaPagina({
                 height={481}
                 priority
                 className="al-abertura__logo"
-                  sizes="170px"
+                sizes="170px"
               />
               <p className="al-rot">ALMA SEA HOUSES · PEREQUÊ, PORTO BELO</p>
               <h1 className="al-h1">

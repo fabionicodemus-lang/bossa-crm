@@ -1,0 +1,278 @@
+{
+  "data": "2026-10-22T00:43:32.602Z",
+  "base": "http://localhost:3200",
+  "variante": "pública local",
+  "mecanismo": "Navegação visual na variante pública, com marcadores desativados pelo build local",
+  "estados": [
+    {
+      "width": 1440,
+      "secao": "inicio",
+      "innerWidth": 1440,
+      "innerHeight": 1000,
+      "dpr": 1,
+      "scrollWidth": 1440,
+      "visualScale": 1
+    },
+    {
+      "width": 1440,
+      "secao": "apartamentos",
+      "innerWidth": 1440,
+      "innerHeight": 1000,
+      "dpr": 1,
+      "scrollWidth": 1440,
+      "visualScale": 1
+    },
+    {
+      "width": 1440,
+      "secao": "plantas",
+      "innerWidth": 1440,
+      "innerHeight": 1000,
+      "dpr": 1,
+      "scrollWidth": 1440,
+      "visualScale": 1
+    },
+    {
+      "width": 1440,
+      "secao": "posicao",
+      "innerWidth": 1440,
+      "innerHeight": 1000,
+      "dpr": 1,
+      "scrollWidth": 1440,
+      "visualScale": 1
+    },
+    {
+      "width": 1440,
+      "secao": "lazer",
+      "innerWidth": 1440,
+      "innerHeight": 1000,
+      "dpr": 1,
+      "scrollWidth": 1440,
+      "visualScale": 1
+    },
+    {
+      "width": 1440,
+      "secao": "localizacao",
+      "innerWidth": 1440,
+      "innerHeight": 1000,
+      "dpr": 1,
+      "scrollWidth": 1440,
+      "visualScale": 1
+    },
+    {
+      "width": 1440,
+      "secao": "conforto",
+      "innerWidth": 1440,
+      "innerHeight": 1000,
+      "dpr": 1,
+      "scrollWidth": 1440,
+      "visualScale": 1
+    },
+    {
+      "width": 1440,
+      "secao": "obra",
+      "innerWidth": 1440,
+      "innerHeight": 1000,
+      "dpr": 1,
+      "scrollWidth": 1440,
+      "visualScale": 1
+    },
+    {
+      "width": 1440,
+      "secao": "duvidas",
+      "innerWidth": 1440,
+      "innerHeight": 1000,
+      "dpr": 1,
+      "scrollWidth": 1440,
+      "visualScale": 1
+    },
+    {
+      "width": 1440,
+      "secao": "contato",
+      "innerWidth": 1440,
+      "innerHeight": 1000,
+      "dpr": 1,
+      "scrollWidth": 1440,
+      "visualScale": 1
+    },
+    {
+      "width": 390,
+      "secao": "inicio",
+      "innerWidth": 390,
+      "innerHeight": 844,
+      "dpr": 1,
+      "scrollWidth": 390,
+      "visualScale": 1
+    },
+    {
+      "width": 390,
+      "secao": "apartamentos",
+      "innerWidth": 390,
+      "innerHeight": 844,
+      "dpr": 1,
+      "scrollWidth": 390,
+      "visualScale": 1
+    },
+    {
+      "width": 390,
+      "secao": "plantas",
+      "innerWidth": 390,
+      "innerHeight": 844,
+      "dpr": 1,
+      "scrollWidth": 390,
+      "visualScale": 1
+    },
+    {
+      "width": 390,
+      "secao": "posicao",
+      "innerWidth": 390,
+      "innerHeight": 844,
+      "dpr": 1,
+      "scrollWidth": 390,
+      "visualScale": 1
+    },
+    {
+      "width": 390,
+      "secao": "lazer",
+      "innerWidth": 390,
+      "innerHeight": 844,
+      "dpr": 1,
+      "scrollWidth": 390,
+      "visualScale": 1
+    },
+    {
+      "width": 390,
+      "secao": "localizacao",
+      "innerWidth": 390,
+      "innerHeight": 844,
+      "dpr": 1,
+      "scrollWidth": 390,
+      "visualScale": 1
+    },
+    {
+      "width": 390,
+      "secao": "conforto",
+      "innerWidth": 390,
+      "innerHeight": 844,
+      "dpr": 1,
+      "scrollWidth": 390,
+      "visualScale": 1
+    },
+    {
+      "width": 390,
+      "secao": "obra",
+      "innerWidth": 390,
+      "innerHeight": 844,
+      "dpr": 1,
+      "scrollWidth": 390,
+      "visualScale": 1
+    },
+    {
+      "width": 390,
+      "secao": "duvidas",
+      "innerWidth": 390,
+      "innerHeight": 844,
+      "dpr": 1,
+      "scrollWidth": 390,
+      "visualScale": 1
+    },
+    {
+      "width": 390,
+      "secao": "contato",
+      "innerWidth": 390,
+      "innerHeight": 844,
+      "dpr": 1,
+      "scrollWidth": 390,
+      "visualScale": 1
+    },
+    {
+      "width": 320,
+      "secao": "inicio",
+      "innerWidth": 320,
+      "innerHeight": 844,
+      "dpr": 1,
+      "scrollWidth": 320,
+      "visualScale": 1
+    },
+    {
+      "width": 320,
+      "secao": "apartamentos",
+      "innerWidth": 320,
+      "innerHeight": 844,
+      "dpr": 1,
+      "scrollWidth": 320,
+      "visualScale": 1
+    },
+    {
+      "width": 320,
+      "secao": "plantas",
+      "innerWidth": 320,
+      "innerHeight": 844,
+      "dpr": 1,
+      "scrollWidth": 320,
+      "visualScale": 1
+    },
+    {
+      "width": 320,
+      "secao": "posicao",
+      "innerWidth": 320,
+      "innerHeight": 844,
+      "dpr": 1,
+      "scrollWidth": 320,
+      "visualScale": 1
+    },
+    {
+      "width": 320,
+      "secao": "lazer",
+      "innerWidth": 320,
+      "innerHeight": 844,
+      "dpr": 1,
+      "scrollWidth": 320,
+      "visualScale": 1
+    },
+    {
+      "width": 320,
+      "secao": "localizacao",
+      "innerWidth": 320,
+      "innerHeight": 844,
+      "dpr": 1,
+      "scrollWidth": 320,
+      "visualScale": 1
+    },
+    {
+      "width": 320,
+      "secao": "conforto",
+      "innerWidth": 320,
+      "innerHeight": 844,
+      "dpr": 1,
+      "scrollWidth": 320,
+      "visualScale": 1
+    },
+    {
+      "width": 320,
+      "secao": "obra",
+      "innerWidth": 320,
+      "innerHeight": 844,
+      "dpr": 1,
+      "scrollWidth": 320,
+      "visualScale": 1
+    },
+    {
+      "width": 320,
+      "secao": "duvidas",
+      "innerWidth": 320,
+      "innerHeight": 844,
+      "dpr": 1,
+      "scrollWidth": 320,
+      "visualScale": 1
+    },
+    {
+      "width": 320,
+      "secao": "contato",
+      "innerWidth": 320,
+      "innerHeight": 844,
+      "dpr": 1,
+      "scrollWidth": 320,
+      "visualScale": 1
+    }
+  ]
+}

@@ -1,0 +1,852 @@
+{
+  "data": "2026-10-22T00:41:47.131Z",
+  "base": "http://localhost:3200",
+  "variante": "prévia local",
+  "mecanismo": "Duplicação de font-size e line-height calculados de TODOS os elementos HTML antes de qualquer escrita; valores aplicados ao texto real por CSS inline de QA. Não é zoom nativo, DPR, imagem ampliada, transform ou redução de viewport.",
+  "estados": [
+    {
+      "width": 390,
+      "estado": "abertura",
+      "antes": {
+        "innerWidth": 390,
+        "innerHeight": 844,
+        "dpr": 1,
+        "scrollWidth": 390,
+        "visualScale": 1
+      },
+      "depois": {
+        "innerWidth": 390,
+        "innerHeight": 844,
+        "dpr": 1,
+        "scrollWidth": 390,
+        "visualScale": 1
+      },
+      "prova": {
+        "elementos": 721,
+        "amostras": [
+          {
+            "seletor": "h1",
+            "antes": 42,
+            "depois": 84,
+            "fator": 2
+          },
+          {
+            "seletor": ".al-h2",
+            "antes": 32,
+            "depois": 64,
+            "fator": 2
+          },
+          {
+            "seletor": ".al-p",
+            "antes": 17,
+            "depois": 34,
+            "fator": 2
+          },
+          {
+            "seletor": ".al-bt",
+            "antes": 14,
+            "depois": 28,
+            "fator": 2
+          },
+          {
+            "seletor": ".cabecalho__abrir",
+            "antes": 12,
+            "depois": 24,
+            "fator": 2
+          },
+          {
+            "seletor": ".al-nav a",
+            "antes": 17,
+            "depois": 34,
+            "fator": 2
+          },
+          {
+            "seletor": "input",
+            "antes": 17,
+            "depois": 34,
+            "fator": 2
+          }
+        ]
+      }
+    },
+    {
+      "width": 390,
+      "estado": "menu",
+      "antes": {
+        "innerWidth": 390,
+        "innerHeight": 844,
+        "dpr": 1,
+        "scrollWidth": 390,
+        "visualScale": 1
+      },
+      "depois": {
+        "innerWidth": 390,
+        "innerHeight": 844,
+        "dpr": 1,
+        "scrollWidth": 390,
+        "visualScale": 1
+      },
+      "prova": {
+        "elementos": 721,
+        "amostras": [
+          {
+            "seletor": "h1",
+            "antes": 42,
+            "depois": 84,
+            "fator": 2
+          },
+          {
+            "seletor": ".al-h2",
+            "antes": 32,
+            "depois": 64,
+            "fator": 2
+          },
+          {
+            "seletor": ".al-p",
+            "antes": 17,
+            "depois": 34,
+            "fator": 2
+          },
+          {
+            "seletor": ".al-bt",
+            "antes": 14,
+            "depois": 28,
+            "fator": 2
+          },
+          {
+            "seletor": ".cabecalho__abrir",
+            "antes": 12,
+            "depois": 24,
+            "fator": 2
+          },
+          {
+            "seletor": ".al-nav a",
+            "antes": 17,
+            "depois": 34,
+            "fator": 2
+          },
+          {
+            "seletor": "input",
+            "antes": 17,
+            "depois": 34,
+            "fator": 2
+          }
+        ],
+        "ultimoLinkMenu": {
+          "top": 626.5625,
+          "bottom": 773.75
+        }
+      }
+    },
+    {
+      "width": 390,
+      "estado": "plantas",
+      "antes": {
+        "innerWidth": 390,
+        "innerHeight": 844,
+        "dpr": 1,
+        "scrollWidth": 390,
+        "visualScale": 1
+      },
+      "depois": {
+        "innerWidth": 390,
+        "innerHeight": 844,
+        "dpr": 1,
+        "scrollWidth": 390,
+        "visualScale": 1
+      },
+      "prova": {
+        "elementos": 731,
+        "amostras": [
+          {
+            "seletor": "h1",
+            "antes": 42,
+            "depois": 84,
+            "fator": 2
+          },
+          {
+            "seletor": ".al-h2",
+            "antes": 32,
+            "depois": 64,
+            "fator": 2
+          },
+          {
+            "seletor": ".al-p",
+            "antes": 17,
+            "depois": 34,
+            "fator": 2
+          },
+          {
+            "seletor": ".al-bt",
+            "antes": 14,
+            "depois": 28,
+            "fator": 2
+          },
+          {
+            "seletor": ".cabecalho__abrir",
+            "antes": 12,
+            "depois": 24,
+            "fator": 2
+          },
+          {
+            "seletor": ".al-nav a",
+            "antes": 17,
+            "depois": 34,
+            "fator": 2
+          },
+          {
+            "seletor": "input",
+            "antes": 17,
+            "depois": 34,
+            "fator": 2
+          }
+        ]
+      }
+    },
+    {
+      "width": 390,
+      "estado": "comparacao",
+      "antes": {
+        "innerWidth": 390,
+        "innerHeight": 844,
+        "dpr": 1,
+        "scrollWidth": 390,
+        "visualScale": 1
+      },
+      "depois": {
+        "innerWidth": 390,
+        "innerHeight": 844,
+        "dpr": 1,
+        "scrollWidth": 390,
+        "visualScale": 1
+      },
+      "prova": {
+        "elementos": 731,
+        "amostras": [
+          {
+            "seletor": "h1",
+            "antes": 42,
+            "depois": 84,
+            "fator": 2
+          },
+          {
+            "seletor": ".al-h2",
+            "antes": 32,
+            "depois": 64,
+            "fator": 2
+          },
+          {
+            "seletor": ".al-p",
+            "antes": 17,
+            "depois": 34,
+            "fator": 2
+          },
+          {
+            "seletor": ".al-bt",
+            "antes": 14,
+            "depois": 28,
+            "fator": 2
+          },
+          {
+            "seletor": ".cabecalho__abrir",
+            "antes": 12,
+            "depois": 24,
+            "fator": 2
+          },
+          {
+            "seletor": ".al-nav a",
+            "antes": 17,
+            "depois": 34,
+            "fator": 2
+          },
+          {
+            "seletor": "input",
+            "antes": 17,
+            "depois": 34,
+            "fator": 2
+          }
+        ]
+      }
+    },
+    {
+      "width": 390,
+      "estado": "formulario",
+      "antes": {
+        "innerWidth": 390,
+        "innerHeight": 844,
+        "dpr": 1,
+        "scrollWidth": 390,
+        "visualScale": 1
+      },
+      "depois": {
+        "innerWidth": 390,
+        "innerHeight": 844,
+        "dpr": 1,
+        "scrollWidth": 390,
+        "visualScale": 1
+      },
+      "prova": {
+        "elementos": 725,
+        "amostras": [
+          {
+            "seletor": "h1",
+            "antes": 42,
+            "depois": 84,
+            "fator": 2
+          },
+          {
+            "seletor": ".al-h2",
+            "antes": 32,
+            "depois": 64,
+            "fator": 2
+          },
+          {
+            "seletor": ".al-p",
+            "antes": 17,
+            "depois": 34,
+            "fator": 2
+          },
+          {
+            "seletor": ".al-bt",
+            "antes": 14,
+            "depois": 28,
+            "fator": 2
+          },
+          {
+            "seletor": ".cabecalho__abrir",
+            "antes": 12,
+            "depois": 24,
+            "fator": 2
+          },
+          {
+            "seletor": ".al-nav a",
+            "antes": 17,
+            "depois": 34,
+            "fator": 2
+          },
+          {
+            "seletor": "input",
+            "antes": 17,
+            "depois": 34,
+            "fator": 2
+          }
+        ]
+      }
+    },
+    {
+      "width": 390,
+      "estado": "modal",
+      "antes": {
+        "innerWidth": 390,
+        "innerHeight": 844,
+        "dpr": 1,
+        "scrollWidth": 390,
+        "visualScale": 1
+      },
+      "depois": {
+        "innerWidth": 390,
+        "innerHeight": 844,
+        "dpr": 1,
+        "scrollWidth": 390,
+        "visualScale": 1
+      },
+      "prova": {
+        "elementos": 741,
+        "amostras": [
+          {
+            "seletor": "h1",
+            "antes": 42,
+            "depois": 84,
+            "fator": 2
+          },
+          {
+            "seletor": ".al-h2",
+            "antes": 32,
+            "depois": 64,
+            "fator": 2
+          },
+          {
+            "seletor": ".al-p",
+            "antes": 17,
+            "depois": 34,
+            "fator": 2
+          },
+          {
+            "seletor": ".al-bt",
+            "antes": 14,
+            "depois": 28,
+            "fator": 2
+          },
+          {
+            "seletor": ".cabecalho__abrir",
+            "antes": 12,
+            "depois": 24,
+            "fator": 2
+          },
+          {
+            "seletor": ".al-nav a",
+            "antes": 17,
+            "depois": 34,
+            "fator": 2
+          },
+          {
+            "seletor": "input",
+            "antes": 17,
+            "depois": 34,
+            "fator": 2
+          },
+          {
+            "seletor": ".al-visor button",
+            "antes": 16,
+            "depois": 32,
+            "fator": 2
+          }
+        ],
+        "controles": [
+          {
+            "nome": "Aproximar +",
+            "top": 637.109375,
+            "bottom": 703.109375
+          },
+          {
+            "nome": "Reduzir −",
+            "top": 563.109375,
+            "bottom": 629.109375
+          },
+          {
+            "nome": "Ajustar",
+            "top": 637.109375,
+            "bottom": 703.109375
+          },
+          {
+            "nome": "Fechar ×",
+            "top": 28.875,
+            "bottom": 94.875
+          }
+        ]
+      }
+    },
+    {
+      "width": 320,
+      "estado": "abertura",
+      "antes": {
+        "innerWidth": 320,
+        "innerHeight": 844,
+        "dpr": 1,
+        "scrollWidth": 320,
+        "visualScale": 1
+      },
+      "depois": {
+        "innerWidth": 320,
+        "innerHeight": 844,
+        "dpr": 1,
+        "scrollWidth": 320,
+        "visualScale": 1
+      },
+      "prova": {
+        "elementos": 721,
+        "amostras": [
+          {
+            "seletor": "h1",
+            "antes": 42,
+            "depois": 84,
+            "fator": 2
+          },
+          {
+            "seletor": ".al-h2",
+            "antes": 32,
+            "depois": 64,
+            "fator": 2
+          },
+          {
+            "seletor": ".al-p",
+            "antes": 17,
+            "depois": 34,
+            "fator": 2
+          },
+          {
+            "seletor": ".al-bt",
+            "antes": 14,
+            "depois": 28,
+            "fator": 2
+          },
+          {
+            "seletor": ".cabecalho__abrir",
+            "antes": 12,
+            "depois": 24,
+            "fator": 2
+          },
+          {
+            "seletor": ".al-nav a",
+            "antes": 17,
+            "depois": 34,
+            "fator": 2
+          },
+          {
+            "seletor": "input",
+            "antes": 17,
+            "depois": 34,
+            "fator": 2
+          }
+        ]
+      }
+    },
+    {
+      "width": 320,
+      "estado": "menu",
+      "antes": {
+        "innerWidth": 320,
+        "innerHeight": 844,
+        "dpr": 1,
+        "scrollWidth": 320,
+        "visualScale": 1
+      },
+      "depois": {
+        "innerWidth": 320,
+        "innerHeight": 844,
+        "dpr": 1,
+        "scrollWidth": 320,
+        "visualScale": 1
+      },
+      "prova": {
+        "elementos": 721,
+        "amostras": [
+          {
+            "seletor": "h1",
+            "antes": 42,
+            "depois": 84,
+            "fator": 2
+          },
+          {
+            "seletor": ".al-h2",
+            "antes": 32,
+            "depois": 64,
+            "fator": 2
+          },
+          {
+            "seletor": ".al-p",
+            "antes": 17,
+            "depois": 34,
+            "fator": 2
+          },
+          {
+            "seletor": ".al-bt",
+            "antes": 14,
+            "depois": 28,
+            "fator": 2
+          },
+          {
+            "seletor": ".cabecalho__abrir",
+            "antes": 12,
+            "depois": 24,
+            "fator": 2
+          },
+          {
+            "seletor": ".al-nav a",
+            "antes": 17,
+            "depois": 34,
+            "fator": 2
+          },
+          {
+            "seletor": "input",
+            "antes": 17,
+            "depois": 34,
+            "fator": 2
+          }
+        ],
+        "ultimoLinkMenu": {
+          "top": 688.15625,
+          "bottom": 835.34375
+        }
+      }
+    },
+    {
+      "width": 320,
+      "estado": "plantas",
+      "antes": {
+        "innerWidth": 320,
+        "innerHeight": 844,
+        "dpr": 1,
+        "scrollWidth": 320,
+        "visualScale": 1
+      },
+      "depois": {
+        "innerWidth": 320,
+        "innerHeight": 844,
+        "dpr": 1,
+        "scrollWidth": 320,
+        "visualScale": 1
+      },
+      "prova": {
+        "elementos": 731,
+        "amostras": [
+          {
+            "seletor": "h1",
+            "antes": 42,
+            "depois": 84,
+            "fator": 2
+          },
+          {
+            "seletor": ".al-h2",
+            "antes": 32,
+            "depois": 64,
+            "fator": 2
+          },
+          {
+            "seletor": ".al-p",
+            "antes": 17,
+            "depois": 34,
+            "fator": 2
+          },
+          {
+            "seletor": ".al-bt",
+            "antes": 14,
+            "depois": 28,
+            "fator": 2
+          },
+          {
+            "seletor": ".cabecalho__abrir",
+            "antes": 12,
+            "depois": 24,
+            "fator": 2
+          },
+          {
+            "seletor": ".al-nav a",
+            "antes": 17,
+            "depois": 34,
+            "fator": 2
+          },
+          {
+            "seletor": "input",
+            "antes": 17,
+            "depois": 34,
+            "fator": 2
+          }
+        ]
+      }
+    },
+    {
+      "width": 320,
+      "estado": "comparacao",
+      "antes": {
+        "innerWidth": 320,
+        "innerHeight": 844,
+        "dpr": 1,
+        "scrollWidth": 320,
+        "visualScale": 1
+      },
+      "depois": {
+        "innerWidth": 320,
+        "innerHeight": 844,
+        "dpr": 1,
+        "scrollWidth": 320,
+        "visualScale": 1
+      },
+      "prova": {
+        "elementos": 731,
+        "amostras": [
+          {
+            "seletor": "h1",
+            "antes": 42,
+            "depois": 84,
+            "fator": 2
+          },
+          {
+            "seletor": ".al-h2",
+            "antes": 32,
+            "depois": 64,
+            "fator": 2
+          },
+          {
+            "seletor": ".al-p",
+            "antes": 17,
+            "depois": 34,
+            "fator": 2
+          },
+          {
+            "seletor": ".al-bt",
+            "antes": 14,
+            "depois": 28,
+            "fator": 2
+          },
+          {
+            "seletor": ".cabecalho__abrir",
+            "antes": 12,
+            "depois": 24,
+            "fator": 2
+          },
+          {
+            "seletor": ".al-nav a",
+            "antes": 17,
+            "depois": 34,
+            "fator": 2
+          },
+          {
+            "seletor": "input",
+            "antes": 17,
+            "depois": 34,
+            "fator": 2
+          }
+        ]
+      }
+    },
+    {
+      "width": 320,
+      "estado": "formulario",
+      "antes": {
+        "innerWidth": 320,
+        "innerHeight": 844,
+        "dpr": 1,
+        "scrollWidth": 320,
+        "visualScale": 1
+      },
+      "depois": {
+        "innerWidth": 320,
+        "innerHeight": 844,
+        "dpr": 1,
+        "scrollWidth": 320,
+        "visualScale": 1
+      },
+      "prova": {
+        "elementos": 725,
+        "amostras": [
+          {
+            "seletor": "h1",
+            "antes": 42,
+            "depois": 84,
+            "fator": 2
+          },
+          {
+            "seletor": ".al-h2",
+            "antes": 32,
+            "depois": 64,
+            "fator": 2
+          },
+          {
+            "seletor": ".al-p",
+            "antes": 17,
+            "depois": 34,
+            "fator": 2
+          },
+          {
+            "seletor": ".al-bt",
+            "antes": 14,
+            "depois": 28,
+            "fator": 2
+          },
+          {
+            "seletor": ".cabecalho__abrir",
+            "antes": 12,
+            "depois": 24,
+            "fator": 2
+          },
+          {
+            "seletor": ".al-nav a",
+            "antes": 17,
+            "depois": 34,
+            "fator": 2
+          },
+          {
+            "seletor": "input",
+            "antes": 17,
+            "depois": 34,
+            "fator": 2
+          }
+        ]
+      }
+    },
+    {
+      "width": 320,
+      "estado": "modal",
+      "antes": {
+        "innerWidth": 320,
+        "innerHeight": 844,
+        "dpr": 1,
+        "scrollWidth": 320,
+        "visualScale": 1
+      },
+      "depois": {
+        "innerWidth": 320,
+        "innerHeight": 844,
+        "dpr": 1,
+        "scrollWidth": 320,
+        "visualScale": 1
+      },
+      "prova": {
+        "elementos": 741,
+        "amostras": [
+          {
+            "seletor": "h1",
+            "antes": 42,
+            "depois": 84,
+            "fator": 2
+          },
+          {
+            "seletor": ".al-h2",
+            "antes": 32,
+            "depois": 64,
+            "fator": 2
+          },
+          {
+            "seletor": ".al-p",
+            "antes": 17,
+            "depois": 34,
+            "fator": 2
+          },
+          {
+            "seletor": ".al-bt",
+            "antes": 14,
+            "depois": 28,
+            "fator": 2
+          },
+          {
+            "seletor": ".cabecalho__abrir",
+            "antes": 12,
+            "depois": 24,
+            "fator": 2
+          },
+          {
+            "seletor": ".al-nav a",
+            "antes": 17,
+            "depois": 34,
+            "fator": 2
+          },
+          {
+            "seletor": "input",
+            "antes": 17,
+            "depois": 34,
+            "fator": 2
+          },
+          {
+            "seletor": ".al-visor button",
+            "antes": 16,
+            "depois": 32,
+            "fator": 2
+          }
+        ],
+        "controles": [
+          {
+            "nome": "Aproximar +",
+            "top": 738.875,
+            "bottom": 804.875
+          },
+          {
+            "nome": "Reduzir −",
+            "top": 664.875,
+            "bottom": 730.875
+          },
+          {
+            "nome": "Ajustar",
+            "top": 760.875,
+            "bottom": 826.875
+          },
+          {
+            "nome": "Fechar ×",
+            "top": 16.875,
+            "bottom": 82.875
+          }
+        ]
+      }
+    }
+  ]
+}
