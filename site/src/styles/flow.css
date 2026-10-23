@@ -1372,3 +1372,46 @@ body:has(.fl-comercial):has(.cookies) .fl-barra {display:none}
   .fl-comercial .fl-abertura-acoes {gap:8px}
 }
 .fl-planta-destaques {margin:0;padding-left:20px;line-height:1.5}
+
+/* Alvenaria Celucon · especificações informadas pela direção e registros reais. */
+.fl-alvenaria {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(0, 0.75fr);
+  gap: 40px 56px;
+  align-items: center;
+  margin-block: 40px 56px;
+}
+.fl-alvenaria__conteudo { display: grid; gap: 20px; min-width: 0; }
+.fl-alvenaria__conteudo > * { margin: 0; }
+.fl-alvenaria__aplicacoes {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 20px;
+  padding-block: 24px;
+  border-block: 1px solid var(--sal);
+}
+.fl-alvenaria__aplicacoes dt { font-size: 15px; line-height: 1.5; }
+.fl-alvenaria__aplicacoes dd { display: grid; gap: 12px; margin: 8px 0 0; }
+.fl-alvenaria__aplicacoes strong { font-size: clamp(28px, 3vw, 40px); font-weight: 500; line-height: 1.15; }
+.fl-alvenaria__aplicacoes span { font-size: 15px; line-height: 1.5; }
+.fl-alvenaria__registro { width: 100%; max-width: 360px; margin: 0; justify-self: center; }
+.fl-alvenaria__registro img { display: block; width: 100%; height: auto; }
+.fl-alvenaria__registro figcaption { margin-top: 12px; font-size: 14px; line-height: 1.5; }
+.fl-alvenaria__videos { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; }
+.fl-alvenaria__nota { grid-column: 1 / -1; margin: -16px 0 0; max-width: 85ch; }
+.fl-alvenaria__videos .fl-video-cartao { height: 100%; }
+.fl-alvenaria__videos .fl-video-cartao > span { min-width: 0; overflow-wrap: anywhere; }
+.fl-alvenaria__videos .fl-video-cartao > img { flex-shrink: 0; }
+@media (max-width: 860px) {
+  .fl-alvenaria { grid-template-columns: 1fr; gap: 28px; }
+  .fl-alvenaria__registro { max-width: 320px; }
+  .fl-alvenaria__videos { grid-template-columns: 1fr; gap: 16px; }
+}
+@media (max-width: 540px) {
+  .fl-alvenaria { margin-block: 28px 40px; }
+  .fl-alvenaria__aplicacoes { grid-template-columns: 1fr; gap: 20px; }
+  .fl-alvenaria__aplicacoes > div { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr); gap: 16px; align-items: start; }
+  .fl-alvenaria__aplicacoes dd { margin: 0; gap: 8px; }
+  .fl-alvenaria__videos .fl-video-cartao { gap: 16px; padding: 12px; }
+  .fl-alvenaria__videos .fl-video-cartao > img { width: 76px; height: 135px; }
+}

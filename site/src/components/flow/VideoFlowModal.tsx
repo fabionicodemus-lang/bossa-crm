@@ -2,6 +2,9 @@
 import { useEffect, useRef, useState } from "react";
 import { VideoVertical } from "./Clientes";
 const duracoes: Record<string, string> = {
+  "fabio-bloco-celular": "2:07",
+  "demonstracao-acustica-celucon": "0:35",
+  "celucon-na-obra": "0:58",
   "unidade-1601": "1:49",
   "obra-flow": "1:22",
   "depoimento-augusto": "1:30",

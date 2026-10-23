@@ -26,6 +26,7 @@ import { VideoAbertura } from "./Clientes";
 import { NavegacaoFlow } from "./NavegacaoFlow";
 import { GaleriaMove } from "./GaleriaMove";
 import { VideoFlowModal } from "./VideoFlowModal";
+import { AlvenariaFlow } from "./AlvenariaFlow";
 const I = "/img/flow",
   V = "/video/flow";
 function Cab({
@@ -457,10 +458,11 @@ export function FlowPagina({
               rotulo="ENGENHARIA · JEITO BOSSA"
               titulo="O conforto começa antes dos acabamentos."
             >
-              Há decisões de projeto e execução que fazem diferença no uso
-              diário. Conheça as soluções previstas para acústica,
-              impermeabilização, esquadrias e exaustão no Flow.
+              Do material das paredes aos cuidados de execução, conheça as
+              escolhas da Bossa para o conforto do Flow — e veja registros
+              reais da etapa de alvenaria.
             </Cab>
+            <AlvenariaFlow />
             <div className="fl-engenharia">
               {engenhariaFlow.map(([t, b, r]) => {
                 const foto = fotosEngenhariaFlow[t];
