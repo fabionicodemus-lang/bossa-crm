@@ -54,7 +54,6 @@ export const faqFlow = [
 ];
 export const isolamentoPisoFlow = {
   titulo: "Menos ruído de passos entre andares.",
-  videoInstagram: "https://www.instagram.com/bossaempreendimentos/reel/DWULiqQE_MX/",
   descricao:
     "O Flow conta com a manta de lã de PET FS Floor, da Fibersoft, com 8 mm de espessura, entre a laje e o contrapiso. Essa camada ajuda a reduzir a transmissão de ruídos de impacto, como passos e movimentação de móveis.",
   fotos: [

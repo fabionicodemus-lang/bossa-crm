@@ -2,6 +2,7 @@
 
 import { isolamentoPisoFlow } from "@/content/flow";
 import { FotoFlow } from "./Experiencia";
+import { VideoFlowModal } from "./VideoFlowModal";
 
 const legenda = "Registro real da obra do Flow, antes da execução do contrapiso.";
 
@@ -24,14 +25,13 @@ export function MantaAcusticaFlow() {
           <strong>8 mm</strong>
           <span>FS Floor · Fibersoft · lã de PET</span>
         </p>
-        <a
-          href={isolamentoPisoFlow.videoInstagram}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="fl-link"
-        >
-          Fábio explica a manta no Instagram ↗
-        </a>
+        <VideoFlowModal
+          src="/video/flow/fabio-manta-acustica.mp4"
+          poster="/img/flow/engenharia/fabio-manta-acustica.webp"
+          nome="Por que usamos manta acústica no Flow?"
+          legenda="Fábio Nicodemus explica na obra"
+          video="fabio-manta-acustica"
+        />
         <a href="#visita" className="fl-link">
           Conhecer esse cuidado na obra ↗
         </a>

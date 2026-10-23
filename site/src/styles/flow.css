@@ -1413,6 +1413,8 @@ body:has(.fl-comercial):has(.cookies) .fl-barra {display:none}
 }
 .fl-manta__conteudo { display: grid; gap: 24px; min-width: 0; }
 .fl-manta__conteudo > * { margin: 0; }
+.fl-manta__conteudo .fl-video-cartao > img { width: 76px; height: 135px; flex-shrink: 0; }
+.fl-manta__conteudo .fl-video-cartao > span { min-width: 0; overflow-wrap: anywhere; }
 .fl-manta__especificacao { display: grid; gap: 8px; }
 .fl-manta__especificacao strong { font-size: 40px; font-weight: 500; line-height: 1.15; }
 .fl-manta__especificacao span { font-size: 15px; }
