@@ -52,12 +52,31 @@ export const faqFlow = [
     r: "Sim. Solicite uma visita; nossa equipe combina data, horário e as condições de acesso.",
   },
 ];
-export const engenhariaFlow = [
-  [
-    "Menos ruído de passos entre andares.",
-    "O Flow conta com a manta de lã de PET FS Floor, da Fibersoft, entre a laje e o contrapiso. Essa camada ajuda a reduzir a transmissão de ruídos de impacto, como passos e movimentação de móveis.",
-    "Conforto acústico pensado também no piso.",
+export const isolamentoPisoFlow = {
+  titulo: "Menos ruído de passos entre andares.",
+  videoInstagram: "https://www.instagram.com/bossaempreendimentos/reel/DWULiqQE_MX/",
+  descricao:
+    "O Flow conta com a manta de lã de PET FS Floor, da Fibersoft, com 8 mm de espessura, entre a laje e o contrapiso. Essa camada ajuda a reduzir a transmissão de ruídos de impacto, como passos e movimentação de móveis.",
+  fotos: [
+    {
+      src: "/img/flow/engenharia/manta-fs-floor-aplicacao.webp",
+      alt: "Manta Fibersoft cobrindo o piso e acompanhando as bordas das paredes na obra do Flow",
+      titulo: "Manta acústica aplicada no Flow",
+    },
+    {
+      src: "/img/flow/engenharia/manta-fs-floor-circulacao.webp",
+      alt: "Manta Fibersoft instalada no piso de um ambiente e na circulação do Flow, antes do contrapiso",
+      titulo: "Aplicação na circulação",
+    },
+    {
+      src: "/img/flow/engenharia/manta-fs-floor-ambiente.webp",
+      alt: "Vista de outro ambiente do Flow com a manta Fibersoft cobrindo o piso antes do contrapiso",
+      titulo: "Aplicação em outro ambiente",
+    },
   ],
+} as const;
+
+export const engenhariaFlow = [
   [
     "Áreas molhadas: atenção antes do revestimento.",
     "O boletim de setembro detalha impermeabilização e assentamento do box.",
@@ -86,3 +105,4 @@ export const fotosEngenhariaFlow: Record<
     atividade: string;
   }
 > = {};
+

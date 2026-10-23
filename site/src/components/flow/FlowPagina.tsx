@@ -27,6 +27,7 @@ import { NavegacaoFlow } from "./NavegacaoFlow";
 import { GaleriaMove } from "./GaleriaMove";
 import { VideoFlowModal } from "./VideoFlowModal";
 import { AlvenariaFlow } from "./AlvenariaFlow";
+import { MantaAcusticaFlow } from "./MantaAcusticaFlow";
 const I = "/img/flow",
   V = "/video/flow";
 function Cab({
@@ -460,9 +461,10 @@ export function FlowPagina({
             >
               Do material das paredes aos cuidados de execução, conheça as
               escolhas da Bossa para o conforto do Flow — e veja registros
-              reais da etapa de alvenaria.
+              reais da alvenaria e do isolamento sob o contrapiso.
             </Cab>
             <AlvenariaFlow />
+            <MantaAcusticaFlow />
             <div className="fl-engenharia">
               {engenhariaFlow.map(([t, b, r]) => {
                 const foto = fotosEngenhariaFlow[t];
