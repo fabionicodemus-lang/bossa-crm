@@ -32,7 +32,10 @@
     "test:lead-supervision": "node --experimental-strip-types --experimental-loader ./scripts/ts-extension-loader.mjs scripts/check-lead-supervision.mjs",
     "test:client-broker-transfer": "node --experimental-strip-types --experimental-loader ./scripts/ts-extension-loader.mjs scripts/check-client-broker-transfer.mjs",
     "test:nara-round3": "node --experimental-strip-types --experimental-loader ./scripts/ts-extension-loader.mjs scripts/check-nara-round3.mjs",
-    "test:hoje-ui": "node --experimental-strip-types scripts/ui/check-hoje-model.mjs"
+    "test:hoje-ui": "node --experimental-strip-types scripts/ui/check-hoje-model.mjs",
+    "test:commercial": "node --experimental-strip-types scripts/commercial/check.mjs",
+    "test:homologation-isolation": "node scripts/homologation/check.mjs",
+    "homologation:preflight": "node scripts/homologation/preflight.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.3",
@@ -45,9 +48,11 @@
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "0.5.10",
     "@types/node": "^22.0.0",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.0.0",
+    "esbuild": "^0.28.2",
     "eslint": "^9.0.0",
     "eslint-config-next": "^16.2.11",
     "typescript": "^5.9.0"

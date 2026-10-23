@@ -40,8 +40,14 @@ Os dois arquivos `002` declaram dependência apenas de `001_bossa_crm.sql` e atu
 2. Não renomear os dois arquivos existentes no histórico atual.
 3. Criar, em uma mudança futura e separada, uma migration nova com número único para registrar ou validar o histórico aplicado, sem recriar objetos antigos.
 4. Para instalações futuras, considerar um baseline versionado em diretório separado, gerado a partir do estado validado do banco. O baseline não deve substituir nem reescrever o histórico usado em produção.
-5. A partir da próxima migration, usar numeração única e crescente. O próximo número disponível é `023`.
+5. A partir das migrations seguintes, usar numeração única e crescente. A indicação histórica de `023` como próximo número já foi ultrapassada; conferir todos os arquivos e o ledger antes de escolher uma versão nova.
 
 ## Observação sobre a migration 014
 
 `014_whatsapp_coexistencia.sql` permanece no histórico porque pode ter sido executada e contém compatibilidade de schema. O modo operacional atual do Bossa CRM é Desenvolvedor Direto/API-only, com `FEATURE_EMBEDDED_SIGNUP=false`. A existência da migration não significa que a Coexistência esteja ativa.
+
+## Histórico posterior e integração comercial
+
+A lista inicial acima termina em `022` e não cobre todo o histórico atual. Há outros prefixos legados repetidos (`022`, `026`, `027`, `028`), além dos dois `002`; não importar esse diretório inteiro para um ledger Supabase novo sem reconciliar as versões. Não renomear arquivos já possivelmente aplicados.
+
+[O relatório integrado](../../docs/commercial-homologation-status.md) registra a ordem e as dependências das 12 migrações comerciais do PR #128 e da correção aditiva `20261022123000`, além das alterações acumuladas em arquivos do PR. [O manifesto](../../docs/commercial-homologation-evidence.json) contém hashes e exclusões operacionais do replay. O teste `node scripts/commercial/check-integrated-schema.mjs` usa o DDL real versionado em PostgreSQL descartável, com adaptadores explícitos de plataforma e sem dados pessoais ou agendamentos; esse resultado não certifica equivalência com o Supabase implantado.

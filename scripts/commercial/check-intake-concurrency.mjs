@@ -1,0 +1,33 @@
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import fs from 'node:fs';
+import assert from 'node:assert/strict';
+import { schemaSQL, seedSQL, migrations, id, org, user, dev, unit } from './intake-fixture.mjs';
+const exec = promisify(execFile);
+const psql = async (sql) => (await exec('psql',['-X','-A','-t','-v','ON_ERROR_STOP=1','-c',sql],{maxBuffer:8*1024*1024,timeout:20000})).stdout.trim();
+const auth = `select set_config('request.jwt.claim.sub','${user}',false); set role authenticated;`;
+// Requires the disposable PostgreSQL service supplied by CI, never a project URL.
+if (process.env.PGHOST !== '127.0.0.1' || process.env.PGDATABASE !== 'commercial_test') throw new Error('Refusing to run outside the isolated CI database');
+await psql(schemaSQL);
+for (const file of migrations) await psql(fs.readFileSync(new URL(`../../supabase/migrations/${file}`,import.meta.url),'utf8'));
+await psql(seedSQL);
+const source = async (n,buyer) => {
+ const sourceId=id(n); const revision='2026-10-21T12:00:00.123456+00:00';
+ await psql(`${auth} insert into proposals(id,organization_id,lead_id,development_id,unit_id,status,proposed_price,updated_at) values('${sourceId}','${org}','${buyer}','${dev}','${unit}','rascunho',100000,'${revision}');`);
+ return `select commercial_create_verified_intent('${org}','proposals','${sourceId}','${buyer}','Compra familiar conferida','Confirmar visita','Intenção conferida em documento e conversa de teste.','${revision}',true);`;
+};
+const one=await source(600,id(20));
+const same=await Promise.all([psql(`begin; ${auth} ${one} select pg_sleep(0.8); commit;`),psql(`begin; ${auth} ${one} commit;`)]);
+assert.equal(same.length,2);
+assert.equal(await psql('select count(*) from commercial_opportunities;'),'1');
+assert.equal(await psql('select count(*) from commercial_intent_confirmations;'),'1');
+assert.equal(await psql("select count(*) from commercial_intent_confirmations where source_revision='2026-10-21T12:00:00.123456+00:00';"),'1');
+console.log('PASS concurrency: two simultaneous confirmations of one source return one opportunity and preserve microsecond revision');
+const a=await source(601,id(21)), b=await source(602,id(21));
+const competing=await Promise.allSettled([psql(`begin; ${auth} ${a} select pg_sleep(0.8); commit;`),psql(`begin; ${auth} ${b} commit;`)]);
+assert.equal(competing.filter(x=>x.status==='fulfilled').length,1);
+const refused=competing.find(x=>x.status==='rejected');
+assert.match(String(refused.reason.stderr ?? refused.reason),/INTAKE_EXISTING/);
+assert.equal(await psql(`select count(*) from commercial_opportunities where primary_contact_id='${id(21)}';`),'1');
+assert.equal(await psql('select count(*) from commercial_intent_confirmations;'),'2');
+console.log('PASS concurrency: independent sources for the same buyer cannot create two active intentions through this operation');
