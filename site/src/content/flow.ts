@@ -75,12 +75,39 @@ export const isolamentoPisoFlow = {
   ],
 } as const;
 
-export const engenhariaFlow = [
-  [
-    "Áreas molhadas: atenção antes do revestimento.",
-    "O boletim de setembro detalha impermeabilização e assentamento do box.",
-    "Boletim nº 25 · setembro de 2026.",
+export const impermeabilizacaoFlow = {
+  titulo: "O cuidado que fica sob o revestimento.",
+  descricao:
+    "Nos banheiros do Flow, a impermeabilização é executada sobre o contrapiso com caimento para o ralo. Usamos o Vedatop Ultraflex 12000, da Vedacit, em um processo que inclui reforço nos pontos críticos e teste antes de liberar o revestimento.",
+  etapas: [
+    {
+      titulo: "Preparar a base",
+      texto: "Contrapiso com caimento para o ralo, superfície preparada e atenção aos encontros entre piso, paredes e tubulações.",
+    },
+    {
+      titulo: "Preparar o produto",
+      texto: "Mistura dos dois componentes conforme as orientações do fabricante, para formar a membrana impermeabilizante.",
+    },
+    {
+      titulo: "Aplicar e reforçar",
+      texto: "Tela de reforço nos cantos, ao redor dos ralos e na área do box. Demãos cruzadas, respeitando o consumo e os intervalos de aplicação.",
+    },
+    {
+      titulo: "Respeitar a cura",
+      texto: "Aguardar a cura do sistema conforme as condições do ambiente e as orientações do fabricante antes de iniciar o teste.",
+    },
+    {
+      titulo: "Testar por 72 horas",
+      texto: "Com o ralo vedado, uma lâmina d’água permite conferir o nível e verificar o teto do pavimento inferior. Havendo falha, o trecho é corrigido e o teste, repetido.",
+    },
+    {
+      titulo: "Conferir e liberar",
+      texto: "A próxima etapa do acabamento só é liberada após a aprovação do teste de estanqueidade.",
+    },
   ],
+} as const;
+
+export const engenhariaFlow = [
   [
     "Churrasqueira: exaustão prevista em projeto.",
     "A churrasqueira a carvão possui coifa e sistema de exaustão previstos no projeto. Conheça o detalhamento com a equipe.",

@@ -28,6 +28,7 @@ import { GaleriaMove } from "./GaleriaMove";
 import { VideoFlowModal } from "./VideoFlowModal";
 import { AlvenariaFlow } from "./AlvenariaFlow";
 import { MantaAcusticaFlow } from "./MantaAcusticaFlow";
+import { ImpermeabilizacaoFlow } from "./ImpermeabilizacaoFlow";
 const I = "/img/flow",
   V = "/video/flow";
 function Cab({
@@ -461,10 +462,11 @@ export function FlowPagina({
             >
               Do material das paredes aos cuidados de execução, conheça as
               escolhas da Bossa para o conforto do Flow — e veja registros
-              reais da alvenaria e do isolamento sob o contrapiso.
+              reais da alvenaria, do isolamento acústico e da impermeabilização.
             </Cab>
             <AlvenariaFlow />
             <MantaAcusticaFlow />
+            <ImpermeabilizacaoFlow />
             <div className="fl-engenharia">
               {engenhariaFlow.map(([t, b, r]) => {
                 const foto = fotosEngenhariaFlow[t];
@@ -481,7 +483,7 @@ export function FlowPagina({
                     <h3 className="fl-h3">{t}</h3>
                     <p className="fl-p">{b}</p>
                     <p className="fl-nota">{r}</p>
-                    {t.startsWith("Áreas") || t.startsWith("Esquadrias") ? (
+                    {t.startsWith("Esquadrias") ? (
                       <Link href="/obras/flow-aptos/2026-09">
                         Ver etapa no boletim ↗
                       </Link>

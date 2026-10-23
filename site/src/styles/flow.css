@@ -1425,7 +1425,7 @@ body:has(.fl-comercial):has(.cookies) .fl-barra {display:none}
 .fl-manta__mais summary { cursor: pointer; padding-block: 14px; text-decoration: underline; }
 .fl-manta__galeria { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; padding-top: 12px; }
 .fl-manta__galeria .fl-imagem { aspect-ratio: 3/4; }
-.fl-comercial .fl-engenharia { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.fl-comercial .fl-engenharia { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 @media (max-width: 860px) {
   .fl-manta { grid-template-columns: 1fr; gap: 28px; }
   .fl-comercial .fl-engenharia { grid-template-columns: 1fr; }
@@ -1441,4 +1441,50 @@ body:has(.fl-comercial):has(.cookies) .fl-barra {display:none}
   .fl-alvenaria__aplicacoes dd { margin: 0; gap: 8px; }
   .fl-alvenaria__videos .fl-video-cartao { gap: 16px; padding: 12px; }
   .fl-alvenaria__videos .fl-video-cartao > img { width: 76px; height: 135px; }
+}
+
+/* Impermeabilização · processo documentado e registro real da aplicação. */
+.fl-imper {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(0, 0.75fr);
+  gap: 32px 56px;
+  align-items: start;
+  padding-block: 40px;
+  border-top: 1px solid var(--sal);
+  scroll-margin-top: 150px;
+}
+.fl-imper__conteudo { display: grid; gap: 24px; min-width: 0; }
+.fl-imper__conteudo > * { margin: 0; }
+.fl-imper__destaques { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; padding-block: 24px; border-block: 1px solid var(--sal); }
+.fl-imper__destaques dt { font-size: 15px; line-height: 1.5; }
+.fl-imper__destaques dd { display: grid; gap: 10px; margin: 8px 0 0; }
+.fl-imper__destaques strong { font-size: clamp(26px, 3vw, 36px); font-weight: 500; line-height: 1.2; }
+.fl-imper__destaques span { font-size: 15px; line-height: 1.5; }
+.fl-imper__conteudo .fl-video-cartao > img { width: 76px; height: 135px; flex-shrink: 0; }
+.fl-imper__conteudo .fl-video-cartao > span { min-width: 0; overflow-wrap: anywhere; }
+.fl-imper__registro { width: 100%; max-width: 320px; min-width: 0; justify-self: center; }
+.fl-imper__registro .fl-figura { margin: 0; }
+.fl-imper__registro .fl-imagem { aspect-ratio: 9/16; }
+.fl-imper figcaption { font-size: 14px; }
+.fl-imper__processo { grid-column: 1 / -1; min-width: 0; border-top: 1px solid var(--sal); }
+.fl-imper__processo summary { cursor: pointer; padding-block: 20px; text-decoration: underline; }
+.fl-imper__etapas { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr); gap: 32px 56px; align-items: start; padding-block: 12px 20px; }
+.fl-imper__etapas ol { margin: 0; padding-left: 24px; display: grid; gap: 24px; }
+.fl-imper__etapas li { padding-left: 8px; }
+.fl-imper__etapas li::marker { color: var(--pedra); }
+.fl-imper__etapas h4 { margin: 0 0 8px; font-size: 18px; font-weight: 500; line-height: 1.4; }
+.fl-imper__etapas .fl-p { margin: 0; font-size: 15px; }
+.fl-imper__etapas .fl-figura { margin: 0; }
+.fl-imper__etapas .fl-imagem { aspect-ratio: 521/468; }
+.fl-imper__fonte { margin: 16px 0 0; }
+@media (max-width: 860px) {
+  .fl-imper { grid-template-columns: 1fr; gap: 28px; }
+  .fl-imper__etapas { grid-template-columns: 1fr; gap: 28px; }
+  .fl-imper__etapas .fl-figura { max-width: 521px; }
+}
+@media (max-width: 540px) {
+  .fl-imper__destaques { grid-template-columns: 1fr; gap: 20px; }
+  .fl-imper__destaques > div { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr); gap: 16px; align-items: start; }
+  .fl-imper__destaques dd { margin: 0; }
+  .fl-imper__conteudo .fl-video-cartao { gap: 16px; padding: 12px; }
 }

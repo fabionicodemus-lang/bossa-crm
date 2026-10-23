@@ -6,6 +6,7 @@ const duracoes: Record<string, string> = {
   "demonstracao-acustica-celucon": "0:35",
   "celucon-na-obra": "0:58",
   "fabio-manta-acustica": "0:41",
+  "impermeabilizacao-flow": "0:40",
   "unidade-1601": "1:49",
   "obra-flow": "1:22",
   "depoimento-augusto": "1:30",
