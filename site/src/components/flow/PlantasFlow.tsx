@@ -28,15 +28,13 @@ export function PlantasFlow({
     [retorno, setRetorno] = useState("");
   useEffect(() => setRetorno(""), [p.slug]);
   const aviso =
-    p.slug === "tipo-1"
+    p.slug === "tipo-1" || p.slug === "tipo-2" || p.slug === "tipo-3"
       ? "Planta comercial ilustrativa. Mobiliário, decoração e acabamentos sugeridos. Consulte as especificações da unidade."
-      : p.slug === "tipo-2" || p.slug === "tipo-3"
-        ? "Referência ilustrativa provisória de 62 m². Conjuntos técnicos em revisão; não representa desenho executivo validado. Consulte a versão vigente com a equipe."
-        : p.slug === "duplex-tipo-1"
-          ? "Prancha ilustrativa do Duplex Tipo 1, com os pisos inferior e superior e área privativa total de 117,7 m². Amplie para consultar o desenho."
-          : p.suites === 3
-            ? "Prancha ilustrativa com os pisos inferior e superior. Consulte a equipe para esclarecer a distribuição."
-            : "Planta humanizada ilustrativa. Consulte a equipe sobre o detalhamento do projeto.";
+      : p.slug === "duplex-tipo-1"
+        ? "Prancha ilustrativa do Duplex Tipo 1, com os pisos inferior e superior e área privativa total de 117,7 m². Amplie para consultar o desenho."
+        : p.suites === 3
+          ? "Prancha ilustrativa com os pisos inferior e superior. Consulte a equipe para esclarecer a distribuição."
+          : "Planta humanizada ilustrativa. Consulte a equipe sobre o detalhamento do projeto.";
   const foto = {
     src: p.imagens[0].src,
     alt: p.imagens[0].alt,

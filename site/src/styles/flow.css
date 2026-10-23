@@ -1324,7 +1324,7 @@ body:has(.fl-comercial):has(.cookies) .fl-barra {display:none}
 .fl-duplex-resumo .fl-bt {justify-self:start}
 .fl-visor-topo h2 {min-width:0;overflow-wrap:anywhere}
 .fl-visor-topo > button {flex:0 0 auto;white-space:nowrap;align-self:start}
-.fl-comercial .fl-planta-painel[data-tipo=tipo-1] .fl-planta-quadro {aspect-ratio:3000/1758}
+.fl-comercial .fl-planta-painel[data-tipo=tipo-1] .fl-planta-quadro {aspect-ratio:1478/1064}
 @media(min-width:541px) and (max-width:860px) {
   .fl-comercial .fl-planta-painel .fl-planta-quadro {height:clamp(300px,50svh,460px);aspect-ratio:auto}
 }
