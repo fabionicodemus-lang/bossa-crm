@@ -54,9 +54,9 @@ export const faqFlow = [
 ];
 export const engenhariaFlow = [
   [
-    "Acústica: cuidado entre os ambientes.",
-    "As soluções especificadas entre lajes e divisas integram o projeto de conforto do Flow.",
-    "Consulte a equipe sobre as especificações de projeto.",
+    "Menos ruído de passos entre andares.",
+    "O Flow conta com a manta de lã de PET FS Floor, da Fibersoft, entre a laje e o contrapiso. Essa camada ajuda a reduzir a transmissão de ruídos de impacto, como passos e movimentação de móveis.",
+    "Conforto acústico pensado também no piso.",
   ],
   [
     "Áreas molhadas: atenção antes do revestimento.",
