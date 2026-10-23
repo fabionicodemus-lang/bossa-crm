@@ -979,6 +979,7 @@ body:has(.fl-comercial) .rodape {
   max-width: 100%;
   margin: auto;
 }
+.fl-video-modal .fl-vv video { object-fit: contain; }
 .fl-video-fechar {
   position: absolute;
   right: 16px;
