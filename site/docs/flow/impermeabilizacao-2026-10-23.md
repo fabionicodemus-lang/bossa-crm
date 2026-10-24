@@ -20,7 +20,9 @@ Não foram reproduzidas promessas de ausência de infiltração por décadas, co
 
 ### Compatibilidade com revestimentos — ponto para confirmação técnica
 
-A newsletter descreve assentamento direto de porcelanato sobre a membrana. A ficha atual do produto permite assentamento direto para cerâmica até 20 × 20 cm, com argamassa apropriada a partir de ACIII, e recomenda proteção mecânica para dimensões superiores. A página comercial, portanto, não replica a afirmação de assentamento direto nem apresenta o esquema como detalhe executivo específico do Flow. É preciso confirmar com a direção a composição executada e eventual orientação formal do fabricante para as peças utilizadas.
+Em 24/10/2026, Fábio confirmou nesta conversa que o porcelanato é assentado diretamente sobre a membrana, conforme a descrição da newsletter. Essa confirmação esclarece a execução informada pela direção; não constitui aprovação do fabricante para qualquer formato de peça.
+
+A ficha atual do produto permite assentamento direto para cerâmica até 20 × 20 cm, com argamassa apropriada a partir de ACIII, e recomenda proteção mecânica para dimensões superiores. Permanecem pendentes as dimensões das peças utilizadas, a argamassa colante e eventual orientação formal da Vedacit para essa composição. A página comercial mantém o foco na posição da impermeabilização, nos reforços e no procedimento de teste; não apresenta o assentamento direto como diferencial tecnicamente validado nem o esquema como detalhe executivo específico do Flow.
 
 Também se respeita a distinção entre cura e ensaio: a ficha informa cura mínima antes do teste conforme o ambiente e teste de ao menos 72 horas nas demais áreas, com regras próprias para piscinas e reservatórios. Nenhum prazo de piscina foi atribuído aos banheiros.
 
