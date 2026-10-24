@@ -113,4 +113,6 @@ A integração técnica do **repositório** passou após as correções; a homol
 
 ## Continuação: isolamento obrigatório da prévia
 
-A proteção e os limites da liberação foram registrados em [Prévia de homologação](commercial-preview-isolation.md). Preview gerenciado permanece bloqueado nesta revisão; o laboratório automatizado local não autoriza o roteiro humano. Não foram alteradas as 13 migrações ou a configuração de produção. Mantêm-se **12/24** macroentregas e **12/16** verificações de preparação V1.
+A proteção e os limites da liberação foram registrados em [Prévia de homologação](commercial-preview-isolation.md). Preview gerenciado exige as duas provas do [contrato remoto](commercial-preview-remote.md) e ainda não foi homologado; o laboratório automatizado local não autoriza o roteiro humano. Não foram alteradas as 13 migrações ou a configuração de produção. Mantêm-se **12/24** macroentregas e **12/16** verificações de preparação V1.
+
+Suporte ao projeto Vercel independente preparado em código, sem conexão GitHub/deployment: pré-voo v2, atestação Ed25519 vinculada ao deployment e contenção administrativa/rede. Configuração e provas remotas continuam pendentes. Aceite humano **0/8**; referências **12/24** e **12/16** preservadas.

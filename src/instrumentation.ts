@@ -51,6 +51,11 @@ export async function register() {
   if (process.env.NEXT_RUNTIME !== 'nodejs') return;
 
   if (isHomologation()) {
+    if (process.env.BOSSA_HOMOLOGATION_MODE === 'remote') {
+      const { installRemoteNetworkGuard } = await import('./lib/homologation/remote-egress');
+      installRemoteNetworkGuard();
+      return;
+    }
     const original = globalThis.fetch;
     globalThis.fetch = async (input, init) => {
       const config = inspectConfiguration();

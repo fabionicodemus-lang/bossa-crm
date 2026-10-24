@@ -1,10 +1,10 @@
 # Prévia de homologação: bloqueio obrigatório
 
-**Situação: prévia gerenciada não liberada.** Checklist funcional **12/24**; preparação V1 **12/16**. Os oito testes de aceite humano continuam pendentes. O laboratório local com dados fictícios permite testes automatizados; não é a prévia pública, nem aprovação operacional do piloto.
+**Situação: suporte remoto preparado; prévia gerenciada ainda não homologada.** Checklist funcional **12/24**; preparação V1 **12/16**. Os oito testes de aceite humano continuam pendentes. O laboratório local com dados fictícios permite testes automatizados; não é a prévia pública, nem aprovação operacional do piloto.
 
 ## Proteção implementada
 
-Todo build `VERCEL_ENV=preview` recebe a proteção, sem depender de uma opção voluntária. Esta revisão **recusa qualquer plataforma gerenciada**, inclusive com um projeto Supabase diferente, enquanto não houver comprovação da infraestrutura remota. Não existe variável que autorize a prévia gerenciada nesta revisão. Liberá-la exige uma alteração revisada após provisionamento e evidências positivas, não apenas mudar `BOSSA_HOMOLOGATION_MODE`.
+Todo build `VERCEL_ENV=preview` recebe a proteção, sem depender de uma opção voluntária. O modo remoto exige o projeto Vercel independente autorizado, identidades fixadas no build, prova recente do banco e atestação externa assinada para o deployment exato. Mudar `BOSSA_HOMOLOGATION_MODE` não autoriza gravações. Contrato, configurações e critérios de deployment estão em [Homologação remota](commercial-preview-remote.md). A prévia original continua bloqueada.
 
 O projeto Supabase de produção é uma referência pública de bloqueio. A validação ocorre antes dos clientes e de qualquer requisição; não se consulta produção para descobrir se ela é segura. URL/chave pública herdadas não entram nos bundles Preview. Nenhuma configuração de Production foi alterada.
 
@@ -44,7 +44,7 @@ BOSSA_HOMOLOGATION_MODE=local NODE_OPTIONS=--require=./scripts/homologation/egre
 BOSSA_EXPECTED_COMMIT=$(git rev-parse HEAD) npm run homologation:preflight -- --local-automated
 ```
 
-O launcher privado injeta as demais variáveis sem imprimi-las. `GET /api/homologation/preflight` não grava dados, tem `no-store`, apresenta origem/identidade não sensíveis, SHA e os seis resultados. `humanAcceptanceAllowed` permanece falso mesmo com sucesso local. Para a prévia pública, o comando sem `--local-automated` falha até existir comprovação; a ausência de acesso não autoriza continuar testes com gravações.
+O launcher privado injeta as demais variáveis sem imprimi-las. `GET /api/homologation/preflight` não grava dados, tem `no-store`, apresenta origem/identidade não sensíveis, SHA e os seis resultados. `humanAcceptanceAllowed` permanece falso mesmo com sucesso local. Para a prévia independente, o comando exige `--remote` e origem explícita, além da comprovação descrita no contrato remoto; a ausência de acesso não autoriza continuar testes com gravações.
 
 ## Pré-requisitos para a prévia pública
 
@@ -52,7 +52,7 @@ O launcher privado injeta as demais variáveis sem imprimi-las. `GET /api/homolo
 2. Projeto Supabase independente aprovado, com esquema compatível, Auth/Storage/extensões/permissões e usuários fictícios admin/comercial/viewer. Nenhuma credencial de produção reutilizada.
 3. Overrides exclusivos de Preview **desta branch**, removendo integrações herdadas; configuração de Production preservada. Não há mudança remota executada nesta rodada.
 4. Bloqueios comprovados na aplicação, banco, workers/cron, Auth/e-mail e borda de rede gerenciada; identificar Edge Functions, Database Webhooks e demais consumidores implantados. Um sinalizador não comprova ausência de efeitos.
-5. Revisão do suporte à plataforma, publicação autorizada separadamente e pré-voo contra o deployment exato. Só depois liberar os oito testes humanos. Não se presume aprovação de CI remoto ou de piloto.
+5. Contrato remoto v2 e evidências assinadas descritos no documento de homologação remota, publicação autorizada separadamente e pré-voo contra o deployment exato. Só depois liberar os oito testes humanos. Não se presume aprovação de CI remoto ou de piloto.
 
 Os relatórios anteriores continuam históricos. O relatório privado desta rodada distingue verificações isoladas, Next/GoTrue/Chromium locais e configuração pública não auditável. Proveniência histórica, consumidores externos não identificados e aprovação operacional permanecem pendentes.
 
