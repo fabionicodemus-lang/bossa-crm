@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { empreendimentos, getEmpreendimento } from "@/content/empreendimentos";
 import { meta } from "@/lib/seo";
 import { almaMeta } from "@/content/alma";
+import { flowMeta } from "@/content/flow";
 import { PaginaEmpreendimento } from "@/components/PaginaEmpreendimento";
 import { FlowLanding } from "@/components/flow/FlowLanding";
 import { AlmaLanding } from "@/components/alma/AlmaLanding";
@@ -14,6 +15,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   const e = getEmpreendimento((await params).slug);
   if (!e) return {};
   if(e.slug === "alma-seahouses") return meta({ ...almaMeta, caminho: `/empreendimentos/${e.slug}` });
+  if(e.slug === "flow-aptos") return meta({ ...flowMeta, caminho: `/empreendimentos/${e.slug}` });
   return meta({ titulo: e.metaTitle, descricao: e.metaDescription, caminho: `/empreendimentos/${e.slug}`, imagem: e.capa.src });
 }
 

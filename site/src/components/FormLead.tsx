@@ -10,6 +10,7 @@ type Props = {
   sucesso: string;
   interesse?: boolean;
   alma?: boolean;
+  solicitacao?: boolean;
   creci?: boolean;
   data?: boolean;
 };
@@ -21,6 +22,7 @@ export function FormLead({
   sucesso,
   interesse = false,
   alma = false,
+  solicitacao = false,
   creci = false,
   data = false,
 }: Props) {
@@ -101,12 +103,14 @@ export function FormLead({
         empreendimento,
         interesse: corpo.interesse ? String(corpo.interesse) : undefined,
       });
-      if (!alma && formulario === "visita")
+      if (solicitacao && formulario === "book")
+        rastrear("request_material", { empreendimento, formulario, arquivo: "apresentacao-flow" });
+      if (!alma && !solicitacao && formulario === "visita")
         rastrear("request_visit", {
           empreendimento,
           data: String(corpo.data ?? ""),
         });
-      if (!alma && formulario === "book")
+      if (!alma && !solicitacao && formulario === "book")
         rastrear("download_material", { empreendimento, arquivo: "book" });
       setEstado("ok");
     } catch {

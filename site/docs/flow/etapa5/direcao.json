@@ -1,0 +1,185 @@
+{
+  "metodo": "Chromium local, viewports CSS reais; sem aparelho físico/teclado virtual. APIs bloqueadas por interceptação.",
+  "alturas": [
+    {
+      "direcao": 1,
+      "altura": 13,
+      "aviso": ""
+    },
+    {
+      "direcao": 2,
+      "altura": 13,
+      "aviso": ""
+    },
+    {
+      "direcao": 0,
+      "altura": 13,
+      "aviso": ""
+    },
+    {
+      "direcao": 2,
+      "altura": 19,
+      "aviso": "Não há foto do 20º para os morros. Exibindo o 19º."
+    }
+  ],
+  "composicao": [
+    {
+      "width": 360,
+      "medidas": [
+        {
+          "width": 328,
+          "height": 192.96875
+        },
+        {
+          "width": 328,
+          "height": 246
+        }
+      ]
+    },
+    {
+      "width": 390,
+      "medidas": [
+        {
+          "width": 358,
+          "height": 210.609375
+        },
+        {
+          "width": 358,
+          "height": 268.5
+        }
+      ]
+    },
+    {
+      "width": 768,
+      "medidas": [
+        {
+          "width": 736,
+          "height": 433
+        },
+        {
+          "width": 736,
+          "height": 552
+        }
+      ]
+    },
+    {
+      "width": 1024,
+      "medidas": [
+        {
+          "width": 928,
+          "height": 545.96875
+        },
+        {
+          "width": 586.65625,
+          "height": 439.984375
+        }
+      ]
+    },
+    {
+      "width": 1440,
+      "medidas": [
+        {
+          "width": 1320,
+          "height": 776.59375
+        },
+        {
+          "width": 848,
+          "height": 636
+        }
+      ]
+    }
+  ],
+  "compartilhar": [
+    {
+      "mode": "cancelar",
+      "resultado": "",
+      "metodo": "navigator.share simulado; nenhum destinatário"
+    },
+    {
+      "mode": "falhar",
+      "resultado": "Não foi possível compartilhar automaticamente. Copie o endereço abaixo.",
+      "metodo": "navigator.share simulado; nenhum destinatário"
+    },
+    {
+      "mode": "sucesso",
+      "resultado": "Compartilhamento concluído no dispositivo.",
+      "metodo": "navigator.share simulado; nenhum destinatário"
+    }
+  ],
+  "performance": [
+    {
+      "cls": 0.0033127625165652167,
+      "lcp": 260,
+      "bytes": 1835768,
+      "videos": [
+        "/video/flow/abertura.mp4"
+      ]
+    },
+    {
+      "cls": 0.0033127625165652167,
+      "lcp": 340,
+      "bytes": 1835768,
+      "videos": [
+        "/video/flow/abertura.mp4"
+      ]
+    },
+    {
+      "cls": 0.0033127625165652167,
+      "lcp": 296,
+      "bytes": 1835768,
+      "videos": [
+        "/video/flow/abertura.mp4"
+      ]
+    }
+  ],
+  "comparacao": [
+    {
+      "src": "/_next/image?url=/img/flow/vista/b-07.jpg&w=3840&q=70",
+      "alt": "Comparação: referência real de drone para os morros, 13º pavimento"
+    },
+    {
+      "src": "/_next/image?url=/img/flow/vista/b-03.jpg&w=3840&q=70",
+      "alt": "Comparação: referência real de drone para os morros, 19º pavimento"
+    }
+  ],
+  "contextoContato": "https://wa.me/554792889395?text=Olá! Quero solicitar uma visita para conhecer o Flow Aptos. Sei que data, horário e acesso serão confirmados pela equipe. Estou consultando uma referência real de drone para os morros, na altura do 15º pavimento. (ref. 896SUJ)",
+  "alternanciaFormulario": "campos preservados",
+  "cookies": {
+    "cookies": {
+      "left": 1004,
+      "top": 711,
+      "right": 1424,
+      "bottom": 884
+    },
+    "acoes": [
+      {
+        "texto": "Explorar as plantas",
+        "left": 60,
+        "right": 262.703125,
+        "top": 770,
+        "bottom": 822,
+        "sobreposicao": false
+      },
+      {
+        "texto": "Agendar visita",
+        "left": 274.703125,
+        "right": 441.453125,
+        "top": 770,
+        "bottom": 822,
+        "sobreposicao": false
+      }
+    ],
+    "sobreposicao": false
+  },
+  "menuTexto200": {
+    "antes": "14px",
+    "depois": "28px",
+    "width": 390,
+    "dpr": 1,
+    "scrollWidth": 390
+  },
+  "saveData": {
+    "pausado": true,
+    "mp4": 0
+  }
+}

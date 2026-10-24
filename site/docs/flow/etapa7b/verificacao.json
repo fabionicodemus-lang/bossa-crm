@@ -1,0 +1,2784 @@
+{
+  "data": "2026-10-22T20:37:16.792Z",
+  "modo": "Chromium local: viewports CSS, sem aparelho físico/teclado virtual. Respostas de UI simuladas.",
+  "rotas": [
+    {
+      "slug": "tipo-2",
+      "area": "62",
+      "top": 159.8125,
+      "recarregada": true
+    },
+    {
+      "slug": "tipo-3",
+      "area": "62",
+      "top": 159.8125,
+      "recarregada": true
+    },
+    {
+      "slug": "tipo-1",
+      "area": "73",
+      "top": 159.8125,
+      "recarregada": true
+    },
+    {
+      "slug": "duplex-tipo-2-e-3",
+      "area": "93",
+      "top": 159.8125,
+      "recarregada": true
+    },
+    {
+      "slug": "duplex-tipo-1",
+      "area": "117,7",
+      "top": 159.8125,
+      "recarregada": true
+    }
+  ],
+  "larguras": [
+    {
+      "secao": "inicio-flow",
+      "width": 1440,
+      "height": 900,
+      "scrollWidth": 1440
+    },
+    {
+      "secao": "plantas",
+      "width": 1440,
+      "height": 900,
+      "scrollWidth": 1440
+    },
+    {
+      "secao": "lazer",
+      "width": 1440,
+      "height": 900,
+      "scrollWidth": 1440
+    },
+    {
+      "secao": "flow-move",
+      "width": 1440,
+      "height": 900,
+      "scrollWidth": 1440
+    },
+    {
+      "secao": "the-roof",
+      "width": 1440,
+      "height": 900,
+      "scrollWidth": 1440
+    },
+    {
+      "secao": "vistas",
+      "width": 1440,
+      "height": 900,
+      "scrollWidth": 1440
+    },
+    {
+      "secao": "duplex",
+      "width": 1440,
+      "height": 900,
+      "scrollWidth": 1440
+    },
+    {
+      "secao": "engenharia",
+      "width": 1440,
+      "height": 900,
+      "scrollWidth": 1440
+    },
+    {
+      "secao": "construcao",
+      "width": 1440,
+      "height": 900,
+      "scrollWidth": 1440
+    },
+    {
+      "secao": "localizacao-flow",
+      "width": 1440,
+      "height": 900,
+      "scrollWidth": 1440
+    },
+    {
+      "secao": "visita",
+      "width": 1440,
+      "height": 900,
+      "scrollWidth": 1440
+    },
+    {
+      "secao": "duvidas-flow",
+      "width": 1440,
+      "height": 900,
+      "scrollWidth": 1440
+    },
+    {
+      "secao": "inicio-flow",
+      "width": 360,
+      "height": 844,
+      "scrollWidth": 360
+    },
+    {
+      "secao": "plantas",
+      "width": 360,
+      "height": 844,
+      "scrollWidth": 360
+    },
+    {
+      "secao": "lazer",
+      "width": 360,
+      "height": 844,
+      "scrollWidth": 360
+    },
+    {
+      "secao": "flow-move",
+      "width": 360,
+      "height": 844,
+      "scrollWidth": 360
+    },
+    {
+      "secao": "the-roof",
+      "width": 360,
+      "height": 844,
+      "scrollWidth": 360
+    },
+    {
+      "secao": "vistas",
+      "width": 360,
+      "height": 844,
+      "scrollWidth": 360
+    },
+    {
+      "secao": "duplex",
+      "width": 360,
+      "height": 844,
+      "scrollWidth": 360
+    },
+    {
+      "secao": "engenharia",
+      "width": 360,
+      "height": 844,
+      "scrollWidth": 360
+    },
+    {
+      "secao": "construcao",
+      "width": 360,
+      "height": 844,
+      "scrollWidth": 360
+    },
+    {
+      "secao": "localizacao-flow",
+      "width": 360,
+      "height": 844,
+      "scrollWidth": 360
+    },
+    {
+      "secao": "visita",
+      "width": 360,
+      "height": 844,
+      "scrollWidth": 360
+    },
+    {
+      "secao": "duvidas-flow",
+      "width": 360,
+      "height": 844,
+      "scrollWidth": 360
+    },
+    {
+      "secao": "inicio-flow",
+      "width": 390,
+      "height": 844,
+      "scrollWidth": 390
+    },
+    {
+      "secao": "plantas",
+      "width": 390,
+      "height": 844,
+      "scrollWidth": 390
+    },
+    {
+      "secao": "lazer",
+      "width": 390,
+      "height": 844,
+      "scrollWidth": 390
+    },
+    {
+      "secao": "flow-move",
+      "width": 390,
+      "height": 844,
+      "scrollWidth": 390
+    },
+    {
+      "secao": "the-roof",
+      "width": 390,
+      "height": 844,
+      "scrollWidth": 390
+    },
+    {
+      "secao": "vistas",
+      "width": 390,
+      "height": 844,
+      "scrollWidth": 390
+    },
+    {
+      "secao": "duplex",
+      "width": 390,
+      "height": 844,
+      "scrollWidth": 390
+    },
+    {
+      "secao": "engenharia",
+      "width": 390,
+      "height": 844,
+      "scrollWidth": 390
+    },
+    {
+      "secao": "construcao",
+      "width": 390,
+      "height": 844,
+      "scrollWidth": 390
+    },
+    {
+      "secao": "localizacao-flow",
+      "width": 390,
+      "height": 844,
+      "scrollWidth": 390
+    },
+    {
+      "secao": "visita",
+      "width": 390,
+      "height": 844,
+      "scrollWidth": 390
+    },
+    {
+      "secao": "duvidas-flow",
+      "width": 390,
+      "height": 844,
+      "scrollWidth": 390
+    },
+    {
+      "secao": "inicio-flow",
+      "width": 768,
+      "height": 844,
+      "scrollWidth": 768
+    },
+    {
+      "secao": "plantas",
+      "width": 768,
+      "height": 844,
+      "scrollWidth": 768
+    },
+    {
+      "secao": "lazer",
+      "width": 768,
+      "height": 844,
+      "scrollWidth": 768
+    },
+    {
+      "secao": "flow-move",
+      "width": 768,
+      "height": 844,
+      "scrollWidth": 768
+    },
+    {
+      "secao": "the-roof",
+      "width": 768,
+      "height": 844,
+      "scrollWidth": 768
+    },
+    {
+      "secao": "vistas",
+      "width": 768,
+      "height": 844,
+      "scrollWidth": 768
+    },
+    {
+      "secao": "duplex",
+      "width": 768,
+      "height": 844,
+      "scrollWidth": 768
+    },
+    {
+      "secao": "engenharia",
+      "width": 768,
+      "height": 844,
+      "scrollWidth": 768
+    },
+    {
+      "secao": "construcao",
+      "width": 768,
+      "height": 844,
+      "scrollWidth": 768
+    },
+    {
+      "secao": "localizacao-flow",
+      "width": 768,
+      "height": 844,
+      "scrollWidth": 768
+    },
+    {
+      "secao": "visita",
+      "width": 768,
+      "height": 844,
+      "scrollWidth": 768
+    },
+    {
+      "secao": "duvidas-flow",
+      "width": 768,
+      "height": 844,
+      "scrollWidth": 768
+    },
+    {
+      "secao": "inicio-flow",
+      "width": 1024,
+      "height": 844,
+      "scrollWidth": 1024
+    },
+    {
+      "secao": "plantas",
+      "width": 1024,
+      "height": 844,
+      "scrollWidth": 1024
+    },
+    {
+      "secao": "lazer",
+      "width": 1024,
+      "height": 844,
+      "scrollWidth": 1024
+    },
+    {
+      "secao": "flow-move",
+      "width": 1024,
+      "height": 844,
+      "scrollWidth": 1024
+    },
+    {
+      "secao": "the-roof",
+      "width": 1024,
+      "height": 844,
+      "scrollWidth": 1024
+    },
+    {
+      "secao": "vistas",
+      "width": 1024,
+      "height": 844,
+      "scrollWidth": 1024
+    },
+    {
+      "secao": "duplex",
+      "width": 1024,
+      "height": 844,
+      "scrollWidth": 1024
+    },
+    {
+      "secao": "engenharia",
+      "width": 1024,
+      "height": 844,
+      "scrollWidth": 1024
+    },
+    {
+      "secao": "construcao",
+      "width": 1024,
+      "height": 844,
+      "scrollWidth": 1024
+    },
+    {
+      "secao": "localizacao-flow",
+      "width": 1024,
+      "height": 844,
+      "scrollWidth": 1024
+    },
+    {
+      "secao": "visita",
+      "width": 1024,
+      "height": 844,
+      "scrollWidth": 1024
+    },
+    {
+      "secao": "duvidas-flow",
+      "width": 1024,
+      "height": 844,
+      "scrollWidth": 1024
+    }
+  ],
+  "forms": [
+    {
+      "status": 200,
+      "body": {
+        "ok": true,
+        "gravado": false
+      },
+      "resultado": "falha, dados preservados"
+    },
+    {
+      "status": 200,
+      "body": {
+        "ok": true
+      },
+      "resultado": "falha, dados preservados"
+    },
+    {
+      "status": 200,
+      "body": {
+        "ok": false,
+        "gravado": true
+      },
+      "resultado": "falha, dados preservados"
+    },
+    {
+      "status": 500,
+      "body": {
+        "ok": true,
+        "gravado": true
+      },
+      "resultado": "falha, dados preservados"
+    },
+    {
+      "status": 200,
+      "body": {
+        "ok": true,
+        "gravado": true
+      },
+      "rede": true,
+      "resultado": "falha, dados preservados"
+    },
+    {
+      "sucessos": 2,
+      "requestMaterial": 1,
+      "agendamentoConfirmado": false,
+      "downloads": 0
+    }
+  ],
+  "axe": [
+    {
+      "estado": "pagina-desktop",
+      "violacoes": [],
+      "verificacaoManual": [
+        {
+          "id": "color-contrast",
+          "n": 11
+        }
+      ]
+    },
+    {
+      "estado": "visor",
+      "violacoes": [],
+      "verificacaoManual": [
+        {
+          "id": "aria-prohibited-attr",
+          "n": 1
+        }
+      ]
+    },
+    {
+      "estado": "sucessos-formulario",
+      "violacoes": [],
+      "verificacaoManual": [
+        {
+          "id": "color-contrast",
+          "n": 11
+        }
+      ]
+    }
+  ],
+  "eventos": [
+    {
+      "evento": "view_project",
+      "detalhe": {
+        "empreendimento": "flow-aptos",
+        "estagio": "obra"
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/flow-aptos",
+      "titulo": "Flow Aptos | 2 suítes, lazer em dois pavimentos e entrega 2027 | Bossa",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "1440x900",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:37:17.647Z"
+    },
+    {
+      "evento": "page_view",
+      "detalhe": {
+        "tipo_pagina": "empreendimento"
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/flow-aptos",
+      "titulo": "Flow Aptos | 2 suítes, lazer em dois pavimentos e entrega 2027 | Bossa",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "1440x900",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:37:17.651Z"
+    },
+    {
+      "evento": "view_floorplan",
+      "detalhe": {
+        "empreendimento": "flow-aptos",
+        "planta": "tipo-2",
+        "metragem": 62
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/flow-aptos",
+      "titulo": "Flow Aptos | 2 suítes, lazer em dois pavimentos e entrega 2027 | Bossa",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "1440x900",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:37:19.934Z"
+    },
+    {
+      "evento": "form_start",
+      "detalhe": {
+        "formulario": "visita",
+        "empreendimento": "flow-aptos"
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/flow-aptos",
+      "titulo": "Flow Aptos | 2 suítes, lazer em dois pavimentos e entrega 2027 | Bossa",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "1440x900",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:37:20.203Z"
+    },
+    {
+      "evento": "scroll_depth",
+      "detalhe": {
+        "pct": 25,
+        "tipo_pagina": "empreendimento"
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/flow-aptos",
+      "titulo": "Flow Aptos | 2 suítes, lazer em dois pavimentos e entrega 2027 | Bossa",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "1440x900",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:37:20.209Z"
+    },
+    {
+      "evento": "scroll_depth",
+      "detalhe": {
+        "pct": 50,
+        "tipo_pagina": "empreendimento"
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/flow-aptos",
+      "titulo": "Flow Aptos | 2 suítes, lazer em dois pavimentos e entrega 2027 | Bossa",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "1440x900",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:37:20.211Z"
+    },
+    {
+      "evento": "scroll_depth",
+      "detalhe": {
+        "pct": 75,
+        "tipo_pagina": "empreendimento"
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/flow-aptos",
+      "titulo": "Flow Aptos | 2 suítes, lazer em dois pavimentos e entrega 2027 | Bossa",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "1440x900",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:37:20.212Z"
+    },
+    {
+      "evento": "switch_floorplan",
+      "detalhe": {
+        "empreendimento": "flow-aptos",
+        "de": "tipo-2",
+        "para": "tipo-3",
+        "ordem": 1
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/flow-aptos/plantas/tipo-2",
+      "titulo": "Flow Aptos: Tipo 2, 62 m², 2 suítes | Bossa",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "1440x900",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:37:20.672Z"
+    },
+    {
+      "evento": "switch_floorplan",
+      "detalhe": {
+        "empreendimento": "flow-aptos",
+        "de": "tipo-3",
+        "para": "tipo-1",
+        "ordem": 2
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/flow-aptos/plantas/tipo-3",
+      "titulo": "Flow Aptos: Tipo 3, 62 m², 2 suítes | Bossa",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "1440x900",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:37:20.921Z"
+    },
+    {
+      "evento": "switch_floorplan",
+      "detalhe": {
+        "empreendimento": "flow-aptos",
+        "de": "tipo-1",
+        "para": "duplex-tipo-2-e-3",
+        "ordem": 3
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/flow-aptos/plantas/tipo-1",
+      "titulo": "Flow Aptos: Tipo 1, 73 m², 2 suítes | Bossa",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "1440x900",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:37:21.162Z"
+    },
+    {
+      "evento": "switch_floorplan",
+      "detalhe": {
+        "empreendimento": "flow-aptos",
+        "de": "duplex-tipo-2-e-3",
+        "para": "duplex-tipo-1",
+        "ordem": 4
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/flow-aptos/plantas/duplex-tipo-2-e-3",
+      "titulo": "Flow Aptos: Duplex Tipo 2 e 3, 93 m², 3 suítes | Bossa",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "1440x900",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:37:21.407Z"
+    },
+    {
+      "evento": "floorplan_zoom",
+      "detalhe": {
+        "empreendimento": "flow-aptos",
+        "planta": "duplex-tipo-1"
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/flow-aptos/plantas/duplex-tipo-1",
+      "titulo": "Flow Aptos: Duplex Tipo 1, 117,7 m², 3 suítes | Bossa",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "1440x900",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:37:21.691Z"
+    },
+    {
+      "evento": "view_project",
+      "detalhe": {
+        "empreendimento": "flow-aptos",
+        "estagio": "obra"
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/flow-aptos/plantas/tipo-2",
+      "titulo": "Flow Aptos: Tipo 2, 62 m², 2 suítes | Bossa",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "1440x900",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:37:22.351Z"
+    },
+    {
+      "evento": "page_view",
+      "detalhe": {
+        "tipo_pagina": "planta"
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/flow-aptos/plantas/tipo-2",
+      "titulo": "Flow Aptos: Tipo 2, 62 m², 2 suítes | Bossa",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "1440x900",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:37:22.355Z"
+    },
+    {
+      "evento": "view_project",
+      "detalhe": {
+        "empreendimento": "flow-aptos",
+        "estagio": "obra"
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/flow-aptos/plantas/tipo-2",
+      "titulo": "Flow Aptos: Tipo 2, 62 m², 2 suítes | Bossa",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "1440x900",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:37:23.210Z"
+    },
+    {
+      "evento": "page_view",
+      "detalhe": {
+        "tipo_pagina": "planta"
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/flow-aptos/plantas/tipo-2",
+      "titulo": "Flow Aptos: Tipo 2, 62 m², 2 suítes | Bossa",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "1440x900",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:37:23.224Z"
+    },
+    {
+      "evento": "view_project",
+      "detalhe": {
+        "empreendimento": "flow-aptos",
+        "estagio": "obra"
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/flow-aptos/plantas/tipo-3",
+      "titulo": "Flow Aptos: Tipo 3, 62 m², 2 suítes | Bossa",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "1440x900",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:37:23.716Z"
+    },
+    {
+      "evento": "page_view",
+      "detalhe": {
+        "tipo_pagina": "planta"
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/flow-aptos/plantas/tipo-3",
+      "titulo": "Flow Aptos: Tipo 3, 62 m², 2 suítes | Bossa",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "1440x900",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:37:23.724Z"
+    },
+    {
+      "evento": "view_project",
+      "detalhe": {
+        "empreendimento": "flow-aptos",
+        "estagio": "obra"
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/flow-aptos/plantas/tipo-3",
+      "titulo": "Flow Aptos: Tipo 3, 62 m², 2 suítes | Bossa",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "1440x900",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:37:24.346Z"
+    },
+    {
+      "evento": "page_view",
+      "detalhe": {
+        "tipo_pagina": "planta"
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/flow-aptos/plantas/tipo-3",
+      "titulo": "Flow Aptos: Tipo 3, 62 m², 2 suítes | Bossa",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "1440x900",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:37:24.355Z"
+    },
+    {
+      "evento": "view_project",
+      "detalhe": {
+        "empreendimento": "flow-aptos",
+        "estagio": "obra"
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/flow-aptos/plantas/tipo-1",
+      "titulo": "Flow Aptos: Tipo 1, 73 m², 2 suítes | Bossa",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "1440x900",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:37:24.813Z"
+    },
+    {
+      "evento": "page_view",
+      "detalhe": {
+        "tipo_pagina": "planta"
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/flow-aptos/plantas/tipo-1",
+      "titulo": "Flow Aptos: Tipo 1, 73 m², 2 suítes | Bossa",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "1440x900",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:37:24.816Z"
+    },
+    {
+      "evento": "view_project",
+      "detalhe": {
+        "empreendimento": "flow-aptos",
+        "estagio": "obra"
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/flow-aptos/plantas/tipo-1",
+      "titulo": "Flow Aptos: Tipo 1, 73 m², 2 suítes | Bossa",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "1440x900",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:37:25.506Z"
+    },
+    {
+      "evento": "page_view",
+      "detalhe": {
+        "tipo_pagina": "planta"
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/flow-aptos/plantas/tipo-1",
+      "titulo": "Flow Aptos: Tipo 1, 73 m², 2 suítes | Bossa",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "1440x900",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:37:25.508Z"
+    },
+    {
+      "evento": "view_project",
+      "detalhe": {
+        "empreendimento": "flow-aptos",
+        "estagio": "obra"
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/flow-aptos/plantas/duplex-tipo-2-e-3",
+      "titulo": "Flow Aptos: Duplex Tipo 2 e 3, 93 m², 3 suítes | Bossa",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "1440x900",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:37:25.988Z"
+    },
+    {
+      "evento": "page_view",
+      "detalhe": {
+        "tipo_pagina": "planta"
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/flow-aptos/plantas/duplex-tipo-2-e-3",
+      "titulo": "Flow Aptos: Duplex Tipo 2 e 3, 93 m², 3 suítes | Bossa",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "1440x900",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:37:25.996Z"
+    },
+    {
+      "evento": "view_project",
+      "detalhe": {
+        "empreendimento": "flow-aptos",
+        "estagio": "obra"
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/flow-aptos/plantas/duplex-tipo-2-e-3",
+      "titulo": "Flow Aptos: Duplex Tipo 2 e 3, 93 m², 3 suítes | Bossa",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "1440x900",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:37:26.595Z"
+    },
+    {
+      "evento": "page_view",
+      "detalhe": {
+        "tipo_pagina": "planta"
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/flow-aptos/plantas/duplex-tipo-2-e-3",
+      "titulo": "Flow Aptos: Duplex Tipo 2 e 3, 93 m², 3 suítes | Bossa",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "1440x900",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:37:26.598Z"
+    },
+    {
+      "evento": "view_project",
+      "detalhe": {
+        "empreendimento": "flow-aptos",
+        "estagio": "obra"
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/flow-aptos/plantas/duplex-tipo-1",
+      "titulo": "Flow Aptos: Duplex Tipo 1, 117,7 m², 3 suítes | Bossa",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "1440x900",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:37:27.102Z"
+    },
+    {
+      "evento": "page_view",
+      "detalhe": {
+        "tipo_pagina": "planta"
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/flow-aptos/plantas/duplex-tipo-1",
+      "titulo": "Flow Aptos: Duplex Tipo 1, 117,7 m², 3 suítes | Bossa",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "1440x900",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:37:27.106Z"
+    },
+    {
+      "evento": "view_project",
+      "detalhe": {
+        "empreendimento": "flow-aptos",
+        "estagio": "obra"
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/flow-aptos/plantas/duplex-tipo-1",
+      "titulo": "Flow Aptos: Duplex Tipo 1, 117,7 m², 3 suítes | Bossa",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "1440x900",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:37:28.074Z"
+    },
+    {
+      "evento": "page_view",
+      "detalhe": {
+        "tipo_pagina": "planta"
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/flow-aptos/plantas/duplex-tipo-1",
+      "titulo": "Flow Aptos: Duplex Tipo 1, 117,7 m², 3 suítes | Bossa",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "1440x900",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:37:28.101Z"
+    },
+    {
+      "evento": "view_project",
+      "detalhe": {
+        "empreendimento": "flow-aptos",
+        "estagio": "obra"
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/flow-aptos",
+      "titulo": "Flow Aptos | 2 suítes, lazer em dois pavimentos e entrega 2027 | Bossa",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "1440x900",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:37:28.553Z"
+    },
+    {
+      "evento": "page_view",
+      "detalhe": {
+        "tipo_pagina": "empreendimento"
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/flow-aptos",
+      "titulo": "Flow Aptos | 2 suítes, lazer em dois pavimentos e entrega 2027 | Bossa",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "1440x900",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:37:28.556Z"
+    },
+    {
+      "evento": "switch_floorplan",
+      "detalhe": {
+        "empreendimento": "flow-aptos",
+        "de": "tipo-2",
+        "para": "tipo-1",
+        "ordem": 1
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/flow-aptos",
+      "titulo": "Flow Aptos | 2 suítes, lazer em dois pavimentos e entrega 2027 | Bossa",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "1440x900",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:37:28.650Z"
+    },
+    {
+      "evento": "page_view",
+      "detalhe": {
+        "tipo_pagina": "empreendimentos"
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos",
+      "titulo": "Empreendimentos · Bossa Empreendimentos",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "1440x900",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:37:28.895Z"
+    },
+    {
+      "evento": "view_project",
+      "detalhe": {
+        "empreendimento": "flow-aptos",
+        "estagio": "obra"
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/flow-aptos/plantas/tipo-1",
+      "titulo": "Flow Aptos: Tipo 1, 73 m², 2 suítes | Bossa",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "1440x900",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:37:29.259Z"
+    },
+    {
+      "evento": "page_view",
+      "detalhe": {
+        "tipo_pagina": "planta"
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/flow-aptos/plantas/tipo-1",
+      "titulo": "Flow Aptos: Tipo 1, 73 m², 2 suítes | Bossa",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "1440x900",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:37:29.262Z"
+    },
+    {
+      "evento": "view_project",
+      "detalhe": {
+        "empreendimento": "flow-aptos",
+        "estagio": "obra"
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/flow-aptos",
+      "titulo": "Flow Aptos | 2 suítes, lazer em dois pavimentos e entrega 2027 | Bossa",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "1440x900",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:37:29.712Z"
+    },
+    {
+      "evento": "page_view",
+      "detalhe": {
+        "tipo_pagina": "empreendimento"
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/flow-aptos",
+      "titulo": "Flow Aptos | 2 suítes, lazer em dois pavimentos e entrega 2027 | Bossa",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "1440x900",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:37:29.715Z"
+    },
+    {
+      "evento": "scroll_depth",
+      "detalhe": {
+        "pct": 25,
+        "tipo_pagina": "empreendimento"
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/flow-aptos",
+      "titulo": "Flow Aptos | 2 suítes, lazer em dois pavimentos e entrega 2027 | Bossa",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "1440x900",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:37:30.809Z"
+    },
+    {
+      "evento": "scroll_depth",
+      "detalhe": {
+        "pct": 50,
+        "tipo_pagina": "empreendimento"
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/flow-aptos",
+      "titulo": "Flow Aptos | 2 suítes, lazer em dois pavimentos e entrega 2027 | Bossa",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "1440x900",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:37:35.716Z"
+    },
+    {
+      "evento": "scroll_depth",
+      "detalhe": {
+        "pct": 75,
+        "tipo_pagina": "empreendimento"
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/flow-aptos",
+      "titulo": "Flow Aptos | 2 suítes, lazer em dois pavimentos e entrega 2027 | Bossa",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "1440x900",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:37:36.082Z"
+    },
+    {
+      "evento": "scroll_depth",
+      "detalhe": {
+        "pct": 90,
+        "tipo_pagina": "empreendimento"
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/flow-aptos",
+      "titulo": "Flow Aptos | 2 suítes, lazer em dois pavimentos e entrega 2027 | Bossa",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "1440x900",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:37:36.465Z"
+    },
+    {
+      "evento": "view_project",
+      "detalhe": {
+        "empreendimento": "flow-aptos",
+        "estagio": "obra"
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/flow-aptos",
+      "titulo": "Flow Aptos | 2 suítes, lazer em dois pavimentos e entrega 2027 | Bossa",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "360x844",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:37:36.864Z"
+    },
+    {
+      "evento": "page_view",
+      "detalhe": {
+        "tipo_pagina": "empreendimento"
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/flow-aptos",
+      "titulo": "Flow Aptos | 2 suítes, lazer em dois pavimentos e entrega 2027 | Bossa",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "360x844",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:37:36.866Z"
+    },
+    {
+      "evento": "scroll_depth",
+      "detalhe": {
+        "pct": 25,
+        "tipo_pagina": "empreendimento"
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/flow-aptos",
+      "titulo": "Flow Aptos | 2 suítes, lazer em dois pavimentos e entrega 2027 | Bossa",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "360x844",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:37:37.724Z"
+    },
+    {
+      "evento": "scroll_depth",
+      "detalhe": {
+        "pct": 50,
+        "tipo_pagina": "empreendimento"
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/flow-aptos",
+      "titulo": "Flow Aptos | 2 suítes, lazer em dois pavimentos e entrega 2027 | Bossa",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "360x844",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:37:42.498Z"
+    },
+    {
+      "evento": "scroll_depth",
+      "detalhe": {
+        "pct": 75,
+        "tipo_pagina": "empreendimento"
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/flow-aptos",
+      "titulo": "Flow Aptos | 2 suítes, lazer em dois pavimentos e entrega 2027 | Bossa",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "360x844",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:37:42.848Z"
+    },
+    {
+      "evento": "scroll_depth",
+      "detalhe": {
+        "pct": 90,
+        "tipo_pagina": "empreendimento"
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/flow-aptos",
+      "titulo": "Flow Aptos | 2 suítes, lazer em dois pavimentos e entrega 2027 | Bossa",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "360x844",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:37:43.215Z"
+    },
+    {
+      "evento": "view_project",
+      "detalhe": {
+        "empreendimento": "flow-aptos",
+        "estagio": "obra"
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/flow-aptos",
+      "titulo": "Flow Aptos | 2 suítes, lazer em dois pavimentos e entrega 2027 | Bossa",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "390x844",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:37:43.566Z"
+    },
+    {
+      "evento": "page_view",
+      "detalhe": {
+        "tipo_pagina": "empreendimento"
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/flow-aptos",
+      "titulo": "Flow Aptos | 2 suítes, lazer em dois pavimentos e entrega 2027 | Bossa",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "390x844",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:37:43.569Z"
+    },
+    {
+      "evento": "scroll_depth",
+      "detalhe": {
+        "pct": 25,
+        "tipo_pagina": "empreendimento"
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/flow-aptos",
+      "titulo": "Flow Aptos | 2 suítes, lazer em dois pavimentos e entrega 2027 | Bossa",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "390x844",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:37:44.457Z"
+    },
+    {
+      "evento": "scroll_depth",
+      "detalhe": {
+        "pct": 50,
+        "tipo_pagina": "empreendimento"
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/flow-aptos",
+      "titulo": "Flow Aptos | 2 suítes, lazer em dois pavimentos e entrega 2027 | Bossa",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "390x844",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:37:49.348Z"
+    },
+    {
+      "evento": "scroll_depth",
+      "detalhe": {
+        "pct": 75,
+        "tipo_pagina": "empreendimento"
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/flow-aptos",
+      "titulo": "Flow Aptos | 2 suítes, lazer em dois pavimentos e entrega 2027 | Bossa",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "390x844",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:37:49.698Z"
+    },
+    {
+      "evento": "scroll_depth",
+      "detalhe": {
+        "pct": 90,
+        "tipo_pagina": "empreendimento"
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/flow-aptos",
+      "titulo": "Flow Aptos | 2 suítes, lazer em dois pavimentos e entrega 2027 | Bossa",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "390x844",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:37:50.065Z"
+    },
+    {
+      "evento": "view_project",
+      "detalhe": {
+        "empreendimento": "flow-aptos",
+        "estagio": "obra"
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/flow-aptos",
+      "titulo": "Flow Aptos | 2 suítes, lazer em dois pavimentos e entrega 2027 | Bossa",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "768x844",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:37:50.486Z"
+    },
+    {
+      "evento": "page_view",
+      "detalhe": {
+        "tipo_pagina": "empreendimento"
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/flow-aptos",
+      "titulo": "Flow Aptos | 2 suítes, lazer em dois pavimentos e entrega 2027 | Bossa",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "768x844",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:37:50.496Z"
+    },
+    {
+      "evento": "scroll_depth",
+      "detalhe": {
+        "pct": 25,
+        "tipo_pagina": "empreendimento"
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/flow-aptos",
+      "titulo": "Flow Aptos | 2 suítes, lazer em dois pavimentos e entrega 2027 | Bossa",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "768x844",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:37:51.381Z"
+    },
+    {
+      "evento": "scroll_depth",
+      "detalhe": {
+        "pct": 50,
+        "tipo_pagina": "empreendimento"
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/flow-aptos",
+      "titulo": "Flow Aptos | 2 suítes, lazer em dois pavimentos e entrega 2027 | Bossa",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "768x844",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:37:56.148Z"
+    },
+    {
+      "evento": "scroll_depth",
+      "detalhe": {
+        "pct": 75,
+        "tipo_pagina": "empreendimento"
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/flow-aptos",
+      "titulo": "Flow Aptos | 2 suítes, lazer em dois pavimentos e entrega 2027 | Bossa",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "768x844",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:37:56.498Z"
+    },
+    {
+      "evento": "scroll_depth",
+      "detalhe": {
+        "pct": 90,
+        "tipo_pagina": "empreendimento"
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/flow-aptos",
+      "titulo": "Flow Aptos | 2 suítes, lazer em dois pavimentos e entrega 2027 | Bossa",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "768x844",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:37:56.881Z"
+    },
+    {
+      "evento": "view_project",
+      "detalhe": {
+        "empreendimento": "flow-aptos",
+        "estagio": "obra"
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/flow-aptos",
+      "titulo": "Flow Aptos | 2 suítes, lazer em dois pavimentos e entrega 2027 | Bossa",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "1024x844",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:37:57.343Z"
+    },
+    {
+      "evento": "page_view",
+      "detalhe": {
+        "tipo_pagina": "empreendimento"
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/flow-aptos",
+      "titulo": "Flow Aptos | 2 suítes, lazer em dois pavimentos e entrega 2027 | Bossa",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "1024x844",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:37:57.345Z"
+    },
+    {
+      "evento": "scroll_depth",
+      "detalhe": {
+        "pct": 25,
+        "tipo_pagina": "empreendimento"
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/flow-aptos",
+      "titulo": "Flow Aptos | 2 suítes, lazer em dois pavimentos e entrega 2027 | Bossa",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "1024x844",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:37:58.262Z"
+    },
+    {
+      "evento": "scroll_depth",
+      "detalhe": {
+        "pct": 50,
+        "tipo_pagina": "empreendimento"
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/flow-aptos",
+      "titulo": "Flow Aptos | 2 suítes, lazer em dois pavimentos e entrega 2027 | Bossa",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "1024x844",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:38:03.064Z"
+    },
+    {
+      "evento": "scroll_depth",
+      "detalhe": {
+        "pct": 75,
+        "tipo_pagina": "empreendimento"
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/flow-aptos",
+      "titulo": "Flow Aptos | 2 suítes, lazer em dois pavimentos e entrega 2027 | Bossa",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "1024x844",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:38:03.414Z"
+    },
+    {
+      "evento": "scroll_depth",
+      "detalhe": {
+        "pct": 90,
+        "tipo_pagina": "empreendimento"
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/flow-aptos",
+      "titulo": "Flow Aptos | 2 suítes, lazer em dois pavimentos e entrega 2027 | Bossa",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "1024x844",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:38:03.814Z"
+    },
+    {
+      "evento": "gallery_interact",
+      "detalhe": {
+        "empreendimento": "flow-aptos",
+        "ambiente": "vista para o mar 13º"
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/flow-aptos",
+      "titulo": "Flow Aptos | 2 suítes, lazer em dois pavimentos e entrega 2027 | Bossa",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "1024x844",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:38:03.988Z"
+    },
+    {
+      "evento": "gallery_interact",
+      "detalhe": {
+        "empreendimento": "flow-aptos",
+        "ambiente": "vista para o mar 7º"
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/flow-aptos",
+      "titulo": "Flow Aptos | 2 suítes, lazer em dois pavimentos e entrega 2027 | Bossa",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "1024x844",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:38:04.036Z"
+    },
+    {
+      "evento": "gallery_interact",
+      "detalhe": {
+        "empreendimento": "flow-aptos",
+        "ambiente": "vista para o mar 8º"
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/flow-aptos",
+      "titulo": "Flow Aptos | 2 suítes, lazer em dois pavimentos e entrega 2027 | Bossa",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "1024x844",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:38:04.103Z"
+    },
+    {
+      "evento": "gallery_interact",
+      "detalhe": {
+        "empreendimento": "flow-aptos",
+        "ambiente": "vista para o mar 10º"
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/flow-aptos",
+      "titulo": "Flow Aptos | 2 suítes, lazer em dois pavimentos e entrega 2027 | Bossa",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "1024x844",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:38:04.171Z"
+    },
+    {
+      "evento": "gallery_interact",
+      "detalhe": {
+        "empreendimento": "flow-aptos",
+        "ambiente": "vista para o mar 12º"
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/flow-aptos",
+      "titulo": "Flow Aptos | 2 suítes, lazer em dois pavimentos e entrega 2027 | Bossa",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "1024x844",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:38:04.236Z"
+    },
+    {
+      "evento": "gallery_interact",
+      "detalhe": {
+        "empreendimento": "flow-aptos",
+        "ambiente": "vista para o mar 13º"
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/flow-aptos",
+      "titulo": "Flow Aptos | 2 suítes, lazer em dois pavimentos e entrega 2027 | Bossa",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "1024x844",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:38:04.301Z"
+    },
+    {
+      "evento": "gallery_interact",
+      "detalhe": {
+        "empreendimento": "flow-aptos",
+        "ambiente": "vista para o mar 15º"
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/flow-aptos",
+      "titulo": "Flow Aptos | 2 suítes, lazer em dois pavimentos e entrega 2027 | Bossa",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "1024x844",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:38:04.353Z"
+    },
+    {
+      "evento": "gallery_interact",
+      "detalhe": {
+        "empreendimento": "flow-aptos",
+        "ambiente": "vista para o mar 17º"
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/flow-aptos",
+      "titulo": "Flow Aptos | 2 suítes, lazer em dois pavimentos e entrega 2027 | Bossa",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "1024x844",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:38:04.419Z"
+    },
+    {
+      "evento": "gallery_interact",
+      "detalhe": {
+        "empreendimento": "flow-aptos",
+        "ambiente": "vista para o mar 18º"
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/flow-aptos",
+      "titulo": "Flow Aptos | 2 suítes, lazer em dois pavimentos e entrega 2027 | Bossa",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "1024x844",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:38:04.487Z"
+    },
+    {
+      "evento": "gallery_interact",
+      "detalhe": {
+        "empreendimento": "flow-aptos",
+        "ambiente": "vista para o mar 20º"
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/flow-aptos",
+      "titulo": "Flow Aptos | 2 suítes, lazer em dois pavimentos e entrega 2027 | Bossa",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "1024x844",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:38:04.551Z"
+    },
+    {
+      "evento": "gallery_interact",
+      "detalhe": {
+        "empreendimento": "flow-aptos",
+        "ambiente": "vista para o mar 22º"
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/flow-aptos",
+      "titulo": "Flow Aptos | 2 suítes, lazer em dois pavimentos e entrega 2027 | Bossa",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "1024x844",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:38:04.621Z"
+    },
+    {
+      "evento": "gallery_interact",
+      "detalhe": {
+        "empreendimento": "flow-aptos",
+        "ambiente": "vista para o mar 23º"
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/flow-aptos",
+      "titulo": "Flow Aptos | 2 suítes, lazer em dois pavimentos e entrega 2027 | Bossa",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "1024x844",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:38:04.686Z"
+    },
+    {
+      "evento": "gallery_interact",
+      "detalhe": {
+        "empreendimento": "flow-aptos",
+        "ambiente": "vista para o mar 24º · Rooftop"
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/flow-aptos",
+      "titulo": "Flow Aptos | 2 suítes, lazer em dois pavimentos e entrega 2027 | Bossa",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "1024x844",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:38:04.752Z"
+    },
+    {
+      "evento": "gallery_interact",
+      "detalhe": {
+        "empreendimento": "flow-aptos",
+        "ambiente": "vista para a baía 24º · Rooftop"
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/flow-aptos",
+      "titulo": "Flow Aptos | 2 suítes, lazer em dois pavimentos e entrega 2027 | Bossa",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "1024x844",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:38:04.819Z"
+    },
+    {
+      "evento": "gallery_interact",
+      "detalhe": {
+        "empreendimento": "flow-aptos",
+        "ambiente": "vista para a baía 7º"
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/flow-aptos",
+      "titulo": "Flow Aptos | 2 suítes, lazer em dois pavimentos e entrega 2027 | Bossa",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "1024x844",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:38:04.869Z"
+    },
+    {
+      "evento": "gallery_interact",
+      "detalhe": {
+        "empreendimento": "flow-aptos",
+        "ambiente": "vista para a baía 8º"
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/flow-aptos",
+      "titulo": "Flow Aptos | 2 suítes, lazer em dois pavimentos e entrega 2027 | Bossa",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "1024x844",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:38:04.918Z"
+    },
+    {
+      "evento": "gallery_interact",
+      "detalhe": {
+        "empreendimento": "flow-aptos",
+        "ambiente": "vista para a baía 10º"
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/flow-aptos",
+      "titulo": "Flow Aptos | 2 suítes, lazer em dois pavimentos e entrega 2027 | Bossa",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "1024x844",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:38:04.985Z"
+    },
+    {
+      "evento": "gallery_interact",
+      "detalhe": {
+        "empreendimento": "flow-aptos",
+        "ambiente": "vista para a baía 12º"
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/flow-aptos",
+      "titulo": "Flow Aptos | 2 suítes, lazer em dois pavimentos e entrega 2027 | Bossa",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "1024x844",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:38:05.052Z"
+    },
+    {
+      "evento": "gallery_interact",
+      "detalhe": {
+        "empreendimento": "flow-aptos",
+        "ambiente": "vista para a baía 13º"
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/flow-aptos",
+      "titulo": "Flow Aptos | 2 suítes, lazer em dois pavimentos e entrega 2027 | Bossa",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "1024x844",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:38:05.120Z"
+    },
+    {
+      "evento": "gallery_interact",
+      "detalhe": {
+        "empreendimento": "flow-aptos",
+        "ambiente": "vista para a baía 15º"
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/flow-aptos",
+      "titulo": "Flow Aptos | 2 suítes, lazer em dois pavimentos e entrega 2027 | Bossa",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "1024x844",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:38:05.185Z"
+    },
+    {
+      "evento": "gallery_interact",
+      "detalhe": {
+        "empreendimento": "flow-aptos",
+        "ambiente": "vista para a baía 17º"
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/flow-aptos",
+      "titulo": "Flow Aptos | 2 suítes, lazer em dois pavimentos e entrega 2027 | Bossa",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "1024x844",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:38:05.235Z"
+    },
+    {
+      "evento": "gallery_interact",
+      "detalhe": {
+        "empreendimento": "flow-aptos",
+        "ambiente": "vista para a baía 18º"
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/flow-aptos",
+      "titulo": "Flow Aptos | 2 suítes, lazer em dois pavimentos e entrega 2027 | Bossa",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "1024x844",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:38:05.302Z"
+    },
+    {
+      "evento": "gallery_interact",
+      "detalhe": {
+        "empreendimento": "flow-aptos",
+        "ambiente": "vista para a baía 20º"
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/flow-aptos",
+      "titulo": "Flow Aptos | 2 suítes, lazer em dois pavimentos e entrega 2027 | Bossa",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "1024x844",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:38:05.380Z"
+    },
+    {
+      "evento": "gallery_interact",
+      "detalhe": {
+        "empreendimento": "flow-aptos",
+        "ambiente": "vista para a baía 22º"
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/flow-aptos",
+      "titulo": "Flow Aptos | 2 suítes, lazer em dois pavimentos e entrega 2027 | Bossa",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "1024x844",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:38:05.451Z"
+    },
+    {
+      "evento": "gallery_interact",
+      "detalhe": {
+        "empreendimento": "flow-aptos",
+        "ambiente": "vista para a baía 23º"
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/flow-aptos",
+      "titulo": "Flow Aptos | 2 suítes, lazer em dois pavimentos e entrega 2027 | Bossa",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "1024x844",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:38:05.502Z"
+    },
+    {
+      "evento": "gallery_interact",
+      "detalhe": {
+        "empreendimento": "flow-aptos",
+        "ambiente": "vista para a baía 24º · Rooftop"
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/flow-aptos",
+      "titulo": "Flow Aptos | 2 suítes, lazer em dois pavimentos e entrega 2027 | Bossa",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "1024x844",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:38:05.569Z"
+    },
+    {
+      "evento": "gallery_interact",
+      "detalhe": {
+        "empreendimento": "flow-aptos",
+        "ambiente": "vista para os morros 24º · Rooftop"
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/flow-aptos",
+      "titulo": "Flow Aptos | 2 suítes, lazer em dois pavimentos e entrega 2027 | Bossa",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "1024x844",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:38:05.618Z"
+    },
+    {
+      "evento": "gallery_interact",
+      "detalhe": {
+        "empreendimento": "flow-aptos",
+        "ambiente": "vista para os morros 7º"
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/flow-aptos",
+      "titulo": "Flow Aptos | 2 suítes, lazer em dois pavimentos e entrega 2027 | Bossa",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "1024x844",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:38:05.668Z"
+    },
+    {
+      "evento": "gallery_interact",
+      "detalhe": {
+        "empreendimento": "flow-aptos",
+        "ambiente": "vista para os morros 8º"
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/flow-aptos",
+      "titulo": "Flow Aptos | 2 suítes, lazer em dois pavimentos e entrega 2027 | Bossa",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "1024x844",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:38:05.735Z"
+    },
+    {
+      "evento": "gallery_interact",
+      "detalhe": {
+        "empreendimento": "flow-aptos",
+        "ambiente": "vista para os morros 10º"
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/flow-aptos",
+      "titulo": "Flow Aptos | 2 suítes, lazer em dois pavimentos e entrega 2027 | Bossa",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "1024x844",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:38:05.802Z"
+    },
+    {
+      "evento": "gallery_interact",
+      "detalhe": {
+        "empreendimento": "flow-aptos",
+        "ambiente": "vista para os morros 11º"
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/flow-aptos",
+      "titulo": "Flow Aptos | 2 suítes, lazer em dois pavimentos e entrega 2027 | Bossa",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "1024x844",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:38:05.852Z"
+    },
+    {
+      "evento": "gallery_interact",
+      "detalhe": {
+        "empreendimento": "flow-aptos",
+        "ambiente": "vista para os morros 13º"
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/flow-aptos",
+      "titulo": "Flow Aptos | 2 suítes, lazer em dois pavimentos e entrega 2027 | Bossa",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "1024x844",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:38:05.918Z"
+    },
+    {
+      "evento": "gallery_interact",
+      "detalhe": {
+        "empreendimento": "flow-aptos",
+        "ambiente": "vista para os morros 15º"
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/flow-aptos",
+      "titulo": "Flow Aptos | 2 suítes, lazer em dois pavimentos e entrega 2027 | Bossa",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "1024x844",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:38:05.985Z"
+    },
+    {
+      "evento": "gallery_interact",
+      "detalhe": {
+        "empreendimento": "flow-aptos",
+        "ambiente": "vista para os morros 16º"
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/flow-aptos",
+      "titulo": "Flow Aptos | 2 suítes, lazer em dois pavimentos e entrega 2027 | Bossa",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "1024x844",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:38:06.054Z"
+    },
+    {
+      "evento": "gallery_interact",
+      "detalhe": {
+        "empreendimento": "flow-aptos",
+        "ambiente": "vista para os morros 18º"
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/flow-aptos",
+      "titulo": "Flow Aptos | 2 suítes, lazer em dois pavimentos e entrega 2027 | Bossa",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "1024x844",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:38:06.120Z"
+    },
+    {
+      "evento": "gallery_interact",
+      "detalhe": {
+        "empreendimento": "flow-aptos",
+        "ambiente": "vista para os morros 19º"
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/flow-aptos",
+      "titulo": "Flow Aptos | 2 suítes, lazer em dois pavimentos e entrega 2027 | Bossa",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "1024x844",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:38:06.186Z"
+    },
+    {
+      "evento": "gallery_interact",
+      "detalhe": {
+        "empreendimento": "flow-aptos",
+        "ambiente": "vista para os morros 21º"
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/flow-aptos",
+      "titulo": "Flow Aptos | 2 suítes, lazer em dois pavimentos e entrega 2027 | Bossa",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "1024x844",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:38:06.252Z"
+    },
+    {
+      "evento": "gallery_interact",
+      "detalhe": {
+        "empreendimento": "flow-aptos",
+        "ambiente": "vista para os morros 23º"
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/flow-aptos",
+      "titulo": "Flow Aptos | 2 suítes, lazer em dois pavimentos e entrega 2027 | Bossa",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "1024x844",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:38:06.319Z"
+    },
+    {
+      "evento": "gallery_interact",
+      "detalhe": {
+        "empreendimento": "flow-aptos",
+        "ambiente": "vista para os morros 24º · Rooftop"
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/flow-aptos",
+      "titulo": "Flow Aptos | 2 suítes, lazer em dois pavimentos e entrega 2027 | Bossa",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "1024x844",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:38:06.386Z"
+    },
+    {
+      "evento": "gallery_interact",
+      "detalhe": {
+        "empreendimento": "flow-aptos",
+        "ambiente": "Planta ilustrativa do 5º pavimento"
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/flow-aptos",
+      "titulo": "Flow Aptos | 2 suítes, lazer em dois pavimentos e entrega 2027 | Bossa",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "1024x844",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:38:06.519Z"
+    },
+    {
+      "evento": "gallery_interact",
+      "detalhe": {
+        "empreendimento": "flow-aptos",
+        "ambiente": "Planta ilustrativa do 24º pavimento"
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/flow-aptos",
+      "titulo": "Flow Aptos | 2 suítes, lazer em dois pavimentos e entrega 2027 | Bossa",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "1024x844",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:38:06.656Z"
+    },
+    {
+      "evento": "form_start",
+      "detalhe": {
+        "formulario": "visita",
+        "empreendimento": "flow-aptos"
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/flow-aptos",
+      "titulo": "Flow Aptos | 2 suítes, lazer em dois pavimentos e entrega 2027 | Bossa",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "390x844",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:38:06.907Z"
+    },
+    {
+      "evento": "lead_submit",
+      "detalhe": {
+        "formulario": "visita",
+        "empreendimento": "flow-aptos"
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/flow-aptos",
+      "titulo": "Flow Aptos | 2 suítes, lazer em dois pavimentos e entrega 2027 | Bossa",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "390x844",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:38:07.920Z"
+    },
+    {
+      "evento": "form_start",
+      "detalhe": {
+        "formulario": "book",
+        "empreendimento": "flow-aptos"
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/flow-aptos",
+      "titulo": "Flow Aptos | 2 suítes, lazer em dois pavimentos e entrega 2027 | Bossa",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "390x844",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:38:08.101Z"
+    },
+    {
+      "evento": "lead_submit",
+      "detalhe": {
+        "formulario": "book",
+        "empreendimento": "flow-aptos"
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/flow-aptos",
+      "titulo": "Flow Aptos | 2 suítes, lazer em dois pavimentos e entrega 2027 | Bossa",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "390x844",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:38:08.199Z"
+    },
+    {
+      "evento": "request_material",
+      "detalhe": {
+        "empreendimento": "flow-aptos",
+        "formulario": "book",
+        "arquivo": "apresentacao-flow"
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/flow-aptos",
+      "titulo": "Flow Aptos | 2 suítes, lazer em dois pavimentos e entrega 2027 | Bossa",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "390x844",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:38:08.200Z"
+    },
+    {
+      "evento": "page_view",
+      "detalhe": {
+        "tipo_pagina": "empreendimento"
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/alma-seahouses",
+      "titulo": "Alma Sea Houses em Perequê | Bossa Empreendimentos",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "390x844",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:38:09.182Z"
+    },
+    {
+      "evento": "scroll_depth",
+      "detalhe": {
+        "pct": 25,
+        "tipo_pagina": "empreendimento"
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/alma-seahouses",
+      "titulo": "Alma Sea Houses em Perequê | Bossa Empreendimentos",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "390x844",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:38:09.235Z"
+    },
+    {
+      "evento": "scroll_depth",
+      "detalhe": {
+        "pct": 50,
+        "tipo_pagina": "empreendimento"
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/alma-seahouses",
+      "titulo": "Alma Sea Houses em Perequê | Bossa Empreendimentos",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "390x844",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:38:09.236Z"
+    },
+    {
+      "evento": "scroll_depth",
+      "detalhe": {
+        "pct": 75,
+        "tipo_pagina": "empreendimento"
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/alma-seahouses",
+      "titulo": "Alma Sea Houses em Perequê | Bossa Empreendimentos",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "390x844",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:38:09.237Z"
+    },
+    {
+      "evento": "scroll_depth",
+      "detalhe": {
+        "pct": 90,
+        "tipo_pagina": "empreendimento"
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/alma-seahouses",
+      "titulo": "Alma Sea Houses em Perequê | Bossa Empreendimentos",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "390x844",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:38:09.238Z"
+    },
+    {
+      "evento": "form_start",
+      "detalhe": {
+        "formulario": "interesse",
+        "empreendimento": "alma-seahouses"
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/alma-seahouses",
+      "titulo": "Alma Sea Houses em Perequê | Bossa Empreendimentos",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "390x844",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:38:09.259Z"
+    },
+    {
+      "evento": "switch_floorplan",
+      "detalhe": {
+        "empreendimento": "alma-seahouses",
+        "de": "tipo-02",
+        "para": "tipo-01",
+        "ordem": 1
+      },
+      "visitante": "PS79K3",
+      "sessao": "a303f8e3-7b5f-4c1d-bfe8-5e06d4ad7ad1",
+      "visita": 1,
+      "pagina": "/empreendimentos/alma-seahouses",
+      "titulo": "Alma Sea Houses em Perequê | Bossa Empreendimentos",
+      "referencia": "",
+      "utm": {
+        "utm_source": "qa-flow"
+      },
+      "tela": "390x844",
+      "idioma": "en-US",
+      "em": "2026-10-22T20:38:09.310Z"
+    }
+  ],
+  "erros": [],
+  "conteudosPreservados": [
+    "Alma",
+    "Soul",
+    "Jazz"
+  ],
+  "browser": "154.0.8037.57",
+  "clipboard": "Cópia real local",
+  "vistas": 36,
+  "enviosInterceptados": 7,
+  "alma": "Título, seleção e preservação do formulário verificados"
+}
