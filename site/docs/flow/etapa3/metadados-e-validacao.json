@@ -1,0 +1,46 @@
+{
+  "data": "2026-10-22T14:47:45.199Z",
+  "rotas": [
+    {
+      "rota": "/empreendimentos/flow-aptos",
+      "status": 200,
+      "title": "Flow Aptos | 2 suítes, lazer em dois pavimentos e entrega 2027 | Bossa",
+      "canonical": "https://www.bossaempreendimentos.com.br/empreendimentos/flow-aptos"
+    },
+    {
+      "rota": "/empreendimentos/flow-aptos/plantas/tipo-2",
+      "status": 200,
+      "title": "Flow Aptos: Tipo 2, 62 m², 2 suítes | Bossa",
+      "canonical": "https://www.bossaempreendimentos.com.br/empreendimentos/flow-aptos/plantas/tipo-2"
+    },
+    {
+      "rota": "/empreendimentos/flow-aptos/plantas/tipo-3",
+      "status": 200,
+      "title": "Flow Aptos: Tipo 3, 62 m², 2 suítes | Bossa",
+      "canonical": "https://www.bossaempreendimentos.com.br/empreendimentos/flow-aptos/plantas/tipo-3"
+    },
+    {
+      "rota": "/empreendimentos/flow-aptos/plantas/tipo-1",
+      "status": 200,
+      "title": "Flow Aptos: Tipo 1, 73 m², 2 suítes | Bossa",
+      "canonical": "https://www.bossaempreendimentos.com.br/empreendimentos/flow-aptos/plantas/tipo-1"
+    },
+    {
+      "rota": "/empreendimentos/flow-aptos/plantas/duplex-tipo-2-e-3",
+      "status": 200,
+      "title": "Flow Aptos: Duplex Tipo 2 e 3, 93 m², 3 suítes | Bossa",
+      "canonical": "https://www.bossaempreendimentos.com.br/empreendimentos/flow-aptos/plantas/duplex-tipo-2-e-3"
+    },
+    {
+      "rota": "/empreendimentos/flow-aptos/plantas/duplex-tipo-1",
+      "status": 200,
+      "title": "Flow Aptos: Duplex Tipo 1, 117,7 m², 3 suítes | Bossa",
+      "canonical": "https://www.bossaempreendimentos.com.br/empreendimentos/flow-aptos/plantas/duplex-tipo-1"
+    }
+  ],
+  "validacaoCliente": {
+    "semEnvio": true,
+    "focoNoNome": true,
+    "ariaInvalid": true
+  }
+}

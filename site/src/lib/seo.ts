@@ -2,14 +2,14 @@ import type { Metadata } from "next";
 import { SITE_URL, empresa } from "@/content/site";
 import type { Empreendimento } from "@/content/empreendimentos";
 
-export function meta({ titulo, descricao, caminho, imagem }: { titulo: string; descricao: string; caminho: string; imagem?: string }): Metadata {
+export function meta({ titulo, descricao, caminho, imagem, imagemLargura = 1600, imagemAltura = 900 }: { titulo: string; descricao: string; caminho: string; imagem?: string; imagemLargura?: number; imagemAltura?: number }): Metadata {
   const url = SITE_URL + caminho;
   const img = imagem ?? "/img/alma-piscina.jpg";
   return {
     title: { absolute: titulo },
     description: descricao,
     alternates: { canonical: url },
-    openGraph: { title: titulo, description: descricao, url, siteName: empresa.nome, locale: "pt_BR", type: "website", images: [{ url: img, width: 1600, height: 900 }] },
+    openGraph: { title: titulo, description: descricao, url, siteName: empresa.nome, locale: "pt_BR", type: "website", images: [{ url: img, width: imagemLargura, height: imagemAltura }] },
     twitter: { card: "summary_large_image", title: titulo, description: descricao, images: [img] },
   };
 }

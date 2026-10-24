@@ -1,0 +1,61 @@
+
+> bossa-site@0.1.0 build
+> next build
+
+▲ Next.js 16.4.2 (Turbopack)
+✓ Running next.config.ts took 21ms
+
+  Creating an optimized production build ...
+✓ Compiled successfully in 171ms
+  Running TypeScript ...
+  Finished TypeScript in 1601ms ...
+  Collecting page data using 4 workers ...
+  Generating static pages using 4 workers (0/33) ...
+  Generating static pages using 4 workers (8/33)
+  Generating static pages using 4 workers (16/33)
+  Generating static pages using 4 workers (24/33)
+✓ Generating static pages using 4 workers (33/33) in 450ms
+  Finalizing page optimization ...
+
+Route (app)
+┌ ○ /
+├ ○ /_not-found
+├ ƒ /api/eventos
+├ ƒ /api/leads
+├ ○ /comprar-morando-fora
+├ ○ /contato
+├ ○ /corretores
+├ ○ /empreendimentos
+├   /empreendimentos/[slug]
+│ ├ ● /empreendimentos/alma-seahouses
+│ ├ ● /empreendimentos/flow-aptos
+│ ├ ● /empreendimentos/soul-residence
+│ └ ● /empreendimentos/jazz-residence
+├   /empreendimentos/[slug]/plantas/[planta]
+│ ├ ● /empreendimentos/alma-seahouses/plantas/tipo-02
+│ ├ ● /empreendimentos/alma-seahouses/plantas/tipo-01
+│ ├ ● /empreendimentos/alma-seahouses/plantas/duplex-tipo-2
+│ └ ● [+6 more paths]
+├ ○ /jeito-bossa
+├ ○ /llms.txt
+├ ○ /nossa-historia
+├ ○ /obras
+├   /obras/[slug]/[mes]
+│ ├ ● /obras/alma-seahouses/2026-08
+│ └ ● /obras/flow-aptos/2026-09
+├ ○ /perguntas
+├ ○ /porto-belo
+├ ○ /privacidade
+├ ○ /robots.txt
+└ ○ /sitemap.xml
+
+
+○  (Static)   prerendered as static content
+●  (SSG)      prerendered as static HTML (uses generateStaticParams)
+ƒ  (Dynamic)  server-rendered on demand
+
+npm notice
+npm notice New major version of npm available! 11.9.0 -> 12.2.1
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.2.1
+npm notice To update run: npm install -g npm@12.2.1
+npm notice

@@ -1,0 +1,308 @@
+BOSSA / FLOW APTOS                                                                                                   22 OUT 2026
+
+
+
+PARECER EXECUTIVO
+
+
+
+Um material liberado. Três exigem
+revisão.
+As três plantas pertencem às tipologias comerciais corretas: Tipo 1 = 73 m²; Tipos 2 e 3 = 62 m². Isso não
+equivale à fidelidade integral à revisão executiva nem à comprovação da área registral. O living não pode ser
+apresentado como Tipo 2 com a evidência disponível.
+
+ Arquivo                                Resultado                              Ação
+
+ Tipo 1 - FLOW.png                      Aprovado como ilustração comercial     Pode usar o WebP liberado. Não tratar como
+                                        de 73 m²                               planta executiva cotada.
+
+ Tipo 2 - Flow.png                      Tipo 2 / 62 m² identificado; exige     Corrigir conjunto técnico/coifa/volume junto à
+                                        compatibilização                       fachada conforme revisão vigente.
+
+ Tipo 3 - Flow.png                      Tipo 3 / 62 m² identificado; exige     Mesma verificação, feita separadamente. Não
+                                        compatibilização                       assumir simetria perfeita.
+
+ 17_Flow Tipo 02 Living.jpg             Não liberado como Tipo 2               Resolver a abertura lateral e o vínculo ao modelo;
+                                                                               não apenas trocar o nome.
+
+
+
+O que foi comprovado
+Comparação visual dos quatro originais recuperados, da apresentação comercial de 32 páginas, do pavimento
+tipo legal R7 e do executivo R8, além do quadro de informações R5. A cópia R8 recuperada em 2026 é idêntica
+por SHA-256 à encontrada na pasta oficial de executivos de 2024.
+
+Limite da validação definitiva
+As pranchas R7/R8 consultadas têm o campo de carimbos de aprovação vazio. R8 se identifica como emissão de
+projeto executivo de 04/07/2024. O R6 de 2022 tem assinaturas digitais, mas isso não comprova aprovação
+municipal vigente. Por isso, esta revisão libera uma figura ilustrativa e aponta incompatibilidades; não emite
+certificação legal ou de conformidade da obra executada.
+
+Não houve alteração de código, do Drive, dos originais, do banco ou do PR. Não houve merge, publicação ou nova avaliação editorial.
+
+
+
+
+Conferência de materiais | Sem alteração de código ou publicação                                                                    1
+BOSSA / FLOW APTOS                                                                                                  22 OUT 2026
+
+
+
+IDENTIDADE E ÁREAS
+
+
+
+A apresentação confirma as três
+tipologias.
+
+
+
+
+Apresentação comercial de 2026, página 22: Tipos 3 e 2 acima, Tipo 1 abaixo; áreas divulgadas de 62 / 62 / 73 m².
+
+Correspondência visual, sem depender dos nomes
+Tipo 1: perímetro em L, living/cozinha no braço direito, duas suítes no braço inferior e lavabo junto à circulação.
+Tipo 2: cozinha/estar à esquerda e suítes à direita. Tipo 3: organização oposta. Os recortes recuperados
+reproduzem esses desenhos comerciais, incluindo banheiros e sugestão de mobiliário.
+
+
+
+
+Executivo R5, prancha 01, quadro “Apartamentos x vagas”: a coluna se chama “Área”. Ela não substitui o quadro registral de áreas
+privativas.
+
+O quadro técnico indica 62,19 para finais 01 em faixas especificadas; 62,17 para finais 02; e 73,18 para finais 03
+em outra faixa. Tipo comercial não deve ser confundido automaticamente com final de unidade. A associação
+unidade/final/planta e a natureza da área precisam da chave comercial/registral vigente.
+
+Manter 62 e 73 m² como áreas comerciais divulgadas, sem transformar os valores arredondados em medição própria ou atribuir
+centésimos a cada planta sem essa chave. Não extrapolar vagas nem disponibilidade a partir deste quadro.
+
+
+
+
+Conferência de materiais | Sem alteração de código ou publicação                                                                   2
+BOSSA / FLOW APTOS                                                                                                   22 OUT 2026
+
+
+
+TIPO 1 / 73 M²
+
+
+
+Compatível para apresentação
+ilustrativa.
+
+
+
+
+Humanizada recuperada: duas suítes, dois banheiros privativos, lavabo, circulação e living/cozinha integrados.
+
+
+
+
+Executivo R8: mesmo arranjo em L; suíte maior à esquerda, segunda suíte ao centro e área social à direita. O desenho ao lado da
+circulação superior pertence ao núcleo comum/unidades vizinhas.
+
+Resultado e condições de uso
+O confronto não demonstrou incompatibilidade material suficiente para barrar a representação geral do Tipo 1.
+Churrasqueira e duto ficam do mesmo lado da cozinha nas duas representações. O vão do lavabo na
+humanizada não especifica o sistema da porta; o R8 especifica PT.MD.05, correr embutida. Não usar o desenho
+decorado como prova de abertura de giro ou detalhamento executivo.
+
+Liberado: tipo1-73m2.webp, 3000 × 1758 px, 289.054 bytes, com transparência. Fonte original: 3630 × 2127 px.
+Preservar proporção e desenho inteiro; mobiliário, decoração e acabamentos representados são sugestivos. Não
+inferir entrega de móveis, dimensões úteis ou desempenho técnico a partir do render da planta.
+
+
+
+
+Conferência de materiais | Sem alteração de código ou publicação                                                                  3
+BOSSA / FLOW APTOS                                                                                                  22 OUT 2026
+
+
+
+TIPOS 2 E 3 / 62 M²
+
+
+
+A tipologia está correta. O detalhe
+precisa de ajuste.
+
+
+
+
+Humanizadas recuperadas: Tipo 2 à esquerda e Tipo 3 à direita. Os volumes em X e a coifa/conjunto técnico aparecem junto à parede
+da suíte, no encontro com a fachada.
+
+
+
+
+R8: os conjuntos em X e os equipamentos adjacentes aparecem junto à divisa central entre as duas cozinhas. O restante da
+distribuição conserva a identificação das tipologias.
+
+Correção objetiva
+Compatibilizar posição e contorno dos conjuntos técnicos/churrasqueira/coifa com a revisão efetivamente
+executada; ajustar as interferências em bancada, circulação e abertura da cozinha. No R7, o conjunto ainda
+aparece no lado das suítes; o R8 registra a mudança. Logo, a humanizada de 2023 e o PDF comercial de 2026
+não comprovam atualização ao executivo de 2024.
+
+Conferir as duas variantes separadamente: áreas dos ambientes e cotas não são perfeitamente simétricas. Não
+corrigir com espelhamento automático ou pintura sobre o PNG. Atualizar a fonte do desenho, reexportar e
+confrontar os elementos fixos. tipo2-62m2.webp e tipo3-62m2.webp permanecem fora do catálogo liberado.
+
+
+
+
+Conferência de materiais | Sem alteração de código ou publicação                                                               4
+BOSSA / FLOW APTOS                                                                                                  22 OUT 2026
+
+
+
+LIVING RECUPERADO
+
+
+
+Não comprovado como apartamento
+Tipo 2.
+
+
+
+
+JPG original recuperado, 3836 × 2160 px: TV e cozinha na mesma parede, janela estreita entre os dois e grande abertura ao fundo.
+
+Por que o nome do arquivo não basta
+O Tipo 2 tem cozinha/estar encostados na divisa central com o outro apartamento. Na parede onde o render
+reúne TV, janela estreita e cozinha, R7/R8 não mostram essa abertura externa: há a divisa. Mudar a decoração
+ou inverter sofá/TV não explica a janela para a unidade vizinha.
+
+A geometria do Tipo 1 oferece uma hipótese mais plausível para a parede lateral externa com abertura, mas
+essa afinidade não comprova que o JPG seja desse tipo. Não renomear o arquivo, inverter a imagem ou atribuir
+73 m² com base apenas nessa inferência.
+
+Comparação com a apresentação atual
+A página 23 do PDF comercial contém uma versão de decoração diferente, com o mesmo partido visual de TV,
+abertura estreita, cozinha e janela ao fundo, rotulada genericamente como “Aptos tipo”. O uso anterior
+comprova o contexto comercial, mas não demonstra correspondência exata ao Tipo 2.
+
+Para liberar
+Vincular o render ao modelo de origem e à planta com posição de câmera; confrontar paredes, vãos, pé-direito e
+volumes fixos com a revisão vigente. Se a geometria divergir, corrigir o modelo antes de reexportar. Rotular o
+resultado como perspectiva ilustrativa da tipologia realmente confirmada; não apresentar a paisagem como
+vista garantida da unidade.
+
+
+
+
+Conferência de materiais | Sem alteração de código ou publicação                                                                   5
+BOSSA / FLOW APTOS                                                                                                     22 OUT 2026
+
+
+
+ENTREGA PARA O CODEX
+
+
+
+O que entra agora e o que ainda falta.
+ WebP disponível                                  Dimensões / peso                      Liberação
+
+ tipo1-73m2.webp                                  3000 × 1758 / 289.054 B               Sim, como planta comercial ilustrativa.
+
+ tipo2-62m2.webp                                  1871 × 2462 / 369.712 B               Não; compatibilizar com R8/execução.
+
+ tipo3-62m2.webp                                  1858 × 2496 / 365.436 B               Não; compatibilizar com R8/execução.
+
+ living-tipo02.webp                               3000 × 1689 / 369.784 B               Não como Tipo 2; vínculo não
+                                                                                        comprovado.
+
+
+Destino futuro do liberado: site/public/img/flow/plantas/tipo1-73m2.webp. Alterar a imagem da entrada slug tipo-1 em
+site/src/content/empreendimentos.ts e conferir seletor/visor em PlantasFlow.tsx. Preservar rotas, contexto comercial e metadados.
+Nesta etapa esses arquivos não foram alterados.
+
+Para começar a implementação
+A rodada de UI pode começar com cookies em tela baixa, resultado visível das escolhas no Move, proximidade
+entre controles e foto nas vistas, altura do seletor em tablet e ritmo da página. O Tipo 1 liberado também pode
+ser preparado. Não é necessário esperar novos renders de lazer.
+
+Para completar o núcleo visual e chegar à revisão final
+1. Compatibilizar Tipos 2/3 e resolver o living, com referência arquitetônica vigente e evidência de aprovação.
+2. Receber 3-6 fotos reais de engenharia, identificadas por data, pavimento, atividade e benefício comprovado.
+3. Receber quatro arquivos WebVTT e transcrições revisadas: obra, unidade-1601, Augusto e Natália.
+4. Confirmar a data da filmagem da obra pela fonte, sem deduzir a data por upload/exportação.
+
+Aceite antes de publicar
+Conferir as cinco plantas, zoom e teclado; render identificado; fotos técnicas e vídeos acessíveis; nenhuma
+sobreposição de cookies/CTA ou troca invisível no celular. Revalidar 360, 390, 768, 1024 e 1440 px, incluindo
+360 × 640. Homologar recebimento/retorno comercial em escopo autorizado. Preservar proteção e noindex até
+decisão explícita de publicação.
+
+Recomendação: iniciar correções de UI e o material liberado; corrigir/confirmar os outros três antes da inclusão definitiva. A
+referência editorial continua 8,1/10 da Etapa 6. Esta conferência não garante 9+ nem substitui nova auditoria da página renderizada.
+
+
+
+
+Conferência de materiais | Sem alteração de código ou publicação                                                                    6
+BOSSA / FLOW APTOS                                                                                                     22 OUT 2026
+
+
+
+RASTREABILIDADE
+
+
+
+Fontes examinadas e limites do
+parecer.
+S1. Executivo R8, prancha 05
+04/07/2024. Pasta 03-PROJETO EXECUTIVO / 01-PDF. Mesmos bytes da cópia recuperada em 2026.
+Abrir fonte
+
+S2. Projeto legal R7, prancha 05
+18/05/2023. Registro de revisão conforme RAPA_7128-22; campo de carimbos vazio.
+Abrir fonte
+
+S3. Informações R5, prancha 01
+04/07/2024. Quadro de áreas/unidades; distinguir nome comercial, final e área registral.
+Abrir fonte
+
+S4. Apresentação comercial 2026
+32 páginas; páginas 22 e 23 são as evidências centrais desta revisão.
+Abrir fonte
+
+S5. Prancha R6 assinada, 2022
+Assinaturas digitais de 18/08/2022; não comprovam a aprovação municipal vigente.
+Abrir fonte
+
+S6. PR 130, leitura sem escrita
+Aberto, em rascunho. HEAD consultado: 9b2f1a6aaa3ce772544e5d2d5087a855d4b1b681. Conteúdo Flow lido nesse ref.
+Abrir fonte
+
+Originais recuperados
+Tipo 1 - FLOW.png
+Abrir original no Drive | Hash completo, dimensão e status no CSV.
+
+Tipo 2 - Flow.png
+Abrir original no Drive | Hash completo, dimensão e status no CSV.
+
+Tipo 3 - Flow.png
+Abrir original no Drive | Hash completo, dimensão e status no CSV.
+
+17_Flow Tipo 02 Living.jpg
+Abrir original no Drive | Hash completo, dimensão e status no CSV.
+
+O pacote recuperado foi validado por hash contra seu manifesto. Os WebPs foram verificados por dimensões, formato e inspeção
+visual; só o Tipo 1 integra a pasta liberada. Os demais são preservados como candidatos não publicáveis. A auditoria da Etapa 6 foi
+relida para separar pendências de material, UI e operação. Não houve nova navegação ou rehomologação funcional nesta etapa
+documental.
+
+Este é um parecer de correspondência visual/documental para comunicação comercial. Não é projeto, levantamento cadastral,
+aprovação municipal, verificação de execução em obra ou atestado do responsável técnico. Nenhuma inconsistência foi corrigida por
+inferência ou geração de arquitetura.
+
+
+
+
+Conferência de materiais | Sem alteração de código ou publicação                                                                      7
+

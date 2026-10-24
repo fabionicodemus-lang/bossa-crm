@@ -10,10 +10,10 @@ export function WhatsAppFixo() {
   const caminho = usePathname();
   const ctx = contextoWhatsApp(caminho);
   useEffect(() => {
-    document.body.dataset.barraWhats = ctx.barra && !caminho.startsWith("/empreendimentos/alma-seahouses") ? "true" : "false";
+    document.body.dataset.barraWhats = ctx.barra && !/^\/empreendimentos\/(alma-seahouses|flow-aptos)/.test(caminho) ? "true" : "false";
     return () => { document.body.dataset.barraWhats = "false"; };
   }, [ctx.barra, caminho]);
-  if (caminho.startsWith("/empreendimentos/alma-seahouses")) return null;
+  if (/^\/empreendimentos\/(alma-seahouses|flow-aptos)/.test(caminho)) return null;
   return (
     <>
       <div className="whats-fixo">

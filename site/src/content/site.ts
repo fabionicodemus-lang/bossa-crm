@@ -56,7 +56,7 @@ export const perguntas: Pergunta[] = [
   { grupo: "alma", p: "O Alma Seahouses é frente mar?", r: "Não. Fica a 300 metros da Praia do Perequê, cerca de 4 minutos a pé, numa rua residencial." },
   { grupo: "alma", p: "Quais são as plantas do Alma Seahouses?", r: "Quatro: 103 e 114 m² com 3 suítes, e duplex de 145 e 168 m² com 4 suítes. Todas têm 2 vagas, e são dois apartamentos por andar." },
   { grupo: "alma", p: "Quando o Alma Seahouses será entregue?", r: "A entrega está prevista para julho de 2030. A obra começou em julho de 2025 e estava com 10,52% em agosto de 2026." },
-  { grupo: "flow", p: "A que distância do mar fica o Flow Aptos?", r: "A 800 metros da Praia do Perequê, cerca de 3 minutos de carro, na Rua São José, 163." },
+  { grupo: "flow", p: "A que distância do mar fica o Flow Aptos?", r: "A distância divulgada até a Praia do Perequê é de aproximadamente 800 metros, a partir do Flow, na Rua São José, 163. O percurso efetivo depende do acesso utilizado; não se trata de rota pedonal aferida." },
   { grupo: "flow", p: "Quais são as plantas do Flow Aptos?", r: "Apartamentos de 2 suítes com 62 e 73 m², e duplex de 3 suítes com 93 e 117,7 m² e living com pé-direito duplo." },
   { grupo: "flow", p: "Em que fase está a obra do Flow Aptos?", r: "Em setembro de 2026 estava com 57,87%: estrutura concluída, alvenaria no rooftop e acabamentos subindo a torre. A entrega está prevista para novembro de 2027." },
   { grupo: "compra", p: "Posso comprar morando fora do Brasil?", r: "Sim. O atendimento pode ser todo feito pelo WhatsApp, e você acompanha a obra pelas edições mensais publicadas aqui." },

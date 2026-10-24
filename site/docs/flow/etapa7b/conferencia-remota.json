@@ -1,0 +1,28 @@
+{
+  "deployment": "dpl_J1sjuPZDyFTFYKZv8wbZRZRVSbwB",
+  "commit": "2330da6a1c2a464b44ebe629d7a6d64b3b90160e",
+  "estado": "READY",
+  "target": "Preview",
+  "protecao": "Vercel Authentication preservada em todos os deployments",
+  "metodo": "HTML remoto autenticado pelo conector Vercel. Sem executar JS, leads ou mensagens. Capturas/interações verificadas no build local do mesmo código.",
+  "rotas": [
+    {
+      "url": "https://bossa-site-a4xvgs1gj-elos-os.vercel.app/empreendimentos/flow-aptos",
+      "status": 200,
+      "titulo": "Flow Aptos | 2 suítes, lazer em dois pavimentos e entrega 2027 | Bossa",
+      "noindex": true,
+      "tipo1Webp": true,
+      "whatsappCorreto": true,
+      "semAValidar": true
+    },
+    {
+      "url": "https://bossa-site-a4xvgs1gj-elos-os.vercel.app/empreendimentos/flow-aptos/plantas/tipo-1",
+      "status": 200,
+      "titulo": "Flow Aptos: Tipo 1, 73 m², 2 suítes | Bossa",
+      "noindex": true,
+      "tipo1Webp": true,
+      "whatsappCorreto": true,
+      "semAValidar": true
+    }
+  ]
+}

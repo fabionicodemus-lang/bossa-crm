@@ -1,4 +1,5 @@
-// Os 24 eventos do plano de medição (Fase 2, seção 5). Nomes fixos: o servidor recusa qualquer outro.
+// Eventos permitidos no site. O servidor recusa qualquer outro nome.
+// request_material distingue pedido registrado de material e download efetivamente realizado.
 export const EVENTOS = [
   // comportamento
   "page_view", "view_project", "scroll_depth", "view_bossa_way", "view_history",
@@ -6,7 +7,7 @@ export const EVENTOS = [
   "view_location", "click_route", "view_construction", "view_engineering", "faq_open",
   "view_price", "simulate_payment", "download_material", "return_visit", "language_switch",
   // contato
-  "click_whatsapp", "form_start", "lead_submit", "request_visit",
+  "click_whatsapp", "form_start", "lead_submit", "request_visit", "request_material",
 ] as const;
 
 export type Evento = (typeof EVENTOS)[number];

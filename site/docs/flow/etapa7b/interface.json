@@ -1,0 +1,455 @@
+{
+  "metodo": "Chromium local; viewport CSS efetivo; reduz movimento. API interceptada. Sem aparelho físico, teclado virtual ou escuta integral.",
+  "cookies": [
+    {
+      "width": 360,
+      "height": 640,
+      "acoes": [
+        {
+          "texto": "Explorar as plantas",
+          "sobreposto": false,
+          "alcancavel": true
+        },
+        {
+          "texto": "Agendar visita",
+          "sobreposto": false,
+          "alcancavel": true
+        }
+      ],
+      "posicao": "static"
+    },
+    {
+      "width": 390,
+      "height": 844,
+      "acoes": [
+        {
+          "texto": "Explorar as plantas",
+          "sobreposto": false,
+          "alcancavel": true
+        },
+        {
+          "texto": "Agendar visita",
+          "sobreposto": false,
+          "alcancavel": true
+        }
+      ],
+      "posicao": "static"
+    },
+    {
+      "width": 768,
+      "height": 844,
+      "acoes": [
+        {
+          "texto": "Explorar as plantas",
+          "sobreposto": false,
+          "alcancavel": true
+        },
+        {
+          "texto": "Agendar visita",
+          "sobreposto": false,
+          "alcancavel": true
+        }
+      ],
+      "posicao": "static"
+    },
+    {
+      "width": 1024,
+      "height": 844,
+      "acoes": [
+        {
+          "texto": "Explorar as plantas",
+          "sobreposto": false,
+          "alcancavel": true
+        },
+        {
+          "texto": "Agendar visita",
+          "sobreposto": false,
+          "alcancavel": true
+        }
+      ],
+      "posicao": "fixed"
+    },
+    {
+      "width": 1440,
+      "height": 900,
+      "acoes": [
+        {
+          "texto": "Explorar as plantas",
+          "sobreposto": false,
+          "alcancavel": true
+        },
+        {
+          "texto": "Agendar visita",
+          "sobreposto": false,
+          "alcancavel": true
+        }
+      ],
+      "posicao": "fixed"
+    }
+  ],
+  "move": [
+    {
+      "width": 360,
+      "indice": 0,
+      "imagem": {
+        "top": 251.03125,
+        "height": 246
+      },
+      "scrollPreservado": true
+    },
+    {
+      "width": 360,
+      "indice": 1,
+      "imagem": {
+        "top": 251.03125,
+        "height": 246
+      },
+      "scrollPreservado": true
+    },
+    {
+      "width": 360,
+      "indice": 2,
+      "imagem": {
+        "top": 251.03125,
+        "height": 246
+      },
+      "scrollPreservado": true
+    },
+    {
+      "width": 360,
+      "indice": 3,
+      "imagem": {
+        "top": 251.03125,
+        "height": 246
+      },
+      "scrollPreservado": true
+    },
+    {
+      "width": 360,
+      "indice": 4,
+      "imagem": {
+        "top": 251.03125,
+        "height": 246
+      },
+      "scrollPreservado": true
+    },
+    {
+      "width": 390,
+      "indice": 0,
+      "imagem": {
+        "top": 251.46875,
+        "height": 268.5
+      },
+      "scrollPreservado": true
+    },
+    {
+      "width": 390,
+      "indice": 1,
+      "imagem": {
+        "top": 251.46875,
+        "height": 268.5
+      },
+      "scrollPreservado": true
+    },
+    {
+      "width": 390,
+      "indice": 2,
+      "imagem": {
+        "top": 251.46875,
+        "height": 268.5
+      },
+      "scrollPreservado": true
+    },
+    {
+      "width": 390,
+      "indice": 3,
+      "imagem": {
+        "top": 251.46875,
+        "height": 268.5
+      },
+      "scrollPreservado": true
+    },
+    {
+      "width": 390,
+      "indice": 4,
+      "imagem": {
+        "top": 251.46875,
+        "height": 268.5
+      },
+      "scrollPreservado": true
+    },
+    {
+      "width": 768,
+      "indice": 0,
+      "imagem": {
+        "top": 250.671875,
+        "height": 552
+      },
+      "scrollPreservado": true
+    },
+    {
+      "width": 768,
+      "indice": 1,
+      "imagem": {
+        "top": 250.671875,
+        "height": 552
+      },
+      "scrollPreservado": true
+    },
+    {
+      "width": 768,
+      "indice": 2,
+      "imagem": {
+        "top": 250.671875,
+        "height": 552
+      },
+      "scrollPreservado": true
+    },
+    {
+      "width": 768,
+      "indice": 3,
+      "imagem": {
+        "top": 250.671875,
+        "height": 552
+      },
+      "scrollPreservado": true
+    },
+    {
+      "width": 768,
+      "indice": 4,
+      "imagem": {
+        "top": 250.671875,
+        "height": 552
+      },
+      "scrollPreservado": true
+    }
+  ],
+  "vistas": [
+    {
+      "direcao": "a",
+      "altura": 7,
+      "src": "/_next/image?url=/img/flow/vista/a-00.jpg&w=3840&q=70"
+    },
+    {
+      "direcao": "a",
+      "altura": 8,
+      "src": "/_next/image?url=/img/flow/vista/a-01.jpg&w=3840&q=70"
+    },
+    {
+      "direcao": "a",
+      "altura": 10,
+      "src": "/_next/image?url=/img/flow/vista/a-02.jpg&w=3840&q=70"
+    },
+    {
+      "direcao": "a",
+      "altura": 12,
+      "src": "/_next/image?url=/img/flow/vista/a-03.jpg&w=3840&q=70"
+    },
+    {
+      "direcao": "a",
+      "altura": 13,
+      "src": "/_next/image?url=/img/flow/vista/a-04.jpg&w=3840&q=70"
+    },
+    {
+      "direcao": "a",
+      "altura": 15,
+      "src": "/_next/image?url=/img/flow/vista/a-05.jpg&w=3840&q=70"
+    },
+    {
+      "direcao": "a",
+      "altura": 17,
+      "src": "/_next/image?url=/img/flow/vista/a-06.jpg&w=3840&q=70"
+    },
+    {
+      "direcao": "a",
+      "altura": 18,
+      "src": "/_next/image?url=/img/flow/vista/a-07.jpg&w=3840&q=70"
+    },
+    {
+      "direcao": "a",
+      "altura": 20,
+      "src": "/_next/image?url=/img/flow/vista/a-08.jpg&w=3840&q=70"
+    },
+    {
+      "direcao": "a",
+      "altura": 22,
+      "src": "/_next/image?url=/img/flow/vista/a-09.jpg&w=3840&q=70"
+    },
+    {
+      "direcao": "a",
+      "altura": 23,
+      "src": "/_next/image?url=/img/flow/vista/a-10.jpg&w=3840&q=70"
+    },
+    {
+      "direcao": "a",
+      "altura": 24,
+      "src": "/_next/image?url=/img/flow/vista/a-11.jpg&w=3840&q=70"
+    },
+    {
+      "direcao": "c",
+      "altura": 7,
+      "src": "/_next/image?url=/img/flow/vista/c-00.jpg&w=3840&q=70"
+    },
+    {
+      "direcao": "c",
+      "altura": 8,
+      "src": "/_next/image?url=/img/flow/vista/c-01.jpg&w=3840&q=70"
+    },
+    {
+      "direcao": "c",
+      "altura": 10,
+      "src": "/_next/image?url=/img/flow/vista/c-02.jpg&w=3840&q=70"
+    },
+    {
+      "direcao": "c",
+      "altura": 12,
+      "src": "/_next/image?url=/img/flow/vista/c-03.jpg&w=3840&q=70"
+    },
+    {
+      "direcao": "c",
+      "altura": 13,
+      "src": "/_next/image?url=/img/flow/vista/c-04.jpg&w=3840&q=70"
+    },
+    {
+      "direcao": "c",
+      "altura": 15,
+      "src": "/_next/image?url=/img/flow/vista/c-05.jpg&w=3840&q=70"
+    },
+    {
+      "direcao": "c",
+      "altura": 17,
+      "src": "/_next/image?url=/img/flow/vista/c-06.jpg&w=3840&q=70"
+    },
+    {
+      "direcao": "c",
+      "altura": 18,
+      "src": "/_next/image?url=/img/flow/vista/c-07.jpg&w=3840&q=70"
+    },
+    {
+      "direcao": "c",
+      "altura": 20,
+      "src": "/_next/image?url=/img/flow/vista/c-08.jpg&w=3840&q=70"
+    },
+    {
+      "direcao": "c",
+      "altura": 22,
+      "src": "/_next/image?url=/img/flow/vista/c-09.jpg&w=3840&q=70"
+    },
+    {
+      "direcao": "c",
+      "altura": 23,
+      "src": "/_next/image?url=/img/flow/vista/c-10.jpg&w=3840&q=70"
+    },
+    {
+      "direcao": "c",
+      "altura": 24,
+      "src": "/_next/image?url=/img/flow/vista/c-11.jpg&w=3840&q=70"
+    },
+    {
+      "direcao": "b",
+      "altura": 24,
+      "src": "/_next/image?url=/img/flow/vista/b-00.jpg&w=3840&q=70"
+    },
+    {
+      "direcao": "b",
+      "altura": 23,
+      "src": "/_next/image?url=/img/flow/vista/b-01.jpg&w=3840&q=70"
+    },
+    {
+      "direcao": "b",
+      "altura": 21,
+      "src": "/_next/image?url=/img/flow/vista/b-02.jpg&w=3840&q=70"
+    },
+    {
+      "direcao": "b",
+      "altura": 19,
+      "src": "/_next/image?url=/img/flow/vista/b-03.jpg&w=3840&q=70"
+    },
+    {
+      "direcao": "b",
+      "altura": 18,
+      "src": "/_next/image?url=/img/flow/vista/b-04.jpg&w=3840&q=70"
+    },
+    {
+      "direcao": "b",
+      "altura": 16,
+      "src": "/_next/image?url=/img/flow/vista/b-05.jpg&w=3840&q=70"
+    },
+    {
+      "direcao": "b",
+      "altura": 15,
+      "src": "/_next/image?url=/img/flow/vista/b-06.jpg&w=3840&q=70"
+    },
+    {
+      "direcao": "b",
+      "altura": 13,
+      "src": "/_next/image?url=/img/flow/vista/b-07.jpg&w=3840&q=70"
+    },
+    {
+      "direcao": "b",
+      "altura": 11,
+      "src": "/_next/image?url=/img/flow/vista/b-08.jpg&w=3840&q=70"
+    },
+    {
+      "direcao": "b",
+      "altura": 10,
+      "src": "/_next/image?url=/img/flow/vista/b-09.jpg&w=3840&q=70"
+    },
+    {
+      "direcao": "b",
+      "altura": 8,
+      "src": "/_next/image?url=/img/flow/vista/b-10.jpg&w=3840&q=70"
+    },
+    {
+      "direcao": "b",
+      "altura": 7,
+      "src": "/_next/image?url=/img/flow/vista/b-11.jpg&w=3840&q=70"
+    }
+  ],
+  "plantas": [
+    {
+      "width": 768,
+      "indice": 0,
+      "altura": 422
+    },
+    {
+      "width": 768,
+      "indice": 1,
+      "altura": 422
+    },
+    {
+      "width": 768,
+      "indice": 2,
+      "altura": 422
+    },
+    {
+      "width": 768,
+      "indice": 3,
+      "altura": 422
+    },
+    {
+      "width": 768,
+      "indice": 4,
+      "altura": 422
+    }
+  ],
+  "regressoes": [
+    {
+      "slug": "alma-seahouses",
+      "cookies": "fixed"
+    },
+    {
+      "slug": "soul-residence",
+      "cookies": "fixed"
+    },
+    {
+      "slug": "jazz-residence",
+      "cookies": "fixed"
+    }
+  ],
+  "erros": [],
+  "sha256": "f41defb65a1a7f5bad65b9ee2975607f544d03ebb02eea6e0f44778885b62a68",
+  "browser": "154.0.8037.57",
+  "andarAusente": "Não há foto do 20º para os morros. Exibindo o 19º.",
+  "navegacaoSPA": "Portal do Flow removido; banner institucional preservado"
+}
