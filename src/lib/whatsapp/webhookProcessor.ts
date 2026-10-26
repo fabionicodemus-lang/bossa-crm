@@ -1,6 +1,6 @@
 import { generateAiTurn, type AiFileOption } from '@/lib/ai-v120';
 import { loadAiContext } from '@/lib/ai-context';
-import { recordAiUsage } from '@/lib/ai-usage';
+import { recordAiUsage, recordAiUsageLog } from '@/lib/ai-usage';
 import { loadNaraDynamicTurnContext } from '@/lib/nara-dynamic-context';
 import { loadNaraForeignContext } from '@/lib/nara-exterior';
 import { loadNaraOperationalContext } from '@/lib/nara-operations';
@@ -718,6 +718,15 @@ export async function processConversation(args: {
         reason: 'estado da conversa mudou durante o processamento da IA',
       });
     }
+    // A resposta foi gerada (e cobrada) antes de a conversa mudar: o consumo é
+    // registrado mesmo sem envio. Só o log, sem tocar no lead, porque outro
+    // processamento da mesma conversa pode estar gravando o lead agora.
+    await recordAiUsageLog({
+      admin: args.admin,
+      organizationId: args.channel.organization_id,
+      leadId: lead.id,
+      records: turn.usage_records ?? [],
+    });
     return;
   }
   if (lead.kind === 'cliente' && shouldHandleAgendaTurn(history, lastUserMessage)) {

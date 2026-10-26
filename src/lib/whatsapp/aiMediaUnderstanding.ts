@@ -1,4 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import type { AiUsageRecord } from '@/lib/ai';
+import { usageFromResponsesPayload } from '@/lib/ai-pricing';
+import { recordAiUsageLog } from '@/lib/ai-usage';
 import { transcribeAudio } from '@/lib/audio-transcription';
 import { aiModelRoutingSettings } from '@/lib/openai-model-routing';
 import { channelAccess, findChannelById } from '@/lib/whatsapp/channelService';
@@ -7,6 +10,7 @@ import { fetchMetaMedia } from '@/lib/whatsapp/media';
 type MessageRow = {
   id: string;
   organization_id?: string;
+  lead_id?: string | null;
   whatsapp_channel_id: string | null;
   raw_payload: Record<string, unknown> | null;
   body: string;
@@ -82,9 +86,10 @@ async function describeImage(bytes: ArrayBuffer, mimeType: string) {
     error?: { message?: string };
   };
   if (!response.ok) throw new Error(data.error?.message || `OpenAI visão: HTTP ${response.status}`);
+  const usage = usageFromResponsesPayload(data, { requestKind: 'image_understanding', fallbackModel: model });
   for (const item of data.output ?? []) {
     for (const content of item.content ?? []) {
-      if (content.type === 'output_text' && content.text?.trim()) return { text: content.text.trim(), model };
+      if (content.type === 'output_text' && content.text?.trim()) return { text: content.text.trim(), model, usage };
     }
   }
   throw new Error('A OpenAI não devolveu uma descrição utilizável da imagem.');
@@ -93,6 +98,8 @@ async function describeImage(bytes: ArrayBuffer, mimeType: string) {
 export async function understandInboundMedia(args: {
   admin: SupabaseClient;
   organizationId: string;
+  /** Lead dono da mensagem; sem ele o consumo não pode ser gravado em ai_usage_logs. */
+  leadId?: string | null;
   row: MessageRow;
 }): Promise<string | null> {
   const raw = args.row.raw_payload;
@@ -110,6 +117,7 @@ export async function understandInboundMedia(args: {
     const mime = descriptor.mime_type || ref.mimeType || response.headers.get('content-type') || (ref.type === 'audio' ? 'audio/ogg' : 'image/jpeg');
     let understanding: string;
     let model: string;
+    let usage: AiUsageRecord | null = null;
 
     if (ref.type === 'audio') {
       const existing = cachedTranscript(raw);
@@ -121,12 +129,21 @@ export async function understandInboundMedia(args: {
         const result = await transcribeAudio({ bytes, mimeType: mime, language: 'pt' });
         understanding = `Áudio transcrito: ${result.text}`;
         model = result.model;
+        usage = result.usage;
       }
     } else {
       if (bytes.byteLength > 12 * 1024 * 1024) throw new Error('Imagem grande demais para interpretação automática.');
       const result = await describeImage(bytes, mime);
       understanding = `Imagem recebida${ref.caption ? `, legenda: ${ref.caption}` : ''}. Conteúdo: ${result.text}`;
       model = result.model;
+      usage = result.usage;
+    }
+
+    const leadId = args.leadId ?? args.row.lead_id ?? null;
+    if (usage && leadId) {
+      await recordAiUsageLog({ admin: args.admin, organizationId: args.organizationId, leadId, records: [usage] });
+    } else if (usage) {
+      console.warn('[ai usage log] mídia sem lead; consumo não registrado', args.row.id, usage.request_kind);
     }
 
     const now = new Date().toISOString();
