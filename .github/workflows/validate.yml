@@ -43,6 +43,8 @@ jobs:
         run: npm ci --no-audit --no-fund
       - name: Test fail-closed preview isolation
         run: npm run test:homologation-isolation
+      - name: Test manual caller isolation
+        run: node scripts/commercial/check-manual-callers.mjs && node scripts/commercial/check-manual-detail.mjs
       - name: Test commercial ledger and metrics
         run: npm run test:commercial
       - name: Test conservative commercial linking

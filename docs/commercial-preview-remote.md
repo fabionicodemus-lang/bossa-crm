@@ -2,6 +2,12 @@
 
 Código preparado, ambiente ainda **não homologado**. Nenhum projeto foi conectado ao GitHub, nenhum deployment foi criado e nenhum banco foi alterado nesta entrega. Funcional **12/24**, preparação V1 **12/16**, aceite humano **0/8**.
 
+## Chamadores manuais H2.2B
+
+O cadastro do Pipeline usa o cliente da sessão e as colunas já autorizadas pelo banco. Em homologação, cria somente contatos com IA desabilitada, automação pausada e proprietário humano; não há fallback administrativo nem nova RPC de cadastro. A ficha manual dispensa a consulta administrativa de conexões WhatsApp. A disponibilidade da agenda usa a sessão e o calendário interno; criação mantém preparação/replay/RPC atômica, edição mantém o compare-and-set de `updated_at`. Nenhum desses caminhos consulta ou sincroniza Microsoft na homologação. Eventos de IA/importados não entram na edição manual e a exclusão fica bloqueada, preservando o cancelamento pelo PATCH. Fora da homologação, os caminhos anteriores são preservados.
+
+O mapper distingue conflito explícito `COMMERCIAL_SOURCE_CHANGED` de erro de transporte/serialização genérico. Os testes locais cobrem HTTP 409 da rota de recuperação para as duas RPCs, tanto com `40001` quanto com `PT409`, sem alterar registros financeiros nem duplicar atividades. Isso não comprova HTTP 409 do PostgREST remoto: o SQLSTATE legado `40001` pode provocar retries antes de chegar ao chamador. O candidato independente `supabase/compatibility/20261022_rpc_http_conflicts.sql` permanece sem aplicação remota. Sua revisão opcional contra catálogo/guarda H2.2 usa `BOSSA_H22_PRIVATE_PACKAGE` nos testes `check-http-conflict-compatibility.mjs` e `check-manual-callers.mjs`; o pacote e os resultados detalhados ficam fora de Git/CI. Homologação real, eventual aplicação SQL e evidência HTTP remota exigem etapa própria. Os indicadores e aceites acima não avançam por testes locais.
+
 ## Identidades e configuração
 
 Apenas `VERCEL_ENV=preview`, projeto `prj_L89zRE7TKcC4ij14B5QyOa72XfPz`, branch `feat/commercial-metrics-foundation` e Supabase `okhtfibuexfsgkobjxtu` podem solicitar o modo remoto. O projeto original `bossa-crm`, outros projetos/branches, Supabase de produção e origens desconhecidas continuam bloqueados. Production do projeto original mantém seu comportamento anterior. O laboratório local e seu contrato v1 são preservados.

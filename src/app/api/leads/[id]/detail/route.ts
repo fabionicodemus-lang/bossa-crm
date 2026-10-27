@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getCurrentContext } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { isHomologation } from "@/lib/homologation/policy";
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ id: string }> },
@@ -57,12 +58,14 @@ export async function GET(
         .select("user_id,role,profiles(full_name,email)")
         .eq("organization_id", org)
         .order("created_at"),
-      createAdminClient()
-        .from("whatsapp_connections")
-        .select("id", { count: "exact", head: true })
-        .eq("organization_id", org)
-        .eq("channel", lead.kind === "cliente" ? "clientes" : "corretores")
-        .eq("status", "connected"),
+      isHomologation()
+        ? Promise.resolve({ count: 0, error: null })
+        : createAdminClient()
+            .from("whatsapp_connections")
+            .select("id", { count: "exact", head: true })
+            .eq("organization_id", org)
+            .eq("channel", lead.kind === "cliente" ? "clientes" : "corretores")
+            .eq("status", "connected"),
     ],
   );
   if ([messages, activities, tasks, members, connections].some((r) => r.error))

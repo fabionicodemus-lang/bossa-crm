@@ -283,4 +283,49 @@ await check('durable preparation missing migration fails closed without source f
 await check('malformed preparation is not treated as authorization to save', async (s) => {
   s.prepareMalformed = true; assert.equal((await POST(request('POST', base))).status, 503); noSideEffects(s);
 });
+process.env.BOSSA_HOMOLOGATION_MODE = 'remote';
+try {
+  await check('isolated manual POST uses atomic RPC and replay never sends invitations', async s => {
+    const first = await POST(request('POST', base));
+    assert.equal(first.status, 201);
+    assert.equal((await first.json()).syncStatus, 'internal_only');
+    assert.equal(s.rpcCalls.filter(c => c.name === 'commercial_create_agenda_once').length, 1);
+    const writes = s.writes.length;
+    const retry = await POST(request('POST', base));
+    assert.equal(retry.status, 200);
+    assert.equal((await retry.json()).replayed, true);
+    assert.equal(s.writes.length, writes);
+    assert.equal(s.pushes.length, 0); assert.equal(s.cancellations.length, 0);
+  });
+  await check('isolated PATCH retains timestamp comparison and skips Outlook for edits and cancellation', async s => {
+    assert.equal((await PATCH(request('PATCH', { id: EVENT, title: 'Manual' }))).status, 200);
+    assert.ok(s.calls.some(c => c.op === 'update' && c.filters.some(([k]) => k === 'updated_at')));
+    assert.equal((await PATCH(request('PATCH', { id: EVENT, status: 'cancelled' }))).status, 200);
+    assert.equal(s.pushes.length, 0); assert.equal(s.cancellations.length, 0);
+  });
+  await check('isolated viewer and foreign organization cannot write', async s => {
+    s.context.role = 'viewer';
+    assert.equal((await POST(request('POST', base))).status, 403);
+    assert.equal((await PATCH(request('PATCH', { id: EVENT, title: 'Forbidden' }))).status, 403);
+    s.context.role = 'comercial'; s.context.organization.id = OTHER;
+    assert.equal((await PATCH(request('PATCH', { id: EVENT, title: 'Forbidden' }))).status, 404);
+    noSideEffects(s);
+  });
+  await check('isolated conflict and concurrent edit fail without writes', async s => {
+    s.conflicts = [{ id: EVENT }];
+    assert.equal((await POST(request('POST', base))).status, 409);
+    noSideEffects(s);
+    s.conflicts = []; s.stale = true;
+    assert.equal((await PATCH(request('PATCH', { id: EVENT, title: 'Stale' }))).status, 409);
+    assert.equal(s.pushes.length, 0); assert.equal(s.cancellations.length, 0);
+  });
+  await check('isolated imported and AI events cannot enter the manual path', async s => {
+    for (const change of [{ microsoft_event_id: 'remote' }, { created_by_kind: 'ai' }, { agent: 'nara' }]) {
+      Object.assign(s.tables.agenda_events[0], change);
+      assert.equal((await PATCH(request('PATCH', { id: EVENT, title: 'Forbidden' }))).status, 403);
+    }
+    assert.equal((await DELETE(remove())).status, 403);
+    noSideEffects(s);
+  });
+} finally { delete process.env.BOSSA_HOMOLOGATION_MODE; }
 console.log(`PASS ${passed} isolated agenda API scenarios. Supabase/Outlook adapters mocked; not production or browser homologation.`);

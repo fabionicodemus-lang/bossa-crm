@@ -11,6 +11,7 @@ import { usePipelineLeadsFeed } from '@/lib/use-pipeline-leads-feed';
 import { dedupePipelineLeads } from '@/lib/pipeline-lead-select';
 import { metaAdSourceLabel, readMetaAdAttribution } from '@/lib/meta-ad-attribution';
 import { useCrmUI } from './CrmUI';
+import { pipelineLeadAutomation } from '@/lib/manual-pipeline-lead';
 
 function updatedAtTime(value: string | null | undefined) {
   const time = value ? new Date(value).getTime() : NaN;
@@ -295,8 +296,7 @@ export function PipelineBoard({ initialLeads, kind, organizationId, canEdit }: {
       company: kind === 'corretor' ? String(form.get('company') || '').trim() || 'Autônomo' : null,
       group_name: kind === 'corretor' ? String(form.get('group_name') || '').trim() || 'Novos cadastros' : null,
       temperature: 0,
-      ai_enabled: true,
-      owner_mode: 'ai',
+      ...pipelineLeadAutomation(),
       priority_class: null,
       metadata: {},
     };

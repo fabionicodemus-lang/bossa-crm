@@ -23,6 +23,10 @@ test('missing migration is explicit and has no privileged fallback',()=>{
 });
 test('editing stale data is a conflict; permission denial is forbidden',()=>{
  assert.equal(sourceRequestFailure({message:'COMMERCIAL_SOURCE_CHANGED',code:'40001'}).status,409);
+  assert.equal(sourceRequestFailure({message:'COMMERCIAL_SOURCE_CHANGED',code:'PT409'}).status,409);
+  // A generic serialization/transport failure is not proof of a business rollback.
+  assert.equal(sourceRequestFailure({message:'serialization failure',code:'40001'}).status,503);
+  assert.equal(sourceRequestFailure({message:'serialization failure',code:'40001'}).definiteRollback,false);
  assert.equal(sourceRequestFailure({code:'42501'}).status,403);
 });
 test('physical meeting creation also has a stable Graph transactionId',()=>{

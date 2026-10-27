@@ -3,6 +3,7 @@ import { getCurrentContext } from '@/lib/auth';
 import { findAgendaConflicts } from '@/lib/agenda';
 import { deleteMicrosoftEvent, pushMicrosoftEvent } from '@/lib/microsoft-calendar';
 import { createClient } from '@/lib/supabase/server';
+import { isHomologation } from '@/lib/homologation/policy';
 
 export const runtime = 'nodejs';
 
@@ -69,7 +70,9 @@ async function conflictsOrFailure(input: Parameters<typeof findAgendaConflicts>[
   try { return { conflicts: await findAgendaConflicts(input), error: '' }; }
   catch (cause) {
     console.error('[agenda availability]', cause instanceof Error ? cause.message : 'Erro');
-    return { conflicts: [], error: 'Não foi possível verificar toda a disponibilidade, inclusive Outlook. Tente novamente.' };
+    return { conflicts: [], error: isHomologation()
+      ? 'Não foi possível verificar a disponibilidade do calendário interno. Tente novamente.'
+      : 'Não foi possível verificar toda a disponibilidade, inclusive Outlook. Tente novamente.' };
   }
 }
 
@@ -124,7 +127,8 @@ export async function POST(request: Request) {
   // Do not repeat Outlook side effects, even if the original event has been cancelled or edited.
   if (replay.data !== null && (!replay.data?.record?.id || replay.data.replayed !== true)) return err('O servidor não confirmou a gravação anterior. Tente novamente com a mesma chave.', 503);
   if (replay.data) return Response.json({ event: replay.data.record, replayed: true,
-    warning: 'Gravação anterior recuperada. Confira o estado atual e a sincronização com o Outlook antes de avisar o participante.' });
+    warning: isHomologation() ? 'Gravação anterior recuperada no calendário interno; nenhum convite foi enviado.'
+      : 'Gravação anterior recuperada. Confira o estado atual e a sincronização com o Outlook antes de avisar o participante.' });
   const invalid = await references(db, org, body.assigned_to, body.lead_id || null, true);
   if (invalid) return invalid;
   const availability = await conflictsOrFailure({ organizationId: org,
@@ -138,7 +142,9 @@ export async function POST(request: Request) {
   }
   const data = created.data.record;
   if (created.data.replayed) return Response.json({ event: data, replayed: true,
-    warning: 'Compromisso já salvo por outra tentativa. Confira a sincronização com o Outlook; nenhum novo envio foi iniciado.' });
+    warning: isHomologation() ? 'Compromisso já salvo no calendário interno; nenhum convite foi enviado.'
+      : 'Compromisso já salvo por outra tentativa. Confira a sincronização com o Outlook; nenhum novo envio foi iniciado.' });
+  if (isHomologation()) return Response.json({ event: data, syncStatus: 'internal_only' }, { status: 201 });
   try {
     const syncStatus = await pushMicrosoftEvent(data);
     const refreshed = await db.from('agenda_events').select('*').eq('organization_id', org).eq('id', data.id).maybeSingle();
@@ -160,6 +166,8 @@ export async function PATCH(request: Request) {
   if (existing.error) return err('Não foi possível consultar o compromisso.', 503);
   const current = existing.data;
   if (!current) return err('Evento não encontrado.', 404);
+  if (isHomologation() && (current.created_by_kind !== 'human' || current.agent || current.microsoft_event_id
+    || current.microsoft_sync_status === 'imported')) return err('Somente compromissos manuais internos podem ser alterados na homologação.', 403);
   if (current.microsoft_sync_status === 'imported') return err('Este bloqueio veio do Outlook. Edite-o diretamente no Outlook e sincronize novamente.', 403);
   const leadId = has(body, 'lead_id') ? body.lead_id || null : current.lead_id;
   const assignedTo = has(body, 'assigned_to') ? body.assigned_to : current.assigned_to;
@@ -195,6 +203,7 @@ export async function PATCH(request: Request) {
   const { data, error } = await update.select('*').maybeSingle();
   if (error) return err(error.code === '23P01' ? 'Conflito de horário; atualize a agenda.' : 'Não foi possível atualizar o compromisso com a sua sessão.', error.code === '23P01' ? 409 : 500);
   if (!data) return err('O compromisso mudou ou sua permissão foi alterada. Atualize a agenda.', 409);
+  if (isHomologation()) return Response.json({ event: data, syncStatus: 'internal_only' });
   try {
     if (nextStatus === 'cancelled') await deleteMicrosoftEvent(data);
     else await pushMicrosoftEvent(data);
@@ -209,6 +218,7 @@ export async function PATCH(request: Request) {
 export async function DELETE(request: Request) {
   const auth = await authorization(true);
   if (!auth.context) return auth.response!;
+  if (isHomologation()) return err('Na homologação, registre o cancelamento pelo calendário interno.', 403);
   const id = new URL(request.url).searchParams.get('id');
   if (!id || !uuid.test(id)) return err('Evento não informado corretamente.');
   const db = await createClient();

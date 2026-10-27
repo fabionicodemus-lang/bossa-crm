@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import assert from 'node:assert/strict';
 import { PGlite } from '@electric-sql/pglite';
 import { sourceRequestSetupSql, id, org, user, dev, unit } from './source-request-fixture.mjs';
+import { sourceRequestFailure } from '../../src/lib/commercial/source-request.ts';
 
 // SQL contract only. Real PostgREST retries and rendered recovery need a preview.
 const db = new PGlite();
@@ -26,6 +27,8 @@ const snapshot = async () => {
 let key = 18000;
 let stale;
 const staleCommand = async (kind, code) => {
+  await q("select set_config('request.method','POST',false),set_config('request.path',$1,false)",
+    [`/rpc/${kind === 'status' ? 'commercial_proposal_status_once' : 'commercial_save_proposal_once'}`]);
   const request = id(++key);
   const payload = kind === 'status'
     ? { data: { operation: 'status', workflow_status: 'aprovada', expected_version: stale.version },
@@ -41,6 +44,8 @@ const staleCommand = async (kind, code) => {
   await assert.rejects(call, error => {
     assert.equal(error.message, 'COMMERCIAL_SOURCE_CHANGED');
     assert.equal(error.code, code);
+    assert.equal(sourceRequestFailure(error).status, 409);
+    assert.equal(sourceRequestFailure(error).definiteRollback, true);
     return true;
   });
   assert.deepEqual(await snapshot(), before);
@@ -52,10 +57,34 @@ try {
   for (const sql of sourceRequestSetupSql()) await db.exec(sql);
   await db.exec(read('migrations/20261021182758_commercial_recoverable_requests.sql'));
   await db.exec(read('migrations/20261021203000_commercial_proposal_status_once.sql'));
+  // Optional private catalog/guard review. Private evidence stays outside Git.
+  const privatePackage = process.env.BOSSA_H22_PRIVATE_PACKAGE;
+  if (privatePackage) {
+    const catalog = JSON.parse(fs.readFileSync(`${privatePackage}/final-catalog.json`, 'utf8'));
+    const live = await q(`select oid::regprocedure::text signature,md5(prosrc) md5,prosecdef definer,
+      proconfig path,has_function_privilege('anon',oid,'EXECUTE') anon,
+      has_function_privilege('authenticated',oid,'EXECUTE') authenticated,
+      has_function_privilege('service_role',oid,'EXECUTE') service
+      from pg_proc where proname in ('commercial_save_proposal_once','commercial_proposal_status_once')`);
+    for (const row of live) {
+      const reviewed = catalog.functions.find(f => f.signature === row.signature);
+      assert.ok(reviewed, 'Missing function in private catalog');
+      for (const key of ['md5','definer','path','anon','authenticated','service']) assert.deepEqual(row[key], reviewed[key]);
+    }
+    const guard = fs.readFileSync(`${privatePackage}/atomic-route-guard.sql`, 'utf8');
+    const start = guard.indexOf('CREATE FUNCTION public.h22_atomic_source_route_guard()');
+    assert.ok(start > 0);
+    // Local disposable fixture only: omit the managed-data installation precondition.
+    await db.exec(guard.slice(start));
+    console.log('PASS: private H2.2 function hashes and effective privileges match; financial route guard loaded only into disposable PGlite');
+  }
+  const route = async name => q("select set_config('request.method','POST',false),set_config('request.path',$1,false)", [`/rpc/${name}`]);
   await q("select set_config('request.jwt.claim.sub',$1,false)", [user]);
   await db.exec('set role authenticated');
+  await route('commercial_save_proposal_once');
   stale = (await q('select commercial_save_proposal_once($1,$2,$3,$4,$5,$6) r',
     [org, id(++key), data, items, null, null]))[0].r.record;
+  await route('commercial_proposal_status_once');
   await q('select commercial_proposal_status_once($1,$2,$3,$4,$5,$6)',
     [org, id(++key), stale.id, stale.updated_at, stale.version, 'enviada']);
   assert.notEqual((await q('select updated_at from proposals where id=$1', [stale.id]))[0].updated_at, stale.updated_at);
