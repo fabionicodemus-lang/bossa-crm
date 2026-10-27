@@ -1,5 +1,6 @@
 import { createPublicKey, verify } from 'node:crypto';
 import { inspectConfiguration, REMOTE_SUPABASE_REF, REMOTE_VERCEL_PROJECT, type Environment } from './policy';
+import { validAuthAudit, validDatabaseAudit, authMembershipsMatch } from './auth-audit';
 
 export const PLATFORM_CHECKS = [
   'networkEgressRestricted', 'externalIntegrationsDisabled', 'cronDisabled', 'webhooksDisabled',
@@ -20,7 +21,9 @@ export function hasRemotePlatformAttestation(env: Environment, receipt?: Platfor
     if (key.asymmetricKeyType !== 'ed25519' || !verify(null, Buffer.from(payload, 'base64url'), key, Buffer.from(signature, 'base64url'))) return false;
     const proof = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
     const issued = Date.parse(proof.issuedAt), expires = Date.parse(proof.expiresAt), now = Date.now();
-    return proof.contractVersion === 1 && proof.environmentId === config.environmentId
+    return proof.contractVersion === 2 && typeof proof.issuer === 'string' && /^[A-Za-z0-9._:@/-]{1,200}$/.test(proof.issuer)
+      && validAuthAudit(proof.authAudit, now) && validDatabaseAudit(proof.databaseAudit, now)
+      && authMembershipsMatch(proof.authAudit, proof.databaseAudit) && proof.environmentId === config.environmentId
       && proof.vercelProjectId === REMOTE_VERCEL_PROJECT && proof.supabaseProjectRef === REMOTE_SUPABASE_REF
       && proof.deploymentId === env.VERCEL_DEPLOYMENT_ID && proof.deploymentOrigin === config.deploymentOrigin
       && proof.commit === config.commit && typeof proof.evidenceSha256 === 'string' && /^[a-f0-9]{64}$/.test(proof.evidenceSha256)

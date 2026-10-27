@@ -34,8 +34,8 @@
     "test:nara-round3": "node --experimental-strip-types --experimental-loader ./scripts/ts-extension-loader.mjs scripts/check-nara-round3.mjs",
     "test:hoje-ui": "node --experimental-strip-types scripts/ui/check-hoje-model.mjs",
     "test:commercial": "node --experimental-strip-types scripts/commercial/check.mjs",
-    "test:homologation-isolation": "node scripts/homologation/check.mjs && node scripts/homologation/check-remote.mjs",
-    "test:homologation-compiled": "node scripts/homologation/check-remote-compiled.mjs",
+    "test:homologation-isolation": "node scripts/homologation/check.mjs && node --experimental-strip-types scripts/homologation/check-remote.mjs && node --experimental-strip-types scripts/homologation/check-auth-observation.mjs && node --experimental-strip-types scripts/homologation/check-preflight-v2-sql.mjs",
+    "test:homologation-compiled": "node --experimental-strip-types scripts/homologation/check-remote-compiled.mjs",
     "homologation:preflight": "node scripts/homologation/preflight.mjs"
   },
   "dependencies": {

@@ -4,7 +4,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { createRequire } from 'node:module';
-import { generateKeyPairSync, sign } from 'node:crypto';
+import { key, cryptoStub, cryptoRuntime, fixtureReceipt, authAudit, databaseAudit } from './contract-fixture.mjs';
+import { createPublicKey, verify } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { build } from 'esbuild';
 const repo = process.cwd(), temp = fs.mkdtempSync(path.join(os.tmpdir(), 'bossa-remote-isolation-'));
@@ -12,6 +13,7 @@ const require = createRequire(import.meta.url), saved = { ...process.env }, fetc
 let count = 0;
 async function check(name, run) { await run(); count++; console.log('PASS ' + name); }
 async function load(file, stubs = {}, define = {}) {
+  stubs = { 'node:crypto': cryptoStub, ...stubs };
   const output = path.join(temp, fs.readdirSync(temp).length + '.cjs');
   await build({ entryPoints: [path.join(repo, file)], outfile: output, bundle: true, platform: 'node', format: 'cjs', define,
     tsconfig: path.join(repo, 'tsconfig.json'), logLevel: 'silent', plugins: [{ name: 'isolated-framework', setup(b) {
@@ -20,8 +22,7 @@ async function load(file, stubs = {}, define = {}) {
     } }] });
   return { module: require(output), output };
 }
-const { publicKey, privateKey } = generateKeyPairSync('ed25519');
-const key = publicKey.export({ format: 'der', type: 'spki' }).toString('base64');
+// Verification is replaced only in isolated bundles; no keys or signatures are generated.
 const origin = 'https://okhtfibuexfsgkobjxtu.supabase.co', project = 'prj_L89zRE7TKcC4ij14B5QyOa72XfPz';
 const base = { BOSSA_HOMOLOGATION_MODE: 'remote', VERCEL_ENV: 'preview', VERCEL_PROJECT_ID: project,
   VERCEL_DEPLOYMENT_ID: 'dpl_Synthetic', VERCEL_URL: 'bossa-synthetic.vercel.app',
@@ -33,22 +34,21 @@ const base = { BOSSA_HOMOLOGATION_MODE: 'remote', VERCEL_ENV: 'preview', VERCEL_
   NEXT_PUBLIC_BOSSA_HOMOLOGATION_PROJECT: project, NEXT_PUBLIC_BOSSA_HOMOLOGATION_ORIGIN: 'https://bossa-synthetic.vercel.app',
   BOSSA_HOMOLOGATION_SUPABASE_URL: origin, NEXT_PUBLIC_SUPABASE_URL: origin,
   BOSSA_HOMOLOGATION_SUPABASE_PUBLISHABLE_KEY: 'synthetic-anon', NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: 'synthetic-anon',
-  BOSSA_HOMOLOGATION_SUPABASE_SECRET_KEY: 'synthetic-service', BOSSA_HOMOLOGATION_ATTESTATION_PUBLIC_KEY: key,
+  BOSSA_HOMOLOGATION_SUPABASE_SECRET_KEY: 'sb_secret_synthetic_service_only', BOSSA_HOMOLOGATION_ATTESTATION_PUBLIC_KEY: key,
   BOSSA_HOMOLOGATION_BUILD_ATTESTATION_KEY: key,
   FEATURE_DIRECT_WHATSAPP_CONNECTION: 'false', FEATURE_EMBEDDED_SIGNUP: 'false', NEXT_PUBLIC_ALLOW_PUBLIC_SIGNUP: 'false' };
 function setEnv(overrides = {}) {
   for (const k of Object.keys(process.env)) if (/^(BOSSA_|NEXT_PUBLIC_|VERCEL_|SUPABASE_|OPENAI_|META_|MICROSOFT_|OUTLOOK_|WHATSAPP_|FEATURE_|CRON_|SMTP_|RESEND_|SENDGRID_|MAILGUN_|NARA_|WEBHOOK_|NEXT_RUNTIME)/.test(k)) delete process.env[k];
   Object.assign(process.env, base, overrides);
 }
-const platform = () => ({ contractVersion: 1, environmentId: base.BOSSA_HOMOLOGATION_ENVIRONMENT_ID,
+const platform = () => ({ contractVersion: 2, issuer: 'contract-fixture-only', authAudit: authAudit(), databaseAudit: databaseAudit(), environmentId: base.BOSSA_HOMOLOGATION_ENVIRONMENT_ID,
   vercelProjectId: project, deploymentId: base.VERCEL_DEPLOYMENT_ID, deploymentOrigin: base.NEXT_PUBLIC_BOSSA_HOMOLOGATION_ORIGIN,
   supabaseProjectRef: 'okhtfibuexfsgkobjxtu', commit: base.VERCEL_GIT_COMMIT_SHA,
   issuedAt: new Date(Date.now() - 1000).toISOString(), expiresAt: new Date(Date.now() + 60000).toISOString(), evidenceSha256: 'a'.repeat(64),
   checks: { networkEgressRestricted: true, externalIntegrationsDisabled: true, cronDisabled: true, webhooksDisabled: true,
     authEmailDisabled: true, functionsDisabled: true, storageEffectsDisabled: true } });
 function receipt(value = platform()) {
-  const bytes = Buffer.from(JSON.stringify(value));
-  return { payload: bytes.toString('base64url'), signature: sign(null, bytes, privateKey).toString('base64url') };
+  return fixtureReceipt(value);
 }
 const database = () => ({ contractVersion: 2, environmentId: base.BOSSA_HOMOLOGATION_ENVIRONMENT_ID,
   supabaseProjectRef: 'okhtfibuexfsgkobjxtu', checkedAt: new Date().toISOString(),
@@ -61,12 +61,52 @@ try {
   let calls = [];
   globalThis.__bossaHomologationNetworkGuard = 'remote-supabase-https-v1';
   const transport = async (input, init) => { calls.push([String(input), init]); return Response.json(database()); };
-  await check('exact independent project plus signed platform and complete DB proof authorize isolated status only', async () => {
+  await check('exact independent project plus verified-boundary fixture and complete DB proof authorize isolated status only', async () => {
     const proof = await server.getHomologationPreflight(process.env, transport);
     assert.equal(proof.writesAllowed, true); assert.equal(proof.status, 'remote-isolated-only');
     assert.equal(proof.humanAcceptanceAllowed, false); assert.ok(Object.values(proof.checks).every(Boolean));
     assert.equal(calls[0][0], origin + '/rest/v1/rpc/bossa_homologation_preflight'); assert.equal(calls[0][1].redirect, 'error');
     assert.ok(!JSON.stringify(proof).includes('synthetic-service'));
+  });
+  await check('real Ed25519 verification accepts published RFC8032 vector, rejects altered bytes and signs nothing', async () => {
+    const publicKey = createPublicKey({key:Buffer.from(key,'base64'),format:'der',type:'spki'});
+    const signature = Buffer.from('e5564300c360ac729086e2cc806e828a84877f1eb8e5d974d873e065224901555fb8821590a33bacc61e39701cf9b46bd25bf5f0595bbe24655141438e7a100b','hex');
+    assert.equal(verify(null,Buffer.alloc(0),publicKey,signature),true);
+    assert.equal(verify(null,Buffer.from('changed'),publicKey,signature),false);
+    const {module:realVerifier}=await load('src/lib/homologation/attestation.ts',{'node:crypto':"export { createPublicKey, verify, createHash } from 'crypto';"});
+    assert.equal(realVerifier.hasRemotePlatformAttestation(process.env,receipt()),false,'test fixture cannot pass deployed cryptographic verification');
+  });
+  await check('opaque PostgREST key uses apikey only; wrong/missing admin credentials and HTTP401 remain blocked', async () => {
+    calls=[];
+    assert.equal((await server.getHomologationPreflight(process.env,transport)).writesAllowed,true);
+    assert.equal(calls[0][1].headers.get('apikey'),base.BOSSA_HOMOLOGATION_SUPABASE_SECRET_KEY);
+    assert.equal(calls[0][1].headers.has('authorization'),false);
+    for (const secret of ['sb_publishable_wrong','not-a-key','']) {
+      let requests=0;
+      assert.equal((await server.getHomologationPreflight({...process.env,BOSSA_HOMOLOGATION_SUPABASE_SECRET_KEY:secret},async()=>{requests++;return Response.json(database());})).writesAllowed,false);
+      assert.equal(requests,0);
+    }
+    const legacy = ['eyJhbGciOiJIUzI1NiJ9',Buffer.from(JSON.stringify({role:'service_role'})).toString('base64url'),'incorrectSignature'].join('.');
+    const denied=await server.getHomologationPreflight({...process.env,BOSSA_HOMOLOGATION_SUPABASE_SECRET_KEY:legacy},async(_url,init)=>{
+      assert.equal(init.headers.get('authorization'),`Bearer ${legacy}`);return new Response('credential rejected',{status:401});
+    });
+    assert.equal(denied.writesAllowed,false);
+  });
+  await check('Auth inventory, actual roles, time limits and SQL observation cannot be replaced by true DB flags', async () => {
+    for (const mutate of [
+      p=>{delete p.authAudit;},p=>{p.contractVersion=1;},p=>{p.issuer='';},
+      p=>{p.authAudit.source='profiles';},p=>{p.authAudit.paginationComplete=false;},p=>{p.authAudit.users.pop();},
+      p=>{p.authAudit.users[0].email='real@example.com';},p=>{p.authAudit.users[0].isAnonymous=true;},
+      p=>{p.authAudit.users[0].bannedUntil=new Date().toISOString();},p=>{p.authAudit.users[0].deletedAt=new Date().toISOString();},
+      p=>{p.authAudit.users[0].appRole='viewer';},p=>{p.authAudit.users[0].getUserVerifiedAt='';},
+      p=>{p.authAudit.users[0].id=p.authAudit.users[1].id;},p=>{p.authAudit.expiresAt=new Date(Date.now()-1).toISOString();},
+      p=>{p.authAudit.expiresAt=new Date(Date.now()+900001).toISOString();},
+      p=>{delete p.databaseAudit;},p=>{p.databaseAudit.migrations.pop();},p=>{p.databaseAudit.emptyRelations[0].count=1;},
+      p=>{p.databaseAudit.memberships[0].appRole='viewer';},
+    ]) {
+      const value=platform();mutate(value);
+      assert.equal((await server.getHomologationPreflight(process.env,async()=>Response.json({...database(),platformAttestation:receipt(value)}))).writesAllowed,false);
+    }
   });
   await check('original/unknown Vercel, production Supabase, wrong SHA/branch/build pins and absent credentials refused before transport', async () => {
     for (const overrides of [
@@ -106,7 +146,7 @@ try {
       assert.equal(proof.writesAllowed, false); assert.ok(!JSON.stringify(proof).includes('private-key'));
     }
   });
-  await check('valid signatures cannot authorize different deployments, projects, commits or expired/incomplete evidence', async () => {
+  await check('verified-boundary contract fixtures cannot authorize different deployments, projects, commits or expired/incomplete evidence', async () => {
     const basePlatform = platform();
     for (const override of [ { vercelProjectId: 'bossa-crm' }, { deploymentId: 'dpl_Other' }, { deploymentOrigin: 'https://other.vercel.app' },
       { supabaseProjectRef: 'oridhneerxutcjsvwuju' }, { environmentId: 'wrong' }, { commit: '2'.repeat(40) }, { evidenceSha256: '' },
@@ -117,7 +157,8 @@ try {
       assert.equal(r.writesAllowed, false);
     }
     const bad = receipt(); bad.signature = 'A'.repeat(bad.signature.length);
-    assert.equal((await server.getHomologationPreflight(process.env, async () => Response.json({ ...database(), platformAttestation: bad }))).writesAllowed, false);
+    const rejected = await server.getHomologationPreflight(process.env, async () => Response.json({ ...database(), platformAttestation: bad }));
+    assert.equal(rejected.writesAllowed, false); assert.equal(rejected.checks.syntheticRoles,false);
   });
   await check('real admin and user SDKs require fresh proof for each write and deny privileged/email/automation paths', async () => {
     setEnv(); let good = true; calls = [];
@@ -127,6 +168,8 @@ try {
     for (const db of [admin.createAdminClient(), await user.createClient()]) {
       assert.equal((await db.from('leads').update({ name: 'Fictitious' }).eq('id', '1')).error, null);
       assert.equal(calls.at(-1)[1].redirect, 'error');
+      if (calls.at(-1)[1].headers.get('apikey') === base.BOSSA_HOMOLOGATION_SUPABASE_SECRET_KEY)
+        assert.equal(calls.at(-1)[1].headers.has('authorization'),false,'SDK opaque Bearer removed');
       const before = calls.length;
       for (const rpc of ['next_client_handoff_owner', 'merge_duplicate_leads_batch', 'commercial_record_detected_proposal', 'enqueue_broker_performance', 'unknown']) assert.ok((await db.rpc(rpc, {})).error);
       assert.ok((await db.from('whatsapp_messages').insert({ body: 'blocked' })).error);
@@ -136,6 +179,9 @@ try {
       assert.ok((await db.from('leads').update({ name: 'Blocked' }).eq('id', '1')).error); assert.equal(calls.length, before + 1);
       good = true;
     }
+    const userJwt='human-session-jwt';
+    await server.serverSupabaseOptions(false).global.fetch(origin+'/rest/v1/leads',{headers:{apikey:base.BOSSA_HOMOLOGATION_SUPABASE_PUBLISHABLE_KEY,authorization:`Bearer ${userJwt}`}});
+    assert.equal(calls.at(-1)[1].headers.get('authorization'),`Bearer ${userJwt}`);
     setEnv({ VERCEL_PROJECT_ID: 'bossa-crm' });
     assert.throws(() => admin.createAdminClient(), /PREFLIGHT_BLOCKED/); await assert.rejects(() => user.createClient(), /PREFLIGHT_BLOCKED/);
     setEnv();
@@ -221,7 +267,7 @@ try {
   });
   await check('actual instrumentation installs process guard; raw HTTP/TLS/socket/Unix and service-role fetches cannot bypass proof', async () => {
     setEnv(); const { output } = await load('src/instrumentation.ts');
-    const program = `const assert=require('node:assert/strict');let calls=[];let good=true;let socketCalls=0;const net=require('node:net'),tls=require('node:tls');net.Socket.prototype.connect=function(){socketCalls++;return this};tls.connect=function(){socketCalls++;return new net.Socket()};let proof=${JSON.stringify(database())};globalThis.fetch=async(input,init)=>{calls.push([String(input),init]);return Response.json(String(input).endsWith('/rpc/bossa_homologation_preflight')?{...proof,permissionsSafe:good}:[])};(async()=>{await require(${JSON.stringify(output)}).register();assert.equal(globalThis.__bossaHomologationNetworkGuard,'remote-supabase-https-v1');for(const f of [()=>require('node:http').request('http://example.com'),()=>require('node:https').request('${origin}/auth/v1/invite'),()=>require('node:net').connect(443,'example.com'),()=>require('node:tls').connect({host:'example.com',port:443}),()=>require('node:tls').connect({host:'okhtfibuexfsgkobjxtu.supabase.co',port:443,rejectUnauthorized:false}),()=>require('node:net').connect('/var/run/docker.sock')])assert.throws(f,/EGRESS_BLOCKED/);for(const u of ['https://graph.facebook.com/','https://graph.microsoft.com/','https://api.openai.com/','${origin}/auth/v1/invite','${origin}/functions/v1/nara','${origin}/rest/v1/rpc/next_client_handoff_owner'])await assert.rejects(()=>fetch(u,{method:'POST'}),/BLOCKED/);assert.equal(calls.length,0);require('node:tls').connect({host:'okhtfibuexfsgkobjxtu.supabase.co',servername:'okhtfibuexfsgkobjxtu.supabase.co',port:443,rejectUnauthorized:true}).destroy();assert.equal(socketCalls,1);await fetch('${origin}/rest/v1/leads',{method:'PATCH',headers:{apikey:'synthetic-service'}});assert.equal(calls.length,2);assert.equal(calls[1][1].redirect,'error');good=false;await assert.rejects(()=>fetch('${origin}/rest/v1/leads',{method:'PATCH'}),/BLOCKED/);assert.equal(calls.length,3);process.env.VERCEL_PROJECT_ID='bossa-crm';await assert.rejects(()=>fetch('${origin}/rest/v1/leads'),/BLOCKED/);assert.equal(calls.length,3)})().catch(e=>{console.error(e);process.exit(1)});`;
+    const program = `${cryptoRuntime}const assert=require('node:assert/strict');let calls=[];let good=true;let socketCalls=0;const net=require('node:net'),tls=require('node:tls');net.Socket.prototype.connect=function(){socketCalls++;return this};tls.connect=function(){socketCalls++;return new net.Socket()};let proof=${JSON.stringify(database())};globalThis.fetch=async(input,init)=>{calls.push([String(input),init]);return Response.json(String(input).endsWith('/rpc/bossa_homologation_preflight')?{...proof,permissionsSafe:good}:[])};(async()=>{await require(${JSON.stringify(output)}).register();assert.equal(globalThis.__bossaHomologationNetworkGuard,'remote-supabase-https-v1');for(const f of [()=>require('node:http').request('http://example.com'),()=>require('node:https').request('${origin}/auth/v1/invite'),()=>require('node:net').connect(443,'example.com'),()=>require('node:tls').connect({host:'example.com',port:443}),()=>require('node:tls').connect({host:'okhtfibuexfsgkobjxtu.supabase.co',port:443,rejectUnauthorized:false}),()=>require('node:net').connect('/var/run/docker.sock')])assert.throws(f,/EGRESS_BLOCKED/);for(const u of ['https://graph.facebook.com/','https://graph.microsoft.com/','https://api.openai.com/','${origin}/auth/v1/invite','${origin}/functions/v1/nara','${origin}/rest/v1/rpc/next_client_handoff_owner'])await assert.rejects(()=>fetch(u,{method:'POST'}),/BLOCKED/);assert.equal(calls.length,0);require('node:tls').connect({host:'okhtfibuexfsgkobjxtu.supabase.co',servername:'okhtfibuexfsgkobjxtu.supabase.co',port:443,rejectUnauthorized:true}).destroy();assert.equal(socketCalls,1);await fetch('${origin}/rest/v1/leads',{method:'PATCH',headers:{apikey:'synthetic-service'}});assert.equal(calls.length,2);assert.equal(calls[1][1].redirect,'error');good=false;await assert.rejects(()=>fetch('${origin}/rest/v1/leads',{method:'PATCH'}),/BLOCKED/);assert.equal(calls.length,3);process.env.VERCEL_PROJECT_ID='bossa-crm';await assert.rejects(()=>fetch('${origin}/rest/v1/leads'),/BLOCKED/);assert.equal(calls.length,3)})().catch(e=>{console.error(e);process.exit(1)});`;
     const env = { ...process.env, NEXT_RUNTIME: 'nodejs' };
     const result = spawnSync(process.execPath, ['-e', program], { env, encoding: 'utf8' }); assert.equal(result.status, 0, result.stderr);
   });

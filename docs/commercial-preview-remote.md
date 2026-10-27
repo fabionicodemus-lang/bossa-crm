@@ -43,7 +43,7 @@ O contrato remoto **v2** dessa RPC precisa ser preparado/revisado separadamente 
 | `environmentId`, `supabaseProjectRef` | Identidade persistida do banco, UUID dedicado e `okhtfibuexfsgkobjxtu` |
 | `checkedAt` | Horário do servidor, validade máxima de 15 segundos; tolerância futura de 5 segundos |
 | `schemaReady` | Estrutura comercial, dependências e versões esperadas verificadas, não apenas contagem de tabelas |
-| `syntheticUsersOnly`, `requiredRolesReady` | Usuários exclusivamente fictícios e administrador/comercial/visualizador autenticáveis e vinculados às organizações de teste |
+| `syntheticUsersOnly`, `requiredRolesReady` | Inventário completo de Auth pela API administrativa, GET por UUID e observações recentes de login/getUser/logout, cobertos por atestação independente; comparar UUIDs/e-mails fictícios e vínculos SQL efetivamente observados com a referência privada revisada |
 | `permissionsSafe` | Grants, RLS, funções privilegiadas e proprietário/search path/EXECUTE da própria RPC conferidos contra a referência revisada |
 | `guardsIntact`, `serviceRoleGuardsIntact` | Fingerprints e estado das guardas que impedem efeitos externos, inclusive bypass de RLS/`service_role` |
 | `zeroExternalEffects`, `authEmailBlocked` | Filas/provedores/automação bloqueados, sem efeitos externos; complementar com auditoria da plataforma |
@@ -57,7 +57,8 @@ Formato de `platformAttestation`: `{payload, signature}`, ambos base64url. `sign
 
 ```json
 {
-  "contractVersion": 1,
+  "contractVersion": 2,
+  "issuer": "IDENTIDADE_DO_AUDITOR_INDEPENDENTE",
   "environmentId": "UUID_DO_AMBIENTE_FICTICIO",
   "vercelProjectId": "prj_L89zRE7TKcC4ij14B5QyOa72XfPz",
   "deploymentId": "dpl_IDENTIDADE_REAL",
@@ -67,6 +68,8 @@ Formato de `platformAttestation`: `{payload, signature}`, ambos base64url. `sign
   "issuedAt": "DATA_UTC_DA_AUDITORIA",
   "expiresAt": "DATA_UTC_DE_EXPIRACAO",
   "evidenceSha256": "HASH_SHA256_DO_RELATORIO_PRIVADO",
+  "authAudit": "OBJETO_DE_OBSERVACAO_AUTH_DEFINIDO_ABAIXO",
+  "databaseAudit": "OBJETO_DE_OBSERVACAO_SQL_DEFINIDO_ABAIXO",
   "checks": {
     "networkEgressRestricted": true,
     "externalIntegrationsDisabled": true,
@@ -78,6 +81,30 @@ Formato de `platformAttestation`: `{payload, signature}`, ambos base64url. `sign
   }
 }
 ```
+
+### Evidência externa Auth e proprietário limitado (H2.3B)
+
+A RPC v2 não lê `auth.users`, `profiles` ou `memberships`. O candidato `scripts/homologation/preflight-v2-candidate.sql` usa um proprietário dedicado NOLOGIN/NOINHERIT/NOBYPASSRLS, sem herança de papéis amplos e sem SELECT nas tabelas de negócio. A função pública é STABLE, SECURITY DEFINER, com `search_path=pg_catalog` e EXECUTE exclusivo de `service_role`; só consulta catálogos e duas tabelas privadas de referência/recibo, que a aplicação, `service_role` e o proprietário da RPC não podem escrever. Não altera políticas RLS, grants Auth, funções comerciais ou migrações anteriores. Não é uma migração automática: a instalação deve ser revisada e executada separadamente pelo Work. Instalação preexistente ou proprietário incompatível recusam o candidato. Para o instalador sem superuser, o operador deve provisionar previamente o papel limitado e a opção temporária SET sobre ele (sem INHERIT); também precisa de CREATE WITH GRANT OPTION no schema public. O candidato concede CREATE ao novo proprietário apenas dentro da transação para transferir a propriedade da função, e o revoga antes do commit; não deixa esse privilégio instalado. Não conceder SET a anon/authenticated/service_role. Ao terminar, remover a opção SET temporária do instalador e conferir a ACL efetiva. O teste em PostgreSQL 17 descartável confirmou instalação por operador sem superuser, sem BYPASSRLS e sem GRANT OPTION no schema Auth.
+
+O envelope externo agora exige **contractVersion=2**. O contrato de resposta da RPC continua v2 e o laboratório local continua v1. Recibos externos antigos sem observação Auth não liberam o modo remoto. A aplicação verifica Ed25519 com a chave pública fixada no build antes de confiar em qualquer observação. O SQL não verifica Ed25519: transporta os bytes originais e agrega evidências do armazenamento privado. Só um operador independente pode carregar um recibo após verificar sua assinatura/custódia e a origem das observações. Booleans isolados da RPC nunca são autorização suficiente.
+
+`authAudit` contém `source="supabase-auth-admin-api"`, `supabaseProjectRef`, `observedAt`, `expiresAt`, `paginationComplete=true`, `inventorySha256` e `users`. Deve haver exatamente sete UUIDs distintos, todos do inventário real completo, com e-mail em `@bossa-homolog.invalid`, `authRole="authenticated"`, `isAnonymous=false`, `deletedAt=null`, `bannedUntil=null` e `emailConfirmedAt`. Cada usuário inclui `organizationId`, `appRole` e os horários efetivos `loginVerifiedAt`, `getUserVerifiedAt`, `logoutVerifiedAt`. Os três papéis admin/comercial/viewer devem estar presentes nas duas organizações. Os vínculos vêm de observação SQL independente e devem coincidir com `databaseAudit.memberships` e com a referência privada; nunca usar `user_metadata` como autorização. `profiles`/`memberships` sem inventário Auth e verificações de sessão não satisfazem o contrato.
+
+O coletor externo `scripts/homologation/auth-observation.mjs` exporta `collectAuthObservation({key,expectedUsers,loginObservations,transport,now})`. É ferramenta do operador, fora da aplicação: realiza apenas GETs paginados em `/auth/v1/admin/users` e GET por UUID no único projeto autorizado; rejeita erro, inventário extra/incompleto/duplicado e observação de sessão ausente/vencida. Ele não faz login, não grava remotamente e não assina. `expectedUsers` deve ser a referência revisada; `loginObservations` deve trazer `userId`, `checkedAt`, `loginStatus=200`, `userStatus=200`, `logoutStatus=204` e `identityMatches=true` baseados em testes reais previamente executados pelo operador. O auditor confere os registros brutos e o hash do inventário antes de incorporar o resultado ao recibo. Um resultado do coletor, sozinho, não é atestação.
+
+`databaseAudit` contém `source="supabase-reviewed-sql-read"`, `observedAt`, `expiresAt`, `catalogFingerprint`, a lista exata de 22 `migrations` (`version`,`sha256`), `memberships` (`id`,`organizationId`,`appRole`) e `emptyRelations` (`name` qualificado, `count=0`). Deve representar consultas efetivas do operador sobre o ledger, vínculos e todas as filas/conexões/produtores da referência revisada. O proprietário limitado não recebe privilégios para essas leituras; usa a observação externa autenticada pelo recibo. A RPC compara a observação com referências privadas e recalcula o fingerprint atual dos catálogos: corpos/owners/modos/search_paths/ACLs/defaults de funções, colunas, grants, RLS/policies, triggers, constraints e índices. Não adotar o catálogo atual desconhecido como referência: primeiro confrontá-lo com H2/H2.1/H2.2C, hashes das 22 migrações e corpos deste candidato. Nenhum valor esperado/recibo é pré-carregado pelo SQL.
+
+**Validade:** cada observação Auth/SQL dura no máximo 15 minutos, sem tolerância para expiração, e horários de observação futuros têm tolerância máxima de cinco segundos. Login/getUser/logout não podem anteceder a observação Auth em mais de 15 minutos. Essas são observações externas com validade limitada, não uma leitura Auth ao vivo em cada acesso. O operador deve renovar evidências após mudanças e revogar o recibo imediatamente quando perder confiança. Se não houver mecanismo operacional de renovação/revogação, a instalação segura permanece bloqueada. A validade efetiva reportada pela aplicação é a menor entre recibo, Auth e SQL. O relatório H2.3A antigo/sem assinatura não é prova reutilizável.
+
+### Autenticação PostgREST
+
+Para chave opaca `sb_secret_`, a chamada exata é POST para `/rest/v1/rpc/bossa_homologation_preflight`, corpo `{}`, `apikey: <secret>` e `Content-Type: application/json`, sem `Authorization`. Para JWT legado `service_role`, mantém-se também `Authorization: Bearer <JWT>`; o servidor valida a credencial, não os claims lidos localmente. Chave publishable, valor malformado, HTTP 401/403, redirect ou erro de transporte fecham o pré-voo. O wrapper administrativo remove somente o Bearer redundante igual à própria chave opaca que o SDK acrescenta; JWTs humanos não são removidos/trocados. O guard da aplicação continua proibindo Auth administrativo; o coletor só é executado pelo operador fora do runtime.
+
+Documentação consultada: [API keys](https://supabase.com/docs/guides/getting-started/api-keys), seção de limitações de chaves opacas. O acesso direto ao changelog foi recusado pela política de rede nesta sessão; a documentação de chaves foi consultada pelo conector Supabase. Uma sonda GET somente leitura em `/rest/v1/` do projeto autorizado retornou HTTP 401 com a credencial disponível no runtime; nenhuma RPC foi invocada, logo a autenticação real não está comprovada. O probe real com a credencial administrativa exclusiva e os cabeçalhos acima continua obrigatório **após** instalação autorizada; um teste local de headers não comprova autenticação no gateway gerenciado.
+
+### Testes e limite de aceitação
+
+Os testes do contrato usam banco descartável e transportes/fronteira criptográfica simulados; essas fixtures não são aceitas pelo verificador Ed25519 real. Um vetor público RFC8032 testa a verificação criptográfica real, sem gerar chave privada ou assinatura. O teste compilado opcional usa a mesma fronteira simulada exclusivamente no filho de teste. Nada disso substitui inventário Auth oficial, assinatura/custódia independente, pré-voo real, CI remoto ou aceite humano. Não há flags para aceitar fixtures no código da aplicação.
 
 Identidades devem coincidir com o build/runtime. A validade não pode exceder 24 horas; recibos expirados, adulterados, de outro deployment ou com campos incompletos são recusados a cada acesso. Após mudanças de infraestrutura, revogar a prova no banco e refazer a auditoria; a assinatura não detecta sozinha mudanças remotas posteriores. Restringir acesso à configuração, guardar a chave privada offline e estabelecer revogação/renovação são condições operacionais obrigatórias. Assinar sem verificar não é comprovação.
 
