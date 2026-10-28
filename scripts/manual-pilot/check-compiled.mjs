@@ -35,13 +35,21 @@ try{
  console.log('PASS compiled HTTP blocks anonymous/invalid sessions, foreign origin, forbidden APIs and action paths');
  const browser=await chromium.launch({executablePath:process.env.BOSSA_CHROMIUM_PATH||undefined,headless:true,args:['--no-sandbox','--disable-background-networking','--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE localhost, EXCLUDE 127.0.0.1']});
  const context=await browser.newContext({serviceWorkers:'block'});
+ let closing=false;
  try{
   let outside=[];
   const require=createRequire(import.meta.url);process.env.BOSSA_MANUAL_PILOT_FIXTURE_FILE=fixture;const {respond}=require('./transport.cjs');
   await context.route('**/*',async route=>{const u=new URL(route.request().url());
-   if(u.origin===site){const r=await route.fetch({url:'http://127.0.0.1:3003'+u.pathname+u.search,headers:{...route.request().headers(),host:new URL(site).host,'x-forwarded-proto':'https'},maxRedirects:0});return route.fulfill({response:r});}
-   if(u.origin===origin){const r=respond(u.href,{method:route.request().method(),headers:route.request().headers(),body:route.request().postData()});return route.fulfill({status:r.status,headers:Object.fromEntries(r.headers),body:await r.text()});}
-   outside.push(u.href);return route.abort();});
+   try {
+   if(u.origin===site){const r=await route.fetch({url:'http://127.0.0.1:3003'+u.pathname+u.search,headers:{...route.request().headers(),host:new URL(site).host,'x-forwarded-proto':'https'},maxRedirects:0});return await route.fulfill({response:r});}
+   if(u.origin===origin){const r=respond(u.href,{method:route.request().method(),headers:route.request().headers(),body:route.request().postData()});return await route.fulfill({status:r.status,headers:Object.fromEntries(r.headers),body:await r.text()});}
+   outside.push(u.href);return await route.abort();
+   } catch(error) {
+    // Chromium 151 can cancel a prefetch while unrouteAll drains callbacks.
+    // Only expected cancellations AFTER the assertions are exempt; every active test error fails.
+    if(!closing||!/Route is already handled|Request context disposed|Target page, context or browser has been closed/.test(error.message))throw error;
+   }
+  });
   const page=await context.newPage();let errors=[];page.on('pageerror',e=>errors.push(e.message));
   await page.goto(site+'/login');await page.getByRole('button',{name:'Entrar no Bossa CRM'}).waitFor();assert.equal(await page.getByText('Esqueci minha senha').count(),0);
   await context.addCookies([{name:'sb-okhtfibuexfsgkobjxtu-auth-token',value:cookieFor(users[0]).split('=')[1],url:site,sameSite:'Lax'}]);
@@ -67,8 +75,10 @@ try{
   console.log('PASS no privileged RPC, administrative integration lookup, provider egress or browser page errors');
  }finally{
   // Drain before closing/navigating: cancelling the page first races route.fulfill in Chromium.
+  closing=true;
   await context.unrouteAll({behavior:'wait'});await context.close();await browser.close();
  }
+ console.log('PASS compiled browser teardown');
  fs.writeFileSync(path.join(dir,'results.json'),JSON.stringify({compiledLocalAdapters:'PASS',managedAuthRlsBrowser:{status:'PENDING',scenarios:8},deployed:false},null,2));
  console.log('PENDING: all eight managed authenticated browser scenarios; no private accounts configured. Local evidence: '+dir);
 }finally{server.kill('SIGTERM');await new Promise(resolve=>{if(server.exitCode!==null)return resolve();const t=setTimeout(()=>{server.kill('SIGKILL');resolve();},5000);server.once('exit',()=>{clearTimeout(t);resolve();});});fs.closeSync(log);}
