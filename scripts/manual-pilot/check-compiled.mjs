@@ -66,8 +66,7 @@ try{
   assert.equal(outside.length,0,JSON.stringify(outside));assert.equal(errors.length,0,errors.join('\n'));
   console.log('PASS no privileged RPC, administrative integration lookup, provider egress or browser page errors');
  }finally{
-  // Drain RSC/prefetch handlers even after an assertion fails, preserving the original failure.
-  for(const page of context.pages())await page.goto('about:blank');
+  // Drain before closing/navigating: cancelling the page first races route.fulfill in Chromium.
   await context.unrouteAll({behavior:'wait'});await context.close();await browser.close();
  }
  fs.writeFileSync(path.join(dir,'results.json'),JSON.stringify({compiledLocalAdapters:'PASS',managedAuthRlsBrowser:{status:'PENDING',scenarios:8},deployed:false},null,2));
