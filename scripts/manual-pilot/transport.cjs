@@ -3,11 +3,21 @@
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const fs=require('node:fs');
 function respond(url,init={}){
+ // Browser and Next are separate processes: serialize fixture read/modify/write.
+ const filename=process.env.BOSSA_MANUAL_PILOT_FIXTURE_FILE,lock=filename+'.lock',deadline=Date.now()+5000;
+ for(;;){
+  try{fs.closeSync(fs.openSync(lock,'wx'));break;}
+  catch(error){if(error.code!=='EEXIST'||Date.now()>deadline)throw error;Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,5);}
+ }
+ try{return respondLocked(url,init);}finally{fs.unlinkSync(lock);}
+}
+function respondLocked(url,init){
  const u=new URL(url);if(u.origin!=='https://okhtfibuexfsgkobjxtu.supabase.co')throw Error('TEST_EGRESS_REFUSED');
  const filename=process.env.BOSSA_MANUAL_PILOT_FIXTURE_FILE;const f=JSON.parse(fs.readFileSync(filename,'utf8'));
  const method=init.method||'GET';const h=new Headers(init.headers);const user=f.users.find(x=>h.get('authorization')==='Bearer '+x.token);
  f.events.push({path:u.pathname,method,role:user?.appRole??null});
- const finish=(data,status=200)=>{fs.writeFileSync(filename,JSON.stringify(f));return Response.json(data,{status,headers:{'Content-Range':'0-0/0'}});};
+ const persist=()=>{const tmp=filename+'.'+process.pid+'.tmp';fs.writeFileSync(tmp,JSON.stringify(f));fs.renameSync(tmp,filename);};
+ const finish=(data,status=200)=>{persist();return Response.json(data,{status,headers:{'Content-Range':'0-0/0'}});};
  if(u.pathname==='/auth/v1/.well-known/jwks.json')return finish({keys:[]});
  if(u.pathname==='/auth/v1/token')return finish({msg:'Invalid login credentials',error_code:'invalid_credentials'},400);
  if(u.pathname==='/auth/v1/user')return user?finish({id:user.id,email:user.email,role:'authenticated',is_anonymous:false}):finish({message:'Invalid JWT'},401);
@@ -38,7 +48,7 @@ function respond(url,init={}){
  }
  if(table==='developments')rows=[{id:'00000000-0000-0000-0000-000000000030',name:'Flow',active:true,default_payment_plan:{},delivery_date:null},{id:'00000000-0000-0000-0000-000000000031',name:'Alma',active:true,default_payment_plan:{},delivery_date:null}];
  if(h.get('accept')?.includes('vnd.pgrst.object'))rows=rows[0]??null;
- if(method==='HEAD'){fs.writeFileSync(filename,JSON.stringify(f));return new Response(null,{status:200,headers:{'Content-Range':'0-0/0'}});}
+ if(method==='HEAD'){persist();return new Response(null,{status:200,headers:{'Content-Range':'0-0/0'}});}
  return finish(rows);
 }
 module.exports={respond};

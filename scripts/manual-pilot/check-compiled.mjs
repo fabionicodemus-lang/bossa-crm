@@ -34,8 +34,9 @@ try{
  assert.equal((await request('/clientes','GET',cookieFor(users[0],users[0].token+'tampered'))).status,307);
  console.log('PASS compiled HTTP blocks anonymous/invalid sessions, foreign origin, forbidden APIs and action paths');
  const browser=await chromium.launch({executablePath:process.env.BOSSA_CHROMIUM_PATH||undefined,headless:true,args:['--no-sandbox','--disable-background-networking','--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE localhost, EXCLUDE 127.0.0.1']});
+ const context=await browser.newContext({serviceWorkers:'block'});
  try{
-  const context=await browser.newContext({serviceWorkers:'block'});let outside=[];
+  let outside=[];
   const require=createRequire(import.meta.url);process.env.BOSSA_MANUAL_PILOT_FIXTURE_FILE=fixture;const {respond}=require('./transport.cjs');
   await context.route('**/*',async route=>{const u=new URL(route.request().url());
    if(u.origin===site){const r=await route.fetch({url:'http://127.0.0.1:3003'+u.pathname+u.search,headers:{...route.request().headers(),host:new URL(site).host,'x-forwarded-proto':'https'},maxRedirects:0});return route.fulfill({response:r});}
@@ -47,6 +48,7 @@ try{
   for(const p of ['/clientes','/corretores','/agenda','/propostas','/empreendimentos','/gestao','/gestao/nova','/leads/'+lead.id]){
    const r=await page.goto(site+p);assert.equal(r.status(),200,p+' '+(await page.textContent('body')).slice(0,150));
    await page.waitForTimeout(250);
+   console.log('PASS compiled navigation '+p);
   }
   await page.goto(site+'/clientes');await page.getByRole('button',{name:'+ Novo lead',exact:true}).click();await page.locator('input[name=name]').fill('Local Compiled Manual');await page.getByRole('button',{name:'Cadastrar',exact:true}).click();await page.getByText('Local Compiled Manual',{exact:true}).first().waitFor();
   const state=JSON.parse(fs.readFileSync(fixture,'utf8'));const created=state.leads.find(l=>l.name==='Local Compiled Manual');assert.equal(created.ai_enabled,false);assert.equal(created.automation_paused,true);assert.equal(created.owner_mode,'human');
@@ -63,8 +65,11 @@ try{
   const events=JSON.parse(fs.readFileSync(fixture,'utf8')).events;assert.ok(!events.some(e=>/bossa_homologation_preflight|whatsapp|microsoft|storage|functions/.test(e.path)));
   assert.equal(outside.length,0,JSON.stringify(outside));assert.equal(errors.length,0,errors.join('\n'));
   console.log('PASS no privileged RPC, administrative integration lookup, provider egress or browser page errors');
-  await page.goto('about:blank');await context.unrouteAll({behavior:'wait'});await context.close();
- }finally{await browser.close();}
+ }finally{
+  // Drain RSC/prefetch handlers even after an assertion fails, preserving the original failure.
+  for(const page of context.pages())await page.goto('about:blank');
+  await context.unrouteAll({behavior:'wait'});await context.close();await browser.close();
+ }
  fs.writeFileSync(path.join(dir,'results.json'),JSON.stringify({compiledLocalAdapters:'PASS',managedAuthRlsBrowser:{status:'PENDING',scenarios:8},deployed:false},null,2));
  console.log('PENDING: all eight managed authenticated browser scenarios; no private accounts configured. Local evidence: '+dir);
 }finally{server.kill('SIGTERM');await new Promise(resolve=>{if(server.exitCode!==null)return resolve();const t=setTimeout(()=>{server.kill('SIGKILL');resolve();},5000);server.once('exit',()=>{clearTimeout(t);resolve();});});fs.closeSync(log);}
