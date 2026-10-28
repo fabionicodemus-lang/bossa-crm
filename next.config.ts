@@ -1,4 +1,5 @@
 import type { NextConfig } from 'next';
+import { inspectManualPilot } from './src/lib/homologation/manual-pilot';
 import { REMOTE_SUPABASE_ORIGIN, REMOTE_VERCEL_PROJECT } from './src/lib/homologation/policy';
 
 const isolatedBuild = process.env.VERCEL_ENV === 'preview' || process.env.VERCEL_PROJECT_ID === REMOTE_VERCEL_PROJECT || Boolean(process.env.BOSSA_HOMOLOGATION_MODE);
@@ -15,7 +16,10 @@ const remoteBuild = isolatedBuild && process.env.VERCEL_ENV === 'preview'
   && Boolean(process.env.BOSSA_HOMOLOGATION_SUPABASE_PUBLISHABLE_KEY)
   && process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY === process.env.BOSSA_HOMOLOGATION_SUPABASE_PUBLISHABLE_KEY;
 
+const manualBuild = isolatedBuild && inspectManualPilot(process.env, false).ready;
+
 const nextConfig: NextConfig = {
+  ...(manualBuild ? { images: { unoptimized: true } } : {}),
   reactStrictMode: true,
   poweredByHeader: false,
   // Os dois agentes utilizam o mesmo motor em src/lib/ai.ts. Fixar os nomes
@@ -25,15 +29,15 @@ const nextConfig: NextConfig = {
     NEXT_PUBLIC_BOSSA_HOMOLOGATION: isolatedBuild ? 'required' : 'off',
     NEXT_PUBLIC_BOSSA_HOMOLOGATION_COMMIT: isolatedBuild
       ? (process.env.VERCEL_GIT_COMMIT_SHA ?? process.env.BOSSA_HOMOLOGATION_COMMIT ?? '') : '',
-    NEXT_PUBLIC_BOSSA_HOMOLOGATION_MODE: isolatedBuild ? (remoteBuild ? 'remote' : localBuild ? 'local' : 'blocked') : '',
-    NEXT_PUBLIC_BOSSA_HOMOLOGATION_PROJECT: remoteBuild ? REMOTE_VERCEL_PROJECT : '',
+    NEXT_PUBLIC_BOSSA_HOMOLOGATION_MODE: isolatedBuild ? (manualBuild ? 'manual-pilot' : remoteBuild ? 'remote' : localBuild ? 'local' : 'blocked') : '',
+    NEXT_PUBLIC_BOSSA_HOMOLOGATION_PROJECT: (remoteBuild || manualBuild) ? REMOTE_VERCEL_PROJECT : '',
     NEXT_PUBLIC_BOSSA_HOMOLOGATION_ENVIRONMENT_ID: isolatedBuild ? (process.env.BOSSA_HOMOLOGATION_ENVIRONMENT_ID ?? '') : '',
-    NEXT_PUBLIC_BOSSA_HOMOLOGATION_ORIGIN: remoteBuild ? `https://${process.env.VERCEL_URL ?? ''}` : '',
+    NEXT_PUBLIC_BOSSA_HOMOLOGATION_ORIGIN: (remoteBuild || manualBuild) ? `https://${process.env.VERCEL_URL ?? ''}` : '',
     BOSSA_HOMOLOGATION_BUILD_ATTESTATION_KEY: remoteBuild ? (process.env.BOSSA_HOMOLOGATION_ATTESTATION_PUBLIC_KEY ?? '') : '',
     // Never ship an inherited production URL or key in a Preview JavaScript bundle.
     ...(isolatedBuild ? {
-      NEXT_PUBLIC_SUPABASE_URL: (localBuild || remoteBuild) ? process.env.BOSSA_HOMOLOGATION_SUPABASE_URL! : '',
-      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: (localBuild || remoteBuild) ? (process.env.BOSSA_HOMOLOGATION_SUPABASE_PUBLISHABLE_KEY ?? '') : '',
+      NEXT_PUBLIC_SUPABASE_URL: (localBuild || remoteBuild || manualBuild) ? process.env.BOSSA_HOMOLOGATION_SUPABASE_URL! : '',
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: (localBuild || remoteBuild || manualBuild) ? (process.env.BOSSA_HOMOLOGATION_SUPABASE_PUBLISHABLE_KEY ?? '') : '',
     } : {}),
     OPENAI_MODEL: 'gpt-5.6-luna',
     OPENAI_MODEL_FALLBACK: 'gpt-5.6-luna',

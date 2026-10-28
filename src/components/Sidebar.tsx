@@ -1,6 +1,7 @@
 "use client";
 import Link from "next/link";
 import Image from "next/image";
+import { manualPilot, manualPilotPath } from '@/lib/homologation/manual-pilot';
 import { usePathname } from "next/navigation";
 import {
   CalendarDays,
@@ -139,7 +140,7 @@ export function Sidebar({
   );
   return (
     <aside className="sidebar">
-      <Link className="logo" href="/hoje" aria-label="Bossa CRM, início">
+      <Link className="logo" href={manualPilot() ? "/clientes" : "/hoje"} aria-label="Bossa CRM, início">
         <Image
           src="/bossa-logo.png"
           alt="Bossa"
@@ -151,7 +152,7 @@ export function Sidebar({
       </Link>
       <nav className="sidebar-nav" aria-label="Navegação principal">
         {links
-          .filter((item) => !item.restricted || context.role !== "viewer")
+          .filter((item) => (!manualPilot() || manualPilotPath(item.href)) && (!item.restricted || context.role !== "viewer"))
           .map((item) => {
             const count =
               item.href === "/hoje"

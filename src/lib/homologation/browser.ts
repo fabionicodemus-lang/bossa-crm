@@ -1,6 +1,23 @@
+import { assertPilotRequest } from './manual-pilot';
 import { assertLocalSupabaseRequest, assertRemoteSupabaseRequest, LOCAL_SUPABASE_ORIGIN, REMOTE_SUPABASE_ORIGIN, REMOTE_VERCEL_PROJECT } from './policy';
 
 export function browserSupabaseOptions() {
+  if (process.env.NEXT_PUBLIC_BOSSA_HOMOLOGATION_MODE === 'manual-pilot') {
+    if (process.env.NEXT_PUBLIC_BOSSA_HOMOLOGATION_PROJECT !== REMOTE_VERCEL_PROJECT
+      || process.env.NEXT_PUBLIC_SUPABASE_URL !== REMOTE_SUPABASE_ORIGIN
+      || (typeof window !== 'undefined' && window.location.origin !== process.env.NEXT_PUBLIC_BOSSA_HOMOLOGATION_ORIGIN)) throw Error('MANUAL_PILOT_CONFIGURATION_BLOCKED');
+    return {global:{fetch: (async (input,init)=>{
+      if (typeof window === 'undefined') throw Error('MANUAL_PILOT_BROWSER_REQUIRED');
+      const headers = assertPilotRequest(input,init);
+      // Configuration only: no RPC v2, service role, receipt or global write approval.
+      const response = await fetch('/api/homologation/preflight',{cache:'no-store',redirect:'error'});
+      const state = response.ok ? await response.json() : null;
+      if (state?.mode !== 'manual-pilot' || state.configured !== true
+        || state.commit !== process.env.NEXT_PUBLIC_BOSSA_HOMOLOGATION_COMMIT
+        || state.deploymentOrigin !== window.location.origin || state.projectId !== REMOTE_VERCEL_PROJECT) throw Error('MANUAL_PILOT_CONFIGURATION_BLOCKED');
+      return fetch(input,{...init,headers,redirect:'error'});
+    }) as typeof fetch}};
+  }
   if (process.env.NEXT_PUBLIC_BOSSA_HOMOLOGATION !== 'required') return null;
   const remote = process.env.NEXT_PUBLIC_BOSSA_HOMOLOGATION_MODE === 'remote';
   const origin = remote ? REMOTE_SUPABASE_ORIGIN : LOCAL_SUPABASE_ORIGIN;

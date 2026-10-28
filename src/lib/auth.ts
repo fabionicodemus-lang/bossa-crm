@@ -1,3 +1,4 @@
+import { manualPilot, pilotUser } from '@/lib/homologation/manual-pilot';
 import { cache } from 'react';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
@@ -23,6 +24,7 @@ const loadCurrentContext = cache(async (): Promise<ContextLookup> => {
   const { data: claimsData, error: claimsError } = await supabase.auth.getClaims();
   const claims = claimsError ? null : claimsData?.claims;
   const userId = typeof claims?.sub === 'string' ? claims.sub : null;
+  if (manualPilot() && !pilotUser(claims as Record<string,unknown> | null)) return { status: 'no_user' };
   if (!userId) return { status: 'no_user' };
 
   const [{ data }, { data: profile }] = await Promise.all([

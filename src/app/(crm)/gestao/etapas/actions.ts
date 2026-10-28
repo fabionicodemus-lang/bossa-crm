@@ -1,9 +1,11 @@
 "use server";
+import { manualPilot } from '@/lib/homologation/manual-pilot';
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { getCurrentContext } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 export async function setStageAutomation(form: FormData) {
+  if (manualPilot()) throw new Error("Automação indisponível no piloto manual");
   const ctx = await getCurrentContext();
   if (!ctx || ctx.role !== "admin") redirect("/gestao/etapas?error=permission");
   const current = form.get("current");

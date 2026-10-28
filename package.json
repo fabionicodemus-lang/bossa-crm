@@ -36,7 +36,10 @@
     "test:commercial": "node --experimental-strip-types scripts/commercial/check.mjs",
     "test:homologation-isolation": "node scripts/homologation/check.mjs && node --experimental-strip-types scripts/homologation/check-remote.mjs && node --experimental-strip-types scripts/homologation/check-auth-observation.mjs && node --experimental-strip-types scripts/homologation/check-preflight-v2-sql.mjs",
     "test:homologation-compiled": "node --experimental-strip-types scripts/homologation/check-remote-compiled.mjs",
-    "homologation:preflight": "node scripts/homologation/preflight.mjs"
+    "homologation:preflight": "node scripts/homologation/preflight.mjs",
+    "test:manual-pilot": "node scripts/manual-pilot/check.mjs",
+    "test:manual-pilot:compiled": "node scripts/manual-pilot/check-compiled.mjs",
+    "manual-pilot:check-accounts": "node scripts/manual-pilot/check-accounts.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.3",
@@ -56,6 +59,7 @@
     "esbuild": "^0.28.2",
     "eslint": "^9.0.0",
     "eslint-config-next": "^16.2.11",
+    "playwright": "1.62.1",
     "typescript": "^5.9.0"
   }
 }

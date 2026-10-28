@@ -1,3 +1,4 @@
+import { manualPilot, inspectManualPilot, assertPilotRequest } from './manual-pilot';
 import { hasRemotePlatformAttestation, type PlatformReceipt } from './attestation';
 import { preflightAdminHeaders } from './admin-headers';
 import { assertLocalSupabaseRequest, assertRemoteSupabaseRequest, REMOTE_SUPABASE_REF, inspectConfiguration, isHomologation, type Environment } from './policy';
@@ -42,6 +43,13 @@ export type PreflightReport = {
 type GuardedGlobal = typeof globalThis & { __bossaHomologationNetworkGuard?: string };
 
 export async function getHomologationPreflight(env: Environment = process.env, transport: typeof fetch = fetch): Promise<PreflightReport> {
+  if (manualPilot(env)) {
+    const config = inspectManualPilot(env);
+    return { status: 'blocked', writesAllowed: false, humanAcceptanceAllowed: false, checkedAt: new Date().toISOString(),
+      commit: config.commit ?? null, environmentId: null, databaseOrigin: config.ready ? 'https://okhtfibuexfsgkobjxtu.supabase.co' : null, deploymentOrigin: config.origin, vercelProjectId: env.VERCEL_PROJECT_ID ?? null,
+      blockers: [...config.blockers, 'manual-pilot-uses-human-session-not-platform-attestation'],
+      checks: {processEgress:false,databaseIdentity:false,syntheticRoles:false,databaseGuards:false,schema:false,externalEffects:false} };
+  }
   const config = inspectConfiguration(env);
   const report: PreflightReport = { status: 'blocked', writesAllowed: false, humanAcceptanceAllowed: false,
     checkedAt: new Date().toISOString(), commit: config.commit, environmentId: config.environmentId,
@@ -93,6 +101,12 @@ export async function getHomologationPreflight(env: Environment = process.env, t
 }
 
 export function serverSupabaseOptions(admin = false) {
+  if (manualPilot()) {
+    const config = inspectManualPilot();
+    if (admin) throw Error('MANUAL_PILOT_ADMIN_CLIENT_BLOCKED');
+    if (!config.ready) throw Error('MANUAL_PILOT_CONFIGURATION_BLOCKED');
+    return {url: 'https://okhtfibuexfsgkobjxtu.supabase.co',key:process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,global:{fetch: (async (input,init)=>fetch(input,{...init,headers:assertPilotRequest(input,init),redirect:'error'})) as typeof fetch}};
+  }
   if (!isHomologation()) return null;
   const config = inspectConfiguration();
   if (config.blockers.length) throw new Error('HOMOLOGATION_PREFLIGHT_BLOCKED');

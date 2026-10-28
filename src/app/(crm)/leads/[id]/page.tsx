@@ -1,3 +1,4 @@
+import { isHomologation } from '@/lib/homologation/policy';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { PageTopbar } from '@/components/PageTopbar';
@@ -24,13 +25,13 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
   if (!leadData) notFound();
   const lead = leadData as Lead;
   const channel = lead.kind === 'cliente' ? 'clientes' : 'corretores';
-  const admin = createAdminClient();
+  const admin = isHomologation() ? null : createAdminClient();
   const [{ data: messages }, { data: activities }, { data: tasks }, { data: memberships }, { count: connections }] = await Promise.all([
     supabase.from('messages').select('*').eq('lead_id', id).order('created_at', { ascending: true }).limit(1000),
     supabase.from('activities').select('*').eq('lead_id', id).order('created_at', { ascending: false }).limit(500),
     supabase.from('lead_tasks').select('*').eq('lead_id', id).order('status').order('due_at', { ascending: true, nullsFirst: false }).limit(500),
     supabase.from('memberships').select('user_id,role,profiles(full_name,email)').eq('organization_id', orgId).order('created_at'),
-    admin.from('whatsapp_connections').select('id', { count: 'exact', head: true }).eq('organization_id', orgId).eq('channel', channel).eq('status', 'connected'),
+    admin ? admin.from('whatsapp_connections').select('id', { count: 'exact', head: true }).eq('organization_id', orgId).eq('channel', channel).eq('status', 'connected') : Promise.resolve({count:0}),
   ]);
 
   const teamMembers: TeamMember[] = ((memberships ?? []) as MembershipRow[]).map((item) => {

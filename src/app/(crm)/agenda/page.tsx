@@ -1,3 +1,4 @@
+import { manualPilot } from '@/lib/homologation/manual-pilot';
 import { AgendaCalendarWithSync } from '@/components/AgendaCalendarWithSync';
 import { MicrosoftCalendarPanel } from '@/components/MicrosoftCalendarPanel';
 import { PageTopbar } from '@/components/PageTopbar';
@@ -25,7 +26,7 @@ export default async function AgendaPage() {
   return <>
     <PageTopbar title="Agenda" subtitle="Reuniões, apresentações, visitas, ligações e tarefas da equipe — inclusive as marcadas pela Nara e pelo Plantão." />
     <div className="page-content">
-      <MicrosoftCalendarPanel canEdit={canEdit} />
+      {!manualPilot() && <MicrosoftCalendarPanel canEdit={canEdit} />}
       <AgendaCalendarWithSync members={members} currentUserId={context!.userId} canEdit={canEdit} />
     </div>
   </>;

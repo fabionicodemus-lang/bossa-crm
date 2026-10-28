@@ -1,3 +1,4 @@
+import { manualPilot } from '@/lib/homologation/manual-pilot';
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { isAiStage, isHumanStage, stageLabel, stagesFor } from '@/lib/stages';
@@ -25,6 +26,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   const body = await request.json().catch(() => ({})) as { stage?: unknown; reason?: unknown };
   const stage = String(body.stage ?? '');
+  if (manualPilot() && ['qualificacao_ia','passagem_pendente'].includes(stage)) return NextResponse.json({error:'Etapa indisponível no piloto manual.'},{status:400});
   const { data: lead, error: findError } = await supabase
     .from('leads')
     .select('*')
@@ -40,8 +42,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const now = new Date().toISOString();
   const previousStage = lead.stage;
   const update: Record<string, unknown> = { stage, updated_at: now };
+  if (manualPilot()) update.automation_paused = true;
 
-  if (kind === 'geral') {
+  if (manualPilot() && isAiStage(stage)) {
+    update.owner_mode = 'human'; update.ai_enabled = false; update.owner_id = lead.owner_id || user.id;
+  } else if (kind === 'geral') {
     update.owner_mode = stage === 'encerrado' ? 'none' : 'human';
     update.ai_enabled = false;
     update.automation_paused = true;
@@ -67,7 +72,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     update.next_action_due_at = null;
   }
 
-  if (kind !== 'geral' && stage === 'passagem_pendente') {
+  if (!manualPilot() && kind !== 'geral' && stage === 'passagem_pendente') {
     update.handoff_requested_at = now;
     update.next_action = 'Um consultor deve aceitar a passagem e assumir o atendimento.';
     update.next_action_type = 'aceitar_passagem';
@@ -92,7 +97,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     metadata: { previous_stage: previousStage, next_stage: stage, manual: true },
   });
 
-  if (kind !== 'geral' && stage === 'passagem_pendente') {
+  if (!manualPilot() && kind !== 'geral' && stage === 'passagem_pendente') {
     const { data: existing } = await supabase
       .from('lead_handoffs')
       .select('id')

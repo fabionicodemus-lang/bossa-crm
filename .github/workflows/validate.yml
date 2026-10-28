@@ -136,3 +136,18 @@ jobs:
         run: node scripts/commercial/check-intake-concurrency.mjs
       - name: Test real concurrent stage advances
         run: node scripts/commercial/check-stage-concurrency.mjs
+  manual-pilot-compiled:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:manual-pilot
+      - run: npm run test:manual-pilot:compiled

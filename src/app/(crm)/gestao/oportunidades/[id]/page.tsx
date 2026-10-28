@@ -1,3 +1,4 @@
+import { manualPilot } from '@/lib/homologation/manual-pilot';
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getCurrentContext } from "@/lib/auth";
@@ -19,6 +20,7 @@ function Form({
   title: string;
   children: ReactNode;
 }) {
+  if (manualPilot() && !["participant","interest","proposal","visit"].includes(operation)) return <p className="faint">{title}: indisponível no piloto manual.</p>;
   return (
     <form
       action={saveCommercial}

@@ -1,3 +1,4 @@
+import { manualPilot } from '@/lib/homologation/manual-pilot';
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { isAiStage, isHumanStage, stageLabel, stagesFor } from '@/lib/stages';
@@ -41,6 +42,7 @@ export async function POST(request: Request) {
   const kind = String(body.kind ?? '') as LeadKind;
   const fromStage = String(body.fromStage ?? '');
   const toStage = String(body.toStage ?? '');
+  if (manualPilot() && ['qualificacao_ia','passagem_pendente'].includes(toStage)) return NextResponse.json({error:'Etapa indisponível no piloto manual.'},{status:400});
 
   if (!['cliente', 'corretor'].includes(kind)) {
     return NextResponse.json({ error: 'Pipeline inválida.' }, { status: 400 });
@@ -70,7 +72,7 @@ export async function POST(request: Request) {
   if (!leads.length) return NextResponse.json({ updated: 0 });
 
   const now = new Date().toISOString();
-  const aiStage = isAiStage(toStage);
+  const aiStage = !manualPilot() && isAiStage(toStage);
   const humanStage = isHumanStage(toStage);
   const terminalStage = ['fechado_ganho', 'encerrado'].includes(toStage);
 
@@ -78,10 +80,11 @@ export async function POST(request: Request) {
     const ids = batch.map((lead) => lead.id);
     const commonUpdate: Record<string, unknown> = {
       stage: toStage,
-      owner_mode: aiStage ? 'ai' : humanStage ? 'human' : 'none',
+      owner_mode: manualPilot() && !terminalStage ? 'human' : aiStage ? 'ai' : humanStage ? 'human' : 'none',
       ai_enabled: false,
       updated_at: now,
     };
+    if (manualPilot()) commonUpdate.automation_paused = true;
 
     if (aiStage) commonUpdate.owner_id = null;
     if (humanStage) {
@@ -92,7 +95,7 @@ export async function POST(request: Request) {
       commonUpdate.next_action = null;
       commonUpdate.next_action_type = null;
       commonUpdate.next_action_due_at = null;
-    } else if (toStage === 'futuro') {
+    } else if (toStage === 'futuro' && !manualPilot()) {
       commonUpdate.next_action = 'Aguardar inclusão em campanha de reativação comercial.';
       commonUpdate.next_action_type = 'campanha_reativacao';
       commonUpdate.next_action_due_at = null;

@@ -1,4 +1,5 @@
 "use server";
+import { manualPilot } from '@/lib/homologation/manual-pilot';
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { getCurrentContext } from "@/lib/auth";
@@ -19,6 +20,7 @@ export async function saveCommercial(form: FormData) {
   const db = await createClient();
   const org = context.organization.id;
   const kind = text(form, "operation");
+  if (manualPilot() && !["opportunity","participant","interest","proposal","visit"].includes(kind)) throw new Error("Operação indisponível no piloto manual");
   const id = text(form, "opportunity_id");
   let destination = id ? `/gestao/oportunidades/${id}` : "/gestao/nova";
   try {
