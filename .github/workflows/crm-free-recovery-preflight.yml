@@ -1,0 +1,219 @@
+name: CRM Free recovery capability preflight
+
+"on":
+  push:
+    branches:
+      - ops/crm-free-recovery-20261029
+
+permissions: {}
+
+concurrency:
+  group: crm-free-recovery-preflight-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  capability-preflight:
+    if: github.repository == 'fabionicodemus-lang/bossa-crm' && github.ref == 'refs/heads/ops/crm-free-recovery-20261029'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - name: Install age from official Ubuntu repositories
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 120 sudo apt-get update -qq
+          timeout 120 sudo apt-get install --yes --no-install-recommends age
+      - name: Check isolated PostgreSQL, public TLS endpoint and dummy encryption
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'BOSSA_PREFLIGHT_PY'
+          #!/usr/bin/env python3
+          """Credential-free capability checks. Never exports or logs into production."""
+          import argparse
+          import json
+          import os
+          import secrets
+          import shutil
+          import socket
+          import ssl
+          import struct
+          import subprocess
+          import sys
+          import tempfile
+          import time
+
+          IMAGE_TAG = "docker.io/supabase/postgres:17.6.1.147"
+          IMAGE = "docker.io/supabase/postgres@sha256:0c0d3539aaf3c8c09a9a5b044ad3f709470e7241f3e4c69e1572bfac1b90a24b"
+          POOLER_HOST = "aws-0-sa-east-1.pooler.supabase.com"
+          POOLER_PORT = 5432
+          PRODUCTION_CREDENTIAL_NAMES = (
+              "SUPABASE_ACCESS_TOKEN", "SUPABASE_DB_URL", "SUPABASE_DB_PASSWORD",
+              "SUPABASE_SERVICE_ROLE_KEY", "SUPABASE_SECRET_KEY", "DATABASE_URL",
+              "PGPASSWORD", "PGPASSFILE", "VERCEL_TOKEN",
+              "BOSSA_BACKUP_SUPABASE_PAT", "BOSSA_BACKUP_DB_PASSWORD",
+              "BOSSA_BACKUP_DATABASE_URL", "BOSSA_BACKUP_SERVICE_ROLE_KEY",
+              "BOSSA_BACKUP_AGE_SECRET_KEY", "BOSSA_BACKUP_ENCRYPTION_PASSWORD",
+          )
+
+
+          def run(command, timeout=30, **kwargs):
+              result = subprocess.run(command, capture_output=True, timeout=timeout, **kwargs)
+              if result.returncode:
+                  # All commands receive only public image metadata or generated dummy data.
+                  detail = result.stderr.decode("utf-8", "replace")[-1600:]
+                  raise RuntimeError(f"{command[0]} exited {result.returncode}: {detail}")
+              return result.stdout
+
+
+          def assert_no_production_credentials():
+              present = sorted({name for name in PRODUCTION_CREDENTIAL_NAMES if os.environ.get(name)}
+                               | {name for name, value in os.environ.items()
+                                  if name.startswith("BOSSA_BACKUP_") and value})
+              if present:
+                  raise RuntimeError("Credential-free preflight refuses variables: " + ", ".join(present))
+
+
+          def crypt_roundtrip():
+              """Exercise the actual age backup primitive with a disposable local key."""
+              if not shutil.which("age") or not shutil.which("age-keygen"):
+                  raise RuntimeError("age and age-keygen are required")
+              plain = b"BOSSA_CRM_DUMMY_PREFLIGHT_ONLY\n" + secrets.token_bytes(256)
+              with tempfile.TemporaryDirectory(prefix="bossa-age-preflight-") as temporary:
+                  key_path = os.path.join(temporary, "dummy-identity.txt")
+                  run(["age-keygen", "-o", key_path], timeout=20)
+                  os.chmod(key_path, 0o600)
+                  recipient = run(["age-keygen", "-y", key_path], timeout=20).decode("ascii").strip()
+                  if not recipient.startswith("age1") or any(c.isspace() for c in recipient):
+                      raise RuntimeError("Unexpected generated age recipient")
+                  ciphertext = run(["age", "-r", recipient], timeout=20, input=plain)
+                  if run(["age", "-d", "-i", key_path], timeout=20, input=ciphertext) != plain:
+                      raise RuntimeError("Dummy age encryption round trip failed")
+                  tampered = ciphertext[:-1] + bytes([ciphertext[-1] ^ 1])
+                  rejected = subprocess.run(["age", "-d", "-i", key_path], input=tampered,
+                                            capture_output=True, timeout=20)
+                  if rejected.returncode == 0:
+                      raise RuntimeError("Dummy age tamper detection failed")
+              return {"status": "passed", "plaintext": "generated_dummy_only", "round_trip": True,
+                      "mechanism": "age", "tamper_detected": True, "temporary_key_deleted": True,
+                      "backup_files_written": 0, "artifacts_uploaded": 0}
+
+
+          def pooler_tls_probe():
+              """Send PostgreSQL SSLRequest only; never send StartupMessage/authentication."""
+              context = ssl.create_default_context()
+              started = time.monotonic()
+              raw = socket.create_connection((POOLER_HOST, POOLER_PORT), timeout=10)
+              try:
+                  raw.settimeout(10)
+                  raw.sendall(struct.pack("!II", 8, 80877103))
+                  if raw.recv(1) != b"S":
+                      raise RuntimeError("Pooler did not accept PostgreSQL SSLRequest")
+                  with context.wrap_socket(raw, server_hostname=POOLER_HOST) as secure:
+                      raw = None
+                      result = {"status": "passed", "host": POOLER_HOST, "port": POOLER_PORT,
+                                "tls_version": secure.version(), "certificate_verified": True,
+                                "startup_message_sent": False, "authentication_attempted": False,
+                                "elapsed_seconds": round(time.monotonic() - started, 2)}
+                  return result
+              finally:
+                  if raw is not None:
+                      raw.close()
+
+
+          def isolated_empty_cluster():
+              """Bypass image init scripts: create a new engine-only cluster in tmpfs."""
+              if not shutil.which("docker"):
+                  raise RuntimeError("Docker unavailable")
+              name = "bossa-credential-free-" + secrets.token_hex(6)
+              # No password, project reference, source SQL or production configuration enters Docker.
+              bootstrap = (
+                  "initdb -D /tmp/preflight-pg --username=postgres --auth-local=trust "
+                  "--auth-host=reject --encoding=UTF8 --no-locale --no-instructions "
+                  ">/tmp/preflight-initdb.log 2>&1 && "
+                  "exec postgres -D /tmp/preflight-pg "
+                  "-c listen_addresses='' -c unix_socket_directories=/tmp "
+                  "-c shared_preload_libraries='' -c max_connections=10"
+              )
+              run(["docker", "pull", "--platform", "linux/amd64", IMAGE], timeout=420)
+              try:
+                  run(["docker", "run", "--detach", "--name", name, "--platform", "linux/amd64",
+                       "--network", "none", "--read-only", "--user", "postgres", "--cap-drop", "ALL",
+                       "--security-opt", "no-new-privileges", "--no-healthcheck", "--cpus", "2",
+                       "--memory", "2g", "--pids-limit", "128", "--tmpfs",
+                       "/tmp:rw,nosuid,nodev,noexec,size=536870912,mode=1777",
+                       "--entrypoint", "/bin/sh", IMAGE, "-ec", bootstrap], timeout=40)
+                  ready = False
+                  for _ in range(45):
+                      check = subprocess.run(["docker", "exec", name, "pg_isready", "-h", "/tmp",
+                                              "-U", "postgres", "-d", "postgres"],
+                                             capture_output=True, timeout=5)
+                      if check.returncode == 0:
+                          ready = True
+                          break
+                      time.sleep(1)
+                  if not ready:
+                      raise RuntimeError("Fresh PostgreSQL cluster did not become ready within 45 probes")
+                  sql = """SELECT json_build_object(
+                    'server_version_num', current_setting('server_version_num'),
+                    'listen_addresses', current_setting('listen_addresses'),
+                    'shared_preload_libraries', current_setting('shared_preload_libraries'),
+                    'user_table_count', (SELECT count(*) FROM pg_class c
+                       JOIN pg_namespace n ON n.oid=c.relnamespace
+                       WHERE n.nspname NOT LIKE 'pg_%' AND n.nspname <> 'information_schema'
+                       AND c.relkind IN ('r','p','m')),
+                    'extension_count', (SELECT count(*) FROM pg_extension)
+                  )::text;"""
+                  raw = run(["docker", "exec", name, "psql", "-h", "/tmp", "-U", "postgres",
+                             "-d", "postgres", "-X", "-v", "ON_ERROR_STOP=1", "-At", "-c", sql])
+                  catalog = json.loads(raw.decode("utf-8"))
+                  inspect = json.loads(run(["docker", "inspect", name]).decode("utf-8"))[0]
+                  isolation = inspect["HostConfig"]
+                  if (int(catalog["server_version_num"]) != 170006
+                          or catalog["listen_addresses"] != ""
+                          or catalog["shared_preload_libraries"] != ""
+                          or catalog["user_table_count"] != 0
+                          or catalog["extension_count"] != 1
+                          or isolation["NetworkMode"] != "none"
+                          or not isolation["ReadonlyRootfs"]
+                          or isolation.get("PortBindings")):
+                      raise RuntimeError("Fresh-cluster isolation/catalog assertion failed")
+                  return {"status": "passed", "image_tag": IMAGE_TAG, "pinned_image": IMAGE,
+                          "network_mode": "none", "published_ports": 0,
+                          "root_filesystem_read_only": True, "fresh_tmpfs_cluster": True,
+                          "image_entrypoint_bypassed": True, "production_restore_tested": False,
+                          "catalog": catalog}
+              finally:
+                  subprocess.run(["docker", "rm", "--force", "--volumes", name],
+                                 capture_output=True, timeout=30, check=False)
+
+
+          def main():
+              parser = argparse.ArgumentParser()
+              parser.add_argument("--self-test", action="store_true",
+                                  help="Only test dummy cryptography; no network or Docker")
+              args = parser.parse_args()
+              assert_no_production_credentials()
+              results = {"production_credentials_used": False, "production_data_accessed": False,
+                         "backup_created": False, "production_restore_tested": False,
+                         "ci_artifacts_uploaded": False}
+              failures = []
+              checks = [("dummy_cryptography", crypt_roundtrip)]
+              if not args.self_test:
+                  checks += [("pooler_tls_without_login", pooler_tls_probe),
+                             ("empty_isolated_postgres", isolated_empty_cluster)]
+              for label, check in checks:
+                  try:
+                      results[label] = check()
+                  except Exception as error:
+                      results[label] = {"status": "failed", "error": str(error)}
+                      failures.append(label)
+                  print(json.dumps({label: results[label]}, ensure_ascii=False), flush=True)
+              results["status"] = "passed" if not failures else "failed"
+              print(json.dumps(results, ensure_ascii=False), flush=True)
+              return 1 if failures else 0
+
+
+          if __name__ == "__main__":
+              sys.exit(main())
+          BOSSA_PREFLIGHT_PY

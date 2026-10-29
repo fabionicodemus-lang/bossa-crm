@@ -1,5 +1,10 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "git": {
+    "deploymentEnabled": {
+      "ops/crm-free-recovery-20261029": false
+    }
+  },
   "crons": [
     {
       "path": "/api/automation/followup",
