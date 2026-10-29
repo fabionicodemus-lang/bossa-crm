@@ -8,6 +8,7 @@ type BulkLead = {
   id: string;
   opt_out: boolean | null;
   automation_paused: boolean | null;
+  ai_enabled: boolean | null;
 };
 
 const CHUNK_SIZE = 400;
@@ -30,7 +31,7 @@ export async function POST(request: Request) {
     .limit(1)
     .maybeSingle();
 
-  if (!membership || membership.role === 'viewer') {
+  if (!membership || !['admin','comercial'].includes(membership.role)) {
     return NextResponse.json({ error: 'Você não possui permissão para movimentar leads em massa.' }, { status: 403 });
   }
 
@@ -60,7 +61,7 @@ export async function POST(request: Request) {
 
   const { data, error: findError } = await supabase
     .from('leads')
-    .select('id,opt_out,automation_paused')
+    .select('id,opt_out,automation_paused,ai_enabled')
     .eq('organization_id', membership.organization_id)
     .eq('kind', kind)
     .eq('stage', fromStage)
@@ -70,6 +71,7 @@ export async function POST(request: Request) {
   if (findError) return NextResponse.json({ error: findError.message }, { status: 400 });
   const leads = (data ?? []) as BulkLead[];
   if (!leads.length) return NextResponse.json({ updated: 0 });
+  if (manualPilot() && leads.some(lead=>lead.automation_paused!==true||lead.ai_enabled!==false)) return NextResponse.json({error:'Há contatos fora do estado manual seguro. Nenhuma movimentação foi iniciada.'},{status:409});
 
   const now = new Date().toISOString();
   const aiStage = !manualPilot() && isAiStage(toStage);
@@ -84,7 +86,6 @@ export async function POST(request: Request) {
       ai_enabled: false,
       updated_at: now,
     };
-    if (manualPilot()) commonUpdate.automation_paused = true;
 
     if (aiStage) commonUpdate.owner_id = null;
     if (humanStage) {
@@ -101,12 +102,19 @@ export async function POST(request: Request) {
       commonUpdate.next_action_due_at = null;
     }
 
-    const { error: updateError } = await supabase
+    let updateQuery = supabase
       .from('leads')
       .update(commonUpdate)
       .eq('organization_id', membership.organization_id)
       .in('id', ids);
+    if (manualPilot()) updateQuery = updateQuery.eq('stage',fromStage).eq('automation_paused',true).eq('ai_enabled',false);
+    const {data:changed,error:updateError} = manualPilot() ? await updateQuery.select('id') : await updateQuery;
     if (updateError) return NextResponse.json({ error: updateError.message }, { status: 400 });
+    // Each PATCH and the existing stage-history trigger form one transaction.
+    if (manualPilot()) {
+      if (changed?.length!==ids.length) return NextResponse.json({error:'O pipeline mudou durante a movimentação. Atualize a lista e confira as etapas já registradas.'},{status:409});
+      continue;
+    }
 
     if (aiStage) {
       const enabledIds = batch.filter((lead) => !lead.opt_out && !lead.automation_paused).map((lead) => lead.id);

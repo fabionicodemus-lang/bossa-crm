@@ -3,6 +3,8 @@ import { createClient } from '@/lib/supabase/server';
 import { POST as createAgenda } from '@/app/api/agenda/route';
 import { objectValue, parseRecoveryAction, publicRecovery } from '@/lib/commercial/recovery';
 import { sourceRequestFailure } from '@/lib/commercial/source-request';
+import { manualPilot } from '@/lib/homologation/manual-pilot';
+import { POST as moveLeadStage } from '@/app/api/leads/[id]/stage/route';
 
 export const runtime = 'nodejs';
 const response = (body: unknown, status = 200) => Response.json(body, { status, headers: { 'Cache-Control': 'no-store, private' } });
@@ -69,6 +71,18 @@ export async function POST(request: Request) {
       warning = data.operation === 'status'
         ? 'Status e atividade conferidos no CRM. A escolha não comprova envio, assinatura ou recebimento.'
         : 'Proposta conferida no CRM. Etapa legada do contato e abertura do PDF não foram reexecutadas.';
+      if (manualPilot() && data.operation !== 'status') {
+        // The source RPC/receipt is already committed. Stage retry never saves the
+        // proposal again; its PATCH + existing history trigger is independently atomic.
+        const record = objectValue(objectValue(saved.data).record);
+        if (typeof record.id==='string' && typeof record.lead_id==='string') {
+          const moved = await moveLeadStage(new Request(new URL(`/api/leads/${record.lead_id}/stage`,request.url),{
+            method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({stage:'proposta_negociacao',proposalId:record.id}),
+          }),{params:Promise.resolve({id:record.lead_id})});
+          warning = moved.ok ? 'Proposta conferida e etapa do contato verificada sem duplicar a gravação. Confira o PDF atual.'
+            : 'Proposta salva. A etapa do contato não foi confirmada; confira o pipeline. Não salve outra proposta para corrigir a etapa.';
+        }
+      }
     } else {
       // Reuse the human agenda path: availability, RLS and external-sync warnings.
       // Never accept the browser's replacement payload or impersonate another actor.

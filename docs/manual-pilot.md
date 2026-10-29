@@ -4,7 +4,7 @@ Modo explícito `manual-pilot`, independente do modo H2.3 `remote`. Não aprova 
 
 ## Escopo
 
-Clientes e corretores (cadastro, consulta e edição humana), pipeline manual, oportunidades, participantes e interesses nos produtos existentes Flow/Alma, visitas/agenda interna, propostas/parcelas/status/recuperação, histórico humano e indicadores disponíveis para as permissões humanas. Empreendimentos são somente consulta; não há criação de produtos nem seed remoto nesta etapa. Um catálogo vazio exige preparação fictícia separada pelo operador, sem uso de dados reais.
+Clientes e corretores (cadastro, consulta e edição humana), pipeline manual, oportunidades, participantes e interesses nos produtos existentes Flow/Alma, visitas/agenda interna, propostas/parcelas/status/recuperação e PDF em memória com sessão/RLS, histórico humano e indicadores disponíveis para as permissões humanas. Empreendimentos são somente consulta; não há criação de produtos nem seed remoto nesta etapa. Um catálogo vazio exige preparação fictícia separada pelo operador, sem uso de dados reais.
 
 Sem Nara/Plantão, transferência automatizada, WhatsApp, Meta, Microsoft/Outlook, notificações automáticas, convites/e-mails, importação, Storage, Edge Functions, Realtime, jobs, filas ou configurações de automação. Contratos/recebimentos e reconciliações não são liberados por este modo. Não há fallback administrativo. O guard H2.2 do banco continua sendo a autoridade final para grants, RLS, atomicidade, idempotência e conflitos; nenhuma migração foi alterada.
 
@@ -54,7 +54,14 @@ BOSSA_MANUAL_PILOT_ACCOUNTS_FILE=/workspace/private/manual-pilot/accounts.json n
 
 Essa variável é somente do processo de teste, nunca do Vercel/app. O validador rejeita symlinks, arquivos dentro de Git, permissões abertas e formato incompleto; não autentica, não mostra senhas e não aprova os cenários. Sem arquivo retorna código 2 e PENDENTES. A execução real será uma etapa separada com origem/SHA autorizados, acesso Vercel Authentication e credenciais disponíveis nesse armazenamento privado.
 
-Oito cenários autenticados reais ainda **PENDENTES**: login/sessão/logout; cadastro/edição de cliente; corretor/pipeline; oportunidade/participantes/interesses Flow e Alma; agenda/visitas/conflitos; propostas/parcelas/status/409/idempotência/recuperação; viewer sem escrita; organização estrangeira/sessão inválida e ausência de efeitos externos. Não aprovar V1 antes dessa execução.
+A aceitação real cobre oito cenários: login/sessão/logout; cadastro/edição de cliente; corretor/pipeline; oportunidade/participantes/interesses Flow e Alma; agenda/visitas/conflitos; propostas/parcelas/status/409/idempotência/recuperação; viewer sem escrita; organização estrangeira/sessão inválida e ausência de efeitos externos. Após as reprovações informadas pelo Work, os cenários **3, 5 e 6 exigem nova validação real**. Testes locais não reclassificam os demais resultados do Work nem aprovam V1.
+
+## Correções dos cenários 3, 5 e 6
+
+- Pipeline: o PATCH humano preserva `automation_paused` já verdadeiro, recusa estado inseguro e utiliza somente colunas permitidas. O trigger existente `leads_log_stage_change` registra ator/origem/destino na mesma transação. Não há INSERT adicional em `activities`, RPC nova, grant ou alteração de migração. Comparação de etapa/revisão e RLS impedem sobrescrita concorrente; repetição da mesma etapa não duplica histórico. A movimentação em massa utiliza o mesmo trigger por PATCH, mantendo os lotes existentes.
+- Agenda: o formulário pesquisa cliente/corretor, preserva o vínculo ao editar e permite concluir/cancelar o compromisso por PATCH. A API mantém responsáveis, referências da organização, conflitos e proteção do histórico comercial; o piloto não oferece exclusão física.
+- PDF: somente GET autenticado, com sessão/RLS e escopo de organização nas consultas de proposta, produto, unidade, contato e parcelas. O logo institucional é local; Storage e download do logo do empreendimento continuam bloqueados. Totais inconsistentes retornam 409.
+- Proposta/etapa: proposta, parcelas, histórico financeiro e recibo continuam atômicos na RPC existente. A movimentação do lead é uma operação posterior, com seu próprio histórico transacional, não uma transação distribuída. Falha nessa etapa gera aviso sem refazer a proposta. Repetições manuais e retomadas explícitas conferem a proposta salva e repetem a etapa de modo idempotente, sem reabrir contato encerrado. Consultar uma recuperação já confirmada continua sem efeitos de escrita.
 
 ## Testes locais e CI
 

@@ -44,6 +44,7 @@ export function SearchableLeadSelect({
   onSelect,
   disabled = false,
   placeholder = "Digite para buscar…",
+  inputId,
 }: {
   leads: ProposalLead[];
   value: string;
@@ -51,6 +52,7 @@ export function SearchableLeadSelect({
   onSelect?: (lead: ProposalLead) => void;
   disabled?: boolean;
   placeholder?: string;
+  inputId?: string;
 }) {
   const optionsId = useId();
   const selectedLead = leads.find((lead) => lead.id === value) ?? null;
@@ -134,6 +136,7 @@ export function SearchableLeadSelect({
   return (
     <div style={{ position: "relative" }}>
       <input
+        id={inputId}
         className="input"
         type="text"
         role="combobox"

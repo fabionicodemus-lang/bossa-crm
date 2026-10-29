@@ -4,6 +4,7 @@ import { FormEvent, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { SourceSaveAttempt, sourceRequestFailure } from '@/lib/commercial/source-request';
 import { createClient } from '@/lib/supabase/client';
+import { manualPilot } from '@/lib/homologation/manual-pilot';
 import { CommercialSaveRecovery } from './CommercialSaveRecovery';
 import { ProposalEditor } from './proposals/ProposalEditor';
 import { ProposalList } from './proposals/ProposalList';
@@ -440,7 +441,7 @@ export function ProposalsManager({
         if (acknowledged.error || acknowledged.data?.state !== 'acknowledged') postSaveWarning = 'A proposta está salva; conclua a conferência da tentativa no painel de recuperação. ';
       } catch { postSaveWarning = 'A proposta está salva; conclua a conferência da tentativa no painel de recuperação. '; }
 
-      if (!data.replayed && !['recusada', 'expirada', 'convertida'].includes(form.workflowStatus)) {
+      if ((!data.replayed || manualPilot()) && !['recusada', 'expirada', 'convertida'].includes(form.workflowStatus)) {
         try {
         const stageResponse = await fetch(`/api/leads/${form.leadId}/stage`, {
           method: 'POST',
@@ -448,6 +449,7 @@ export function ProposalsManager({
           body: JSON.stringify({
             stage: 'proposta_negociacao',
             reason: `Proposta #${saved.proposal_number} salva no CRM.`,
+            ...(manualPilot()?{proposalId:saved.id}:{}),
           }),
         });
         const stagePayload = await stageResponse.json().catch(() => ({})) as { error?: string };

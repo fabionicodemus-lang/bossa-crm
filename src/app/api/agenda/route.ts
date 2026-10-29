@@ -83,7 +83,7 @@ export async function GET(request: Request) {
   const start = params.get('start'); const end = params.get('end'); const assignedTo = params.get('assigned_to');
   if ((assignedTo && !uuid.test(assignedTo)) || (start && !validDate(start)) || (end && !validDate(end))) return err('Filtro de agenda inválido.');
   const db = await createClient();
-  let query = db.from('agenda_events').select('*').eq('organization_id', auth.context.organization.id)
+  let query = db.from('agenda_events').select('*,leads(id,kind,name,phone,enterprise,company,group_name)').eq('organization_id', auth.context.organization.id)
     .order('starts_at', { ascending: true }).limit(3000);
   if (start) query = query.gte('starts_at', start);
   if (end) query = query.lt('starts_at', end);

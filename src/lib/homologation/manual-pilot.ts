@@ -37,6 +37,7 @@ export function manualPilotPath(pathname: string, method = 'GET') {
   if (path === '/api/activities') return method === 'POST';
   if (path === '/api/agenda') return ['GET','POST','PATCH'].includes(method);
   if (path === '/api/commercial/recovery') return ['GET','POST'].includes(method);
+  if (/^\/api\/propostas\/[0-9a-f-]{36}\/pdf$/.test(path)) return method === 'GET';
   if (/^\/api\/leads\/[0-9a-f-]{36}\/detail$/.test(path) || path === '/api/leads/search') return method === 'GET';
   if (/^\/api\/leads\/[0-9a-f-]{36}\/stage$/.test(path)) return method === 'POST';
   if (path === '/api/leads/bulk-stage') return method === 'POST';

@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { createProposalPdf, jpegDimensions, type ProposalPdfImage, type ProposalPdfScheduleRow } from '@/lib/simple-pdf';
 import { BOSSA_LOGO_BASE64 } from '@/lib/brand-assets';
+import { manualPilot } from '@/lib/homologation/manual-pilot';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -44,8 +45,9 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     .maybeSingle();
   if (!membership) return NextResponse.json({ error: 'Usuário sem acesso à organização.' }, { status: 403 });
 
-  const admin = createAdminClient();
-  const { data: proposal, error: proposalError } = await admin.from('proposals')
+  const isolated = manualPilot();
+  const db = isolated ? supabase : createAdminClient();
+  const { data: proposal, error: proposalError } = await db.from('proposals')
     .select('*')
     .eq('id', id)
     .eq('organization_id', membership.organization_id)
@@ -53,15 +55,17 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   if (proposalError || !proposal) return NextResponse.json({ error: 'Proposta não encontrada.' }, { status: 404 });
 
   const [developmentResult, unitResult, leadResult, itemsResult] = await Promise.all([
-    admin.from('developments').select('id,name,delivery_date,logo_path').eq('id', proposal.development_id).maybeSingle(),
-    proposal.unit_id ? admin.from('development_units').select('unit_code').eq('id', proposal.unit_id).maybeSingle() : Promise.resolve({ data: null, error: null }),
-    proposal.lead_id ? admin.from('leads').select('name,kind,company').eq('id', proposal.lead_id).maybeSingle() : Promise.resolve({ data: null, error: null }),
-    admin.from('proposal_payment_items').select('kind,label,quantity,amount,start_date,interval_months,sort_order,metadata').eq('proposal_id', id).order('sort_order'),
+    db.from('developments').select('id,name,delivery_date,logo_path').eq('organization_id',membership.organization_id).eq('id', proposal.development_id).maybeSingle(),
+    proposal.unit_id ? db.from('development_units').select('unit_code').eq('organization_id',membership.organization_id).eq('id', proposal.unit_id).maybeSingle() : Promise.resolve({ data: null, error: null }),
+    proposal.lead_id ? db.from('leads').select('name,kind,company').eq('organization_id',membership.organization_id).eq('id', proposal.lead_id).maybeSingle() : Promise.resolve({ data: null, error: null }),
+    db.from('proposal_payment_items').select('kind,label,quantity,amount,start_date,interval_months,sort_order,metadata').eq('organization_id',membership.organization_id).eq('proposal_id', id).order('sort_order'),
   ]);
 
   if (developmentResult.error || !developmentResult.data) {
     return NextResponse.json({ error: 'O empreendimento da proposta não foi encontrado.' }, { status: 404 });
   }
+  if (isolated && ((proposal.unit_id && (unitResult.error || !unitResult.data))
+    || (proposal.lead_id && (leadResult.error || !leadResult.data)))) return NextResponse.json({error:'Referências da proposta indisponíveis na sua organização.'},{status:404});
   if (itemsResult.error) {
     return NextResponse.json({ error: 'Não foi possível carregar o cronograma da proposta.' }, { status: 500 });
   }
@@ -113,8 +117,8 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   if (!bossaLogo) return NextResponse.json({ error: 'O logo institucional não pôde ser carregado.' }, { status: 500 });
 
   let developmentLogo: ProposalPdfImage | null = null;
-  if (development.logo_path) {
-    const { data: logoBlob } = await admin.storage.from('development-files').download(development.logo_path);
+  if (!isolated && development.logo_path) {
+    const { data: logoBlob } = await db.storage.from('development-files').download(development.logo_path);
     if (logoBlob) developmentLogo = await jpegImage(Buffer.from(await logoBlob.arrayBuffer()));
   }
 

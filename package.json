@@ -37,7 +37,7 @@
     "test:homologation-isolation": "node scripts/homologation/check.mjs && node --experimental-strip-types scripts/homologation/check-remote.mjs && node --experimental-strip-types scripts/homologation/check-auth-observation.mjs && node --experimental-strip-types scripts/homologation/check-preflight-v2-sql.mjs",
     "test:homologation-compiled": "node --experimental-strip-types scripts/homologation/check-remote-compiled.mjs",
     "homologation:preflight": "node scripts/homologation/preflight.mjs",
-    "test:manual-pilot": "node scripts/manual-pilot/check.mjs",
+    "test:manual-pilot": "node scripts/manual-pilot/check.mjs && node scripts/manual-pilot/check-acceptance.mjs",
     "test:manual-pilot:compiled": "node scripts/manual-pilot/check-compiled.mjs",
     "manual-pilot:check-accounts": "node scripts/manual-pilot/check-accounts.mjs"
   },

@@ -4,6 +4,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { CommercialSaveRecovery } from './CommercialSaveRecovery';
 import { SourceSaveAttempt } from '@/lib/commercial/source-request';
+import { SearchableLeadSelect } from './proposals/SearchableLeadSelect';
+import type { ProposalLead } from './proposals/model';
+import { manualPilot } from '@/lib/homologation/manual-pilot';
 
 type Member = { user_id: string; full_name: string; email: string; role: string };
 type ViewMode = 'month' | 'week' | 'day';
@@ -22,6 +25,7 @@ type AgendaEvent = {
   starts_at: string;
   ends_at: string;
   status: 'scheduled' | 'completed' | 'cancelled';
+  leads?: ProposalLead | null;
 };
 
 type FormState = {
@@ -36,6 +40,10 @@ type FormState = {
   date: string;
   start_time: string;
   end_time: string;
+  lead_id: string;
+  lead: ProposalLead | null;
+  lead_kind: ProposalLead['kind'];
+  status: AgendaEvent['status'];
 };
 
 const weekdays = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
@@ -69,7 +77,7 @@ function initialForm(date = new Date(), memberId = ''): FormState {
   if (rounded.getMinutes() === 0) rounded.setHours(rounded.getHours() + 1);
   const end = new Date(rounded.getTime() + 60 * 60 * 1000);
   return {
-    id: '', title: '', description: '', assigned_to: memberId,
+    id: '', title: '', description: '', assigned_to: memberId, lead_id:'', lead:null, lead_kind:'cliente', status:'scheduled',
     event_type: 'reuniao_cliente', meeting_mode: 'presencial', location: '', video_url: '',
     date: ymd(rounded), start_time: `${pad(rounded.getHours())}:${pad(rounded.getMinutes())}`,
     end_time: `${pad(end.getHours())}:${pad(end.getMinutes())}`,
@@ -150,6 +158,7 @@ export function AgendaCalendar({ members, currentUserId, canEdit }: { members: M
       id: event.id, title: event.title, description: event.description || '', assigned_to: event.assigned_to || currentUserId,
       event_type: event.event_type, meeting_mode: event.meeting_mode, location: event.location || '', video_url: event.video_url || '',
       date: ymd(start), start_time: hhmm(event.starts_at), end_time: hhmm(event.ends_at),
+      lead_id:event.lead_id??'',lead:event.leads??null,lead_kind:event.leads?.kind??'cliente',status:event.status,
     });
   }
 
@@ -167,6 +176,7 @@ export function AgendaCalendar({ members, currentUserId, canEdit }: { members: M
         id: form.id || undefined, title: form.title, description: form.description, assigned_to: form.assigned_to,
         event_type: form.event_type, meeting_mode: form.meeting_mode, location: form.location, video_url: form.video_url,
         starts_at: startsAt, ends_at: endsAt,
+        lead_id:form.lead_id||null,...(form.id?{status:form.status}:{}),
       };
       const requestId = form.id ? null : saveAttempt.current.prepare(command);
       const response = await fetch('/api/agenda', {
@@ -234,6 +244,7 @@ export function AgendaCalendar({ members, currentUserId, canEdit }: { members: M
       borderRadius: 8, padding: compact ? '5px 7px' : '8px 9px', cursor: canEdit ? 'pointer' : 'default', marginBottom: 5,
     }}>
       <div style={{ fontWeight: 800, fontSize: compact ? 11 : 12 }}>{hhmm(event.starts_at)} · {event.title}</div>
+      {event.status === 'completed' && <small>Concluído</small>}
       {!compact && <div className="faint" style={{ fontSize: 10, marginTop: 3 }}>{member?.full_name || 'Sem responsável'} · {modeLabels[event.meeting_mode]}{event.created_by_kind === 'ai' ? ` · ${event.agent === 'plantao' ? 'Plantão IA' : 'Nara'}` : ''}</div>}
     </button>;
   }
@@ -306,6 +317,11 @@ export function AgendaCalendar({ members, currentUserId, canEdit }: { members: M
         <div className="card-body grid" style={{ gap: 12 }}>
           <div className="field"><label>Título</label><input className="input" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="Ex.: Apresentação do Flow para João" /></div>
           <div className="grid grid-2">
+            <div className="field"><label htmlFor="agenda-lead-kind">Tipo de contato</label><select id="agenda-lead-kind" className="select" value={form.lead_kind} onChange={(e)=>setForm({...form,lead_kind:e.target.value as ProposalLead['kind'],lead_id:'',lead:null})}><option value="cliente">Cliente</option><option value="corretor">Corretor</option></select></div>
+            <div className="field"><label htmlFor="agenda-lead-input">Contato vinculado</label><SearchableLeadSelect inputId="agenda-lead-input" key={`${form.id}:${form.lead_kind}:${form.lead_id}`} leads={[form.lead??{id:'',kind:form.lead_kind,name:'',phone:null,enterprise:null,company:null,group_name:null}]} value={form.lead_id} onChange={()=>{}} onSelect={(lead)=>setForm({...form,lead_id:lead.id,lead})} placeholder={form.lead_kind==='cliente'?'Buscar cliente para a visita…':'Buscar corretor ou imobiliária…'} />{form.lead_id&&<button type="button" className="btn btn-ghost btn-sm" onClick={()=>setForm({...form,lead_id:'',lead:null})}>Remover vínculo</button>}</div>
+          </div>
+          {form.id&&<div className="field"><label htmlFor="agenda-status">Situação do compromisso</label><select id="agenda-status" className="select" value={form.status} onChange={(e)=>setForm({...form,status:e.target.value as AgendaEvent['status']})}><option value="scheduled">Agendado</option><option value="completed">Concluído</option><option value="cancelled">Cancelado</option></select></div>}
+          <div className="grid grid-2">
             <div className="field"><label>Responsável</label><select className="select" value={form.assigned_to} onChange={(e) => setForm({ ...form, assigned_to: e.target.value })}><option value="">Selecione</option>{members.map((member) => <option key={member.user_id} value={member.user_id}>{member.full_name}</option>)}</select></div>
             <div className="field"><label>Tipo</label><select className="select" value={form.event_type} onChange={(e) => setForm({ ...form, event_type: e.target.value as AgendaEvent['event_type'] })}>{Object.entries(eventLabels).map(([value,label]) => <option key={value} value={value}>{label}</option>)}</select></div>
           </div>
@@ -321,7 +337,7 @@ export function AgendaCalendar({ members, currentUserId, canEdit }: { members: M
           <div className="field"><label>Descrição</label><textarea className="textarea" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Contexto, pauta ou observações" /></div>
           <div className="info-box"><strong>Conflitos:</strong> o CRM bloqueia automaticamente dois compromissos sobrepostos para o mesmo responsável. A mesma regra é usada pela Nara e pelo Plantão.</div>
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
-            <div>{form.id && <button className="btn btn-ghost" onClick={() => void remove()} disabled={saving}>Excluir</button>}</div>
+            <div>{form.id && !manualPilot() && <button className="btn btn-ghost" onClick={() => void remove()} disabled={saving}>Excluir</button>}</div>
             <div style={{ display: 'flex', gap: 8 }}><button className="btn btn-ghost" onClick={() => { if (saveLock.current || saveAttempt.current.pending) { setError('Confirme a gravação atual antes de fechar o formulário.'); return; } setForm(null); }}>Cancelar</button><button className="btn btn-primary" onClick={() => void save()} disabled={saving || !form.title.trim() || !form.assigned_to}>{saving ? 'Salvando...' : 'Salvar'}</button></div>
           </div>
         </div>
