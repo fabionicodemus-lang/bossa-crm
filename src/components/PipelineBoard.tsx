@@ -1,5 +1,6 @@
 'use client';
 
+import { manualPilot } from '@/lib/homologation/manual-pilot';
 import Link from 'next/link';
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -11,6 +12,7 @@ import { usePipelineLeadsFeed } from '@/lib/use-pipeline-leads-feed';
 import { dedupePipelineLeads } from '@/lib/pipeline-lead-select';
 import { metaAdSourceLabel, readMetaAdAttribution } from '@/lib/meta-ad-attribution';
 import { useCrmUI } from './CrmUI';
+import { pipelineLeadAutomation } from '@/lib/manual-pipeline-lead';
 
 function updatedAtTime(value: string | null | undefined) {
   const time = value ? new Date(value).getTime() : NaN;
@@ -137,7 +139,7 @@ export function PipelineBoard({ initialLeads, kind, organizationId, canEdit }: {
     };
   }, [showNew, showBulk, selectMode, error, notice]);
 
-  const stages = stagesFor(kind);
+  const stages = stagesFor(kind).filter(stage => !manualPilot() || !['qualificacao_ia','passagem_pendente'].includes(stage.id));
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return leads;
@@ -215,12 +217,12 @@ export function PipelineBoard({ initialLeads, kind, organizationId, canEdit }: {
     if (!current || current.stage === stage) return;
 
     const before = leads;
-    const optimisticOwnerMode = isAiStage(stage) ? 'ai' : isHumanStage(stage) ? 'human' : 'none';
+    const optimisticOwnerMode = manualPilot() && !['fechado_ganho','encerrado'].includes(stage) ? 'human' : isAiStage(stage) ? 'ai' : isHumanStage(stage) ? 'human' : 'none';
     setLeads((items) => items.map((lead) => lead.id === id ? {
       ...lead,
       stage,
       owner_mode: optimisticOwnerMode,
-      ai_enabled: isAiStage(stage) && !lead.opt_out && !lead.automation_paused,
+      ai_enabled: !manualPilot() && isAiStage(stage) && !lead.opt_out && !lead.automation_paused,
     } : lead));
     const response = await fetch(`/api/leads/${id}/stage`, {
       method: 'POST',
@@ -255,13 +257,13 @@ export function PipelineBoard({ initialLeads, kind, organizationId, canEdit }: {
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(payload.error || 'Não foi possível movimentar os leads.');
 
-      const ownerMode = isAiStage(bulkToStage) ? 'ai' : isHumanStage(bulkToStage) ? 'human' : 'none';
+      const ownerMode = manualPilot() && !['fechado_ganho','encerrado'].includes(bulkToStage) ? 'human' : isAiStage(bulkToStage) ? 'ai' : isHumanStage(bulkToStage) ? 'human' : 'none';
       setLeads((items) => items.map((lead) => lead.stage === bulkFromStage ? {
         ...lead,
         stage: bulkToStage,
         owner_mode: ownerMode,
-        ai_enabled: isAiStage(bulkToStage) && !lead.opt_out && !lead.automation_paused,
-        next_action: bulkToStage === 'futuro' ? 'Aguardar inclusão em campanha de reativação comercial.' : lead.next_action,
+        ai_enabled: !manualPilot() && isAiStage(bulkToStage) && !lead.opt_out && !lead.automation_paused,
+        next_action: bulkToStage === 'futuro' && !manualPilot() ? 'Aguardar inclusão em campanha de reativação comercial.' : lead.next_action,
         next_action_due_at: bulkToStage === 'futuro' ? null : lead.next_action_due_at,
       } : lead));
       setNotice(payload.message || `${payload.updated || bulkCount} registros movimentados.`);
@@ -295,8 +297,7 @@ export function PipelineBoard({ initialLeads, kind, organizationId, canEdit }: {
       company: kind === 'corretor' ? String(form.get('company') || '').trim() || 'Autônomo' : null,
       group_name: kind === 'corretor' ? String(form.get('group_name') || '').trim() || 'Novos cadastros' : null,
       temperature: 0,
-      ai_enabled: true,
-      owner_mode: 'ai',
+      ...pipelineLeadAutomation(),
       priority_class: null,
       metadata: {},
     };
@@ -345,15 +346,15 @@ export function PipelineBoard({ initialLeads, kind, organizationId, canEdit }: {
       <div className="page-head">
         <div>
           <h2>{kind === 'cliente' ? 'Pipeline de Clientes' : 'Pipeline de Corretores'}</h2>
-          <p>A IA lê as conversas, atualiza classificação e estado; o humano aceita a passagem e registra a próxima ação. O quadro atualiza sozinho conforme os leads mudam.</p>
+          <p>{manualPilot() ? "Cadastro e movimentação comercial manuais. Integrações externas indisponíveis neste piloto." : "A IA lê as conversas, atualiza classificação e estado; o humano aceita a passagem e registra a próxima ação. O quadro atualiza sozinho conforme os leads mudam."}</p>
         </div>
         <div className="page-actions">
           <input className="input" style={{ width: 230 }} placeholder="Buscar nome, ação, prioridade…" value={query} onChange={(e) => setQuery(e.target.value)} />
           <button className="btn btn-ghost btn-sm" onClick={() => void exportXlsx()}>⬇ Exportar XLSX</button>
           {canEdit && <>
-            <button className={`btn btn-sm ${selectMode ? 'btn-primary' : 'btn-ghost'}`} onClick={toggleSelectMode}>{selectMode ? '✓ Selecionando' : '☑ Selecionar vários'}</button>
+            {!manualPilot() && <button className={`btn btn-sm ${selectMode ? 'btn-primary' : 'btn-ghost'}`} onClick={toggleSelectMode}>{selectMode ? '✓ Selecionando' : '☑ Selecionar vários'}</button>}
             <button className="btn btn-ghost btn-sm" onClick={() => setShowBulk((value) => !value)}>⇄ Mover em massa</button>
-            <Link className="btn btn-ghost btn-sm" href={`/importar?tipo=${kind}`}>📥 Importar XLSX</Link>
+            {!manualPilot() && <Link className="btn btn-ghost btn-sm" href={`/importar?tipo=${kind}`}>📥 Importar XLSX</Link>}
             <button className="btn btn-primary btn-sm" onClick={() => setShowNew((value) => !value)}>+ {kind === 'cliente' ? 'Novo lead' : 'Novo corretor'}</button>
           </>}
         </div>

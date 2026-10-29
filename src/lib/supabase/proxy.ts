@@ -1,15 +1,19 @@
+import { manualPilot, pilotUser } from '../homologation/manual-pilot';
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
+import { serverSupabaseOptions } from '../homologation/server';
 
 const AUTH_PATHS = ['/login', '/cadastro', '/recuperar-senha'];
 
 export async function updateSession(request: NextRequest) {
+  const homologation = serverSupabaseOptions();
   let response = NextResponse.next({ request });
 
   const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
+    homologation?.url ?? process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    homologation?.key ?? process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
     {
+      ...(homologation ? { global: homologation.global } : {}),
       cookies: {
         getAll: () => request.cookies.getAll(),
         setAll(cookiesToSet) {
@@ -25,7 +29,7 @@ export async function updateSession(request: NextRequest) {
   // evitando uma ida ao servidor de autenticação a cada clique. Também renova a
   // sessão (cookies) quando o token está perto de expirar.
   const { data: claimsData, error: claimsError } = await supabase.auth.getClaims();
-  const user = !claimsError && typeof claimsData?.claims?.sub === 'string' ? claimsData.claims : null;
+  const user = !(manualPilot() && !pilotUser(claimsData?.claims as Record<string,unknown> | undefined)) && !claimsError && typeof claimsData?.claims?.sub === 'string' ? claimsData.claims : null;
   const pathname = request.nextUrl.pathname;
   const isAuthPath = AUTH_PATHS.some((path) => pathname.startsWith(path));
   const isPublicPath = isAuthPath || pathname.startsWith('/auth/') || pathname.startsWith('/api/') || pathname === '/atualizar-senha';
@@ -39,7 +43,7 @@ export async function updateSession(request: NextRequest) {
 
   if (user && isAuthPath) {
     const url = request.nextUrl.clone();
-    url.pathname = '/hoje';
+    url.pathname = manualPilot() ? '/clientes' : '/hoje';
     url.search = '';
     return NextResponse.redirect(url);
   }

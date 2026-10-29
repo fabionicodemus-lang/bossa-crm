@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import { manualPilot } from '@/lib/homologation/manual-pilot';
 import {
   createContext,
   useCallback,
@@ -542,6 +543,7 @@ export function CrmUI({
   }
   useEffect(() => {
     function key(event: KeyboardEvent) {
+      if (manualPilot()) return;
       const target = event.target as HTMLElement;
       if (
         target.closest('input,textarea,select,[contenteditable="true"]') ||
@@ -889,9 +891,10 @@ function NotificationCenter() {
 
 export function WorkspaceActions() {
   const ui = useCrmUI();
+  if (manualPilot()) return <span className="faint">Piloto comercial manual</span>;
   return (
     <div className="page-actions">
-      <NotificationCenter />
+      {!manualPilot() && <NotificationCenter />}
       <button className="global-search" type="button" onClick={ui.openSearch}>
         <Search size={14} />
         <span>Buscar lead, telefone…</span>

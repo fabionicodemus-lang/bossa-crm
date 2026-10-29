@@ -1,0 +1,45 @@
+import assert from 'node:assert/strict';
+import {execFile,spawn} from 'node:child_process';
+import {promisify} from 'node:util';
+import {aiProposalSetupSql,aiPayload,id,org,user,dev,unit} from './ai-proposal-fixture.mjs';
+const exec=promisify(execFile),container=`bossa_ai_proposal_${process.pid}`;
+const docker=async(...args)=>(await exec('docker',args,{timeout:20000,maxBuffer:6e6})).stdout.trim();
+const sql=s=>docker('exec',container,'psql','-X','-A','-t','-v','ON_ERROR_STOP=1','-U','postgres','-d','commercial_ai_proposal_test','-c',s);
+const apply=s=>new Promise((resolve,reject)=>{const p=spawn('docker',['exec','-i',container,'psql','-X','-q','-v','ON_ERROR_STOP=1','-U','postgres','-d','commercial_ai_proposal_test']);let error='';p.stderr.on('data',c=>error+=c);p.on('close',code=>code?reject(Error(error)):resolve());p.stdin.end(s);});
+const quoted=x=>`'${JSON.stringify(x).replaceAll("'","''")}'::jsonb`;
+const call=(source,p)=>`select commercial_record_detected_proposal('${org}','${source}','${p.signature}',${quoted(p.data)},${quoted(p.items)});`;
+const service='set role service_role;';
+const waitForHold=async n=>{for(let i=0;i<50;i++){if((await sql(`select exists(select 1 from pg_locks where locktype='advisory' and objid=${n} and granted);`))==='t')return;await new Promise(r=>setTimeout(r,40));}throw Error('Lock barrier unavailable');};
+try{
+ await docker('run','--rm','-d','--network','none','--name',container,'-e','POSTGRES_PASSWORD=isolated-only','-e','POSTGRES_DB=commercial_ai_proposal_test','postgres:17');
+ for(let i=0;i<40;i++){try{await sql('select 1');break;}catch{if(i===39)throw Error('Isolated PostgreSQL unavailable');await new Promise(r=>setTimeout(r,100));}}
+ for(const statement of aiProposalSetupSql())await apply(statement);
+ for(const n of [9300,9301,9302,9303])await sql(`insert into messages(id,organization_id,lead_id,created_at,body) values('${id(n)}','${org}','${id(30)}','2026-10-21T15:00:00Z','Proposta detectada');`);
+ const a=aiPayload({id,org,dev,unit,lead:id(30),source:id(9300)});
+ const first=sql(`begin; set local lock_timeout='8s'; ${service} ${call(id(9300),a)} select pg_advisory_xact_lock(990001); select pg_sleep(3); commit;`);
+ await waitForHold(990001).catch(async error=>{await first;throw error;});const repeat=await sql(`begin; set local lock_timeout='8s'; ${service} ${call(id(9300),a)} commit;`);await first;
+ assert.match(repeat,/"replayed": true/);
+ assert.equal(await sql("select count(*) from commercial_ai_proposal_detections;"),'1');
+ assert.equal(await sql("select count(*) from activities where type='proposta_detectada_whatsapp';"),'1');
+ assert.equal(await sql("select count(*) from proposals where snapshot->>'source'='whatsapp_commercial_intelligence';"),'1');
+ console.log('PASS PostgreSQL AI concurrency: simultaneous same-source attempts commit one proposal, item set, activity and receipt');
+ const b=aiPayload({id,org,dev,unit,lead:id(30),source:id(9301)}),c=aiPayload({id,org,dev,unit,lead:id(30),source:id(9302)});
+ const second=sql(`begin; set local lock_timeout='8s'; ${service} ${call(id(9301),b)} select pg_advisory_xact_lock(990002); select pg_sleep(3); commit;`);
+ await waitForHold(990002);await sql(`begin; set local lock_timeout='8s'; ${service} ${call(id(9302),c)} commit;`);await second;
+ assert.equal(await sql("select count(*) from proposals where snapshot->>'source'='whatsapp_commercial_intelligence';"),'1');
+ assert.equal(await sql("select version from proposals where snapshot->>'source'='whatsapp_commercial_intelligence';"),'3');
+ assert.equal(await sql('select count(*) from commercial_ai_proposal_detections;'),'3');
+ assert.equal(await sql("select count(*) from activities where type='proposta_detectada_whatsapp';"),'3');
+ assert.equal(await sql('select count(*) from proposal_payment_items;'),'1');
+ console.log('PASS PostgreSQL AI concurrency: distinct source messages sharing a signature serialize onto one machine draft');
+ const proposal=await sql("select id from proposals where snapshot->>'source'='whatsapp_commercial_intelligence';");
+ const human=sql(`begin; set local lock_timeout='5s'; select set_config('request.jwt.claim.sub','${user}',false); set role authenticated;
+  update proposals set notes='Edição humana concorrente',updated_by='${user}',version=version+1 where id='${proposal}';
+  select pg_advisory_xact_lock(990003); select pg_sleep(3); commit;`);
+ await waitForHold(990003);const d=aiPayload({id,org,dev,unit,lead:id(30),source:id(9303)});
+ const protectedResult=await sql(`begin; set local lock_timeout='5s'; ${service} ${call(id(9303),d)} commit;`);await human;
+ assert.match(protectedResult,/"outcome": "protected"/);
+ assert.equal(await sql(`select notes from proposals where id='${proposal}';`),'Edição humana concorrente');
+ assert.equal(await sql(`select version from proposals where id='${proposal}';`),'4');
+ console.log('PASS PostgreSQL AI concurrency: human edit commits first and the delayed detection records protection without overwriting it');
+}finally{await docker('rm','-f',container).catch(()=>{});}

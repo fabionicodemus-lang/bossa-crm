@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import { manualPilot, manualPilotPath } from '@/lib/homologation/manual-pilot';
 import { usePathname } from "next/navigation";
 import { useCrmUI } from "./CrmUI";
 const groups = [
@@ -44,9 +45,10 @@ export function WorkspaceTabs() {
   const role = context.role;
   const group = groups.find((g) => g.some((i) => i.href === pathname));
   if (!group) return null;
+  const available = group.filter(item => !manualPilot() || manualPilotPath(item.href));
   return (
     <nav className="workspace-tabs" aria-label="Seções">
-      {group
+      {available
         .filter(
           (i) =>
             !("admin" in i && i.admin && role !== "admin") &&

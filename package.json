@@ -32,7 +32,14 @@
     "test:lead-supervision": "node --experimental-strip-types --experimental-loader ./scripts/ts-extension-loader.mjs scripts/check-lead-supervision.mjs",
     "test:client-broker-transfer": "node --experimental-strip-types --experimental-loader ./scripts/ts-extension-loader.mjs scripts/check-client-broker-transfer.mjs",
     "test:nara-round3": "node --experimental-strip-types --experimental-loader ./scripts/ts-extension-loader.mjs scripts/check-nara-round3.mjs",
-    "test:hoje-ui": "node --experimental-strip-types scripts/ui/check-hoje-model.mjs"
+    "test:hoje-ui": "node --experimental-strip-types scripts/ui/check-hoje-model.mjs",
+    "test:commercial": "node --experimental-strip-types scripts/commercial/check.mjs",
+    "test:homologation-isolation": "node scripts/homologation/check.mjs && node --experimental-strip-types scripts/homologation/check-remote.mjs && node --experimental-strip-types scripts/homologation/check-auth-observation.mjs && node --experimental-strip-types scripts/homologation/check-preflight-v2-sql.mjs",
+    "test:homologation-compiled": "node --experimental-strip-types scripts/homologation/check-remote-compiled.mjs",
+    "homologation:preflight": "node scripts/homologation/preflight.mjs",
+    "test:manual-pilot": "node scripts/manual-pilot/check.mjs && node scripts/manual-pilot/check-acceptance.mjs",
+    "test:manual-pilot:compiled": "node scripts/manual-pilot/check-compiled.mjs",
+    "manual-pilot:check-accounts": "node scripts/manual-pilot/check-accounts.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.3",
@@ -45,11 +52,14 @@
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "0.5.10",
     "@types/node": "^22.0.0",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.0.0",
+    "esbuild": "^0.28.2",
     "eslint": "^9.0.0",
     "eslint-config-next": "^16.2.11",
+    "playwright": "1.62.1",
     "typescript": "^5.9.0"
   }
 }

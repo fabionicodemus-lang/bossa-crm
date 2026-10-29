@@ -2,14 +2,15 @@
 
 import { date, money, numberValue, statusLabels, workflowOf, type Proposal, type ProposalDevelopment, type WorkflowStatus } from './model';
 
-export function ProposalList({proposals,filteredProposals,developments,canEdit,search,setSearch,statusFilter,setStatusFilter,developmentFilter,setDevelopmentFilter,sentCount,activeValue,approvedValue,onNew,onExport,onEdit,onChangeStatus}:{
+export function ProposalList({proposals,filteredProposals,developments,canEdit,statusSaving,search,setSearch,statusFilter,setStatusFilter,developmentFilter,setDevelopmentFilter,sentCount,activeValue,approvedValue,onNew,onExport,onEdit,onChangeStatus}:{
   proposals:Proposal[]; filteredProposals:Proposal[]; developments:ProposalDevelopment[]; canEdit:boolean;
+  statusSaving:boolean;
   search:string; setSearch:(value:string)=>void; statusFilter:string; setStatusFilter:(value:string)=>void;
   developmentFilter:string; setDevelopmentFilter:(value:string)=>void; sentCount:number; activeValue:number; approvedValue:number;
   onNew:()=>void; onExport:()=>void; onEdit:(proposal:Proposal)=>void; onChangeStatus:(proposal:Proposal,status:WorkflowStatus)=>void;
 }){
   return <>
-    <div className="page-head"><div><h2>Controle de propostas</h2><p>Cada proposta fica vinculada ao lead, possui cronograma por datas e PDF comercial.</p></div><div className="page-actions">{canEdit&&<button className="btn btn-primary" onClick={onNew}>+ Nova proposta</button>}<button className="btn btn-ghost" onClick={onExport}>⬇ Exportar Excel</button></div></div>
+    <div className="page-head"><div><h2>Controle de propostas</h2><p>Cada proposta fica vinculada ao lead, possui cronograma por datas e PDF comercial.</p></div><div className="page-actions">{canEdit&&<button className="btn btn-primary" disabled={statusSaving} onClick={onNew}>+ Nova proposta</button>}<button className="btn btn-ghost" onClick={onExport}>⬇ Exportar Excel</button></div></div>
     <div className="kpis">
       <div className="kpi"><div className="kpi-label">Propostas</div><div className="kpi-value">{proposals.length}</div><div className="kpi-note">base geral</div></div>
       <div className="kpi"><div className="kpi-label">Em andamento</div><div className="kpi-value">{sentCount}</div><div className="kpi-note">enviadas e negociando</div></div>
@@ -30,9 +31,9 @@ export function ProposalList({proposals,filteredProposals,developments,canEdit,s
           <td><strong>{String(proposal.snapshot?.development_name??'—')}</strong><div className="faint">Unidade {String(proposal.snapshot?.unit_code??'—')}</div></td>
           <td><strong>{money.format(numberValue(proposal.proposed_price))}</strong></td>
           <td>{numberValue(proposal.snapshot?.paid_until_keys_percent).toFixed(2)}%<div className="faint">{money.format(numberValue(proposal.snapshot?.paid_until_keys_amount))}</div></td>
-          <td>{canEdit?<select className="select" style={{minWidth:150}} value={workflowOf(proposal)} onChange={event=>onChangeStatus(proposal,event.target.value as WorkflowStatus)}>{Object.entries(statusLabels).map(([value,label])=><option value={value} key={value}>{label}</option>)}</select>:statusLabels[workflowOf(proposal)]}</td>
+          <td>{canEdit?<select className="select" aria-label={`Status da proposta #${proposal.proposal_number}`} style={{minWidth:150}} value={workflowOf(proposal)} disabled={statusSaving} onChange={event=>onChangeStatus(proposal,event.target.value as WorkflowStatus)}>{Object.entries(statusLabels).map(([value,label])=><option value={value} key={value}>{label}</option>)}</select>:statusLabels[workflowOf(proposal)]}</td>
           <td>{date.format(new Date(proposal.updated_at))}</td>
-          <td><div className="page-actions" style={{justifyContent:'flex-end'}}><a className="btn btn-ghost btn-sm" href={`/api/propostas/${proposal.id}/pdf`} target="_blank" rel="noreferrer">PDF</a>{canEdit&&<button className="btn btn-ghost btn-sm" onClick={()=>onEdit(proposal)}>Editar</button>}</div></td>
+          <td><div className="page-actions" style={{justifyContent:'flex-end'}}><a className="btn btn-ghost btn-sm" href={`/api/propostas/${proposal.id}/pdf`} target="_blank" rel="noreferrer">PDF</a>{canEdit&&<button className="btn btn-ghost btn-sm" disabled={statusSaving} onClick={()=>onEdit(proposal)}>Editar</button>}</div></td>
         </tr>)}
       </tbody></table></div>
     </div></section>
