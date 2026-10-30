@@ -668,7 +668,7 @@ class Recovery:
             if special:
                 self.target.query("BEGIN; ALTER ROLE postgres WITH SUPERUSER; "
                                   +create+" ALTER ROLE postgres WITH NOSUPERUSER; COMMIT;")
-                gate(self.target.json("SELECT rolsuper FROM pg_roles WHERE rolname='postgres';") is False,
+                gate(self.target.json("SELECT to_json(rolsuper) FROM pg_roles WHERE rolname='postgres';") is False,
                      "temporary_extension_privilege_not_revoked")
             else:
                 self.target.query(create)
