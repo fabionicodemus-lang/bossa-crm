@@ -25,7 +25,7 @@ jobs:
           docker exec --user postgres "$name" initdb -D /recovery/data -U supabase_admin -A trust --no-instructions >/dev/null
           # Ephemeral fictitious key to keep pg_net requests disabled while loading vault.
           docker exec --user postgres "$name" sh -c "printf '%064d\n' 0 >/recovery/vault.key; printf '#!/bin/sh\nexec cat /recovery/vault.key\n' >/recovery/getkey; chmod 700 /recovery/getkey"
-          docker exec --detach --user postgres "$name" sh -c "exec postgres -D /recovery/data -c listen_addresses='' -c unix_socket_directories=/tmp -c shared_preload_libraries=pg_cron,pg_stat_statements,supabase_vault -c cron.database_name=postgres -c cron.launch_active_jobs=off -c vault.getkey_script=/recovery/getkey -c log_min_error_statement=panic >/recovery/server.log 2>&1"
+          docker exec --detach --user postgres "$name" sh -c "exec postgres -D /recovery/data -c listen_addresses='' -c unix_socket_directories=/tmp -c shared_preload_libraries=pg_cron,pg_stat_statements,supabase_vault,pg_net -c cron.database_name=postgres -c cron.launch_active_jobs=off -c vault.getkey_script=/recovery/getkey -c log_min_error_statement=panic >/recovery/server.log 2>&1"
           ready=false
           for i in {1..40}; do
             if docker exec "$name" pg_isready -h /tmp -U supabase_admin -d postgres >/dev/null 2>&1; then ready=true; break; fi
@@ -78,6 +78,20 @@ jobs:
           docker exec -i "$name" psql -h /tmp -U supabase_admin -d postgres -X -qAt -v ON_ERROR_STOP=1 <<'SQL'
           SET SESSION AUTHORIZATION postgres;
           CREATE EXTENSION "uuid-ossp" WITH SCHEMA extensions VERSION '1.1';
+          SQL
+          printf 'STAGE=DISABLE_PG_NET_BEFORE_RESTORING_SOURCE_DATA\n'
+          docker exec --user postgres "$name" pg_ctl -D /recovery/data -m fast stop >/dev/null
+          docker exec --detach --user postgres "$name" sh -c "exec postgres -D /recovery/data -c listen_addresses='' -c unix_socket_directories=/tmp -c shared_preload_libraries=pg_cron,pg_stat_statements,supabase_vault -c cron.database_name=postgres -c cron.launch_active_jobs=off -c vault.getkey_script=/recovery/getkey -c log_min_error_statement=panic >/recovery/server.log 2>&1"
+          ready=false
+          for i in {1..40}; do
+            if docker exec "$name" pg_isready -h /tmp -U supabase_admin -d postgres >/dev/null 2>&1; then ready=true; break; fi
+            sleep 1
+          done
+          test "$ready" = true
+          docker exec -i "$name" psql -h /tmp -U supabase_admin -d postgres -X -qAt -v ON_ERROR_STOP=1 <<'SQL'
+          SELECT 'pg_net_disabled=' || (position('pg_net' in current_setting('shared_preload_libraries'))=0)::text;
+          SELECT 'cron_jobs_disabled=' || current_setting('cron.launch_active_jobs');
+          SELECT 'pg_net_queue_rows=' || count(*)::text FROM net.http_request_queue;
           SQL
           printf 'STAGE=CHECK_ROLE_OWNERS\n'
           docker exec -i "$name" psql -h /tmp -U supabase_admin -d postgres -X -qAt -v ON_ERROR_STOP=1 <<'SQL'
