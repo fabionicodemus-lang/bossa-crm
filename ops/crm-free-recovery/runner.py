@@ -568,6 +568,7 @@ class Recovery:
                   "--entrypoint","sleep",self.image,"infinity"])
         info = json.loads(self.run(["docker","inspect",self.container]))[0]
         gate(info["HostConfig"]["NetworkMode"] == "none" and not info["HostConfig"].get("PortBindings"), "restore_network_not_isolated")
+        self.manifest["network_none"] = True
         self.run(["docker","exec",self.container,"sh","-c","mkdir -p /recovery && chown postgres:postgres /recovery"])
         providers = {"b":"builtin","c":"libc","i":"icu"}
         gate(self.database["provider"] in providers,"unsupported_locale_provider")
@@ -578,9 +579,10 @@ class Recovery:
             gate(self.database["locale"],"provider_locale_missing")
             init += [("--builtin-locale=" if self.database["provider"]=="b" else "--icu-locale=")+self.database["locale"]]
         self.run(init)
-        # pg_net is deliberately NOT preloaded. Thus restored requests cannot
-        # be consumed/replayed, even internally. Docker adds a second barrier.
-        start = "exec postgres -D /recovery/data -c listen_addresses='' -c unix_socket_directories=/tmp -c shared_preload_libraries=pg_cron,pg_stat_statements,supabase_vault -c cron.database_name=postgres -c cron.launch_active_jobs=off -c vault.getkey_script=/recovery_getkey -c log_statement=none -c log_min_error_statement=panic >/recovery/server.log 2>&1"
+        # pg_net needs shared_preload_libraries while its extension is created.
+        # Preload ONLY on the empty, network-isolated clone, before any source
+        # rows are restored. After CREATE EXTENSION restart without pg_net.
+        start = "exec postgres -D /recovery/data -c listen_addresses='' -c unix_socket_directories=/tmp -c shared_preload_libraries=pg_cron,pg_stat_statements,supabase_vault,pg_net -c cron.database_name=postgres -c cron.launch_active_jobs=off -c vault.getkey_script=/recovery_getkey -c log_statement=none -c log_min_error_statement=panic >/recovery/server.log 2>&1"
         self.run(["docker","exec","--detach","--user","postgres",self.container,"sh","-c",start])
         ready = False
         for _ in range(45):
@@ -594,7 +596,7 @@ class Recovery:
         self.target = Psql(cmd, dict(os.environ), self.logs/"restore-session.log")
         self.target.query("SET search_path=pg_catalog; SET timezone='UTC'; SET datestyle='ISO, YMD'; SET extra_float_digits=3; SET bytea_output='hex'; SET session_replication_role=replica;")
         config = self.target.json("SELECT json_build_object('cron',current_setting('cron.launch_active_jobs'),'preload',current_setting('shared_preload_libraries'),'version',current_setting('server_version'));")
-        gate(config["cron"] == "off" and "pg_net" not in config["preload"] and config["version"] == EXPECTED_VERSION, "unsafe_restore_configuration")
+        gate(config["cron"] == "off" and "pg_net" in config["preload"] and config["version"] == EXPECTED_VERSION, "unsafe_extension_bootstrap_configuration")
 
     def prepare_roles_extensions(self):
         stage("RESTORE_ORIGINAL_ROLES_AND_EXTENSION_OWNERS")
@@ -651,7 +653,7 @@ class Recovery:
             gate(special or original_roles[e["owner"]]["rolsuper"] or
                  not install["requires_superuser"] or install["trusted"],
                  "extension_owner_requires_superuser_or_trusted_adapter")
-        gate(self.manifest.get("network_none") is not False, "isolation_required_for_restore")
+        gate(self.manifest.get("network_none") is True, "isolation_required_for_restore")
         # The source role's original attributes must be restored before any
         # schema or row verification. A failure destroys this local clone.
         self.target.query("DROP EXTENSION plpgsql;")
@@ -676,6 +678,65 @@ class Recovery:
              == {r["rolname"]:r["rolsuper"] for r in self.roles
                  if r["rolname"] in ("postgres","supabase_admin")},
              "restored_extension_role_privileges_mismatch")
+        self.disable_pg_net_before_source_restore()
+
+    def disable_pg_net_before_source_restore(self):
+        # Bootstrap creates no source rows. Confirm queue empty while the
+        # worker is enabled, then stop the server BEFORE importing source data.
+        stage("DISABLE_PG_NET_BEFORE_SOURCE_RESTORE")
+        gate(self.manifest.get("network_none") is True, "offline_container_required")
+        gate(self.target.json("SELECT to_json(count(*)) FROM net.http_request_queue;") == 0,
+             "pg_net_bootstrap_queue_not_empty")
+        self.target.close()
+        self.target = None
+        self.run(["docker", "exec", "--user", "postgres", self.container,
+                  "pg_ctl", "-D", "/recovery/data", "-m", "fast", "stop"], timeout=90)
+
+        # Keep pg_cron loaded but fully disabled; do not reload pg_net worker.
+        # The restored queue may have historic data, so even internal requests
+        # must not be retried. Docker --network none is a second barrier.
+        restart = ("exec postgres -D /recovery/data -c listen_addresses='' "
+                   "-c unix_socket_directories=/tmp "
+                   "-c shared_preload_libraries=pg_cron,pg_stat_statements,supabase_vault "
+                   "-c cron.database_name=postgres -c cron.launch_active_jobs=off "
+                   "-c vault.getkey_script=/recovery_getkey "
+                   "-c log_statement=none -c log_min_error_statement=panic "
+                   ">/recovery/server.log 2>&1")
+        self.run(["docker", "exec", "--detach", "--user", "postgres", self.container,
+                  "sh", "-c", restart], timeout=30)
+        ready = False
+        for _ in range(45):
+            check = subprocess.run(
+                ["docker", "exec", self.container, "pg_isready", "-h", "/tmp",
+                 "-U", "supabase_admin", "-d", "postgres"],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            if check.returncode == 0:
+                ready = True
+                break
+            time.sleep(1)
+        gate(ready, "offline_database_restart_failed")
+        info = json.loads(self.run(["docker", "inspect", self.container]))[0]
+        gate(info["HostConfig"]["NetworkMode"] == "none"
+             and not info["HostConfig"].get("PortBindings"),
+             "restore_network_isolation_lost")
+        command = ["docker", "exec", "--interactive", self.container, "psql",
+                   "-h", "/tmp", "-U", "supabase_admin", "-d", "postgres", "-X",
+                   "-qAt", "-v", "ON_ERROR_STOP=1"]
+        self.target = Psql(command, dict(os.environ), self.logs / "restore-after-restart.log")
+        self.target.query("SET search_path=pg_catalog; SET timezone='UTC'; "
+                          "SET datestyle='ISO, YMD'; SET extra_float_digits=3; "
+                          "SET bytea_output='hex'; SET session_replication_role=replica;")
+        config = self.target.json(
+            "SELECT json_build_object('cron',current_setting('cron.launch_active_jobs'),"
+            "'preload',current_setting('shared_preload_libraries'),"
+            "'version',current_setting('server_version'));")
+        gate(config["cron"] == "off" and "pg_net" not in config["preload"]
+             and config["version"] == EXPECTED_VERSION,
+             "network_workers_not_disabled_before_restore")
+        gate(self.target.json("SELECT to_json(count(*)) FROM net.http_request_queue;") == 0,
+             "pg_net_queue_changed_after_restart")
+        self.manifest["pg_net_empty_bootstrap_then_disabled"] = True
+        stage("SOURCE_RESTORE_PROCESSORS_DISABLED")
 
     def restore(self):
         self.prepare_roles_extensions()
