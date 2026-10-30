@@ -5,6 +5,7 @@ on:
       - ops/crm-free-recovery-20261029
     paths:
       - .github/workflows/crm-recovery-integration-smoke.yml
+      - ops/crm-free-recovery/runner.py
 permissions: {}
 jobs:
   synthetic-recovery-integration:
