@@ -856,6 +856,7 @@ class Recovery:
 
     def verify(self):
         stage("VERIFY_RESTORED_ROWS_SECURITY_AND_VAULT")
+        mismatches = []
         for name, query, expected in (("schemas",SCHEMAS_SQL,self.schemas),("relations",TABLES_SQL,self.tables),
                                        ("extensions",EXT_SQL,self.extensions),("policies",POLICIES_SQL,self.policies),
                                        ("catalog",CATALOG_SQL,self.catalog),("roles",ROLES_SQL,self.roles),
@@ -866,7 +867,25 @@ class Recovery:
                                        ("database_settings",DB_SETTINGS_SQL,self.db_settings)):
             actual = self.target.json(query)
             dump_json(self.payload/("restored-"+name+".json"), actual)
-            gate(actual == expected, "restore_"+name+"_mismatch")
+            if actual != expected:
+                mismatches.append(name)
+                if name == "schemas":
+                    by_source = {s["name"]: s for s in expected}
+                    by_clone = {s["name"]: s for s in actual}
+                    for schema in sorted(set(by_source) | set(by_clone)):
+                        a, b = by_source.get(schema), by_clone.get(schema)
+                        differences = (["missing"] if b is None else
+                                       ["extra"] if a is None else
+                                       [k for k in ("owner", "acl", "extension") if a[k] != b[k]])
+                        if differences:
+                            # Hash schema names to avoid disclosing private
+                            # database topology in this public Actions log.
+                            digest = hashlib.sha256(schema.encode()).hexdigest()[:16]
+                            print("RESTORE_SCHEMA_DIAG="+digest+":"+
+                                  ",".join(differences), flush=True)
+                else:
+                    print("RESTORE_METADATA_DIAG="+name, flush=True)
+        gate(not mismatches, "restore_metadata_mismatch")
         self.run(["docker","exec",self.container,"mkdir","-p","/recovery/verify"])
         for index, c in enumerate(self.copies):
             output = "/recovery/verify/"+str(index)+".copy"
