@@ -41,14 +41,23 @@ jobs:
               return dict(rolname=name,rolsuper=superuser,rolinherit=True,rolcreaterole=superuser,
                           rolcreatedb=superuser,rolcanlogin=True,rolreplication=False,rolbypassrls=superuser,
                           rolconnlimit=-1,rolvaliduntil=None,rolconfig=[])
-          r.roles=[role("supabase_admin",True),role("postgres",False)]
+          r.roles=[role("supabase_admin",True),role("postgres",False),
+                   role("anon",False),role("authenticated",False),
+                   role("service_role",False),role("supabase_functions_admin",False)]
           r.members=[]
           r.db_owner="postgres"
           r.database=dict(provider="c",encoding="UTF8",collate="C",ctype="C",locale=None,
                           connection_limit=-1)
           r.schemas=[
               {"name":"extensions","owner":"postgres","extension":None},
-              {"name":"vault","owner":"supabase_admin","extension":None}
+              {"name":"vault","owner":"supabase_admin","extension":None},
+              {"name":"cron","owner":"supabase_admin","extension":"pg_cron",
+               "acl":["postgres=U*/supabase_admin","supabase_admin=UC/supabase_admin"]},
+              {"name":"net","owner":"supabase_admin","extension":"pg_net",
+               "acl":["=U/supabase_admin","anon=U/supabase_admin",
+                      "authenticated=U/supabase_admin","postgres=U/supabase_admin",
+                      "service_role=U/supabase_admin","supabase_admin=UC/supabase_admin",
+                      "supabase_functions_admin=U/supabase_admin"]}
           ]
           r.extensions=[
               {"name":"btree_gist","version":"1.7","schema":"public","owner":"supabase_admin"},
@@ -71,9 +80,15 @@ jobs:
               r.start_target()
               print("STAGE=SYNTHETIC_PREPARE_ROLES_AND_EXTENSIONS",flush=True)
               r.prepare_roles_extensions()
+              print("STAGE=SYNTHETIC_RECONCILE_EXTENSION_ACLS",flush=True)
+              r.reconcile_extension_schema_acls()
               print("STAGE=SYNTHETIC_NO_HTTP_WORKERS",flush=True)
               cfg=r.target.json("SELECT json_build_object('net_loaded',position('pg_net' IN current_setting('shared_preload_libraries'))>0,'cron',current_setting('cron.launch_active_jobs'),'queued',(SELECT count(*) FROM net.http_request_queue));")
               assert cfg==dict(net_loaded=False,cron="off",queued=0), cfg
+              from runner import SCHEMAS_SQL
+              got={x["name"]:x for x in r.target.json(SCHEMAS_SQL)}
+              expected={x["name"]:x for x in r.schemas if x["extension"]}
+              assert all(got[name]["acl"]==expected[name]["acl"] for name in expected)
               print("RESULT=SYNTHETIC_RECOVERY_BOOTSTRAP_PASSED",flush=True)
           except Exception as exc:
               print("RESULT=SYNTHETIC_RECOVERY_BOOTSTRAP_FAILED",flush=True)
