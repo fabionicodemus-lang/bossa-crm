@@ -89,13 +89,22 @@ class Psql:
     """Persistent psql, including a snapshot keeper; output is never echoed."""
 
     def __init__(self, command, env, log, timeout=300):
+        self.log_path = Path(log)
         self.log_handle = open(log, "ab")
-        self.proc = subprocess.Popen(command, env=env, stdin=subprocess.PIPE,
+        # PostgreSQL's sqlstate verbosity suppresses error text and context.
+        # Even the private stderr file is not copied to the public run log.
+        self.proc = subprocess.Popen(command + ["-v", "VERBOSITY=sqlstate"], env=env, stdin=subprocess.PIPE,
                                      stdout=subprocess.PIPE, stderr=self.log_handle)
         self.timeout = timeout
         self.buffer = b""
         self.selector = selectors.DefaultSelector()
         self.selector.register(self.proc.stdout, selectors.EVENT_READ)
+
+    def failed(self):
+        self.log_handle.flush()
+        states = re.findall(rb"(?:ERROR|FATAL):\s+([A-Z0-9]{5})\b", self.log_path.read_bytes())
+        suffix = "_" + states[-1].decode("ascii") if states else ""
+        raise GateFailure("sql_process_failed" + suffix)
 
     def query(self, sql):
         marker = ("CRM_END_" + secrets.token_hex(24)).encode()
@@ -115,10 +124,12 @@ class Psql:
             left = deadline - time.monotonic()
             gate(left > 0, "sql_timeout")
             if not self.selector.select(min(left, 10)):
-                gate(self.proc.poll() is None, "sql_process_failed")
+                if self.proc.poll() is not None:
+                    self.failed()
                 continue
             part = os.read(self.proc.stdout.fileno(), 65536)
-            gate(part, "sql_process_failed")
+            if not part:
+                self.failed()
             self.buffer += part
 
     def json(self, sql):
@@ -421,27 +432,26 @@ class Recovery:
 
     def capture(self):
         stage("CONSISTENT_DATABASE_EXPORT")
-        self.schemas = self.source.json(SCHEMAS_SQL)
-        self.tables = self.source.json(TABLES_SQL)
-        self.extensions = self.source.json(EXT_SQL)
-        self.roles = self.source.json(ROLES_SQL)
-        self.members = self.source.json(MEMBERS_SQL)
-        self.policies = self.source.json(POLICIES_SQL)
-        self.catalog = self.source.json(CATALOG_SQL)
-        self.default_acls = self.source.json(DEFAULT_ACLS_SQL)
-        self.publications = self.source.json(PUBLICATIONS_SQL)
-        self.database = self.source.json(DATABASE_SQL)
-        self.db_settings = self.source.json(DB_SETTINGS_SQL)
-        self.objects = self.source.json(STORAGE_SQL)
+        for name, query in (("schemas",SCHEMAS_SQL),("tables",TABLES_SQL),
+                            ("extensions",EXT_SQL),("roles",ROLES_SQL),
+                            ("members",MEMBERS_SQL),("policies",POLICIES_SQL),
+                            ("catalog",CATALOG_SQL),("default_acls",DEFAULT_ACLS_SQL),
+                            ("publications",PUBLICATIONS_SQL),("database",DATABASE_SQL),
+                            ("db_settings",DB_SETTINGS_SQL),("objects",STORAGE_SQL)):
+            stage("SOURCE_CATALOG_"+name.upper())
+            setattr(self,name,self.source.json(query))
+        stage("SOURCE_RECOVERY_FEATURE_GATES")
         gate({e["name"]:e["version"] for e in self.extensions} == EXPECTED_EXTENSIONS, "extensions_changed")
         gate(not any(t["kind"] == "f" for t in self.tables), "foreign_table_requires_separate_backup")
         gate(self.source.json("SELECT to_json(count(*)) FROM pg_subscription;") == 0, "replication_subscription_requires_adapter")
         gate(self.source.json("SELECT to_json(count(*)) FROM pg_largeobject_metadata;") == 0, "large_objects_require_validation_adapter")
         gate(self.source.json("SELECT to_json(count(*)) FROM pg_tablespace WHERE spcname NOT IN ('pg_default','pg_global');") == 0, "custom_tablespaces_require_adapter")
         gate(not self.database["icu_rules"], "custom_icu_rules_require_adapter")
+        stage("SOURCE_VAULT_DECRYPTION_PROOF")
         self.vault_proof = self.source.json("SELECT json_build_object('count',count(*),'hash',md5(coalesce(string_agg(id::text||':'||md5(decrypted_secret),',' ORDER BY id),''))) FROM vault.decrypted_secrets;")
         self.copies = []
         (self.payload / "tables").mkdir()
+        stage("SOURCE_NATIVE_TABLE_COPIES")
         for index, table in enumerate(self.tables):
             gate(time.monotonic()-self.started < MAX_SECONDS, "overall_deadline")
             if table["kind"] not in ("r", "m"):
@@ -467,6 +477,7 @@ class Recovery:
             self.copies.append({"table":table,"file":name,"rows":count,
                                 "fingerprint_file":fingerprint_file,
                                 "sha256":sha_file(self.payload/fingerprint_file),"select":fingerprint_sql})
+        stage("SOURCE_SEQUENCE_STATES")
         self.sequences = []
         for t in self.tables:
             if t["kind"] == "S":
