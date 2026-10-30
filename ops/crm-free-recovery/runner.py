@@ -481,7 +481,9 @@ class Recovery:
         self.sequences = []
         for t in self.tables:
             if t["kind"] == "S":
-                state = self.source.json("SELECT row_to_json(t) FROM "+qualified(t["schema"],t["name"])+" t;")
+                # Sequences have no composite row type. Read their state
+                # columns explicitly, as PostgreSQL's own pg_dump does.
+                state = self.source.json("SELECT json_build_object('last_value',last_value,'log_cnt',log_cnt,'is_called',is_called) FROM "+qualified(t["schema"],t["name"])+";")
                 self.sequences.append({"schema":t["schema"],"name":t["name"],"state":state})
         gate(self.dump_process.wait(timeout=600) == 0, "raw_dump_failed")
         for h in self.dump_handles:
@@ -721,7 +723,7 @@ class Recovery:
         vault = self.target.json("SELECT json_build_object('count',count(*),'hash',md5(coalesce(string_agg(id::text||':'||md5(decrypted_secret),',' ORDER BY id),''))) FROM vault.decrypted_secrets;")
         gate(vault == self.vault_proof, "vault_decryption_mismatch")
         for s in self.sequences:
-            actual = self.target.json("SELECT row_to_json(t) FROM "+qualified(s["schema"],s["name"])+" t;")
+            actual = self.target.json("SELECT json_build_object('last_value',last_value,'log_cnt',log_cnt,'is_called',is_called) FROM "+qualified(s["schema"],s["name"])+";")
             gate(all(actual[k]==s["state"][k] for k in ("last_value","is_called")),"sequence_state_mismatch")
         self.manifest["state"] = "RESTORE_VERIFIED"
         self.manifest["table_copy_count"] = len(self.copies)
