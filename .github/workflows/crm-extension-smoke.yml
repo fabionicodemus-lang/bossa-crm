@@ -1,0 +1,51 @@
+name: CRM offline extension smoke (no source data)
+on:
+  push:
+    branches:
+      - ops/crm-free-recovery-20261029
+    paths:
+      - .github/workflows/crm-extension-smoke.yml
+permissions: {}
+jobs:
+  synthetic-extension-smoke:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - name: Check managed extension ownership without secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          image='supabase/postgres:17.6.1.147@sha256:ac581882596ed0e46937ea6dd53a627d09f53e005d7264c2082a7ff7b62eaaca'
+          docker pull "$image" >/dev/null
+          name="bossa-smoke-$GITHUB_RUN_ID"
+          trap 'docker rm -f "$name" >/dev/null 2>&1 || true' EXIT
+          docker run -d --name "$name" --network none --entrypoint sleep "$image" infinity >/dev/null
+          test "$(docker inspect --format '{{.HostConfig.NetworkMode}}' "$name")" = 'none'
+          docker exec "$name" sh -c 'mkdir -p /recovery && chown postgres:postgres /recovery'
+          docker exec --user postgres "$name" initdb -D /recovery/data -U supabase_admin -A trust --no-instructions >/dev/null
+          docker exec --detach --user postgres "$name" sh -c "exec postgres -D /recovery/data -c listen_addresses='' -c unix_socket_directories=/tmp -c shared_preload_libraries=pg_stat_statements -c log_min_error_statement=panic >/recovery/server.log 2>&1"
+          ready=false
+          for i in {1..40}; do
+            if docker exec "$name" pg_isready -h /tmp -U supabase_admin -d postgres >/dev/null 2>&1; then ready=true; break; fi
+            sleep 1
+          done
+          test "$ready" = true
+          printf 'STAGE=SMOKE_ORIGINAL_PRIVILEGES\n'
+          docker exec -i "$name" psql -h /tmp -U supabase_admin -d postgres -X -qAt -v ON_ERROR_STOP=1 <<'SQL'
+          CREATE ROLE postgres WITH NOSUPERUSER LOGIN;
+          CREATE SCHEMA extensions AUTHORIZATION supabase_admin;
+          SELECT 'postgres_initial_super=' || rolsuper::text FROM pg_roles WHERE rolname='postgres';
+          SQL
+          printf 'STAGE=SMOKE_TEMPORARY_ROLE_ELEVATION\n'
+          docker exec -i "$name" psql -h /tmp -U supabase_admin -d postgres -X -qAt -v ON_ERROR_STOP=1 <<'SQL'
+          BEGIN;
+          ALTER ROLE postgres WITH SUPERUSER;
+          SET SESSION AUTHORIZATION postgres;
+          CREATE EXTENSION pg_stat_statements WITH SCHEMA extensions VERSION '1.11';
+          RESET SESSION AUTHORIZATION;
+          ALTER ROLE postgres WITH NOSUPERUSER;
+          COMMIT;
+          SELECT 'postgres_final_super=' || rolsuper::text FROM pg_roles WHERE rolname='postgres';
+          SELECT 'extension_owner=' || pg_get_userbyid(extowner) FROM pg_extension WHERE extname='pg_stat_statements';
+          SQL
+          printf 'STAGE=SMOKE_PASS\n'
