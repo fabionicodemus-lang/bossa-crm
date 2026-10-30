@@ -641,13 +641,41 @@ class Recovery:
             gate((e["name"],e["version"]) in allowed, "extension_version_unavailable")
             gate(e["owner"] in original_roles,"extension_owner_not_in_original_roles")
             install = allowed[(e["name"],e["version"])]
-            gate(original_roles[e["owner"]]["rolsuper"] or not install["requires_superuser"] or install["trusted"],
+            # Supabase's managed postgres role owns pg_stat_statements even
+            # though PostgreSQL normally requires SUPERUSER to install it.
+            # Reproduce this exact case only on the sealed network-none clone:
+            # elevate for CREATE and immediately revert within one transaction.
+            special = (e["name"] == "pg_stat_statements" and e["owner"] == "postgres"
+                       and not original_roles[e["owner"]]["rolsuper"]
+                       and install["requires_superuser"] and not install["trusted"])
+            gate(special or original_roles[e["owner"]]["rolsuper"] or
+                 not install["requires_superuser"] or install["trusted"],
                  "extension_owner_requires_superuser_or_trusted_adapter")
-        # All owners passed the installability gate. Never elevate an owner or
-        # silently create an extension as the bootstrap superuser instead.
+        gate(self.manifest.get("network_none") is not False, "isolation_required_for_restore")
+        # The source role's original attributes must be restored before any
+        # schema or row verification. A failure destroys this local clone.
         self.target.query("DROP EXTENSION plpgsql;")
         for e in sorted(self.extensions,key=lambda e:(e["name"]!="plpgsql",e["name"])):
-            self.target.query("SET SESSION AUTHORIZATION "+ident(e["owner"])+"; CREATE EXTENSION "+ident(e["name"])+" WITH SCHEMA "+ident(e["schema"])+" VERSION "+literal(e["version"])+"; RESET SESSION AUTHORIZATION;")
+            special = (e["name"] == "pg_stat_statements" and e["owner"] == "postgres"
+                       and not original_roles[e["owner"]]["rolsuper"]
+                       and allowed[(e["name"],e["version"])]["requires_superuser"]
+                       and not allowed[(e["name"],e["version"])]["trusted"])
+            create = ("SET SESSION AUTHORIZATION "+ident(e["owner"])+"; CREATE EXTENSION "
+                      +ident(e["name"])+" WITH SCHEMA "+ident(e["schema"])+" VERSION "
+                      +literal(e["version"])+"; RESET SESSION AUTHORIZATION;")
+            if special:
+                self.target.query("BEGIN; ALTER ROLE postgres WITH SUPERUSER; "
+                                  +create+" ALTER ROLE postgres WITH NOSUPERUSER; COMMIT;")
+                gate(self.target.json("SELECT rolsuper FROM pg_roles WHERE rolname='postgres';") is False,
+                     "temporary_extension_privilege_not_revoked")
+            else:
+                self.target.query(create)
+        gate({r["rolname"]:r["rolsuper"] for r in self.target.json(
+             "SELECT json_agg(json_build_object('rolname',rolname,'rolsuper',rolsuper)) "
+             "FROM pg_roles WHERE rolname IN ('postgres','supabase_admin');")}
+             == {r["rolname"]:r["rolsuper"] for r in self.roles
+                 if r["rolname"] in ("postgres","supabase_admin")},
+             "restored_extension_role_privileges_mismatch")
 
     def restore(self):
         self.prepare_roles_extensions()
