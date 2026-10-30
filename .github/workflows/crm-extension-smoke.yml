@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 12
     steps:
-      - name: Check managed extension ownership without secrets
+      - name: Rehearse all exact managed extension owners without source credentials
         shell: bash
         run: |
           set -euo pipefail
@@ -20,23 +20,42 @@ jobs:
           name="bossa-smoke-$GITHUB_RUN_ID"
           trap 'docker rm -f "$name" >/dev/null 2>&1 || true' EXIT
           docker run -d --name "$name" --network none --entrypoint sleep "$image" infinity >/dev/null
-          test "$(docker inspect --format '{{.HostConfig.NetworkMode}}' "$name")" = 'none'
+          test "$(docker inspect --format '{{.HostConfig.NetworkMode}}' "$name")" = none
           docker exec "$name" sh -c 'mkdir -p /recovery && chown postgres:postgres /recovery'
           docker exec --user postgres "$name" initdb -D /recovery/data -U supabase_admin -A trust --no-instructions >/dev/null
-          docker exec --detach --user postgres "$name" sh -c "exec postgres -D /recovery/data -c listen_addresses='' -c unix_socket_directories=/tmp -c shared_preload_libraries=pg_stat_statements -c log_min_error_statement=panic >/recovery/server.log 2>&1"
+          # Ephemeral fictitious key to keep pg_net requests disabled while loading vault.
+          docker exec --user postgres "$name" sh -c "printf '%064d\n' 0 >/recovery/vault.key; printf '#!/bin/sh\nexec cat /recovery/vault.key\n' >/recovery/getkey; chmod 700 /recovery/getkey"
+          docker exec --detach --user postgres "$name" sh -c "exec postgres -D /recovery/data -c listen_addresses='' -c unix_socket_directories=/tmp -c shared_preload_libraries=pg_cron,pg_stat_statements,supabase_vault -c cron.database_name=postgres -c cron.launch_active_jobs=off -c vault.getkey_script=/recovery/getkey -c log_min_error_statement=panic >/recovery/server.log 2>&1"
           ready=false
           for i in {1..40}; do
             if docker exec "$name" pg_isready -h /tmp -U supabase_admin -d postgres >/dev/null 2>&1; then ready=true; break; fi
             sleep 1
           done
           test "$ready" = true
-          printf 'STAGE=SMOKE_ORIGINAL_PRIVILEGES\n'
           docker exec -i "$name" psql -h /tmp -U supabase_admin -d postgres -X -qAt -v ON_ERROR_STOP=1 <<'SQL'
           CREATE ROLE postgres WITH NOSUPERUSER LOGIN;
           CREATE SCHEMA extensions AUTHORIZATION supabase_admin;
-          SELECT 'postgres_initial_super=' || rolsuper::text FROM pg_roles WHERE rolname='postgres';
+          CREATE SCHEMA vault AUTHORIZATION supabase_admin;
+          DROP EXTENSION plpgsql;
           SQL
-          printf 'STAGE=SMOKE_TEMPORARY_ROLE_ELEVATION\n'
+          printf 'STAGE=EXT_PLPGSQL\n'
+          docker exec -i "$name" psql -h /tmp -U supabase_admin -d postgres -X -qAt -v ON_ERROR_STOP=1 <<'SQL'
+          SET SESSION AUTHORIZATION supabase_admin;
+          CREATE EXTENSION plpgsql WITH SCHEMA pg_catalog VERSION '1.0';
+          SQL
+          printf 'STAGE=EXT_BTREE_GIST\n'
+          docker exec -i "$name" psql -h /tmp -U supabase_admin -d postgres -X -qAt -v ON_ERROR_STOP=1 <<'SQL'
+          CREATE EXTENSION btree_gist WITH SCHEMA public VERSION '1.7';
+          SQL
+          printf 'STAGE=EXT_PG_CRON\n'
+          docker exec -i "$name" psql -h /tmp -U supabase_admin -d postgres -X -qAt -v ON_ERROR_STOP=1 <<'SQL'
+          CREATE EXTENSION pg_cron WITH SCHEMA pg_catalog VERSION '1.6.4';
+          SQL
+          printf 'STAGE=EXT_PG_NET\n'
+          docker exec -i "$name" psql -h /tmp -U supabase_admin -d postgres -X -qAt -v ON_ERROR_STOP=1 <<'SQL'
+          CREATE EXTENSION pg_net WITH SCHEMA public VERSION '0.20.4';
+          SQL
+          printf 'STAGE=EXT_PG_STAT_STATEMENTS\n'
           docker exec -i "$name" psql -h /tmp -U supabase_admin -d postgres -X -qAt -v ON_ERROR_STOP=1 <<'SQL'
           BEGIN;
           ALTER ROLE postgres WITH SUPERUSER;
@@ -45,7 +64,24 @@ jobs:
           RESET SESSION AUTHORIZATION;
           ALTER ROLE postgres WITH NOSUPERUSER;
           COMMIT;
-          SELECT 'postgres_final_super=' || rolsuper::text FROM pg_roles WHERE rolname='postgres';
-          SELECT 'extension_owner=' || pg_get_userbyid(extowner) FROM pg_extension WHERE extname='pg_stat_statements';
+          SQL
+          printf 'STAGE=EXT_PGCRYPTO\n'
+          docker exec -i "$name" psql -h /tmp -U supabase_admin -d postgres -X -qAt -v ON_ERROR_STOP=1 <<'SQL'
+          SET SESSION AUTHORIZATION postgres;
+          CREATE EXTENSION pgcrypto WITH SCHEMA extensions VERSION '1.3';
+          SQL
+          printf 'STAGE=EXT_SUPABASE_VAULT\n'
+          docker exec -i "$name" psql -h /tmp -U supabase_admin -d postgres -X -qAt -v ON_ERROR_STOP=1 <<'SQL'
+          CREATE EXTENSION supabase_vault WITH SCHEMA vault VERSION '0.3.1';
+          SQL
+          printf 'STAGE=EXT_UUID_OSSP\n'
+          docker exec -i "$name" psql -h /tmp -U supabase_admin -d postgres -X -qAt -v ON_ERROR_STOP=1 <<'SQL'
+          SET SESSION AUTHORIZATION postgres;
+          CREATE EXTENSION "uuid-ossp" WITH SCHEMA extensions VERSION '1.1';
+          SQL
+          printf 'STAGE=CHECK_ROLE_OWNERS\n'
+          docker exec -i "$name" psql -h /tmp -U supabase_admin -d postgres -X -qAt -v ON_ERROR_STOP=1 <<'SQL'
+          SELECT extname, pg_get_userbyid(extowner) FROM pg_extension ORDER BY extname;
+          SELECT 'postgres_super=' || rolsuper::text FROM pg_roles WHERE rolname='postgres';
           SQL
           printf 'STAGE=SMOKE_PASS\n'
