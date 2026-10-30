@@ -1,0 +1,115 @@
+{
+  "format_version": 1,
+  "approved_release_commit": "a6607f0a6d40483c5767e8155ff55c95c62fc8fb",
+  "migrations": [
+    {
+      "order": 1,
+      "version": "20261021011240",
+      "name": "commercial_metrics_foundation",
+      "path": "supabase/migrations/20261021011240_commercial_metrics_foundation.sql",
+      "sha256": "627e58e4a6aae81857f4335b1284d8fcc9a99f4524b4eb0d7ce69f208a8b33a2",
+      "bytes": 21415
+    },
+    {
+      "order": 2,
+      "version": "20261021011422",
+      "name": "commercial_metrics_queries",
+      "path": "supabase/migrations/20261021011422_commercial_metrics_queries.sql",
+      "sha256": "8f1fd0027aebb151783983028300b09925fee67f8e2977b873426a2b7acf6944",
+      "bytes": 10940
+    },
+    {
+      "order": 3,
+      "version": "20261021012121",
+      "name": "commercial_operations_insights",
+      "path": "supabase/migrations/20261021012121_commercial_operations_insights.sql",
+      "sha256": "766bb2cd0baf6cd03faccd62b7ee0a0e76dcb20c905d0344e375a407305d07a4",
+      "bytes": 11252
+    },
+    {
+      "order": 4,
+      "version": "20261021094500",
+      "name": "commercial_development_attribution",
+      "path": "supabase/migrations/20261021094500_commercial_development_attribution.sql",
+      "sha256": "b55d4bdccafd1b7021540de3fa1f50422ac1ab0783abd328748f3eb0dcb0eb07",
+      "bytes": 17399
+    },
+    {
+      "order": 5,
+      "version": "20261021155436",
+      "name": "commercial_verified_intent",
+      "path": "supabase/migrations/20261021155436_commercial_verified_intent.sql",
+      "sha256": "a8a60c23a28ad91af193c3e8de941605644a04e4ac330cf57ff50776cabc1b3f",
+      "bytes": 12248
+    },
+    {
+      "order": 6,
+      "version": "20261021162332",
+      "name": "commercial_fact_stage_sync",
+      "path": "supabase/migrations/20261021162332_commercial_fact_stage_sync.sql",
+      "sha256": "019556155397a72b641905271fa83c92aade06e85b02218dcee16370d8b162be",
+      "bytes": 9561
+    },
+    {
+      "order": 7,
+      "version": "20261021165139",
+      "name": "commercial_contact_integrity",
+      "path": "supabase/migrations/20261021165139_commercial_contact_integrity.sql",
+      "sha256": "d9daa262e643c622f7b72a1bdbdefc1ccde4a29295b89c034366e1eac9a156f4",
+      "bytes": 13715
+    },
+    {
+      "order": 8,
+      "version": "20261021172930",
+      "name": "commercial_source_idempotency",
+      "path": "supabase/migrations/20261021172930_commercial_source_idempotency.sql",
+      "sha256": "f97ab9ec44109ed2a25953716828485cd353a12e3d489bdae4e37c417fd042d3",
+      "bytes": 15292
+    },
+    {
+      "order": 9,
+      "version": "20261021182758",
+      "name": "commercial_recoverable_requests",
+      "path": "supabase/migrations/20261021182758_commercial_recoverable_requests.sql",
+      "sha256": "0bbe963a3c99dd3d380d5410594f11ce9e8bf6a5b9ec4a19af93c473aa93f3cf",
+      "bytes": 12543
+    },
+    {
+      "order": 10,
+      "version": "20261021190000",
+      "name": "commercial_contact_reconciliation",
+      "path": "supabase/migrations/20261021190000_commercial_contact_reconciliation.sql",
+      "sha256": "39f303062aa425d5dc6b802a25df73e6a8da2a50781fbb4bd300441c062c82d6",
+      "bytes": 10970
+    },
+    {
+      "order": 11,
+      "version": "20261021203000",
+      "name": "commercial_proposal_status_once",
+      "path": "supabase/migrations/20261021203000_commercial_proposal_status_once.sql",
+      "sha256": "018c28d34985f13e6952ee2ee6ce34df7202b818920244e75f6f5f08f5ed189f",
+      "bytes": 4966
+    },
+    {
+      "order": 12,
+      "version": "20261021213000",
+      "name": "commercial_ai_proposal_detection",
+      "path": "supabase/migrations/20261021213000_commercial_ai_proposal_detection.sql",
+      "sha256": "5829de6b4a21727ae28970a6785f61d261769d239caa8705a91515ab5db3f324",
+      "bytes": 13997
+    },
+    {
+      "order": 13,
+      "version": "20261022123000",
+      "name": "commercial_source_scope_integrity",
+      "path": "supabase/migrations/20261022123000_commercial_source_scope_integrity.sql",
+      "sha256": "e77dd6fd1a219881e2fdf9c0d3804d6c4fe0da8b2b1b3e927dbc9765b8ccf698",
+      "bytes": 3433
+    }
+  ],
+  "compatibility": {
+    "path": "supabase/compatibility/20261022_rpc_http_conflicts.sql",
+    "sha256": "200b1aacf4baf351096b327d8b5493d1b2c8c81027312ee070592a8298d3ab4f",
+    "bytes": 12764
+  }
+}
