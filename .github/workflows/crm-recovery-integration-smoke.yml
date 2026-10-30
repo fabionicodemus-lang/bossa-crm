@@ -1,0 +1,85 @@
+name: CRM recovery Python integration smoke (synthetic only)
+on:
+  push:
+    branches:
+      - ops/crm-free-recovery-20261029
+    paths:
+      - .github/workflows/crm-recovery-integration-smoke.yml
+permissions: {}
+jobs:
+  synthetic-recovery-integration:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Fetch exact public commit without credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          git init --quiet test-src
+          git -C test-src fetch --quiet --depth=1 https://github.com/fabionicodemus-lang/bossa-crm.git "$GITHUB_SHA"
+          git -C test-src checkout --quiet --detach FETCH_HEAD
+          test "$(git -C test-src rev-parse HEAD)" = "$GITHUB_SHA"
+      - name: Verify source syntax and synthetic offline integration
+        shell: bash
+        env:
+          BOSSA_BACKUP_IMAGE: supabase/postgres:17.6.1.147@sha256:ac581882596ed0e46937ea6dd53a627d09f53e005d7264c2082a7ff7b62eaaca
+        run: |
+          set -euo pipefail
+          python3 -m py_compile test-src/ops/crm-free-recovery/runner.py
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          import sys
+          import traceback
+          import subprocess
+          sys.path.insert(0,str(Path("test-src/ops/crm-free-recovery").resolve()))
+          from runner import Recovery
+          assert not any(os.environ.get(x) for x in ("BOSSA_BACKUP_SUPABASE_PAT","PGPASSWORD","DATABASE_URL","SUPABASE_ACCESS_TOKEN"))
+          r=Recovery()
+          def role(name,superuser):
+              return dict(rolname=name,rolsuper=superuser,rolinherit=True,rolcreaterole=superuser,
+                          rolcreatedb=superuser,rolcanlogin=True,rolreplication=False,rolbypassrls=superuser,
+                          rolconnlimit=-1,rolvaliduntil=None,rolconfig=[])
+          r.roles=[role("supabase_admin",True),role("postgres",False)]
+          r.members=[]
+          r.db_owner="postgres"
+          r.database=dict(provider="c",encoding="UTF8",collate="C",ctype="C",locale=None,
+                          connection_limit=-1)
+          r.schemas=[
+              {"name":"extensions","owner":"postgres","extension":None},
+              {"name":"vault","owner":"supabase_admin","extension":None}
+          ]
+          r.extensions=[
+              {"name":"btree_gist","version":"1.7","schema":"public","owner":"supabase_admin"},
+              {"name":"pg_cron","version":"1.6.4","schema":"pg_catalog","owner":"supabase_admin"},
+              {"name":"pg_net","version":"0.20.4","schema":"public","owner":"supabase_admin"},
+              {"name":"pg_stat_statements","version":"1.11","schema":"extensions","owner":"postgres"},
+              {"name":"pgcrypto","version":"1.3","schema":"extensions","owner":"postgres"},
+              {"name":"plpgsql","version":"1.0","schema":"pg_catalog","owner":"supabase_admin"},
+              {"name":"supabase_vault","version":"0.3.1","schema":"vault","owner":"supabase_admin"},
+              {"name":"uuid-ossp","version":"1.1","schema":"extensions","owner":"postgres"}
+          ]
+          (r.payload/"vault-root.key").write_text("0"*64+"\n")
+          (r.work/"getkey.sh").write_text("#!/bin/sh\nexec cat /recovery_root.key\n")
+          (r.payload/"vault-root.key").chmod(0o444)
+          (r.work/"getkey.sh").chmod(0o555)
+          try:
+              print("STAGE=SYNTHETIC_IMAGE_PULL",flush=True)
+              r.run(["docker","pull",r.image],timeout=240)
+              print("STAGE=SYNTHETIC_START_TARGET",flush=True)
+              r.start_target()
+              print("STAGE=SYNTHETIC_PREPARE_ROLES_AND_EXTENSIONS",flush=True)
+              r.prepare_roles_extensions()
+              print("STAGE=SYNTHETIC_NO_HTTP_WORKERS",flush=True)
+              cfg=r.target.json("SELECT json_build_object('net_loaded',position('pg_net' IN current_setting('shared_preload_libraries'))>0,'cron',current_setting('cron.launch_active_jobs'),'queued',(SELECT count(*) FROM net.http_request_queue));")
+              assert cfg==dict(net_loaded=False,cron="off",queued=0), cfg
+              print("RESULT=SYNTHETIC_RECOVERY_BOOTSTRAP_PASSED",flush=True)
+          except Exception as exc:
+              print("RESULT=SYNTHETIC_RECOVERY_BOOTSTRAP_FAILED",flush=True)
+              print("ERROR_TYPE="+type(exc).__name__,flush=True)
+              print("ERROR_DETAILS="+str(exc)[:500],flush=True)
+              traceback.print_exc(limit=5)
+              raise
+          finally:
+              r.cleanup()
+          PY
