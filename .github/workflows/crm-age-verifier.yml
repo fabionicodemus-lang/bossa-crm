@@ -1,0 +1,33 @@
+name: Offline age verifier binary (public tool only)
+on:
+  push:
+    branches:
+      - ops/crm-free-recovery-20261029
+    paths:
+      - .github/workflows/crm-age-verifier.yml
+permissions: {}
+jobs:
+  verifier-tool:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - name: Install signed Ubuntu age package without credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install --yes --no-install-recommends age
+          mkdir -p "$RUNNER_TEMP/age-verifier"
+          cp "$(command -v age)" "$RUNNER_TEMP/age-verifier/age"
+          chmod 755 "$RUNNER_TEMP/age-verifier/age"
+          age --version > "$RUNNER_TEMP/age-verifier/version.txt"
+          (cd "$RUNNER_TEMP/age-verifier" && sha256sum age > checksum.sha256)
+          test -s "$RUNNER_TEMP/age-verifier/age"
+      - name: Upload only public age executable (no backup data or secrets)
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: age-public-executable
+          path: ${{ runner.temp }}/age-verifier/
+          retention-days: 1
+          compression-level: 0
+          if-no-files-found: error
