@@ -1,4 +1,4 @@
-name: CRM recovery rehearsal — explicit temporary authorization
+name: CRM recovery review — encrypted delivery is not release approval
 
 on:
   push:
@@ -9,11 +9,9 @@ on:
       - .github/workflows/crm-free-recovery.yml
 
 permissions: {}
-
 concurrency:
   group: crm-free-recovery-20261029
   cancel-in-progress: false
-
 jobs:
   recovery:
     runs-on: ubuntu-24.04
@@ -25,9 +23,9 @@ jobs:
       BOSSA_BACKUP_DELIVERY_MODE: ${{ vars.BOSSA_BACKUP_DELIVERY_MODE }}
       BOSSA_BACKUP_ALLOW_GITHUB_ARTIFACT: ${{ vars.BOSSA_BACKUP_ALLOW_GITHUB_ARTIFACT }}
       BOSSA_BACKUP_CONSISTENCY_MODE: ${{ vars.BOSSA_BACKUP_CONSISTENCY_MODE }}
-      BOSSA_BACKUP_MAX_CIPHERTEXT_BYTES: '471859200' # 450 MiB; leave headroom in 500 MB storage allowance
+      BOSSA_BACKUP_MAX_CIPHERTEXT_BYTES: '471859200'
     steps:
-      - name: Fetch the exact reviewed public commit without a GitHub token
+      - name: Fetch and compile the exact reviewed public commit without credentials
         shell: bash
         run: |
           set -euo pipefail
@@ -38,40 +36,35 @@ jobs:
           git -C "$RUNNER_TEMP/bossa-reviewed" fetch --quiet --depth=1 https://github.com/fabionicodemus-lang/bossa-crm.git "$GITHUB_SHA"
           git -C "$RUNNER_TEMP/bossa-reviewed" checkout --quiet --detach FETCH_HEAD
           test "$(git -C "$RUNNER_TEMP/bossa-reviewed" rev-parse HEAD)" = "$GITHUB_SHA"
-
-      - name: Install encryption from the signed Ubuntu package repository
+          test -z "$(git -C "$RUNNER_TEMP/bossa-reviewed" status --short)"
+          PYTHONPYCACHEPREFIX="$RUNNER_TEMP/python-cache" python3 -m py_compile "$RUNNER_TEMP/bossa-reviewed/ops/crm-free-recovery/review_recovery.py"
+      - name: Install encryption from signed Ubuntu packages
         shell: bash
         run: |
           set -euo pipefail
           sudo apt-get update -qq
           sudo apt-get install --no-install-recommends -y age
-
-      - name: Run the reviewed recovery program
+      - name: Export and verify offline; preserve private diagnostic on validation failure
         id: recovery
         shell: bash
         env:
           BOSSA_BACKUP_SUPABASE_PAT: ${{ secrets.BOSSA_BACKUP_SUPABASE_PAT }}
-        run: python3 "$RUNNER_TEMP/bossa-reviewed/ops/crm-free-recovery/runner.py"
-
-      # User authorized this one-shot exception on 2026-10-30 for ciphertext only.
-      # The private decryption identity remains outside GitHub.
-      # It never accepts an unencrypted directory, logs, manifest or SQL file.
-      - name: Explicit exception — temporary ciphertext artifact only
+        run: python3 "$RUNNER_TEMP/bossa-reviewed/ops/crm-free-recovery/review_recovery.py"
+      - name: Authorized one-day encrypted review package only
         if: >-
           success() &&
           vars.BOSSA_BACKUP_DELIVERY_MODE == 'github_encrypted_artifact' &&
           vars.BOSSA_BACKUP_ALLOW_GITHUB_ARTIFACT == 'explicitly-approved' &&
           steps.recovery.outputs.encrypted_output_ready == 'true'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2, official tag verified
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: crm-recovery-encrypted-${{ github.run_id }}
+          name: crm-recovery-review-${{ github.run_id }}
           path: ${{ runner.temp }}/crm-recovery-output/recovery.tar.gz.age
           retention-days: 1
           compression-level: 0
           if-no-files-found: error
           include-hidden-files: false
-
-      - name: Remove local ciphertext after the approved delivery step
+      - name: Remove only this run's local ciphertext
         if: always()
         shell: bash
         run: |
