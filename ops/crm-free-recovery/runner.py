@@ -788,6 +788,71 @@ class Recovery:
                 gate(re.fullmatch(r"[a-zA-Z_][a-zA-Z_0-9.]*",key),"unsupported_database_setting")
                 prefix = "ALTER DATABASE postgres" if not setting["role"] else "ALTER ROLE "+ident(setting["role"])+" IN DATABASE postgres"
                 self.target.query(prefix+" SET "+key+" TO "+literal(val)+";")
+        self.reconcile_extension_schema_acls()
+
+    def reconcile_extension_schema_acls(self):
+        """Reapply the source's extension-owned schema grants exactly, in the
+        network-isolated clone only. pg_dump excludes managed extension objects,
+        so their grants need an explicit, separately verified recovery step.
+        """
+        stage("RESTORE_EXTENSION_SCHEMA_ACLS")
+        gate(self.manifest.get("network_none") is True
+             and self.manifest.get("pg_net_empty_bootstrap_then_disabled") is True,
+             "extension_schema_grants_require_offline_restore")
+        expected = {x["name"]: x for x in self.schemas if x["extension"]}
+        gate({k: v["extension"] for k, v in expected.items()}
+             == {"cron": "pg_cron", "net": "pg_net"},
+             "unexpected_extension_schema_grant_scope")
+        current = {x["name"]: x for x in self.target.json(SCHEMAS_SQL)}
+        for name, source_schema in expected.items():
+            clone_schema = current.get(name)
+            gate(clone_schema is not None
+                 and clone_schema["owner"] == source_schema["owner"]
+                 and clone_schema["extension"] == source_schema["extension"]
+                 and source_schema["owner"] == "supabase_admin",
+                 "extension_schema_owner_or_membership_mismatch")
+
+            def parse_acl(item):
+                match = re.fullmatch(r"([^=]*)=([UC*]*)/([^/]+)", item)
+                gate(match is not None, "invalid_extension_schema_acl")
+                grantee, permissions, grantor = match.groups()
+                gate(grantor == source_schema["owner"]
+                     and grantee != "pg_database_owner",
+                     "unsupported_extension_schema_grantor")
+                rights = []
+                i = 0
+                while i < len(permissions):
+                    privilege = permissions[i]
+                    gate(privilege in ("U", "C"), "unsupported_extension_schema_privilege")
+                    option = i+1 < len(permissions) and permissions[i+1] == "*"
+                    rights.append(("USAGE" if privilege == "U" else "CREATE", option))
+                    i += 2 if option else 1
+                return grantee, rights
+
+            def grantee_sql(name):
+                return "PUBLIC" if not name else ident(name)
+
+            original = {g: rights for g, rights in map(parse_acl, source_schema["acl"] or [])}
+            existing = {g: rights for g, rights in map(parse_acl, clone_schema["acl"] or [])}
+            if sorted(source_schema["acl"] or []) == sorted(clone_schema["acl"] or []):
+                continue
+            sql = ["SET SESSION AUTHORIZATION "+ident(source_schema["owner"])+";"]
+            # Revoke only schema-level grants on this isolated clone. Keep the
+            # owner role's rights intact and re-grant them explicitly below.
+            for grantee in sorted((set(existing) | set(original)) - {source_schema["owner"]}):
+                sql.append("REVOKE ALL PRIVILEGES ON SCHEMA "+ident(name)+
+                           " FROM "+grantee_sql(grantee)+" CASCADE;")
+            for grantee, rights in original.items():
+                for privilege, grant_option in rights:
+                    sql.append("GRANT "+privilege+" ON SCHEMA "+ident(name)+
+                               " TO "+grantee_sql(grantee)+
+                               (" WITH GRANT OPTION;" if grant_option else ";"))
+            sql.append("RESET SESSION AUTHORIZATION;")
+            self.target.query(" ".join(sql))
+            refreshed = {x["name"]: x for x in self.target.json(SCHEMAS_SQL)}
+            gate(refreshed[name]["acl"] == source_schema["acl"],
+                 "restored_extension_schema_acl_mismatch")
+        self.manifest["extension_schema_acl_reconciled"] = True
 
     def verify(self):
         stage("VERIFY_RESTORED_ROWS_SECURITY_AND_VAULT")
