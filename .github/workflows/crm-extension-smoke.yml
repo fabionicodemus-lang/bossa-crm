@@ -34,7 +34,8 @@ jobs:
           test "$ready" = true
           docker exec -i "$name" psql -h /tmp -U supabase_admin -d postgres -X -qAt -v ON_ERROR_STOP=1 <<'SQL'
           CREATE ROLE postgres WITH NOSUPERUSER LOGIN;
-          CREATE SCHEMA extensions AUTHORIZATION supabase_admin;
+          CREATE SCHEMA extensions AUTHORIZATION postgres;
+          ALTER DATABASE postgres OWNER TO postgres;
           CREATE SCHEMA vault AUTHORIZATION supabase_admin;
           DROP EXTENSION plpgsql;
           SQL
