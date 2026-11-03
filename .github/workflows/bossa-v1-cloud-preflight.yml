@@ -1,0 +1,85 @@
+name: Bossa V1 - simular 13 migracoes
+on:
+  push:
+    branches: ['ops/v1-cloud-preflight']
+    paths: ['.github/workflows/bossa-v1-cloud-preflight.yml']
+permissions: {}
+concurrency: bossa-v1-cloud-preflight
+jobs:
+  simular:
+    if: github.repository == 'fabionicodemus-lang/bossa-crm' && github.ref == 'refs/heads/ops/v1-cloud-preflight'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    environment: bossa-v1-preflight
+    steps:
+      - name: Preparar CLI e conferir arquivos do release aprovado
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP"
+          curl -fsSL https://github.com/supabase/cli/releases/download/v3.0.0/supabase_3.0.0_linux_amd64.deb -o cli.deb
+          echo '771be2516e19dd4e4432689422992bf14a6c00e4fb5e6ec2497a358215ec919b  cli.deb' | sha256sum --check --status
+          dpkg-deb -x cli.deb cli
+          binary="$(find cli -type f -name supabase -print -quit)"
+          test -n "$binary"
+          ln -s "$RUNNER_TEMP/$binary" "$RUNNER_TEMP/sb"
+          mkdir lab
+          cd lab
+          ../sb init
+          python3 - <<'PY'
+          import hashlib, json, os, pathlib, urllib.request
+          base = 'https://raw.githubusercontent.com/fabionicodemus-lang/bossa-crm/'
+          release = 'a6607f0a6d40483c5767e8155ff55c95c62fc8fb'
+          ops = '19e25737c6758f499d41738af67b021fb68b831c'
+          lock = json.load(urllib.request.urlopen(base+ops+'/ops/crm-free-recovery/migration-rehearsal-lock.json',timeout=20))
+          assert lock['approved_release_commit'] == release and len(lock['migrations']) == 13
+          import re
+          expected = []
+          dest = pathlib.Path(os.environ['RUNNER_TEMP'])/'pending'
+          dest.mkdir()
+          for row in lock['migrations']:
+              name = row['version']+'_'+row['name']+'.sql'
+              assert re.fullmatch(r'[0-9]{14}_commercial_[a-z_]+\.sql',name)
+              assert row['path'] == 'supabase/migrations/'+name
+              data = urllib.request.urlopen(base+release+'/'+row['path'],timeout=20).read()
+              assert len(data)==row['bytes'] and hashlib.sha256(data).hexdigest()==row['sha256']
+              (dest/name).write_bytes(data)
+              expected.append(name)
+          assert expected == sorted(set(expected)) and len(expected)==13
+          print('13/13 arquivos do release verificados.')
+          PY
+      - name: Simular no projeto aprovado (nenhuma aplicacao)
+        shell: bash
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/lab"
+          python3 - <<'PY'
+          import os,pathlib,re,shutil,subprocess,sys
+          if not os.environ.get('SUPABASE_ACCESS_TOKEN'):
+              sys.exit('Cadastre SUPABASE_ACCESS_TOKEN no environment bossa-v1-preflight e repita este job.')
+          temp=pathlib.Path(os.environ['RUNNER_TEMP'])
+          target='--remote=oridhneerxutcjsvwuju'
+          def run(args):
+              p=subprocess.run([str(temp/'sb'),*args],capture_output=True,text=True,timeout=150,stdin=subprocess.DEVNULL)
+              if p.returncode:
+                  sys.exit('Falha em '+args[0]+' '+args[1]+'. Verifique o acesso do token ao projeto. Nenhuma migracao foi aplicada.')
+              return p.stdout+'\n'+p.stderr
+          # Apenas identificadores do historico, nunca suas instrucoes SQL ou dados de negocio.
+          result=run(['migration','list',target])
+          versions=re.findall(r'^\s*\|\s*(\d{14})\s*\|',result,re.M)
+          if not versions or len(set(versions))!=len(versions) or max(versions)!='20261019204456':
+              sys.exit('Historico ou formato inesperado; simulacao interrompida.')
+          migrations=pathlib.Path('supabase/migrations')
+          migrations.mkdir(exist_ok=True)
+          for version in versions:
+              (migrations/(version+'_already_applied.sql')).write_text('-- Remote version present. Dry run only.\n')
+          pending=sorted((temp/'pending').glob('*.sql'))
+          for f in pending: shutil.copyfile(f,migrations/f.name)
+          result=run(['db','push',target,'--dry-run','--skip-vault'])
+          names=re.findall(r'(?<![\w])([\w.-]+\.sql)\b',result)
+          if names != [f.name for f in pending]:
+              sys.exit('A lista simulada nao corresponde exatamente aos 13 arquivos; nenhuma aplicacao.')
+          print('Simulacao confirmada: 13/13, sem aplicar SQL, sem seed e sem atualizar Vault.')
+          PY
