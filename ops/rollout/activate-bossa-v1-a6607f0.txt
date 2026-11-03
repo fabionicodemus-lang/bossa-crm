@@ -1,0 +1,4 @@
+Commercial application release: a6607f0a6d40483c5767e8155ff55c95c62fc8fb
+Scope: the 13 locked migrations, then Vercel production after database checks.
+Partial human acceptance authorized: 2 of 8. Six scenarios remain open.
+Independent HTTP conflict compatibility SQL is outside this batch.
