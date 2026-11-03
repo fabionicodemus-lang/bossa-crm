@@ -12,7 +12,7 @@ jobs:
       - name: Verificar rotas publicadas com GET sem sessao
         run: |
           python3 - <<'PY'
-          import json
+          import json, subprocess, tempfile
           from urllib.error import HTTPError
           from urllib.parse import urlsplit
           from urllib.request import HTTPRedirectHandler, Request, build_opener
@@ -42,7 +42,13 @@ jobs:
 
           status, _, body = request('/login')
           form = LoginForm()
-          form.feed(body.decode('utf-8','replace'))
+          # The login form uses useSearchParams and hydrates inside Suspense.
+          with tempfile.TemporaryDirectory() as profile:
+              browser = subprocess.run(['google-chrome','--headless','--no-sandbox','--disable-dev-shm-usage',
+                                        '--user-data-dir='+profile,'--virtual-time-budget=10000','--dump-dom',origin+'/login'],
+                                       capture_output=True,timeout=50)
+              assert browser.returncode == 0, 'Falha ao abrir o navegador de verificacao'
+              form.feed(browser.stdout.decode('utf-8','replace'))
           assert status == 200 and 'password' in form.fields, f'login: HTTP {status}, form check failed'
           print('Login renderizado: 200.')
           for page in ['/gestao', '/nara', '/conversas']:
