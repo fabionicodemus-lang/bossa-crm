@@ -1,0 +1,88 @@
+name: CRM private backup verifier smoke (synthetic only)
+on:
+  push:
+    branches: [ops/crm-free-recovery-20261029]
+    paths:
+      - ops/crm-free-recovery/verify_private_archive.py
+      - .github/workflows/crm-private-verifier-smoke.yml
+permissions: {}
+jobs:
+  synthetic-local-verifier:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - name: Check exact reviewed public commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          git init --quiet source
+          git -C source fetch --quiet --depth=1 https://github.com/fabionicodemus-lang/bossa-crm.git "$GITHUB_SHA"
+          git -C source checkout --quiet --detach FETCH_HEAD
+          test "$(git -C source rev-parse HEAD)" = "$GITHUB_SHA"
+      - name: Install official age distribution
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends age
+      - name: Authenticate and verify an entirely fictitious encrypted backup
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile source/ops/crm-free-recovery/verify_private_archive.py
+          python3 - <<'PY'
+          import hashlib, io, json, os, pathlib, subprocess, sys, tarfile, tempfile, zipfile
+          tool = pathlib.Path("source/ops/crm-free-recovery/verify_private_archive.py").resolve()
+          with tempfile.TemporaryDirectory() as t:
+              t = pathlib.Path(t)
+              key = t/"dummy-key.txt"
+              subprocess.run(["age-keygen","-o",str(key)],check=True,capture_output=True)
+              recipient = subprocess.run(["age-keygen","-y",str(key)],check=True,capture_output=True,text=True).stdout.strip()
+              files = {"database.dump":b"DUMMY_ONLY_DATABASE_BACKUP\n",
+                       "vault-root.key":b"DUMMY_ONLY_VAULT_KEY\n",
+                       "storage/dummy.bin":b"DUMMY_ONLY_STORAGE\n"}
+              manifest = {
+                  "state":"RESTORE_VERIFIED","project_ref":"dummy-offline-only",
+                  "network_none":True,"cron_launch_active_jobs":"off",
+                  "pg_net_preloaded":False,
+                  "file_sha256":{k:hashlib.sha256(v).hexdigest() for k,v in files.items()},
+                  "migration_rehearsal":{
+                     "status":"PASSED_SCHEMA_ACL_AND_COMPATIBILITY_GATES",
+                     "baseline_unchanged":True,"sql_committed":13,
+                     "ledger_recorded":13,"human_acceptance_changed":False}}
+              all_files = {**files,"manifest.json":json.dumps(manifest).encode()}
+              plain = t/"dummy.tar.gz"
+              with tarfile.open(plain,"w:gz") as archive:
+                  for name,blob in all_files.items():
+                      info=tarfile.TarInfo("recovery/"+name)
+                      info.size=len(blob)
+                      archive.addfile(info, io.BytesIO(blob))
+              cipher=t/"recovery.tar.gz.age"
+              subprocess.run(["age","-r",recipient,"-o",str(cipher),str(plain)],
+                             check=True,capture_output=True)
+              zip_path=t/"dummy.zip"
+              with zipfile.ZipFile(zip_path,"w",zipfile.ZIP_STORED) as z:
+                  z.write(cipher,arcname="recovery.tar.gz.age")
+              digest=hashlib.sha256(cipher.read_bytes()).hexdigest()
+              args=[sys.executable,str(tool),"--archive",str(zip_path),
+                    "--identity",str(key),"--sha256",digest,
+                    "--bytes",str(cipher.stat().st_size),
+                    "--project","dummy-offline-only"]
+              passed=subprocess.run(args,capture_output=True,text=True)
+              assert passed.returncode==0,passed.stderr
+              summary=json.loads(passed.stdout)
+              assert summary["state"]=="PRIVATE_RECOVERY_PACKAGE_VERIFIED"
+              assert summary["files_checked"]==3
+              wrong_hash=subprocess.run(args+["--sha256","f"*64],
+                                        capture_output=True,text=True)
+              assert wrong_hash.returncode!=0
+              other=t/"wrong-key.txt"
+              subprocess.run(["age-keygen","-o",str(other)],check=True,capture_output=True)
+              wrong_key=[str(other) if x==str(key) else x for x in args]
+              rejected=subprocess.run(wrong_key,capture_output=True,text=True)
+              assert rejected.returncode!=0
+              print("SYNTHETIC_CIPHER_HASH=PASSED")
+              print("SYNTHETIC_AGE_AUTHENTICATION=PASSED")
+              print("SYNTHETIC_ARCHIVE_MANIFEST_HASHES=PASSED")
+              print("SYNTHETIC_INCORRECT_HASH_AND_KEY=REJECTED")
+          PY
