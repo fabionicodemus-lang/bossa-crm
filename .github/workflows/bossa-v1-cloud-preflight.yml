@@ -56,19 +56,21 @@ jobs:
           set -euo pipefail
           cd "$RUNNER_TEMP/lab"
           python3 - <<'PY'
-          import os,pathlib,re,shutil,subprocess,sys
+          import json,os,pathlib,re,shutil,subprocess,sys
           if not os.environ.get('SUPABASE_ACCESS_TOKEN'):
               sys.exit('Cadastre SUPABASE_ACCESS_TOKEN no environment bossa-v1-preflight e repita este job.')
           temp=pathlib.Path(os.environ['RUNNER_TEMP'])
           target='--remote=oridhneerxutcjsvwuju'
           def run(args):
-              p=subprocess.run([str(temp/'sb'),*args],capture_output=True,text=True,timeout=150,stdin=subprocess.DEVNULL)
+              p=subprocess.run([str(temp/'sb'),*args,'--output-format','json'],capture_output=True,text=True,timeout=150,stdin=subprocess.DEVNULL)
               if p.returncode:
                   sys.exit('Falha em '+args[0]+' '+args[1]+'. Verifique o acesso do token ao projeto. Nenhuma migracao foi aplicada.')
-              return p.stdout+'\n'+p.stderr
+              return json.loads(p.stdout)
           # Apenas identificadores do historico, nunca suas instrucoes SQL ou dados de negocio.
           result=run(['migration','list',target])
-          versions=re.findall(r'^\s*\|\s*(\d{14})\s*\|',result,re.M)
+          versions=[row['remote'] for row in result['migrations']]
+          if any(not re.fullmatch(r'[0-9]{14}',v) for v in versions):
+              sys.exit('Versao de historico inesperada. Nenhuma aplicacao.')
           if not versions or len(set(versions))!=len(versions) or max(versions)!='20261019204456':
               sys.exit('Historico ou formato inesperado; simulacao interrompida.')
           migrations=pathlib.Path('supabase/migrations')
@@ -78,7 +80,8 @@ jobs:
           pending=sorted((temp/'pending').glob('*.sql'))
           for f in pending: shutil.copyfile(f,migrations/f.name)
           result=run(['db','push',target,'--dry-run','--skip-vault'])
-          names=re.findall(r'(?<![\w])([\w.-]+\.sql)\b',result)
+          assert result['dryRun'] is True
+          names=result['migrations']
           if names != [f.name for f in pending]:
               sys.exit('A lista simulada nao corresponde exatamente aos 13 arquivos; nenhuma aplicacao.')
           print('Simulacao confirmada: 13/13, sem aplicar SQL, sem seed e sem atualizar Vault.')
