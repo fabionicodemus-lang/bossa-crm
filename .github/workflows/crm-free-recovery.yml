@@ -14,6 +14,8 @@ concurrency:
   cancel-in-progress: false
 jobs:
   recovery:
+    # Routine fixes run synthetic tests, never an automatic production export.
+    if: github.event.head_commit.message == 'execute: authorized CRM recovery'
     runs-on: ubuntu-24.04
     timeout-minutes: 55
     environment: crm-free-recovery-20261029

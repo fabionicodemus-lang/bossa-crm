@@ -1,0 +1,32 @@
+name: CRM exact recovery bootstrap - synthetic data only
+on:
+  push:
+    branches: [ops/crm-free-recovery-20261029]
+    paths:
+      - ops/crm-free-recovery/bootstrap_recovery.py
+      - ops/crm-free-recovery/test_bootstrap_recovery.py
+      - ops/crm-free-recovery/runner.py
+      - .github/workflows/crm-recovery-exact-bootstrap.yml
+permissions: {}
+jobs:
+  exact-bootstrap:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - name: Fetch reviewed public code without credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          git init --quiet source
+          git -C source fetch --quiet --depth=1 https://github.com/fabionicodemus-lang/bossa-crm.git "$GITHUB_SHA"
+          git -C source checkout --quiet --detach FETCH_HEAD
+          test "$(git -C source rev-parse HEAD)" = "$GITHUB_SHA"
+          test -z "$(git -C source status --short)"
+      - name: Compile and test empty network-isolated PostgreSQL
+        shell: bash
+        env:
+          BOSSA_BACKUP_IMAGE: supabase/postgres:17.6.1.147@sha256:ac581882596ed0e46937ea6dd53a627d09f53e005d7264c2082a7ff7b62eaaca
+        run: |
+          set -euo pipefail
+          python3 -m py_compile source/ops/crm-free-recovery/bootstrap_recovery.py source/ops/crm-free-recovery/test_bootstrap_recovery.py
+          python3 source/ops/crm-free-recovery/test_bootstrap_recovery.py
