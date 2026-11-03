@@ -1,1 +1,2 @@
-Production build READY for application commit a6607f0a6d40483c5767e8155ff55c95c62fc8fb. Verify public endpoints and the signed-out login boundary.
+Verify browser login and unauthenticated HTTP boundaries at the production hostname used by the CRM schedulers, bossa-crm-phi.vercel.app. Custom hostname DNS is tracked separately.
+Approved application: a6607f0a6d40483c5767e8155ff55c95c62fc8fb
