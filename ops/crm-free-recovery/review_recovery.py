@@ -11,7 +11,9 @@ from pathlib import Path
 import re
 import shutil
 import traceback
-from runner import (Recovery, GateFailure, gate, ident, stage, dump_json,
+from urllib.error import HTTPError
+from bootstrap_recovery import Recovery
+from runner import (GateFailure, gate, ident, stage, dump_json,
                     SCHEMAS_SQL, ROLES_SQL, CATALOG_SQL, DATABASE_SQL)
 
 
@@ -133,14 +135,19 @@ def main():
             stage('PRIVATE_DIAGNOSTIC_CAPTURED_RELEASE_BLOCKED')
         else:
             r.rehearse_release()
-        for filename in ('runner.py', 'review_recovery.py', 'migration_rehearsal.py'):
+        for filename in ('runner.py', 'bootstrap_recovery.py', 'review_recovery.py', 'migration_rehearsal.py'):
             shutil.copyfile(Path(__file__).with_name(filename), r.payload / ('recovery-tool-' + filename))
         r.encrypt()
         r.deliver_review()
         return 0
     except Exception as exc:
         (r.logs / 'review-failure.txt').write_text(traceback.format_exc())
-        code = str(exc) if isinstance(exc, GateFailure) else 'unexpected_review_failure'
+        if isinstance(exc, GateFailure):
+            code = str(exc)
+        elif isinstance(exc, HTTPError) and exc.code in (401, 403, 404, 429):
+            code = 'http_status_' + str(exc.code)
+        else:
+            code = 'unexpected_review_failure'
         print('RESULT=FAILED; CODE=' + code, flush=True)
         return 1
     finally:
