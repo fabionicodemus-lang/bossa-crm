@@ -1,0 +1,60 @@
+name: Bossa V1 - verificar dominio publicado
+on:
+  push:
+    branches: ['ops/v1-cloud-preflight']
+    paths: ['ops/rollout/check-bossa-v1-a6607f0.txt']
+permissions: {}
+jobs:
+  verificar:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - name: Verificar rotas publicadas com GET sem sessao
+        run: |
+          python3 - <<'PY'
+          import json
+          from urllib.error import HTTPError
+          from urllib.parse import urlsplit
+          from urllib.request import HTTPRedirectHandler, Request, build_opener
+          from html.parser import HTMLParser
+
+          origin = 'https://crm.bossaempreendimentos.com.br'
+          class NoRedirect(HTTPRedirectHandler):
+              def redirect_request(self, req, fp, code, msg, headers, newurl):
+                  return None
+
+          class LoginForm(HTMLParser):
+              def __init__(self):
+                  super().__init__()
+                  self.fields = set()
+              def handle_starttag(self, tag, attrs):
+                  if tag == 'input':
+                      self.fields.add(dict(attrs).get('type'))
+
+          opener = build_opener(NoRedirect)
+          def request(path):
+              try:
+                  response = opener.open(Request(origin + path, headers={'User-Agent': 'BossaCRM-Release-Smoke/1'}), timeout=20)
+              except HTTPError as error:
+                  response = error
+              with response:
+                  return response.status, response.headers.get('Location',''), response.read(524288)
+
+          status, _, body = request('/login')
+          form = LoginForm()
+          form.feed(body.decode('utf-8','replace'))
+          assert status == 200 and 'password' in form.fields, f'login: HTTP {status}, form check failed'
+          print('Login renderizado: 200.')
+          for page in ['/gestao', '/nara', '/conversas']:
+              status, location, _ = request(page)
+              dest = urlsplit(location)
+              assert status in (302,303,307,308) and dest.netloc in ('',urlsplit(origin).netloc) and dest.path == '/login', f'{page}: HTTP {status}, unexpected access control'
+              print(f'{page}: controle de sessao confirmado ({status}).')
+
+          status, _, body = request('/api/commercial/export')
+          assert status == 401 and 'error' in json.loads(body), f'exportacao: HTTP {status}'
+          print('Exportacao comercial: HTTP 401 para cliente sem sessao.')
+          status, _, body = request('/api/meta/whatsapp/webhook?hub.mode=subscribe&hub.verify_token=bossa-release-invalid-probe&hub.challenge=probe')
+          assert status == 403 and body.strip() == b'Forbidden', f'webhook: HTTP {status}'
+          print('Webhook recusou token invalido: HTTP 403. Nenhuma mensagem enviada.')
+          PY
