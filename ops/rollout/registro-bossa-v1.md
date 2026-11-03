@@ -1,0 +1,13 @@
+# Implantação comercial do Bossa CRM V1 — 3 de novembro de 2026
+
+O release `a6607f0a6d40483c5767e8155ff55c95c62fc8fb` foi publicado no projeto de produção `bossa-crm` da Vercel. O endereço usado pelos agendamentos do CRM respondeu à verificação pública. [Abrir o CRM](https://bossa-crm-phi.vercel.app/login)
+
+A equipe verificou o pacote criptografado em ambiente privado, incluindo a integridade de todos os arquivos e a evidência da restauração e do ensaio isolados. O GitHub Actions conferiu os hashes do release, simulou a aplicação e depois confirmou as 13 versões originais no Supabase. A conferência independente encontrou 20 tabelas novas com segurança por linha ativa e zero ocorrências no diagnóstico de vínculos. As permissões de salvar proposta e de registrar detecção pela Nara foram verificadas em separado. [Simulação](https://github.com/fabionicodemus-lang/bossa-crm/actions/runs/41706962216) · [Aplicação](https://github.com/fabionicodemus-lang/bossa-crm/actions/runs/41707913687)
+
+A reconstrução concorrente dos índices recuperou cerca de 44 MB. A manutenção preservou os registros existentes. O histórico de webhooks e do agendador foi mantido.
+
+A verificação de produção abriu o login em Chromium, confirmou as proteções de sessão de Gestão, Nara e Conversas, o bloqueio da exportação comercial anônima e a rejeição de um token inválido pelo webhook do WhatsApp. Os agendamentos continuaram executando. Esse conjunto de testes não inclui um diálogo real de ponta a ponta entre um cliente e a Nara após a publicação. [Verificação no domínio operacional](https://github.com/fabionicodemus-lang/bossa-crm/actions/runs/41708738541)
+
+O aceite humano autorizado permanece em **2 de 8 cenários**, com seis pendentes. A compatibilidade HTTP 409 independente permanece fora destas 13 migrações e sem comprovação remota. O hostname `crm.bossaempreendimentos.com.br` está associado ao release na Vercel, mas a consulta de configuração constatou ausência de A e CNAME no DNS externo. Os dois primeiros acionamentos de implantação não executaram SQL em produção por uma falha de sintaxe no fluxo. O histórico foi conferido antes da execução corrigida. A primeira simulação também exigiu uma correção para interpretar a saída estruturada do CLI.
+
+**Retorno operacional.** Se a aplicação precisar voltar, o alvo anterior de produção é `dpl_BW1owJFDuLgU6ZyXUMkHaEH27SZ5` (commit `d88fdd23d07f78dfe994df8e74445b9340153f14`). Usar o rollback de tráfego do projeto na Vercel, verificar os aliases e repetir as verificações de acesso e webhook. O rollback de tráfego não reverte o banco. Uma recuperação do banco exige conciliar as gravações realizadas desde o backup para preservar esses dados.
