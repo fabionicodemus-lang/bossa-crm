@@ -31,6 +31,11 @@ export async function POST(req: Request) {
       if (chaves.has(k)) { const x = limpar(v); if (x !== null) detalhe[k] = x; }
     }
   }
+  // O domínio é identificado no servidor (não aceitamos host informado pelo visitante).
+  // A função do banco move essa informação técnica para site_sessions/site_events.hostname.
+  const host = new URL(req.url).hostname.toLowerCase();
+  if (/^[a-z0-9.-]{1,253}$/.test(host)) detalhe.__site_hostname = host;
+
   const utm: Record<string, string> = {};
   if (c.utm && typeof c.utm === "object") for (const [k, v] of Object.entries(c.utm as Record<string, unknown>)) if (/^(utm_\w+|fbclid|gclid)$/.test(k) && typeof v === "string") utm[k] = v.slice(0, 200);
 
