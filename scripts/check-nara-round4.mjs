@@ -14,6 +14,7 @@ import {
   refusesHandoff,
 } from '../src/lib/nara-conversation-signals.ts';
 import { resolvePlantRequest } from '../src/lib/nara-plant-catalog.ts';
+import { deriveHybridDecision } from '../src/lib/hybrid.ts';
 
 const passed = [];
 function accept(title, run) {
@@ -39,6 +40,8 @@ const files = [
   file('alma-tipo-02', 'planta', 'Plantas Tipo 02', ['Alma', 'plantas', 'tipo', '3 suítes'], 'Tipo 02.jpg'),
   file('alma-duplex', 'planta', 'Planta Duplex Tipo 1', ['Alma', 'duplex', '4 suítes'], 'Duplex Tipo 1.jpg'),
   file('alma-fachada', 'imagem', 'Fachada Alma', ['Alma', 'fachada'], 'fachada-alma.jpg'),
+  // Nomes reais da biblioteca (rodada 4): duplex do Alma sem a palavra "tipo".
+  file('alma-duplex-02', 'imagem', 'Planta Duplex 02', ['Alma', 'planta', 'duplex', 'imagens'], 'Duplex 02.jpg'),
   file('soul-piscina', 'imagem', 'Piscina Soul', ['Soul', 'piscina'], 'piscina-soul.jpg'),
   file('tabela-alma', 'tabela', 'Tabela de vendas · Alma Seahouses Ago26', ['Alma', 'tabela'], 'tabela.pdf'),
 ];
@@ -294,8 +297,63 @@ accept('Planta sem especificar: manda as duas de 3 suítes e oferece o duplex', 
   withinLimit(final);
   oneQuestionMax(final);
   const yes = postProcessNaraTurn(turn({ reply: 'Claro!' }), [...history, a(result.reply), u('Quero ver')], alma);
-  assert.deepEqual(yes.attachment_ids, ['alma-duplex']);
-  assert.match(yes.reply, /168 m²/);
+  assert.deepEqual([...yes.attachment_ids].sort(), ['alma-duplex', 'alma-duplex-02']);
+  assert.match(yes.reply, /145 m².*168 m²/);
+});
+
+
+// ---------- Rodada 4 (testes ao vivo, cenários 26–35) ----------
+accept('26/27: depois de mandar planta não acrescenta "Quantas suítes você procura?"', () => {
+  const history = [u('Boa tarde! Me manda as plantas do Alma?'), a('Te mando as plantas do Alma: 103 m² (Tipo 02) e 114 m² (Tipo 01), as duas com 3 suítes. Também tem duplex de 4 suítes, de 145 m² e 168 m². Quer ver?'), u('Gostei da maior de 3 suítes. Manda só ela?')];
+  const result = postProcessNaraTurn(turn({ reply: 'Claro!' }), history, alma);
+  assert.deepEqual(result.attachment_ids, ['alma-tipo-01']);
+  assert.match(result.reply, /114 m²/);
+  assert.doesNotMatch(result.reply, /103 m²|\?/);
+});
+
+accept('27: "Esse valor sobe até a entrega?" não vira tabela de preço', () => {
+  const history = [u('Me manda as plantas do Alma?'), a('O Alma começa em R$ 1.285.350,85.'), u('Esse valor sobe até a entrega?')];
+  const reply = 'O saldo direto com a construtora é corrigido pelo CUB até a entrega.';
+  const result = postProcessNaraTurn(turn({ reply }), history, alma);
+  assert.equal(result.reply, reply);
+});
+
+accept('27: "Quero reservar, como faço?" não é "sim" para a oferta de planta', () => {
+  const history = [u('Me manda as plantas do Alma?'), a('O Alma começa em R$ 1.285.350,85. Quer que eu te mande a planta da opção de menor valor?'), u('Quero reservar, como faço?')];
+  const reply = 'Que ótimo! Vou chamar a Taís do comercial para cuidar da sua reserva.';
+  const result = postProcessNaraTurn(turn({ reply, handoff: true }), history, alma);
+  assert.equal(result.reply, reply);
+  assert.equal(result.handoff, true);
+  assert.deepEqual(result.attachment_ids, []);
+});
+
+accept('31: "Manda a planta do duplex de 145" acha "Planta Duplex 02" da biblioteca', () => {
+  const result = postProcessNaraTurn(turn({ reply: 'Claro.' }), [u('Oi, só pesquisando o Alma.'), a('O Alma fica a 300 m do mar.'), u('Manda a planta do duplex de 145.')], alma);
+  assert.deepEqual(result.attachment_ids, ['alma-duplex-02']);
+  assert.match(result.reply, /145 m²/);
+  assert.doesNotMatch(result.reply, /168/);
+});
+
+accept('34: corretor continua no Plantão, sem frase repetida sem sentido', () => {
+  const routing = 'Vou direcionar você para o Plantão da Bossa, que atende corretores parceiros.';
+  const history = [u('Boa tarde, sou corretor da imobiliária Mar Azul e tenho um cliente pro Alma.'), a(`Oi! Aqui é a Nara, da Bossa 😊 ${routing}`), u('Qual a tabela?'), a(routing), u('Ok, quem me atende?')];
+  const result = postProcessNaraTurn(turn({ reply: routing, handoff: true }), history, alma);
+  assert.match(result.reply, /Plant[aã]o/);
+  assert.doesNotMatch(result.reply, /Sobre a sua d[uú]vida/);
+  assert.equal(result.handoff, true);
+  const tabela = postProcessNaraTurn(turn({ reply: 'Vou direcionar você.', handoff: true }), history.slice(0, 3), alma);
+  assert.equal(tabela.handoff, true, 'pedido de tabela de corretor não desfaz a passagem');
+});
+
+accept('Transferência forçada só com pedido real (Soul, entrada, videochamada não)', () => {
+  const lead = { id: 'l', organization_id: 'org', kind: 'cliente', stage: 'qualificacao_ia', owner_mode: 'ai', ai_enabled: true, metadata: {} };
+  const t = (handoff = false) => turn({ handoff, classification: 'morno', score: 45 });
+  for (const message of ['Quanto custa esse Soul?', 'Como fica o pagamento dela? Entrada e parcelas.', 'Videochamada não. Só queria saber preço mesmo. Eu volto depois.', 'Tô em Boston e só pesquisando. Não pedi reserva.', 'Vocês têm algo pronto pra morar?']) {
+    assert.equal(deriveHybridDecision({ lead, turn: t(), lastUserMessage: message }).handoffRequired, false, message);
+  }
+  for (const message of ['Quero reservar, como faço?', 'Quero falar com uma pessoa, pode me ligar amanhã de manhã?']) {
+    assert.equal(deriveHybridDecision({ lead, turn: t(), lastUserMessage: message }).handoffRequired, true, message);
+  }
 });
 
 // ---------- Consulta comercial acompanha a conversa ----------

@@ -117,7 +117,8 @@ export function explicitHumanRequest(text: string): boolean {
 /** Intenção real de compra nesta mensagem (não apenas pedido de informação). */
 export function purchaseIntent(text: string): boolean {
   const value = withoutNegatedRequests(normalizeSignalText(text));
-  return /\b(quero (?:reservar|comprar|fechar|fazer (?:uma )?proposta)|vou (?:reservar|comprar|fechar)|reservar a unidade|fazer (?:uma )?proposta|quero visitar|agendar (?:uma )?visita|quiero (?:reservar|comprar)|hacer una propuesta)\b/.test(value);
+  // Visita não entra aqui: a Nara agenda pela agenda conectada, sem transferir.
+  return /\b(quero (?:reservar|comprar|fechar|fazer (?:uma )?proposta)|vou (?:reservar|comprar|fechar)|reservar a unidade|fazer (?:uma )?proposta|quiero (?:reservar|comprar)|hacer una propuesta)\b/.test(value);
 }
 
 /** O texto da Nara pede permissão para responder ("Posso verificar...?"). */

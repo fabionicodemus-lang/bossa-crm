@@ -1,5 +1,6 @@
 import { enforceNaraReplyGuardrails, ensureFirstTurnIntroduction, generateAiTurn as generateCoreAiTurn } from './ai';
 import { naraConversationLanguage, requestedNaraLanguage } from './nara-language';
+import { isAssistedSaleSignal, isBrokerRoutingSignal, isPostSaleRoutingSignal } from './nara-contact-routing';
 import type { AiTrainingContext, AiTurn } from './ai';
 import type { Lead } from './types';
 import type { NaraUnitOffer } from './nara-unit-queries';
@@ -8,12 +9,10 @@ import { isGenericPortfolioInterest, portfolioFacadesForFirstPresentation, prese
 import {
   asksPermissionToAnswer,
   declaredFirstName,
-  declinedTopics,
   enterpriseInFocus,
   explicitHumanRequest,
   purchaseIntent,
   qualificationPaused,
-  questionTopic,
   refusesHandoff,
   withoutNegatedRequests,
   withoutUnwantedQualification,
@@ -233,22 +232,6 @@ function ensureFirstReplyIdentity(reply: string, history: ChatMessage[]): string
   return ensureFirstTurnIntroduction(reply, history, {});
 }
 
-function materialQualificationQuestion(history: ChatMessage[]): string {
-  // Cliente só pesquisando ou que recusou a pergunta não recebe outra pergunta de qualificação.
-  if (qualificationPaused(history)) return '';
-  const declined = declinedTopics(history);
-  const asked = new Set(assistantMessages(history).map((message) => questionTopic(message.split(/[.!]/).at(-1) ?? '')).filter(Boolean));
-  const value = normalizeText(userText(history));
-  const spanish = isSpanishLead(history);
-  if (!declined.has('suites') && !asked.has('suites') && !/\b\d+\s*(?:suites?|quartos?|habitaciones?)\b|\b(?:dois|tres|quatro|dos|tres|cuatro)\s*(?:suites?|quartos?|habitaciones?)\b|\b\d{2,3}\s*(?:m2|m²|metros)\b/.test(value)) {
-    return spanish ? '¿Cuántas suites buscas?' : 'Quantas suítes você procura?';
-  }
-  if (!declined.has('finalidade') && !asked.has('finalidade') && !/\b(morar|moradia|investir|investimento|viver|vivir|invertir|inversion|ferias|veranear|temporada)\b/.test(value)) {
-    return spanish ? '¿Lo buscas para vivir o para invertir?' : 'Você procura para morar ou investir?';
-  }
-  return '';
-}
-
 /** Remove frases em que a Nara desmente um valor que ela mesma já informou nesta conversa. */
 function withoutPriceRetraction(reply: string, history: ChatMessage[]): string {
   const informedBefore = assistantMessages(history).some((message) => /R\$\s*\d/.test(message));
@@ -259,9 +242,22 @@ function withoutPriceRetraction(reply: string, history: ChatMessage[]): string {
   return result || reply;
 }
 
+/** Corretor, pós-venda ou venda assistida: atendimento sai da Nara e a passagem não pode ser desfeita. */
+function outsideBuyerDestination(history: ChatMessage[]): 'plantao' | 'pos_venda' | 'venda_assistida' | null {
+  const messages = history.filter((item) => item.role === 'user').map((item) => item.content);
+  if (messages.some(isAssistedSaleSignal)) return 'venda_assistida';
+  if (messages.some(isBrokerRoutingSignal)) return 'plantao';
+  if (messages.some(isPostSaleRoutingSignal)) return 'pos_venda';
+  return null;
+}
+
 function finishTurn(turn: AiTurn, history: ChatMessage[]): AiTurn {
   turn.reply = ensureFirstReplyIdentity(turn.reply, history);
   const latest = lastUserText(history);
+  if (outsideBuyerDestination(history)) {
+    turn.handoff = true;
+    return turn;
+  }
   if (isPureInformationRequest(latest) && !requiresHumanHandoff(latest)) {
     turn.handoff = false;
   }
@@ -279,10 +275,8 @@ function finishTurn(turn: AiTurn, history: ChatMessage[]): AiTurn {
   }
   turn.reply = withoutPriceRetraction(turn.reply, history);
   turn.reply = withoutUnwantedQualification(turn.reply, history);
-  if (turn.attachment_ids.length > 0 && !turn.handoff && !turn.reply.includes('?')) {
-    const question = materialQualificationQuestion(history);
-    if (question) turn.reply = `${turn.reply.trim()} ${question}`;
-  }
+  // Rodada 4: não acrescenta mais pergunta automática de qualificação depois de enviar material
+  // ("Quantas suítes você procura?" logo após a planta, inclusive em conversa em inglês).
   return turn;
 }
 
@@ -342,6 +336,8 @@ function conversationLanguage(history: ChatMessage[]): 'pt' | 'es' | 'en' {
 }
 
 function asksApartmentPrice(latestNormalized: string): boolean {
+  // "Esse valor sobe até a entrega?" é pergunta sobre reajuste, não pedido de preço.
+  if (/\b(sobe|subir|reajust\w*|corrig\w*|correcao|aument\w*|cub|indice|inflacao|sube|reajuste)\b/.test(latestNormalized)) return false;
   return /\b(precos?|precio|prices?|valor(?:es)?|quanto (?:custa|ta|tá|esta|fica|sai|e|da)|(?:fica|sai|custa|ta|esta|comeca|da) (?:em |por )?quanto|cuanto (?:cuesta|sale)|how much|dolar|usd|cabe no bolso|o total|valor total|total do menor)\b/.test(latestNormalized)
     || /\b(?:ate|hasta|up to)\s+(?:r\$\s*)?\d/.test(latestNormalized);
 }
@@ -404,7 +400,7 @@ function naturalPriceReply(range: PriceRange, history: ChatMessage[], context: A
   const conversion = context.foreign?.fx
     ? context.foreign.conversions.find((item) => item.development === range.empreendimento && Math.round(item.brl) === Math.round(range.valor_minimo))
     : undefined;
-  const min = `${formatBrlExact(range.valor_minimo)}${conversion ? ` (≈ ${formatForeign(conversion.foreign, conversion.currency)}${language === 'en' ? ', approximate PTAX' : language === 'es' ? ', PTAX aproximada' : ' pela PTAX do dia'})` : ''}`;
+  const min = `${formatBrlExact(range.valor_minimo)}${conversion ? ` (≈ ${formatForeign(conversion.foreign, conversion.currency)}${language === 'en' ? ', approximate rate of the day' : language === 'es' ? ', cotización del día' : ' pela cotação do dia'})` : ''}`;
   const max = range.valor_maximo > range.valor_minimo ? formatBrlExact(range.valor_maximo) : '';
   const name = range.empreendimento;
   const asked = normalizeText(userText(history));
@@ -465,10 +461,11 @@ function plantRequestTurn(turn: AiTurn, history: ChatMessage[], context: AiTrain
   const previousAssistant = [...history].reverse().find((item) => item.role === 'assistant')?.content ?? '';
   const acceptsOffer = !mentionsPlant(latest)
     && /^(sim|s|pode|pode mandar|pode sim|manda|me manda|quero|quero ver|claro|ok|beleza|bora|si|sí|dale|yes|sure)\b/.test(latestNormalized)
+    && latestNormalized.split(' ').length <= 5 && !purchaseIntent(latest) && !asksApartmentPrice(latestNormalized)
     && mentionsPlant(previousAssistant) && previousAssistant.includes('?');
   // "3 suítes", "a de 103 m²", "Tipo 01" respondendo a uma pergunta da Nara sobre planta.
   const answersPlantQuestion = !mentionsPlant(latest) && !acceptsOffer
-    && mentionsPlant(previousAssistant) && previousAssistant.includes('?')
+    && (mentionsPlant(previousAssistant) || /\b\d{2,3}(?:,\d)? m²/.test(previousAssistant))
     && /\b(\d|dois|duas|tres|quatro)\s*(?:suites?|quartos?)\b|\b\d{2,3}(?:[.,]\d)?\s*(?:m2|m²|m\b|metros)|\btipo\s*0?\d\b|\bduplex\b|\b(?:menor|maior)\b/.test(latestNormalized);
   if (!mentionsPlant(latest) && !acceptsOffer && !answersPlantQuestion) return null;
   const development = developmentFromHistory(history);
@@ -515,13 +512,21 @@ function plantRequestTurn(turn: AiTurn, history: ChatMessage[], context: AiTrain
       return turn;
     }
   }
-  turn.reply = plantReply({
-    development,
-    request,
-    sentEntries: sent,
-    language: conversationLanguage(history),
-    allowQuestion: !qualificationPaused(history),
-  });
+  const language = conversationLanguage(history);
+  const missing = request.entries.filter((entry) => !sent.includes(entry));
+  // Envio parcial: descreve o que foi enviado e avisa, numa frase, o que não está na biblioteca.
+  turn.reply = sent.length && missing.length
+    ? `${plantReply({ development, request: { entries: sent, generic: false }, sentEntries: sent, language, allowQuestion: false })} ${
+      language === 'es' ? `La de ${missing.map((entry) => entry.areaLabel).join(' y ')} no está conmigo ahora; el equipo puede enviártela.`
+        : language === 'en' ? `I do not have the ${missing.map((entry) => entry.areaLabel).join(' and ')} one with me right now; the team can send it.`
+          : `A de ${missing.map((entry) => entry.areaLabel).join(' e ')} não está comigo agora; o time pode te enviar.`}`
+    : plantReply({
+      development,
+      request,
+      sentEntries: sent,
+      language,
+      allowQuestion: !qualificationPaused(history),
+    });
   if (!explicitHumanRequest(latest) && !purchaseIntent(latest)) turn.handoff = false;
   turn.summary = sent.length
     ? `Planta enviada pelo catálogo oficial: ${sent.map((entry) => `${entry.label} (${entry.areaLabel})`).join(', ')}.`
@@ -785,10 +790,16 @@ export function postProcessNaraTurn(
   if (repeated || repeatedTriage) {
     const topic = topicFromQuestion(latestRaw);
     const alreadyInHandoff = priorMessages.some((message) => /ta[ií]s.*comercial|chamando a ta[ií]s|llamando a ta[ií]s/.test(normalizeText(message)));
-    turn.reply = alreadyInHandoff
-      ? `Essa dúvida sobre ${topic} já ficou registrada para a Taís; você não precisa repetir. Ela continua daqui.`
-      : `Sobre ${topic}: me conta o que ficou faltando que eu respondo direto.`;
-    turn.handoff = alreadyInHandoff;
+    const destination = outsideBuyerDestination(history);
+    const closing = /^(ok|valeu|obrigad[oa]|blz|beleza|show|certo|perfeito|tchau|gracias|thanks)/.test(latest);
+    turn.reply = destination === 'plantao'
+      ? closing ? 'Por nada! O Plantão da Bossa já foi avisado e continua com você por aqui.' : 'Isso o Plantão da Bossa responde para você: tabela, comissão e unidades. Já avisei a equipe e eles te chamam por aqui.'
+      : destination === 'pos_venda' || destination === 'venda_assistida'
+        ? 'Já registrei e avisei a equipe; eles continuam seu atendimento por aqui, sem você precisar repetir.'
+        : alreadyInHandoff
+          ? `Essa dúvida sobre ${topic} já ficou registrada para a Taís; você não precisa repetir. Ela continua daqui.`
+          : spanish ? 'Cuéntame un poco más de lo que quieres saber y te respondo directo.' : 'Me conta um pouco mais do que você quer saber, que eu te respondo direto.';
+    turn.handoff = alreadyInHandoff || Boolean(destination);
     turn.summary = `Resposta anterior seria repetida. Dúvida atual: ${latestRaw.slice(0, 280)}`;
     turn.next_action = alreadyInHandoff
       ? 'Taís deve continuar a partir da dúvida registrada, sem pedir o assunto novamente.'

@@ -287,7 +287,8 @@ const operationalContext = {
   assert.equal(result.handoff, false);
   assert.match(result.reply, /Camila/i);
   assert.match(result.reply, /Nara.*Bossa/i);
-  assert.equal((result.reply.match(/\?/g) ?? []).length, 1);
+  // Rodada 4: sem pergunta automática de qualificação depois do material; no máximo uma pergunta.
+  assert.ok((result.reply.match(/\?/g) ?? []).length <= 1);
 }
 
 // Rodada 2: planta genérica não escolhe arquivo arbitrário
