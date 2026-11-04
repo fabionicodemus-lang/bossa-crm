@@ -143,6 +143,7 @@ function looksLikeUnderstandableMedia(row: MessageRow) {
 async function enrichRecentMedia(
   admin: ReturnType<typeof createAdminClient>,
   organizationId: string,
+  leadId: string,
   rows: MessageRow[],
   latestAt: string,
 ) {
@@ -157,7 +158,7 @@ async function enrichRecentMedia(
   }).slice(-MAX_MEDIA_PER_TURN);
 
   const results = await Promise.all(candidates.map(async (row) => {
-    const understanding = await understandInboundMedia({ admin, organizationId, row });
+    const understanding = await understandInboundMedia({ admin, organizationId, leadId, row });
     return [row.id, understanding] as const;
   }));
   return new Map(results.filter((entry): entry is readonly [string, string] => Boolean(entry[1])));
@@ -276,7 +277,7 @@ export async function generateAiTurn(lead: Lead, history: ChatMessage[], context
     return skip(freshLead);
   }
 
-  const mediaUnderstanding = await enrichRecentMedia(admin, freshLead.organization_id, rows, latest.created_at);
+  const mediaUnderstanding = await enrichRecentMedia(admin, freshLead.organization_id, freshLead.id, rows, latest.created_at);
   const recentHistory: ChatMessage[] = rows.map((row) => ({
     role: row.direction === 'in' ? 'user' : 'assistant',
     content: mediaUnderstanding.get(row.id) || row.body,

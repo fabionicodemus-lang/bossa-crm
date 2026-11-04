@@ -43,6 +43,8 @@ jobs:
         run: npm ci --no-audit --no-fund
       - name: Test Hoje workspace
         run: npm run test:hoje-ui
+      - name: Test AI usage logging
+        run: npm run test:ai-usage
       - name: Test Meta referral attribution
         run: npm run test:meta-referral
       - name: Test Alma sales table

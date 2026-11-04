@@ -1,3 +1,4 @@
+import { recordAiUsageLog } from '@/lib/ai-usage';
 import { getCurrentContext } from '@/lib/auth';
 import { transcribeAudio } from '@/lib/audio-transcription';
 import { createAdminClient } from '@/lib/supabase/admin';
@@ -10,6 +11,7 @@ export const maxDuration = 60;
 type AudioMessageRow = {
   id: string;
   organization_id: string;
+  lead_id: string | null;
   whatsapp_channel_id: string | null;
   whatsapp_message_id: string | null;
   body: string;
@@ -47,7 +49,7 @@ export async function POST(
   const admin = createAdminClient();
   const { data, error } = await admin
     .from('messages')
-    .select('id,organization_id,whatsapp_channel_id,whatsapp_message_id,body,raw_payload')
+    .select('id,organization_id,lead_id,whatsapp_channel_id,whatsapp_message_id,body,raw_payload')
     .eq('id', id)
     .eq('organization_id', context.organization.id)
     .maybeSingle();
@@ -78,6 +80,14 @@ export async function POST(
       mimeType: descriptor.mime_type || audio.mimeType || response.headers.get('content-type') || 'audio/ogg',
       language: 'pt',
     });
+    if (result.usage && message.lead_id) {
+      await recordAiUsageLog({
+        admin,
+        organizationId: context.organization.id,
+        leadId: message.lead_id,
+        records: [result.usage],
+      });
+    }
     const now = new Date().toISOString();
     const enrichedPayload = {
       ...(message.raw_payload || {}),
