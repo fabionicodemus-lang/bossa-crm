@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
-import { generateSupervisedAiTurn, type AiFileOption } from '@/lib/ai-v120';
+import { generateSupervisedAiTurn, ensureFirstTurnIntroduction, isUnverifiedCommercialFile, type AiFileOption } from '@/lib/ai-v120';
+import { naraReplyNeedsCommercialProtection, protectNaraCommercialReply } from '@/lib/nara-commercial-guard';
 import { loadAiContext } from '@/lib/ai-context';
 import { rankAiFilesForConversation } from '@/lib/ai-file-ranking';
 import { recordAiUsage } from '@/lib/ai-usage';
@@ -260,10 +261,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       .select('direction,body,created_at')
       .eq('lead_id', lead.id)
       .neq('direction', 'system')
-      .order('created_at', { ascending: true })
+      .order('created_at', { ascending: false })
       .limit(100);
     if (historyError) throw historyError;
-    const history = (rows ?? []).map((row) => ({
+    const history = [...(rows ?? [])].reverse().map((row) => ({
       role: row.direction === 'in' ? 'user' as const : 'assistant' as const,
       content: String(row.body ?? ''),
     }));
@@ -308,6 +309,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       files: context.files ?? [],
       modelAttachmentIds: turn.attachment_ids ?? [],
     });
+    // Supervisor selection cannot reintroduce an unversioned commercial PDF.
+    const unverifiedPriceFiles = new Set((context.files ?? [])
+      .filter(isUnverifiedCommercialFile).map((file) => file.id));
+    turn.attachment_ids = turn.attachment_ids.filter((fileId) => !unverifiedPriceFiles.has(fileId));
 
     const sentFileIds = await sendFiles({
       admin,
@@ -322,7 +327,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       instruction,
     });
 
-    const reply = adjustReplyForFiles(turn.reply.trim(), turn.attachment_ids.length, sentFileIds.length);
+    let reply = adjustReplyForFiles(turn.reply.trim(), turn.attachment_ids.length, sentFileIds.length);
+    if (naraReplyNeedsCommercialProtection(reply, history)) {
+      context.commercial = await loadNaraCommercialTurnContext(admin, membership.organization_id, lead, history);
+      const checked = protectNaraCommercialReply(reply, history, context.commercial, { enterprise: lead.enterprise });
+      reply = ensureFirstTurnIntroduction(checked.reply, history, context);
+    }
     const { provider, accessToken, phoneNumberId } = channelAccess(channel);
     const sent = await provider.sendText({
       phoneNumberId,

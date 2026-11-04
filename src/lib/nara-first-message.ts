@@ -13,12 +13,6 @@ import { readMetaAdAttribution } from './meta-ad-attribution';
 export type Development = 'soul' | 'flow' | 'alma';
 export type Language = 'pt' | 'es' | 'en';
 
-const WORD_LIMIT = 45;
-
-function wordCount(value: string): number {
-  return value.match(/[\p{L}\p{N}]+(?:['’.-][\p{L}\p{N}]+)*/gu)?.length ?? 0;
-}
-
 function normalize(value: string): string {
   return value.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLocaleLowerCase('pt-BR');
 }
@@ -78,7 +72,7 @@ const SINGLE: Record<Development, Record<Language, string>> = {
   },
 };
 
-/** Monta a primeira mensagem; o lugar só entra se couber no limite de palavras. */
+/** Compose the opening without discarding the contact context to meet a word limit. */
 export function firstMessageBody(args: {
   intro: string;
   language: Language;
@@ -88,8 +82,7 @@ export function firstMessageBody(args: {
   const body = args.development ? SINGLE[args.development][args.language] : PORTFOLIO[args.language];
   const place = placeLine(args.place, args.language);
   const withPlace = [args.intro, place, body].filter(Boolean).join(' ');
-  if (place && wordCount(withPlace) <= WORD_LIMIT) return withPlace;
-  return [args.intro, body].filter(Boolean).join(' ');
+  return withPlace;
 }
 
 function fileCorpus(file: AiFileOption): string {

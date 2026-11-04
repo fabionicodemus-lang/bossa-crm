@@ -232,16 +232,6 @@ function ensureFirstReplyIdentity(reply: string, history: ChatMessage[]): string
   return ensureFirstTurnIntroduction(reply, history, {});
 }
 
-/** Remove frases em que a Nara desmente um valor que ela mesma já informou nesta conversa. */
-function withoutPriceRetraction(reply: string, history: ChatMessage[]): string {
-  const informedBefore = assistantMessages(history).some((message) => /R\$\s*\d/.test(message));
-  if (!informedBefore) return reply;
-  const sentences = reply.trim().match(/[^.!?]+[.!?]*\s*/g) ?? [];
-  const kept = sentences.filter((sentence) => !/\b(?:nao (?:estava|estavam) (?:validad|confirmad)\w*|informacao (?:imprecisa|incorreta)|(?:valor|preco|faixa) que (?:eu )?(?:mencionei|informei|passei|citei)(?: antes)?\b.{0,40}\b(?:nao|sem)\b)/.test(normalizeText(sentence)));
-  const result = kept.join('').trim();
-  return result || reply;
-}
-
 /** Corretor, pós-venda ou venda assistida: atendimento sai da Nara e a passagem não pode ser desfeita. */
 function outsideBuyerDestination(history: ChatMessage[]): 'plantao' | 'pos_venda' | 'venda_assistida' | null {
   const messages = history.filter((item) => item.role === 'user').map((item) => item.content);
@@ -273,7 +263,6 @@ function finishTurn(turn: AiTurn, history: ChatMessage[]): AiTurn {
     turn.classification = 'morno';
     turn.score = Math.min(turn.score, 50);
   }
-  turn.reply = withoutPriceRetraction(turn.reply, history);
   turn.reply = withoutUnwantedQualification(turn.reply, history);
   // Rodada 4: não acrescenta mais pergunta automática de qualificação depois de enviar material
   // ("Quantas suítes você procura?" logo após a planta, inclusive em conversa em inglês).

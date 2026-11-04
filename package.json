@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "npm run test:ai-model-routing && npm run test:nara-language && npm run test:nara-round3 && npm run test:nara-round4 && npm run test:nara-phase10 && next build",
+    "build": "npm run test:nara-conversation-policy && npm run test:nara-commercial-guard && npm run test:nara-integration && npm run test:ai-model-routing && npm run test:nara-language && npm run test:nara-round3 && npm run test:nara-round4 && npm run test:nara-phase10 && next build",
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
@@ -13,11 +13,11 @@
     "test:alma-table": "node scripts/check-alma-sales-table.mjs",
     "test:flow-table": "node scripts/check-flow-sales-table.mjs",
     "test:ai-files-commercial": "node scripts/check-ai-files-commercial-access.mjs",
-    "test:nara-prompt": "node scripts/check-nara-prompt-contract.mjs",
+    "test:nara-prompt": "node --experimental-strip-types --experimental-loader ./scripts/ts-extension-loader.mjs scripts/check-nara-prompt-contract.mjs",
     "test:ai-model-routing": "node scripts/check-ai-model-routing.mjs",
     "test:nara-language": "node --experimental-strip-types --experimental-loader ./scripts/ts-extension-loader.mjs scripts/check-nara-language.mjs",
-    "test:nara-fixed-layer": "node scripts/check-nara-fixed-layer.mjs",
-    "test:nara-price-levels": "node --experimental-strip-types scripts/check-nara-price-levels.mjs",
+    "test:nara-fixed-layer": "node --experimental-strip-types --experimental-loader ./scripts/ts-extension-loader.mjs scripts/check-nara-fixed-layer.mjs",
+    "test:nara-price-levels": "node --experimental-strip-types --experimental-loader ./scripts/ts-extension-loader.mjs scripts/check-nara-price-levels.mjs",
     "test:nara-unit-queries": "node --experimental-strip-types --experimental-loader ./scripts/ts-extension-loader.mjs scripts/check-nara-unit-queries.mjs",
     "test:nara-guardrails": "node --experimental-strip-types --experimental-loader ./scripts/ts-extension-loader.mjs scripts/check-nara-guardrails.mjs",
     "test:nara-dynamic-context": "node --experimental-strip-types --experimental-loader ./scripts/ts-extension-loader.mjs scripts/check-nara-dynamic-context.mjs",
@@ -33,7 +33,10 @@
     "test:client-broker-transfer": "node --experimental-strip-types --experimental-loader ./scripts/ts-extension-loader.mjs scripts/check-client-broker-transfer.mjs",
     "test:nara-round3": "node --experimental-strip-types --experimental-loader ./scripts/ts-extension-loader.mjs scripts/check-nara-round3.mjs",
     "test:nara-round4": "node --experimental-strip-types --experimental-loader ./scripts/ts-extension-loader.mjs scripts/check-nara-round4.mjs",
-    "test:hoje-ui": "node --experimental-strip-types scripts/ui/check-hoje-model.mjs"
+    "test:hoje-ui": "node --experimental-strip-types scripts/ui/check-hoje-model.mjs",
+    "test:nara-conversation-policy": "node --experimental-strip-types --experimental-loader ./scripts/ts-extension-loader.mjs scripts/check-nara-conversation-policy.mjs",
+    "test:nara-commercial-guard": "node --experimental-strip-types --experimental-loader ./scripts/ts-extension-loader.mjs scripts/check-nara-commercial-guard.mjs",
+    "test:nara-integration": "node --experimental-strip-types --experimental-loader ./scripts/ts-extension-loader.mjs scripts/check-nara-integration.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.3",

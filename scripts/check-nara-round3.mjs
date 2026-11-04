@@ -124,4 +124,8 @@ assert.match(shortened, /Qual opção faz mais sentido para você agora\?/);
 
 assert.deepEqual(officeHours('2026-09-26','08:00-18:00','08:00-18:00'),{open:480,close:1080});
 assert.equal(officeHours('2026-09-27','08:00-18:00','08:00-18:00'),null);
-console.log('Nara rodada 3: opt-out, pós-venda, agenda, preços e corte de 45 palavras validados.');
+const completeAgenda = appendAgendaMessageToReply(longReply, 'Qual dia você prefere para a visita?');
+assert.match(completeAgenda, /Esta segunda frase acrescenta/);
+assert.match(completeAgenda, /Qual dia você prefere para a visita\?/);
+assert.ok(naraReplyWordCount(completeAgenda) > 45, 'agenda não deve cortar a explicação');
+console.log('Nara rodada 3: opt-out, pós-venda, agenda, preços e explicação preservada validados.');

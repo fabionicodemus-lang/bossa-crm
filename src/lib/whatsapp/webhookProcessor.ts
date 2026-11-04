@@ -1,4 +1,6 @@
-import { generateAiTurn, type AiFileOption } from '@/lib/ai-v120';
+import { generateAiTurn, ensureFirstTurnIntroduction, type AiFileOption } from '@/lib/ai-v120';
+import { naraReplyNeedsCommercialProtection, protectNaraCommercialReply } from '@/lib/nara-commercial-guard';
+import { naraConversationLanguage } from '@/lib/nara-language';
 import { loadAiContext } from '@/lib/ai-context';
 import { recordAiUsage } from '@/lib/ai-usage';
 import { loadNaraDynamicTurnContext } from '@/lib/nara-dynamic-context';
@@ -720,6 +722,7 @@ export async function processConversation(args: {
     }
     return;
   }
+  let agendaReply = '';
   if (lead.kind === 'cliente' && shouldHandleAgendaTurn(history, lastUserMessage)) {
     const officeAddress = context.dynamic?.values.office_address?.trim();
     const appointment = await maybeScheduleAgendaFromAi({ admin: args.admin,
@@ -730,8 +733,10 @@ export async function processConversation(args: {
     if (appointment.status === 'created') {
       const maps = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(officeAddress || '')}`;
       turn.reply = `Sua visita ficou marcada para ${new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo', dateStyle: 'short', timeStyle: 'short' }).format(new Date(appointment.startsAt))}, no escritório da Bossa, ${officeAddress}. ${maps} Se precisar mudar, avise por aqui.`;
+      agendaReply = turn.reply;
       turn.stage = 'agendado'; turn.classification = 'agendamento'; turn.handoff = false;
     } else if (appointment.status !== 'none') {
+      agendaReply = appointment.message;
       turn.reply = hasNonAgendaQuestion(lastUserMessage)
         ? appendAgendaMessageToReply(turn.reply, appointment.message)
         : appointment.message;
@@ -836,6 +841,38 @@ export async function processConversation(args: {
       turn.attachment_ids.length,
       delivery.sentIds.length,
     );
+  }
+
+  // Re-read prices immediately before sending. Never authorize an offer using the
+  // draft, prior messages, supervisor examples or the earlier lookup alone.
+  if (lead.kind === 'cliente' && naraReplyNeedsCommercialProtection(reply, history)) {
+    context.commercial = await loadNaraCommercialTurnContext(
+      args.admin, args.channel.organization_id, lead, history,
+    );
+    const checked = protectNaraCommercialReply(reply, history, context.commercial, {
+      enterprise: lead.enterprise,
+    });
+    reply = ensureFirstTurnIntroduction(checked.reply, history, context);
+    if (agendaReply && checked.commercial && !reply.includes(agendaReply)) {
+      reply = `${reply}\n\n${agendaReply}`;
+    }
+    if (checked.commercial && decision.handoffRequired && lead.owner_mode !== 'human') {
+      // applyHybridDecision has already persisted the pending handoff. Preserve
+      // its acknowledgement without retaining the model's financial prose.
+      const language = naraConversationLanguage(history);
+      const handoffNotice = language === 'es'
+        ? 'Tu solicitud quedó encaminada al equipo para continuar la atención.'
+        : language === 'en'
+          ? 'Your request has been passed to the team to continue helping you.'
+          : 'Seu pedido foi encaminhado à equipe para continuar o atendimento.';
+      reply = `${reply}\n\n${handoffNotice}`;
+    }
+    turn.reply = reply;
+    // A human takeover or opt-out during the refresh still wins over this send.
+    if (!(await whatsappCanStillReply({
+      admin: args.admin, leadId: lead.id, conversationId: args.conversation.id,
+      sourceId: args.sourceMessageId, allowDisabledLead: forceBroadcastReply,
+    }))) return;
   }
 
   let offerAuditIds: string[] = [];

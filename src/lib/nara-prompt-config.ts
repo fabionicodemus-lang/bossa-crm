@@ -1,8 +1,10 @@
+import { DEFAULT_NARA_CONSULTATIVE_PROMPT } from './nara-conversation-policy';
+
 export const NARA_PROMPT_MARKER = '# PROMPT FINAL DA NARA';
 export const NARA_PROMPT_STORAGE_KEY = 'prompt_final';
 export const LEGACY_NARA_PROMPT_STORAGE_KEY = 'triagem_pergunta_inicial';
 export const NARA_PROMPT_MAX_LENGTH = 100_000;
-export const DEFAULT_NARA_TRIAGE_QUESTION = 'Para eu te direcionar certinho, você está buscando um imóvel para comprar ou precisa falar com a Bossa sobre outro assunto?';
+export const DEFAULT_NARA_TRIAGE_QUESTION = 'Como posso ajudar você hoje?';
 
 const TRIAGE_OPEN_MARKER = '<PERGUNTA_TRIAGEM>';
 const TRIAGE_CLOSE_MARKER = '</PERGUNTA_TRIAGEM>';
@@ -11,6 +13,7 @@ const PHASE9_PRICE_MARKER = '### Efeito do preço no score e na classificação'
 const SCORE_SECTION_HEADING = '### Pontuação';
 const SCORE_SECTION_END = '\n\n---\n\n## 7. PREÇO';
 const PRICE_ALIGNMENT_ANCHOR = '**Nunca pule para o nível 3 antes de saber o uso.** Valor de apartamento específico sem contexto é só um número grande — e número grande sozinho afasta.';
+const PRICE_ALIGNMENT_GUIDANCE = '**Responda ao pedido de preço com a consulta vigente.** Finalidade de uso e qualificação ajudam a orientar a escolha, mas não são exigências para consultar uma unidade identificada.';
 
 export const NARA_PHASE9_SCORE_BLOCK = `### Score comercial (0–100)
 
@@ -29,7 +32,9 @@ Regras de prevalência:
 - pedido isolado de faixa geral, sem intenção confirmada, fica em **score máximo 20** e classificação \`frio\`;
 - enquanto não houver sinal confiável de possível comprador, o score não passa de 20;
 - faixa claramente incompatível limita o score a **25**, até surgir alternativa compatível confirmada;
-- visita, proposta, reserva, negociação, unidade específica, condição comercial ou pedido de humano são sinais de alta intenção: use **score mínimo 80**, \`handoff=true\` e deixe o motor operacional definir a prioridade;
+- visita, proposta, reserva ou negociação explícitas são sinais de alta intenção: use **score mínimo 80**, \`handoff=true\` e deixe o motor operacional definir a prioridade;
+- pedido isolado de unidade, disponibilidade, preço ou condição de tabela não força score alto nem encaminhamento; responda à informação solicitada mesmo sem qualificação completa;
+- pedido de humano deve ser atendido, mas não aumenta a intenção de compra por si só;
 - transferência para Plantão, pós-venda ou outro setor não aumenta o score comercial de compra;
 - opt-out, spam ou contato sem relação com a Bossa usa score 0.
 
@@ -40,17 +45,17 @@ Use **exatamente um** destes valores no campo \`classification\`:
 - \`frio\`: score de 0 a 20; curiosidade, intenção ainda não confirmada ou somente pedido de faixa geral;
 - \`morno\`: score de 21 a 59; possível comprador com interesse real, mas ainda faltam aderência, prazo ou contexto;
 - \`quente\`: score de 60 a 100; comprador com boa aderência ou intenção concreta, sem horário de visita/ligação já combinado;
-- \`agendamento\`: somente quando visita, ligação ou videochamada estiver claramente combinada; use score mínimo 80, \`stage=agendado\` e \`handoff=true\`;
+- \`agendamento\`: somente quando visita, ligação ou videochamada estiver confirmada pelo sistema; use score mínimo 80, \`stage=agendado\` e \`handoff=true\`;
 - \`sem_interesse\`: somente opt-out, spam ou contato sem relação útil com a Bossa; use score 0.
 
 Nunca escreva \`nutrir\`, \`régua longa\`, A1, A2, B, C ou D no campo \`classification\`. Esses termos pertencem ao tratamento operacional e à prioridade, não ao enum de classificação. Um sinal explícito de alta intenção prevalece sobre a falta de campos de qualificação.`;
 
 export const NARA_PHASE9_PRICE_ALIGNMENT = `### Efeito do preço no score e na classificação
 
-- **Nível 1 — faixa geral sem intenção confirmada:** mantenha \`classification=frio\`, score máximo 20, sem arquivo, sem unidade e sem liberar a qualificação.
-- **Nível 2 — faixa por tipologia:** só pode elevar para \`morno\` quando a conversa também trouxer sinais reais de possível comprador; a faixa, sozinha, não aumenta o score.
-- **Nível 3 — apartamento específico:** exige USO e intenção confirmados. Pedido de unidade, disponibilidade, entrada, parcela ou condição específica é sinal de alta intenção: score mínimo 80, \`classification=quente\` e \`handoff=true\`, salvo quando já houver compromisso agendado, caso em que a classificação é \`agendamento\`.
-- Se a consulta falhar ou não confirmar a condição vigente, não compense aumentando score nem inventando valor; escale para confirmação humana.`;
+- **Nível 1 — faixa geral sem intenção confirmada:** mantenha \`classification=frio\` e score máximo 20 quando só houver curiosidade. Responda à consulta disponível, sem exigir qualificação prévia.
+- **Nível 2 — faixa por tipologia:** a faixa, sozinha, não aumenta o score; considere os demais sinais reais da conversa.
+- **Nível 3 — apartamento específico:** consulte a unidade quando empreendimento e identificação estiverem claros, mesmo sem USO informado. Pedido isolado de unidade, disponibilidade, entrada, parcela ou condição de tabela não obriga \`handoff=true\` nem score mínimo. Proposta, negociação, reserva, visita ou pedido de humano seguem as regras operacionais; use \`agendamento\` apenas com confirmação do sistema.
+- Em todos os níveis, a oferta exige consulta comercial vigente. Histórico, orçamento do cliente e exemplos não autorizam preço. Se a consulta falhar, não aumente o score nem invente valor; explique a pendência e siga a regra de confirmação comercial.`;
 
 type KnowledgeRecord = Record<string, string>;
 
@@ -85,7 +90,7 @@ function addPriceAlignment(prompt: string): string {
   if (!prompt.includes(PHASE9_SCORE_MARKER) || !prompt.includes(PRICE_ALIGNMENT_ANCHOR)) return prompt;
   return prompt.replace(
     PRICE_ALIGNMENT_ANCHOR,
-    `${PRICE_ALIGNMENT_ANCHOR}\n\n${NARA_PHASE9_PRICE_ALIGNMENT}`,
+    `${PRICE_ALIGNMENT_GUIDANCE}\n\n${NARA_PHASE9_PRICE_ALIGNMENT}`,
   );
 }
 
@@ -157,6 +162,6 @@ export function naraKnowledgeForEditor(value: unknown): KnowledgeRecord {
   const prompt = normalized[NARA_PROMPT_STORAGE_KEY] ?? '';
   const editorKnowledge = { ...normalized };
   delete editorKnowledge[NARA_PROMPT_STORAGE_KEY];
-  if (prompt) editorKnowledge[LEGACY_NARA_PROMPT_STORAGE_KEY] = prompt;
+  editorKnowledge[LEGACY_NARA_PROMPT_STORAGE_KEY] = prompt || DEFAULT_NARA_CONSULTATIVE_PROMPT;
   return editorKnowledge;
 }
