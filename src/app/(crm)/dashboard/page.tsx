@@ -7,6 +7,7 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { formatDateTime } from '@/lib/format';
 import { fetchMetaAdSpend } from '@/lib/meta-ads';
+import { divideCost, parseBrazilDate, milestoneReachedAtCutoff } from '@/lib/commercial-metrics';
 
 type ActivityLead = { id: string; name: string; kind: string };
 type DashboardActivity = { id: string; title: string; description: string | null; created_at: string; leads: ActivityLead | null };
@@ -76,12 +77,6 @@ function dateInput(value: Date) {
   return value.toISOString().slice(0, 10);
 }
 
-function parseBrazilDate(value: string | undefined) {
-  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
-  const [year, month, day] = value.split('-').map(Number);
-  const result = new Date(Date.UTC(year, month - 1, day, 3, 0, 0, 0));
-  return Number.isNaN(result.getTime()) ? null : result;
-}
 
 function marketingRange(params: DashboardSearchParams, today: Date) {
   const period = ['week', 'month', '6m', 'custom'].includes(String(params.marketing_period))
@@ -129,18 +124,20 @@ function money(value: number | null) {
   }).format(value);
 }
 
-function divideCost(spend: number | null, count: number) {
-  if (spend == null || !Number.isFinite(spend) || count <= 0) return null;
-  return spend / count;
-}
 
 // Bloco de marketing: depende da API da Meta (externa e mais lenta) e do funil.
 // Carrega separado para não atrasar o restante do Dashboard.
 async function MarketingSection({ orgId, marketing }: { orgId: string; marketing: ReturnType<typeof marketingRange> }) {
+  const context = await getCurrentContext();
+  if (!context || context.organization.id !== orgId || context.role !== 'admin') {
+    return <section className="card"><div className="card-body">Custos consolidados de marketing disponíveis para administradores.</div></section>;
+  }
+  const supabase = await createClient();
   const admin = createAdminClient();
+  const cutoff = new Date();
   const [marketingLeadsResult, metaSpend] = await Promise.all([
-    admin.from('leads')
-      .select('id,created_at,stage,source')
+    supabase.from('leads')
+      .select('id,created_at,stage,source', { count: 'exact' })
       .eq('organization_id', orgId)
       .eq('kind', 'cliente')
       .ilike('source', 'Meta%')
@@ -151,6 +148,10 @@ async function MarketingSection({ orgId, marketing }: { orgId: string; marketing
     fetchMetaAdSpend(admin, orgId, marketing.since, marketing.until),
   ]);
 
+  if (marketingLeadsResult.error || marketingLeadsResult.count == null ||
+      marketingLeadsResult.count !== (marketingLeadsResult.data ?? []).length) {
+    return <section className="card"><div className="card-head"><h3>Performance de Marketing</h3></div><div className="card-body" role="status">Indicadores indisponíveis: a consulta falhou ou retornou dados incompletos. Nenhum custo foi calculado com uma amostra truncada.</div></section>;
+  }
   const marketingLeads = (marketingLeadsResult.data ?? []) as MarketingLead[];
   const marketingLeadIds = marketingLeads.map((lead) => lead.id);
   let funnelMilestones: FunnelMilestone[] = [];
@@ -159,23 +160,28 @@ async function MarketingSection({ orgId, marketing }: { orgId: string; marketing
     // ou é recusada pelo servidor.
     const batches: string[][] = [];
     for (let index = 0; index < marketingLeadIds.length; index += 300) batches.push(marketingLeadIds.slice(index, index + 300));
-    const results = await Promise.all(batches.map((ids) => admin.from('lead_funnel_milestones')
+    const results = await Promise.all(batches.map((ids) => supabase.from('lead_funnel_milestones')
       .select('lead_id,qualified_at,meeting_at,proposal_at,won_at')
+      .eq('organization_id', orgId)
       .in('lead_id', ids)));
+    if (results.some(result => result.error)) {
+      return <section className="card"><div className="card-body" role="status">Histórico do funil indisponível. Os custos por etapa não foram calculados.</div></section>;
+    }
     funnelMilestones = results.flatMap((result) => (result.data ?? []) as FunnelMilestone[]);
   }
   const milestoneByLead = new Map(funnelMilestones.map((item) => [item.lead_id, item]));
-  const qualifiedCount = marketingLeads.filter((lead) => Boolean(milestoneByLead.get(lead.id)?.qualified_at)).length;
-  const meetingCount = marketingLeads.filter((lead) => Boolean(milestoneByLead.get(lead.id)?.meeting_at)).length;
-  const proposalCount = marketingLeads.filter((lead) => Boolean(milestoneByLead.get(lead.id)?.proposal_at)).length;
-  const wonCount = marketingLeads.filter((lead) => Boolean(milestoneByLead.get(lead.id)?.won_at)).length;
+  const qualifiedCount = marketingLeads.filter((lead) => milestoneReachedAtCutoff(milestoneByLead.get(lead.id)?.qualified_at, cutoff)).length;
+  const meetingCount = marketingLeads.filter((lead) => milestoneReachedAtCutoff(milestoneByLead.get(lead.id)?.meeting_at, cutoff)).length;
+  const proposalCount = marketingLeads.filter((lead) => milestoneReachedAtCutoff(milestoneByLead.get(lead.id)?.proposal_at, cutoff)).length;
+  const wonCount = marketingLeads.filter((lead) => milestoneReachedAtCutoff(milestoneByLead.get(lead.id)?.won_at, cutoff)).length;
+  const missingHistory = marketingLeads.filter(lead => !milestoneByLead.has(lead.id)).length;
   const marketingSpend = metaSpend.status === 'ok' ? metaSpend.spend : null;
   const marketingCosts = {
     cpl: divideCost(marketingSpend, marketingLeads.length),
-    qualified: divideCost(marketingSpend, qualifiedCount),
-    meeting: divideCost(marketingSpend, meetingCount),
-    proposal: divideCost(marketingSpend, proposalCount),
-    won: divideCost(marketingSpend, wonCount),
+    qualified: missingHistory ? null : divideCost(marketingSpend, qualifiedCount),
+    meeting: missingHistory ? null : divideCost(marketingSpend, meetingCount),
+    proposal: missingHistory ? null : divideCost(marketingSpend, proposalCount),
+    won: missingHistory ? null : divideCost(marketingSpend, wonCount),
   };
   const marketingPeriodLabel = marketing.key === 'week'
     ? 'Últimos 7 dias'
@@ -191,7 +197,7 @@ async function MarketingSection({ orgId, marketing }: { orgId: string; marketing
         <div className="card-head" style={{ alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
           <div>
             <h3>Performance de Marketing</h3>
-            <div className="muted" style={{ marginTop: 4 }}>Cohort de leads Meta que entraram no período · {marketingPeriodLabel}</div>
+            <div className="muted" style={{ marginTop: 4 }}>Coorte de contatos Meta que entraram no período · {marketingPeriodLabel}</div>
           </div>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             <Link href="/dashboard?marketing_period=week" className={`btn btn-sm ${marketing.key === 'week' ? 'btn-primary' : 'btn-ghost'}`}>1 semana</Link>
@@ -224,6 +230,11 @@ async function MarketingSection({ orgId, marketing }: { orgId: string; marketing
             Não foi possível consultar o investimento da Meta neste momento{metaSpend.error ? `: ${metaSpend.error}` : '.'}
           </div>}
 
+          <div className="info-box" style={{ marginBottom: 14 }}>
+            Entrada dos contatos: {marketing.since} a {marketing.until} · corte da evolução: {formatDateTime(cutoff.toISOString())} (America/Sao_Paulo).
+            {' '}Marcos legados representam etapas registradas no CRM; não comprovam visita realizada, contrato assinado ou recebimento.
+            {missingHistory > 0 && <p>Histórico incompleto em {missingHistory} contatos. Custos por etapa indisponíveis.</p>}
+          </div>
           <div className="kpis">
             <div className="kpi">
               <div className="kpi-label">Investimento Meta</div>
@@ -236,24 +247,24 @@ async function MarketingSection({ orgId, marketing }: { orgId: string; marketing
               <div className="kpi-note">{marketingLeads.length} leads Meta</div>
             </div>
             <div className="kpi">
-              <div className="kpi-label">Custo / lead qualificado</div>
+              <div className="kpi-label">Custo / marco de qualificação</div>
               <div className="kpi-value">{money(marketingCosts.qualified)}</div>
               <div className="kpi-note">{qualifiedCount} chegaram à passagem/comercial</div>
             </div>
             <div className="kpi">
-              <div className="kpi-label">Custo / reunião ou visita</div>
+              <div className="kpi-label">Custo / marco de reunião ou visita</div>
               <div className="kpi-value">{money(marketingCosts.meeting)}</div>
               <div className="kpi-note">{meetingCount} chegaram a reunião/visita</div>
             </div>
             <div className="kpi">
-              <div className="kpi-label">Custo / proposta</div>
+              <div className="kpi-label">Custo / marco de proposta</div>
               <div className="kpi-value">{money(marketingCosts.proposal)}</div>
               <div className="kpi-note">{proposalCount} chegaram à negociação</div>
             </div>
             <div className="kpi">
-              <div className="kpi-label">Custo / venda</div>
+              <div className="kpi-label">Custo / etapa ganha</div>
               <div className="kpi-value">{money(marketingCosts.won)}</div>
-              <div className="kpi-note">{wonCount} vendas ganhas</div>
+              <div className="kpi-note">{wonCount} contatos com marco ganho</div>
             </div>
           </div>
 

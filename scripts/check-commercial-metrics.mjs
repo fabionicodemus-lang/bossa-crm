@@ -1,0 +1,27 @@
+import assert from 'node:assert/strict';
+import { divideCost, relativeChange, weightedRate, parseBrazilDate, milestoneReachedAtCutoff } from '../src/lib/commercial-metrics.ts';
+
+assert.equal(divideCost(null, 10), null);
+assert.equal(divideCost(100, 0), null);
+assert.equal(divideCost(0, 10), 0);
+assert.equal(divideCost(100, 4), 25);
+assert.equal(divideCost(100, NaN), null);
+assert.equal(divideCost(-100, 4), null);
+assert.equal(relativeChange(10, 0), null);
+assert.equal(relativeChange(null, 10), null);
+assert.equal(relativeChange(15, 10), 50);
+assert.equal(weightedRate(3, 100), 0.03);
+assert.equal(weightedRate(0, 0), null);
+assert.equal(weightedRate(101, 100), null);
+assert.equal(parseBrazilDate('2026-02-30'), null);
+assert.equal(parseBrazilDate('2026-13-01'), null);
+assert.equal(parseBrazilDate('2026-10-20')?.toISOString(), '2026-10-20T03:00:00.000Z');
+assert.equal(parseBrazilDate('2024-02-29')?.toISOString(), '2024-02-29T03:00:00.000Z');
+assert.equal(parseBrazilDate('2018-11-04')?.toISOString(), '2018-11-04T03:00:00.000Z');
+assert.equal(parseBrazilDate('2018-11-05')?.toISOString(), '2018-11-05T02:00:00.000Z');
+const cutoff = new Date('2026-10-20T15:00:00Z');
+assert.equal(milestoneReachedAtCutoff('2026-10-20T15:00:00Z', cutoff), true);
+assert.equal(milestoneReachedAtCutoff('2026-10-21T15:00:00Z', cutoff), false);
+assert.equal(milestoneReachedAtCutoff('invalid', cutoff), false);
+assert.equal(milestoneReachedAtCutoff(null, cutoff), false);
+console.log('Commercial metric primitive tests passed.');
