@@ -75,8 +75,9 @@ assert.doesNotMatch(condo.reply, /Flow Aptos.*R\$/);
 const iptu = postProcessNaraTurn(turn('O IPTU precisa ser confirmado para a unidade escolhida.'), [{role:'user',content:'Qual o valor do IPTU?'}], { commercial });
 assert.doesNotMatch(iptu.reply, /Flow Aptos.*R\$/);
 const flowPrice = postProcessNaraTurn(turn(), [{role:'user',content:'Quanto custa o Flow?'}], { commercial });
-assert.match(flowPrice.reply, /Flow Aptos.*R\$/);
-assert.match(flowPrice.reply, /Qual deles te interessa mais\?/);
+assert.match(flowPrice.reply, /O Flow Aptos começa em R\$/);
+// Rodada 3 (04/11/2026): cliente que já disse o empreendimento não recebe "Qual deles te interessa mais?".
+assert.doesNotMatch(flowPrice.reply, /Qual deles/);
 const englishPrice = postProcessNaraTurn(turn(), [{role:'user',content:'How much are the apartments?'}], { commercial });
 assert.match(englishPrice.reply, /Flow Aptos.*R\$/);
 assert.match(englishPrice.reply, /Which one interests you most\?/);

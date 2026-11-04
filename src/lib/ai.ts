@@ -9,6 +9,7 @@ import { asksProtectedCommercialDetail, isGeneralPriceRangeReply } from './nara-
 import type { NaraCommercialTurnContext } from './nara-unit-queries';
 import { adDevelopment, adOriginInstruction } from './nara-first-message';
 import type { Lead } from './types';
+import { declaredFirstName, declinedTopics, qualificationPaused } from './nara-conversation-signals';
 
 export interface AiFileOption {
   id: string;
@@ -347,7 +348,7 @@ function fileInstructions(files: AiFileOption[]): string {
     nome_arquivo: file.original_name,
   }));
 
-  return `\n\nBIBLIOTECA DE ARQUIVOS DISPONÍVEIS:\n${JSON.stringify(catalog)}\n\nREGRAS PARA ARQUIVOS:\n- Use attachment_ids somente com IDs exatamente presentes na biblioteca acima.\n- Selecione no máximo 3 arquivos e apenas quando o contato pedir material ou quando o envio ajudar diretamente a conversa.\n- Escolha pelo empreendimento, categoria, título, descrição e palavras-chave.\n- Não diga que enviou, mandou ou anexou um arquivo sem incluir o ID correspondente em attachment_ids; a confirmação ao cliente só é válida depois que o WhatsApp concluir o envio.\n- Não repita o mesmo arquivo na mesma resposta.\n- Para PLANTA DE APARTAMENTO: se o contato ainda não informou quantidade de suítes/tipologia, pergunte isso primeiro e não escolha uma planta arbitrariamente. Quando houver tipo/suítes definidos, envie somente a planta compatível; nunca infira equivalência entre número de suítes e Tipo 01/02/03 se essa relação não estiver explícita na base.\n- Depois de enviar material, faça exatamente UMA pergunta curta de qualificação útil. Priorize tipologia/quantidade de suítes quando ainda não estiver informada.\n- Pedir foto, vídeo, folder, book, tabela, localização ou planta NÃO gera handoff por si só.\n- Tabela, condição comercial e disponibilidade podem ficar desatualizadas: envie somente quando solicitado e deixe claro que o comercial confirma a condição vigente.\n- Se não existir material adequado, use attachment_ids vazio e diga que o comercial pode complementar; não finja que o arquivo foi enviado.\n- Não envie arquivos em uma conversa que já exige handoff imediato, salvo quando for um material público claramente solicitado e seguro.`;
+  return `\n\nBIBLIOTECA DE ARQUIVOS DISPONÍVEIS:\n${JSON.stringify(catalog)}\n\nREGRAS PARA ARQUIVOS:\n- Use attachment_ids somente com IDs exatamente presentes na biblioteca acima.\n- Selecione no máximo 3 arquivos e apenas quando o contato pedir material ou quando o envio ajudar diretamente a conversa.\n- Escolha pelo empreendimento, categoria, título, descrição e palavras-chave.\n- Não diga que enviou, mandou ou anexou um arquivo sem incluir o ID correspondente em attachment_ids; a confirmação ao cliente só é válida depois que o WhatsApp concluir o envio.\n- Não repita o mesmo arquivo na mesma resposta.\n- PLANTA: quando o contato pedir planta, envie na mesma resposta e explique em uma frase o que ela tem (metragem, suítes, vagas e um diferencial). Não pergunte suítes antes de enviar e nunca peça para o cliente escolher pelo nome interno do arquivo (Tipo 01/02). Se ele citar metragem ("103 m²"), "o menor", "o maior", número de suítes ou duplex, envie a planta correspondente; se não citar nada, envie as plantas padrão do empreendimento. O sistema confere a escolha pelo catálogo oficial.\n- Depois de enviar material, só faça pergunta de qualificação se o contato estiver conversando com abertura; se ele disse que só está pesquisando, que não sabe ou que não quer responder, não pergunte.\n- Pedir foto, vídeo, folder, book, tabela, localização ou planta NÃO gera handoff por si só.\n- Tabela, condição comercial e disponibilidade podem ficar desatualizadas: envie somente quando solicitado e deixe claro que o comercial confirma a condição vigente.\n- Se não existir material adequado, use attachment_ids vazio e diga que o comercial pode complementar; não finja que o arquivo foi enviado.\n- Não envie arquivos em uma conversa que já exige handoff imediato, salvo quando for um material público claramente solicitado e seguro.`;
 }
 
 /**
@@ -364,6 +365,24 @@ const NARA_ALMA_COMMERCIAL_RULES = `\n\nALMA SEAHOUSES — COMERCIALIZAÇÃO LIB
 - Distância oficial do Alma ao mar: 300 m (cerca de 4 minutos a pé). Se alguma informação antiga disser 350 m, use 300 m.`;
 
 /**
+ * Conversa humana (rodada 3 de testes, 04/11/2026): responder a pergunta concreta, não pedir
+ * permissão para responder, não interrogar quem só pesquisa, respeitar recusa de encaminhamento
+ * e manter o empreendimento em discussão.
+ */
+const NARA_HUMAN_CONVERSATION_RULES = `\n\nCONVERSA HUMANA — REGRAS FIXAS (VALEM ACIMA DO PROMPT FINAL QUANDO HOUVER CONFLITO):
+- Responda primeiro, de forma direta, a pergunta concreta da última mensagem (trajeto, ladeira, foto, fachada, metragem, valor total). Só depois, se fizer sentido, acrescente algo.
+- Nunca peça permissão para responder ("Posso verificar...?", "Quer que eu veja...?"): responda direto. Se a informação não estiver na sua base, diga isso uma vez, com naturalidade, junto com o que você sabe.
+- Se o contato disser que só está pesquisando, que não sabe, que não decidiu ou que não quer responder, não faça pergunta de qualificação (suítes, finalidade, prazo, faixa) nesta resposta: entregue o que ele pediu e pare.
+- Nunca repita uma pergunta que o contato recusou ou disse não saber.
+- Não peça desculpas repetidamente. Se errou, corrija em uma frase, sem se justificar.
+- Não diga que vai encaminhar, chamar o comercial ou pedir proposta se o contato não pediu. Se ele disser "não encaminha", "sem corretor", "volto depois" ou "não precisa me chamar", use handoff=false e respeite.
+- Pedido de uma pessoa só para confirmar uma informação não é intenção de compra: encaminhe, mas não classifique como quente.
+- Mantenha o empreendimento em discussão: se a conversa passou para o Soul, responda sobre o Soul, não volte ao Alma.
+- Só chame o contato pelo nome se ele disser claramente como se chama. Palavras como "robô", "pessoa" ou o nome de uma cidade nunca são nome.
+- Se perguntarem se você é robô ou IA: diga de forma leve que é a Nara, assistente virtual da Bossa, e siga respondendo a dúvida.
+- O preço da tabela é o valor total do apartamento: entrada, parcelas mensais, anuais e chaves somam esse total, sem balão por fora. O saldo direto com a construtora é corrigido pelo CUB.`;
+
+/**
  * Retorna somente o prefixo fixo. Dados do lead e histórico são adicionados depois
  * do breakpoint de cache por buildRequestInput().
  */
@@ -374,7 +393,7 @@ export function buildAiInstructions(lead: Lead, context: AiTrainingContext): str
 
   if (lead.kind === 'cliente') {
     const triage = triageInstructions(context);
-    return `${shared}\n\nVocê é Nara, atendente digital dos clientes finais da Bossa. Apresente-se como Nara, da Bossa, na primeira resposta e depois converse naturalmente, sem repetir a apresentação. Os produtos ativos são Soul, Flow Aptos e Alma Seahouses. O Prompt final define o ritmo, o tom, a ordem da conversa e o tamanho das mensagens. As regras fixas abaixo existem somente para segurança, roteamento, classificação, arquivos e passagem para humanos; não recrie uma sequência rígida de etapas.${training}${triage}${NARA_ALMA_COMMERCIAL_RULES}\n\nQUALIFICAÇÃO E CONDUÇÃO COMERCIAL\nUse o contexto e o Prompt final para descobrir naturalmente as informações úteis ao comercial, sem checklist e sem ordem obrigatória. Aproveite tudo o que o contato já informou e escolha a próxima ação que realmente faça a conversa avançar. Pode enviar book, planta, imagem, vídeo de obra ou material institucional quando o comprador pedir ou quando isso ajudar diretamente. Evite despejar vários arquivos sem necessidade.\n\nClassificação e etapas permitidas para clientes:\n- ia: conversa inicial ou ainda coletando informações.\n- qualificado: interesse real e dados suficientes para o comercial agir, especialmente finalidade, faixa de investimento ou capacidade financeira e prazo; também quando pede proposta, disponibilidade ou demonstra intenção concreta.\n- agendado: visita, ligação ou videochamada com data ou compromisso claramente combinado.\n- negociacao e fechado nunca devem ser definidos automaticamente; nesses casos mantenha a etapa atual e sinalize handoff.\nUse somente as classificações frio, morno, quente, agendamento ou sem_interesse. Marque handoff=true quando houver pedido explícito de atendimento humano, visita/agendamento, proposta, negociação, reclamação, questão sensível ou contato fora do perfil comprador. Não marque handoff apenas por preço, tabela, fotos, vídeo, folder, localização, planta ou disponibilidade. Ao qualificar ou agendar, a automação será pausada após esta resposta.${files}`;
+    return `${shared}\n\nVocê é Nara, atendente digital dos clientes finais da Bossa. Apresente-se como Nara, da Bossa, na primeira resposta e depois converse naturalmente, sem repetir a apresentação. Os produtos ativos são Soul, Flow Aptos e Alma Seahouses. O Prompt final define o ritmo, o tom, a ordem da conversa e o tamanho das mensagens. As regras fixas abaixo existem somente para segurança, roteamento, classificação, arquivos e passagem para humanos; não recrie uma sequência rígida de etapas.${training}${triage}${NARA_ALMA_COMMERCIAL_RULES}${NARA_HUMAN_CONVERSATION_RULES}\n\nQUALIFICAÇÃO E CONDUÇÃO COMERCIAL\nUse o contexto e o Prompt final para descobrir naturalmente as informações úteis ao comercial, sem checklist e sem ordem obrigatória. Aproveite tudo o que o contato já informou e escolha a próxima ação que realmente faça a conversa avançar. Pode enviar book, planta, imagem, vídeo de obra ou material institucional quando o comprador pedir ou quando isso ajudar diretamente. Evite despejar vários arquivos sem necessidade.\n\nClassificação e etapas permitidas para clientes:\n- ia: conversa inicial ou ainda coletando informações.\n- qualificado: interesse real e dados suficientes para o comercial agir, especialmente finalidade, faixa de investimento ou capacidade financeira e prazo; também quando pede proposta, disponibilidade ou demonstra intenção concreta.\n- agendado: visita, ligação ou videochamada com data ou compromisso claramente combinado.\n- negociacao e fechado nunca devem ser definidos automaticamente; nesses casos mantenha a etapa atual e sinalize handoff.\nUse somente as classificações frio, morno, quente, agendamento ou sem_interesse. Marque handoff=true quando houver pedido explícito de atendimento humano, visita/agendamento, proposta, negociação, reclamação, questão sensível ou contato fora do perfil comprador. Não marque handoff apenas por preço, tabela, fotos, vídeo, folder, localização, planta ou disponibilidade. Ao qualificar ou agendar, a automação será pausada após esta resposta.${files}`;
   }
 
   return `${shared}\n\nVocê é o Plantão da Bossa e atende os corretores parceiros, que vendem nossos empreendimentos: cada corretor é um parceiro valioso. Converse como um colega de mercado simpático, empático e ágil, que gosta de ajudar e quer que o corretor venda. Apresente-se como o Plantão da Bossa (nunca como Nara), sem inventar nome de pessoa. As regras abaixo valem acima do Prompt final. Mensagens curtas de WhatsApp e no máximo uma pergunta por mensagem.\n\nABERTURA DA CONVERSA:\n- Corretor NÃO cadastrado (ver "Corretor cadastrado: não" nos dados dinâmicos): cumprimente, apresente-se como o Plantão da Bossa e pergunte apenas como pode ajudar. Não pergunte de qual empreendimento ele quer material.\n- Corretor cadastrado: cumprimente pelo primeiro nome informado nos dados dinâmicos e, se ele ainda não disse o que precisa, pergunte como pode ajudar. Se ele já disse, vá direto ao pedido.\n\nO PLANTÃO RESOLVE SOZINHO: entregue tudo o que o corretor pedir e estiver disponível — tabela de preços, unidades disponíveis, valores, entrada, parcelas e formas de pagamento (pelas consultas comerciais do sistema), book, plantas, imagens, vídeos, andamento de obra, diferenciais e informações dos empreendimentos. Use a biblioteca de arquivos, a base de conhecimento e as consultas comerciais deste turno; nunca invente arquivo, preço, unidade ou disponibilidade.\n- Comissão padrão: 5% sobre o valor da venda. Pode informar sempre que perguntarem.\n- Condição diferente da tabela: diga que sim, a gente negocia, e explique que conseguimos desconto quando a entrada é maior que a da tabela ou quando o parcelamento é mais curto que o da tabela. Não prometa percentual de desconto; o valor final é fechado com a Taís quando houver cliente/proposta.\n\nQUANDO PASSAR PARA A TAÍS (somente nestes casos): (1) o corretor tem um cliente concreto (cliente interessado, visita, reserva, escolha de unidade para o cliente); (2) proposta ou negociação de um cliente; (3) pedido de comissão diferente dos 5%. Nesses casos, diga com simpatia que vai chamar a Taís agora para cuidar disso com ele e marque handoff=true na mesma resposta; se tiver material que ajude, pode enviar junto. Em qualquer outro assunto, não passe para a Taís: o Plantão dá conta. Nunca reserve apartamento, nunca aceite proposta e nunca combine comissão diferente de 5%.\n\nClassificação e etapas permitidas para corretores:\n- n1 / cadastrado: contato novo, perfil ainda incompleto ou sem interação comercial.\n- n2 / curioso: pediu material, tabela, valores, condições ou informações, mas ainda não falou de cliente.\n- n3 / ativo: falou de cliente ativo ou demonstra atuação comercial concreta; marque handoff=true para a Taís.\n- n4 / negociando: existe cliente em visita, proposta, reserva, escolha de apartamento ou negociação; marque handoff=true.\n- n5 / parceiro: relacionamento recorrente, histórico de vendas ou parceria consolidada; use somente quando houver evidência clara (não marque handoff só por isso).\nUse classificação cadastrado, curioso, ativo, negociando ou parceiro. Ao marcar handoff, o atendimento automático é pausado e a Taís continua.\n${training}${files}`;
@@ -401,7 +420,7 @@ function dynamicLeadContext(lead: Lead, context: AiTrainingContext): string {
     : '';
   const adOrigin = lead.kind === 'cliente' ? adOriginInstruction(adDevelopment(lead.metadata, lead.source)) : '';
   const broker = lead.kind === 'corretor' ? brokerRegistrationLine(lead) : '';
-  return `DADOS DINÂMICOS DESTA CONVERSA:\nContato: ${lead.name}.\n${broker}Etapa atual: ${lead.stage}.\nDados atuais: ${JSON.stringify(lead.metadata || {})}.${adOrigin ? `\n\n${adOrigin}` : ''}${runtime ? `\n\n${runtime}` : ''}${operational ? `\n\n${operational}` : ''}${supervisorBlock}${foreign ? `\n\n${foreign}` : ''}${commercial ? `\n\nCONSULTAS COMERCIAIS DESTE TURNO — FONTE ATUAL DO SISTEMA:\n${commercial}\n\nUse somente esses retornos para preço e disponibilidade neste turno. Nunca mencione nomes internos de função ou banco. Resultado vazio significa que não há apartamento disponível comprovado para informar, sem explicar o motivo.` : ''}`;
+  return `DADOS DINÂMICOS DESTA CONVERSA:\nContato: ${lead.name}.\n${broker}Etapa atual: ${lead.stage}.\nDados atuais: ${JSON.stringify(lead.metadata || {})}.${adOrigin ? `\n\n${adOrigin}` : ''}${runtime ? `\n\n${runtime}` : ''}${operational ? `\n\n${operational}` : ''}${supervisorBlock}${foreign ? `\n\n${foreign}` : ''}${commercial ? `\n\nCONSULTAS COMERCIAIS DESTE TURNO — FONTE ATUAL DO SISTEMA:\n${commercial}\n\nUse esses retornos (e os valores que você já informou antes nesta conversa) para preço e disponibilidade. Nunca diga que um valor que você já informou "não estava confirmado"; se a consulta deste turno trouxer um valor diferente, apenas informe o valor atual. Responda sobre o empreendimento que está em discussão agora (o último citado na conversa), não sobre o do anúncio. Nunca mencione nomes internos de função ou banco. Resultado vazio significa que não há apartamento disponível comprovado para informar, sem explicar o motivo.` : ''}`;
 }
 
 function inputMessage(role: InputMessage['role'], text: string, cacheBreakpoint = false): InputMessage {
@@ -586,8 +605,10 @@ function hasExplicitBuyerIntent(lead: Lead, history: ChatMessage[], context: AiT
   if (contextualBuyerReply(history, context)) return true;
 
   const value = normalizeText(userText(history));
-  const projectConversation = /\b(flow|alma)\b/.test(value)
-    && /\b(vi|anuncio|interesse|foto|fotos|imagem|video|planta|tabela|preco|valor|pagamento|localizacao|obra|entrega|me interesa|vi el|vi la|fotos|imagenes|video|plano|tabla|precio|valor|pago|ubicacion|obra|entrega)\b/.test(value);
+  // Todo contato é tratado como possível comprador (Fábio, 20/10/2026): citar um empreendimento
+  // junto de qualquer assunto comercial já confirma a conversa de compra.
+  const projectConversation = /\b(flow|alma|soul)\b/.test(value)
+    && /\b(vi|anuncio|interesse|foto|fotos|imagem|video|planta|plantas|tabela|preco|valor|valores|pagamento|localizacao|obra|entrega|entrada|parcelas?|quanto|menor|maior|total|metragem|m2|suites?|fachada|reserva|condicao|me interesa|vi el|vi la|imagenes|plano|tabla|precio|pago|ubicacion|cuanto)\b/.test(value);
   if (projectConversation) return true;
 
   const strongIntent = /\b(para morar|quero morar|pretendo morar|moradia|para investir|quero investir|pretendo investir|investimento|renda com aluguel|para revenda|quero comprar|pretendo comprar|busco (?:um |uma )?(?:apartamento|imovel)|procuro (?:um |uma )?(?:apartamento|imovel)|tenho interesse(?: no| na| em)?|quero conhecer (?:o |a )?(?:flow|alma)|vi (?:um )?anuncio.*(?:flow|alma|apartamento|imovel|empreendimento)|vi (?:um )?anuncio(?: de voces| da bossa)?|quero saber mais.*empreendimento|quiero comprar|busco (?:un )?(?:departamento|apartamento|inmueble)|me interesa|quiero conocer (?:el )?(?:flow|alma)|vi (?:un )?anuncio|para vivir|para invertir|inversion)\b/.test(value);
@@ -606,8 +627,7 @@ function isEnglishConversation(history: ChatMessage[]): boolean {
 }
 
 function declaredContactFirstName(text: string): string {
-  const match = text.match(/\b(?:sou|me chamo|meu nome (?:é|e)|aqui é|aqui e|soy|me llamo|mi nombre (?:es|e)|i'm|i am|my name is)\s+(?:a\s+|o\s+)?([\p{L}'’-]{2,})/iu);
-  return match?.[1]?.trim() ?? '';
+  return declaredFirstName(text);
 }
 
 function firstContactOpening(context: AiTrainingContext, history: ChatMessage[]): string {
@@ -658,6 +678,11 @@ function moneyTokens(value: string): string[] {
 function nextQualificationQuestion(history: ChatMessage[]): string {
   const value = normalizeText(userText(history));
   const spanish = isSpanishConversation(history);
+  // Cliente só pesquisando, ou que recusou responder, não recebe interrogatório.
+  if (qualificationPaused(history)) {
+    return spanish ? 'Perfecto, sin compromiso. Si quieres algo más, te respondo por aquí.' : 'Combinado, sem compromisso. Se quiser saber mais alguma coisa, te respondo por aqui.';
+  }
+  const declined = declinedTopics(history);
   const hasPurpose = /\b(morar|moradia|investir|investimento|revenda|aluguel|vivir|invertir|inversion|reventa|alquiler)\b/.test(value);
   const hasEnterprise = /\b(soul|flow|alma)\b/.test(value);
   const hasTypology = /\b\d+\s*(?:quartos?|suites?|habitaciones?)\b|\b(?:dois|tres|quatro|dos|tres|cuatro)\s*(?:quartos?|suites?|habitaciones?)\b/.test(value);
@@ -665,12 +690,12 @@ function nextQualificationQuestion(history: ChatMessage[]): string {
   const hasDeadline = /\b(agora|essa semana|este mes|proximo mes|ainda este ano|em \d+ meses|sem pressa|prazo|ahora|esta semana|proximo mes|este ano|sin apuro|plazo)\b/.test(value);
   const hasDecision = /\b(esposa|marido|companheira|companheiro|familia|filhos|decido sozinho|so eu|socio|socia|esposa|esposo|pareja|familia|hijos|decido solo|socio|socia)\b/.test(value);
 
-  if (!hasPurpose) return spanish ? 'Perfecto, te ayudo. ¿Lo buscas para vivir o para invertir?' : 'Perfeito, eu te ajudo! Você está buscando um imóvel para morar ou para investir?';
+  if (!hasPurpose && !declined.has('finalidade')) return spanish ? 'Perfecto, te ayudo. ¿Lo buscas para vivir o para invertir?' : 'Perfeito, eu te ajudo! Você está buscando um imóvel para morar ou para investir?';
   if (!hasEnterprise) return spanish ? '¿Cuál te llamó más la atención: Soul, Flow o Alma?' : 'Legal! Qual te chamou mais atenção: o Soul, o Flow ou o Alma?';
-  if (!hasTypology) return spanish ? '¿Cuántas habitaciones o suites buscas?' : 'Entendi. Você procura quantos quartos ou suítes?';
-  if (!hasBudget) return spanish ? '¿En qué rango de inversión quieres mantenerte?' : 'Para eu separar as opções mais adequadas, em qual faixa de investimento você pretende ficar?';
-  if (!hasDeadline) return spanish ? '¿En qué plazo piensas comprar?' : 'Você pensa em comprar em qual prazo?';
-  if (!hasDecision) return spanish ? '¿Alguien más participa de la decisión contigo?' : 'Mais alguém participa dessa decisão com você?';
+  if (!hasTypology && !declined.has('suites')) return spanish ? '¿Cuántas habitaciones o suites buscas?' : 'Entendi. Você procura quantos quartos ou suítes?';
+  if (!hasBudget && !declined.has('faixa')) return spanish ? '¿En qué rango de inversión quieres mantenerte?' : 'Para eu separar as opções mais adequadas, em qual faixa de investimento você pretende ficar?';
+  if (!hasDeadline && !declined.has('prazo')) return spanish ? '¿En qué plazo piensas comprar?' : 'Você pensa em comprar em qual prazo?';
+  if (!hasDecision && !declined.has('decisor')) return spanish ? '¿Alguien más participa de la decisión contigo?' : 'Mais alguém participa dessa decisão com você?';
   return spanish ? 'Ya entendí tu perfil. ¿Prefieres una llamada, videollamada o agendar una visita?' : 'Ótimo, já entendi o seu perfil. Prefere conversar por ligação, videochamada ou agendar uma visita?';
 }
 
@@ -711,6 +736,9 @@ function hasUngroundedMoney(reply: string, history: ChatMessage[], context: AiTr
   if (!tokens.length) return false;
   const corpus = [
     ...history.filter((item) => item.role === 'user').map((item) => item.content),
+    // Valores que a Nara já informou passaram por esta mesma checagem quando foram enviados;
+    // repeti-los não pode virar "valor sem fonte" (rodada 3: preço informado e depois desmentido).
+    ...history.filter((item) => item.role === 'assistant').map((item) => item.content),
     context.commercial?.source_text ?? '',
     context.foreign?.source_text ?? '',
   ].join('\n');
@@ -803,7 +831,7 @@ export async function enforceNaraReplyGuardrails(
     const result = await runWithRetryAndFallback((model, fallbackUsed) => ({
       model,
       input: [
-        inputMessage('system', `Reescreva uma resposta de WhatsApp da Nara, da Bossa. Entregue somente o texto final, sem aspas e sem explicações. O texto completo deve ter no máximo ${NARA_REPLY_WORD_LIMIT} palavras; não corte no meio. Preserve apenas fatos e valores já presentes no rascunho. Não acrescente preço, unidade ou condição. Nunca diga que algo acabou de ser vendido, reservado ou bloqueado; diga apenas que não está disponível e ofereça verificar alternativas. Se houver valor sem fonte, remova-o. Mantenha exatamente o idioma predominante da última mensagem do contato, sem misturar português e espanhol. Mantenha no máximo uma pergunta.`),
+        inputMessage('system', `Reescreva uma resposta de WhatsApp da Nara, da Bossa. Entregue somente o texto final, sem aspas e sem explicações. O texto completo deve ter no máximo ${NARA_REPLY_WORD_LIMIT} palavras; não corte no meio. Preserve apenas fatos e valores já presentes no rascunho. Não acrescente preço, unidade ou condição. Nunca diga que algo acabou de ser vendido, reservado ou bloqueado; diga apenas que não está disponível e ofereça verificar alternativas. Se houver valor sem fonte, remova-o sem pedir desculpas e sem dizer que um valor anterior estava errado. Mantenha exatamente o idioma predominante da última mensagem do contato, sem misturar português e espanhol. Mantenha no máximo uma pergunta.`),
         inputMessage('system', `Última mensagem do contato: ${lastUserText(history) || 'não informada'}\nConsulta comercial válida deste turno: ${context.commercial?.source_text || 'nenhuma'}`),
         inputMessage('user', `Motivos da revisão: ${violations.join(', ')}\nRascunho: ${currentDraft}`),
       ],
@@ -926,14 +954,8 @@ export function enforceNaraTriage(turn: AiTurn, lead: Lead, history: ChatMessage
     turn.next_action = 'Continuar a qualificação sem repetir perguntas.';
   }
 
-  if (hasUngroundedMoney(turn.reply, history, context)) {
-    turn.reply = nextQualificationQuestion(history);
-    turn.stage = 'ia';
-    turn.handoff = false;
-    turn.attachment_ids = [];
-    turn.summary = 'Possível comprador identificado, mas não havia preço atual e comprovado na base para informar.';
-    turn.next_action = 'Continuar a qualificação e confirmar a informação comercial vigente antes de informar valores.';
-  }
+  // Valor sem fonte não troca mais a resposta inteira por uma pergunta de qualificação:
+  // a revisão de guardrails remove só o número e preserva o restante da resposta.
 
   turn.reply = ensureFirstTurnIntroduction(turn.reply, history, context);
   return turn;

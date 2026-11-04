@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Lead } from './types';
 import { isAssistedSaleSignal, isBrokerRoutingSignal, isCurrentCustomerSignal } from './nara-contact-routing';
+import { enterpriseInFocus } from './nara-conversation-signals';
 
 type ChatMessage = { role: 'user' | 'assistant'; content: string };
 type JsonRecord = Record<string, unknown>;
@@ -145,7 +146,7 @@ async function resolveDevelopment(
     .some((value) => normalizeText(value) === target));
   if (exact) return exact;
 
-  const alias = target.includes('flow') ? 'flow' : target.includes('alma') ? 'alma' : target;
+  const alias = target.includes('flow') ? 'flow' : target.includes('alma') ? 'alma' : target.includes('soul') ? 'soul' : target;
   return rows.find((row) => {
     const candidates = [row.name, row.slug, row.code]
       .map(normalizeText)
@@ -373,9 +374,10 @@ function allUserText(history: ChatMessage[]): string {
 }
 
 function inferredEnterprise(lead: Lead, history: ChatMessage[]): string {
-  const latest = normalizeText(lastUserMessage(history));
-  if (latest.includes('flow')) return 'flow';
-  if (latest.includes('alma')) return 'alma';
+  // O empreendimento em discussão agora (último citado por cliente ou Nara) vale mais que o do
+  // anúncio: "Esse Soul pronto começa em quanto?" consulta o Soul, não o Alma da campanha.
+  const focus = enterpriseInFocus(history);
+  if (focus) return focus;
   const leadEnterprise = normalizeText(lead.enterprise);
   if (leadEnterprise.includes('flow')) return 'flow';
   if (leadEnterprise.includes('alma')) return 'alma';
@@ -436,7 +438,7 @@ function filtersFromMessage(enterprise: string, message: string): NaraApartmentF
 }
 
 function hasCommercialSignal(message: string): boolean {
-  return /\b(precos?|prices?|precio|cuanto cuesta|how much|valor(?:es)?|quanto custa|quanto fica|faixa|a partir de|tabela|disponibilidade|disponive(?:l|is)|unidade|apto|apartamento|entrada|parcela|andar|suites?|quartos?|duplex|dolar|usd|euro|eur|moeda)\b/.test(normalizeText(message));
+  return /\b(precos?|prices?|precio|cuanto cuesta|how much|valor(?:es)?|quanto custa|quanto fica|quanto (?:ta|sai|e|esta|da)|(?:comeca|fica|sai|custa) (?:em |por )?quanto|cabe no bolso|valor total|o total|mais barat[oa]|faixa|a partir de|tabela|disponibilidade|disponive(?:l|is)|unidade|apto|apartamento|entrada|parcela|andar|suites?|quartos?|duplex|dolar|usd|euro|eur|moeda)\b/.test(normalizeText(message));
 }
 
 function asksForSpecificOptions(message: string): boolean {
@@ -510,12 +512,18 @@ export async function loadNaraCommercialTurnContext(
   const consultedAt = new Date().toISOString();
   const blockedReason = blockedCommercialProfile(lead, history);
   if (blockedReason) return blockedCommercialContext(blockedReason, consultedAt);
-  if (!hasCommercialSignal(latest)) return null;
+  // Depois que a conversa entrou em valores, a faixa continua disponível nas mensagens seguintes
+  // ("E sobe durante a obra?", "Tem balão por fora?"), para a Nara não desmentir o preço que já deu.
+  const continuesPriceConversation = !hasCommercialSignal(latest) && (
+    history.some((item) => item.role === 'user' && hasCommercialSignal(item.content))
+    || history.some((item) => item.role === 'assistant' && /R\$\s*\d/.test(item.content))
+  );
+  if (!hasCommercialSignal(latest) && !continuesPriceConversation) return null;
   const calls: NaraCommercialCall[] = [];
 
   try {
     const enterprise = inferredEnterprise(lead, history);
-    const unitCode = unitCodeFromMessage(latest);
+    const unitCode = continuesPriceConversation ? '' : unitCodeFromMessage(latest);
 
     if (unitCode) {
       if (!enterprise) {
@@ -532,7 +540,7 @@ export async function loadNaraCommercialTurnContext(
         arguments: { empreendimento: enterprise, unidade: unitCode },
         result,
       });
-    } else if (enterprise && asksForSpecificOptions(latest)) {
+    } else if (enterprise && !continuesPriceConversation && asksForSpecificOptions(latest)) {
       const filters = filtersFromMessage(enterprise, latest);
       const result = await buscarApartamentos(client, organizationId, filters);
       calls.push({ name: 'buscar_apartamentos', arguments: filters, result });
@@ -543,6 +551,8 @@ export async function loadNaraCommercialTurnContext(
         arguments: { empreendimento: enterprise },
         result,
       });
+    } else if (continuesPriceConversation) {
+      return null;
     } else {
       const developments = await activeDevelopments(client, organizationId);
       for (const development of developments) {

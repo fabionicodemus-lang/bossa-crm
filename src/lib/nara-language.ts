@@ -48,7 +48,8 @@ export function naraConversationLanguage(history: ChatMessage[]): NaraLanguage {
   return 'pt';
 }
 
-const introductionPattern = /^\s*[¡!]?\s*(?:hola|oi|olá|ola|hi|hello)\b[\s\S]{0,105}?\bbossa\b[.!]?\s*(?:\p{Extended_Pictographic}\uFE0F?\s*)*/iu;
+// \b não funciona depois de letra acentuada ("Olá"), por isso a fronteira é feita com lookahead Unicode.
+const introductionPattern = /^\s*[¡!]?\s*(?:hola|oi|olá|ola|hi|hello)(?![\p{L}\p{N}])[\s\S]{0,105}?\bbossa\b(?:\s+empreendimentos)?[.!]?\s*(?:\p{Extended_Pictographic}\uFE0F?\s*)*/iu;
 
 function comparableIntroduction(text: string): string {
   return norm(text).replace(/[\s\p{P}\p{S}]+/gu, '');
@@ -62,7 +63,8 @@ export function collapseRepeatedNaraIntroductions(reply: string): string {
     if (!first) break;
     const remaining = value.slice(first.length).trimStart();
     const duplicate = remaining.match(introductionPattern)?.[0] || '';
-    if (!duplicate || comparableIntroduction(first) !== comparableIntroduction(duplicate)) break;
+    const bothIntroduceNara = /\bnara\b/i.test(first) && /\bnara\b/i.test(duplicate);
+    if (!duplicate || (comparableIntroduction(first) !== comparableIntroduction(duplicate) && !bothIntroduceNara)) break;
     value = (first.trimEnd() + ' ' + remaining.slice(duplicate.length).trimStart()).trim();
   }
   return value;

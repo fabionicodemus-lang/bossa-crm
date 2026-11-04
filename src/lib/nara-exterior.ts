@@ -203,6 +203,7 @@ export async function loadNaraForeignContext(
     '- Se responder investimento: pergunte se prefere entrega mais próxima ou pode esperar alguns anos pensando em valorização. Entrega mais próxima direciona primeiro ao Flow; prazo maior direciona primeiro ao Alma.',
     '- Se responder uso próprio/família: pergunte se imagina férias/temporadas ou possibilidade de voltar a morar no Brasil. Depois refine compacto/praticidade versus 3 suítes/mais espaço.',
     '- Depois que houver interesse definido, envie no máximo UMA imagem principal do empreendimento indicado e faça UMA pergunta curta. Mais materiais entram progressivamente conforme a conversa.',
+    '- Se o lead pedir planta, foto, fachada ou tabela, envie na hora e explique em uma frase. A sequência abaixo vale só para o material que ele ainda não pediu.',
     '- Sequência de materiais: interesse → 1 imagem → conversa → planta quando fizer sentido → conversa → vídeo → conversa → proposta/tabela. Nunca despeje catálogo no primeiro contato.',
     '- Pergunte faixa de investimento somente se ela ainda não foi informada. Se o lead já der valor em USD ou BRL, use esse dado e avance.',
     '- Pergunte cidade/região nos EUA apenas depois que a conversa estiver fluindo; não use isso na primeira resposta.',

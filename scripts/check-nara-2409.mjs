@@ -311,8 +311,10 @@ const operationalContext = {
     reply: 'Claro, segue a planta.',
     attachment_ids: ['alma-tipo-01'],
   }), history, { files });
-  assert.deepEqual(result.attachment_ids, []);
-  assert.match(result.reply, /quantas su[ií]tes/i);
+  // Rodada 3 (04/11/2026): pediu planta, a Nara manda e explica — sem perguntar suítes antes.
+  assert.deepEqual(result.attachment_ids, ['alma-tipo-01']);
+  assert.match(result.reply, /114 m²/);
+  assert.doesNotMatch(result.reply, /quantas su[ií]tes/i);
   assert.equal(result.handoff, false);
 }
 
@@ -349,9 +351,10 @@ const operationalContext = {
     { role: 'user', content: '3 suítes' },
   ];
   const suiteResult = postProcessNaraTurn(turn({ attachment_ids: ['alma-tipo-01'] }), suiteHistory, { files });
-  assert.deepEqual(suiteResult.attachment_ids, []);
-  assert.match(suiteResult.reply, /Tipo 01.*Tipo 02/i);
-  assert.equal((suiteResult.reply.match(/\?/g) ?? []).length, 1);
+  // Rodada 3: "3 suítes" no Alma são duas plantas (103 e 114 m²) — vão as duas, explicadas.
+  assert.deepEqual([...suiteResult.attachment_ids].sort(), ['alma-tipo-01', 'alma-tipo-02']);
+  assert.match(suiteResult.reply, /103 m².*114 m²/);
+  assert.doesNotMatch(suiteResult.reply, /Qual você quer/);
 
   const typeHistory = [
     ...suiteHistory,
