@@ -375,7 +375,14 @@ function unconfirmedReply(validation: NaraCommercialValidation, language: NaraLa
 function correctionIntroduction(validation: NaraCommercialValidation, history: ChatMessage[], original: string, language: NaraLanguage): string {
   const recognizesCorrection = /\b(?:corrigindo (?:a |o |uma )?(?:informacao|preco|valor)|(?:valor|preco|informacao) (?:anterior|que (?:eu )?(?:informei|passei|mencionei|citei)).{0,70}(?:incorret|imprecis|errad|nao (?:estava |esta )?(?:confirmad|validad))|me enganei|i (?:was wrong|made a mistake)|correcting (?:the |my )?(?:previous|earlier)|corrigiendo (?:la )?(?:informacion|precio|valor)|(?:precio|valor|informacion) anterior.{0,60}(?:incorrect|no (?:estaba )?confirmad))/.test(norm(original));
   if (!recognizesCorrection) return '';
-  const previousIndex = history.findLastIndex((message) => message.role === 'assistant' && moneyMatches(message.content).length > 0);
+  let previousIndex = -1;
+  for (let index = history.length - 1; index >= 0; index -= 1) {
+    const message = history[index];
+    if (message.role === 'assistant' && moneyMatches(message.content).length > 0) {
+      previousIndex = index;
+      break;
+    }
+  }
   if (previousIndex < 0) return '';
   const old = history[previousIndex].content;
   const oldIdentity = requestIdentity(history.slice(0, previousIndex), null);
