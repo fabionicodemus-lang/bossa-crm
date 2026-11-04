@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "npm run test:ai-model-routing && npm run test:nara-language && npm run test:nara-round3 && npm run test:nara-phase10 && next build",
+    "build": "npm run test:ai-model-routing && npm run test:nara-language && npm run test:nara-round3 && npm run test:nara-round4 && npm run test:nara-phase10 && next build",
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
@@ -32,6 +32,7 @@
     "test:lead-supervision": "node --experimental-strip-types --experimental-loader ./scripts/ts-extension-loader.mjs scripts/check-lead-supervision.mjs",
     "test:client-broker-transfer": "node --experimental-strip-types --experimental-loader ./scripts/ts-extension-loader.mjs scripts/check-client-broker-transfer.mjs",
     "test:nara-round3": "node --experimental-strip-types --experimental-loader ./scripts/ts-extension-loader.mjs scripts/check-nara-round3.mjs",
+    "test:nara-round4": "node --experimental-strip-types --experimental-loader ./scripts/ts-extension-loader.mjs scripts/check-nara-round4.mjs",
     "test:hoje-ui": "node --experimental-strip-types scripts/ui/check-hoje-model.mjs"
   },
   "dependencies": {

@@ -1,10 +1,25 @@
 import { enforceNaraReplyGuardrails, ensureFirstTurnIntroduction, generateAiTurn as generateCoreAiTurn } from './ai';
 import { naraConversationLanguage, requestedNaraLanguage } from './nara-language';
-import type { AiFileOption, AiTrainingContext, AiTurn } from './ai';
+import type { AiTrainingContext, AiTurn } from './ai';
 import type { Lead } from './types';
 import type { NaraUnitOffer } from './nara-unit-queries';
 import { adDevelopment, declaredPlace, facadeFor, firstMessageBody } from './nara-first-message';
 import { isGenericPortfolioInterest, portfolioFacadesForFirstPresentation, presentsWholePortfolio, selectPortfolioFacadeIds } from './nara-generic-interest';
+import {
+  asksPermissionToAnswer,
+  declaredFirstName,
+  declinedTopics,
+  enterpriseInFocus,
+  explicitHumanRequest,
+  purchaseIntent,
+  qualificationPaused,
+  questionTopic,
+  refusesHandoff,
+  withoutNegatedRequests,
+  withoutUnwantedQualification,
+  type Enterprise,
+} from './nara-conversation-signals';
+import { filesForPlant, isPlantFile, mentionsPlant, plantReply, resolvePlantRequest, type PlantEntry } from './nara-plant-catalog';
 
 export * from './ai';
 
@@ -39,10 +54,6 @@ function isEnglishLead(history: ChatMessage[]): boolean {
   return naraConversationLanguage(history) === 'en';
 }
 
-function declaredFirstName(text: string): string {
-  const match = text.match(/\b(?:sou|me chamo|meu nome (?:é|e)|aqui é|aqui e|soy|me llamo|mi nombre (?:es|e)|i'm|i am|my name is)\s+(?:a\s+|o\s+)?([\p{L}'’-]{2,})(?:\s+[\p{L}'’-]+){0,2}/iu);
-  return match?.[1]?.trim() ?? '';
-}
 
 function buyerContextIsClear(history: ChatMessage[]): boolean {
   const value = normalizeText(userText(history));
@@ -60,9 +71,12 @@ function isPureInformationRequest(text: string): boolean {
 }
 
 function requiresHumanHandoff(text: string): boolean {
-  const value = normalizeText(text);
+  // "Não pedi reserva" ou "sem proposta" não são pedidos de encaminhamento.
+  const value = withoutNegatedRequests(normalizeText(text));
   return asksHuman(text)
-    || /\b(proposta|reservar|reserva|negociar|negociacao|desconto|reclamacao|propuesta|reservar|reserva|negociar|negociacion|reclamo)\b/.test(value);
+    || explicitHumanRequest(text)
+    || purchaseIntent(text)
+    || /\b(proposta|reservar|reserva|negociar|negociacao|desconto|reclamacao|propuesta|negociacion|reclamo)\b/.test(value);
 }
 
 function handoffQuestion(history: ChatMessage[]): string {
@@ -167,6 +181,8 @@ function choosePromisedFile(history: ChatMessage[], context: AiTrainingContext):
   const previousAssistant = [...history].reverse().find((item) => item.role === 'assistant')?.content ?? '';
   const offered = normalizeText(previousAssistant);
   const isPlant = offered.includes('planta') || offered.includes('plano');
+  // Planta prometida é tratada pela seleção determinística do catálogo de plantas.
+  if (isPlant) return [];
   const terms = isPlant ? ['planta','plano']
     : offered.includes('folder') || offered.includes('book') || offered.includes('folleto') ? ['folder','book','folleto']
       : offered.includes('foto') || offered.includes('imagem') || offered.includes('imagen') ? ['foto','imagem','imagen','render']
@@ -188,17 +204,10 @@ function choosePromisedFile(history: ChatMessage[], context: AiTrainingContext):
     .map((file) => file.id);
 }
 
-function isPlantFile(file: AiFileOption): boolean {
-  const haystack = normalizeText([file.category, file.title, file.description ?? '', ...(file.trigger_keywords ?? [])].join(' '));
-  return /\b(planta|plantas|plano|planos)\b/.test(haystack)
-    && !/\b(lazer|rooftop|roof|move)\b/.test(haystack);
-}
-
 function developmentFromHistory(history: ChatMessage[]): 'alma' | 'flow' | null {
-  const value = normalizeText(userText(history));
-  if (/\balma\b/.test(value)) return 'alma';
-  if (/\bflow\b/.test(value)) return 'flow';
-  return null;
+  // Empreendimento em discussão agora (o último citado), não o primeiro da conversa.
+  const focus = enterpriseInFocus(history);
+  return focus === 'alma' || focus === 'flow' ? focus : null;
 }
 
 function locationFileId(history: ChatMessage[], context: AiTrainingContext): string | null {
@@ -218,24 +227,6 @@ function mapsSearchUrl(development: 'alma' | 'flow'): string {
     : 'https://www.google.com/maps/search/?api=1&query=Flow%20Aptos%20Porto%20Belo%20SC';
 }
 
-function conversationHasPlantIntent(history: ChatMessage[]): boolean {
-  return history.some((item) => item.role === 'user' && /\b(planta|plantas|plano|planos)\b/.test(normalizeText(item.content)));
-}
-
-function plantFileMatchesQualifier(file: AiFileOption, qualifier: string): boolean {
-  const haystack = normalizeText([file.category, file.title, file.description ?? '', ...(file.trigger_keywords ?? [])].join(' '));
-  return haystack.includes(qualifier) || haystack.includes(qualifier.replace(' ', ' 0'));
-}
-
-function projectPlantFiles(history: ChatMessage[], context: AiTrainingContext): AiFileOption[] {
-  const development = developmentFromHistory(history);
-  if (!development) return [];
-  return (context.files ?? []).filter((file) => {
-    if (!isPlantFile(file)) return false;
-    const haystack = normalizeText([file.category, file.title, file.description ?? '', ...(file.trigger_keywords ?? [])].join(' '));
-    return haystack.includes(development);
-  });
-}
 
 function ensureFirstReplyIdentity(reply: string, history: ChatMessage[]): string {
   // Reaproveita a mesma validação idempotente do motor central.
@@ -243,15 +234,29 @@ function ensureFirstReplyIdentity(reply: string, history: ChatMessage[]): string
 }
 
 function materialQualificationQuestion(history: ChatMessage[]): string {
+  // Cliente só pesquisando ou que recusou a pergunta não recebe outra pergunta de qualificação.
+  if (qualificationPaused(history)) return '';
+  const declined = declinedTopics(history);
+  const asked = new Set(assistantMessages(history).map((message) => questionTopic(message.split(/[.!]/).at(-1) ?? '')).filter(Boolean));
   const value = normalizeText(userText(history));
   const spanish = isSpanishLead(history);
-  if (!/\b\d+\s*(?:suites?|quartos?|habitaciones?)\b|\b(?:dois|tres|quatro|dos|tres|cuatro)\s*(?:suites?|quartos?|habitaciones?)\b/.test(value)) {
+  if (!declined.has('suites') && !asked.has('suites') && !/\b\d+\s*(?:suites?|quartos?|habitaciones?)\b|\b(?:dois|tres|quatro|dos|tres|cuatro)\s*(?:suites?|quartos?|habitaciones?)\b|\b\d{2,3}\s*(?:m2|m²|metros)\b/.test(value)) {
     return spanish ? '¿Cuántas suites buscas?' : 'Quantas suítes você procura?';
   }
-  if (!/\b(morar|moradia|investir|investimento|viver|vivir|invertir|inversion)\b/.test(value)) {
+  if (!declined.has('finalidade') && !asked.has('finalidade') && !/\b(morar|moradia|investir|investimento|viver|vivir|invertir|inversion|ferias|veranear|temporada)\b/.test(value)) {
     return spanish ? '¿Lo buscas para vivir o para invertir?' : 'Você procura para morar ou investir?';
   }
-  return spanish ? '¿En qué plazo piensas comprar?' : 'Você pensa em comprar em qual prazo?';
+  return '';
+}
+
+/** Remove frases em que a Nara desmente um valor que ela mesma já informou nesta conversa. */
+function withoutPriceRetraction(reply: string, history: ChatMessage[]): string {
+  const informedBefore = assistantMessages(history).some((message) => /R\$\s*\d/.test(message));
+  if (!informedBefore) return reply;
+  const sentences = reply.trim().match(/[^.!?]+[.!?]*\s*/g) ?? [];
+  const kept = sentences.filter((sentence) => !/\b(?:nao (?:estava|estavam) (?:validad|confirmad)\w*|informacao (?:imprecisa|incorreta)|(?:valor|preco|faixa) que (?:eu )?(?:mencionei|informei|passei|citei)(?: antes)?\b.{0,40}\b(?:nao|sem)\b)/.test(normalizeText(sentence)));
+  const result = kept.join('').trim();
+  return result || reply;
 }
 
 function finishTurn(turn: AiTurn, history: ChatMessage[]): AiTurn {
@@ -260,8 +265,23 @@ function finishTurn(turn: AiTurn, history: ChatMessage[]): AiTurn {
   if (isPureInformationRequest(latest) && !requiresHumanHandoff(latest)) {
     turn.handoff = false;
   }
+  // Recusa atual vale mais que qualquer leitura anterior: "não encaminha", "sem corretor", "volto depois".
+  if (turn.handoff && refusesHandoff(latest) && !explicitHumanRequest(latest) && !purchaseIntent(latest)) {
+    turn.handoff = false;
+    if (turn.classification === 'quente') turn.classification = 'morno';
+    turn.score = Math.min(turn.score, 40);
+    turn.next_action = 'Contato pediu para não ser encaminhado agora; respeitar e seguir só por mensagem quando ele voltar.';
+  }
+  // Pedido de alguém para confirmar uma informação não é intenção de compra.
+  if (turn.handoff && !history.some((item) => item.role === 'user' && purchaseIntent(item.content)) && turn.classification === 'quente') {
+    turn.classification = 'morno';
+    turn.score = Math.min(turn.score, 50);
+  }
+  turn.reply = withoutPriceRetraction(turn.reply, history);
+  turn.reply = withoutUnwantedQualification(turn.reply, history);
   if (turn.attachment_ids.length > 0 && !turn.handoff && !turn.reply.includes('?')) {
-    turn.reply = `${turn.reply.trim()} ${materialQualificationQuestion(history)}`;
+    const question = materialQualificationQuestion(history);
+    if (question) turn.reply = `${turn.reply.trim()} ${question}`;
   }
   return turn;
 }
@@ -315,6 +335,220 @@ function applyConversationDecision(
   return turn;
 }
 
+const ENTERPRISE_NAME: Record<Enterprise, string> = { soul: 'Soul', flow: 'Flow', alma: 'Alma' };
+
+function conversationLanguage(history: ChatMessage[]): 'pt' | 'es' | 'en' {
+  return isSpanishLead(history) ? 'es' : isEnglishLead(history) ? 'en' : 'pt';
+}
+
+function asksApartmentPrice(latestNormalized: string): boolean {
+  return /\b(precos?|precio|prices?|valor(?:es)?|quanto (?:custa|ta|tá|esta|fica|sai|e|da)|(?:fica|sai|custa|ta|esta|comeca|da) (?:em |por )?quanto|cuanto (?:cuesta|sale)|how much|dolar|usd|cabe no bolso|o total|valor total|total do menor)\b/.test(latestNormalized)
+    || /\b(?:ate|hasta|up to)\s+(?:r\$\s*)?\d/.test(latestNormalized);
+}
+
+function formatBrlExact(value: number): string {
+  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
+}
+
+type PriceRange = { empreendimento: string; valor_minimo: number; valor_maximo: number };
+
+/** Faixa de preço do empreendimento em discussão, a partir das consultas comerciais deste turno. */
+function rangeForEnterprise(context: AiTrainingContext, focus: Enterprise | null): PriceRange | null {
+  const calls = context.commercial?.calls ?? [];
+  const matches = (name: string) => !focus || normalizeText(name).includes(focus);
+  const ranges = calls
+    .filter((call) => call.name === 'faixa_empreendimento' && call.result && !Array.isArray(call.result))
+    .map((call) => call.result as PriceRange)
+    .filter((item) => item.valor_minimo > 0 && matches(item.empreendimento));
+  if (ranges.length === 1) return ranges[0];
+  if (ranges.length > 1 && focus) return ranges[0];
+  const offers = calls.flatMap((call) => call.name === 'consultar_apartamento'
+    ? call.result && !Array.isArray(call.result) ? [call.result as NaraUnitOffer] : []
+    : call.name === 'buscar_apartamentos' && Array.isArray(call.result) ? call.result as NaraUnitOffer[] : [])
+    .filter((offer) => offer.valor > 0 && matches(offer.empreendimento));
+  if (!offers.length) return null;
+  const values = offers.map((offer) => offer.valor);
+  return { empreendimento: offers[0].empreendimento, valor_minimo: Math.min(...values), valor_maximo: Math.max(...values) };
+}
+
+function moneyValues(text: string): number[] {
+  return [...text.matchAll(/R\$\s*(\d{1,3}(?:\.\d{3})+|\d+)(?:,(\d{1,2}))?\s*(milh(?:ao|ão|oes|ões)|mil)?/giu)].map((match) => {
+    const base = Number(`${match[1].replace(/\./g, '')}.${match[2] ?? '0'}`);
+    const unit = normalizeText(match[3] ?? '');
+    return unit.startsWith('milh') ? base * 1_000_000 : unit === 'mil' ? base * 1_000 : base;
+  });
+}
+
+function replyHasRangeValue(reply: string, range: PriceRange): boolean {
+  const targets = [range.valor_minimo, range.valor_maximo].map(Math.round);
+  return moneyValues(reply).some((value) => targets.includes(Math.round(value)));
+}
+
+function retractsPrice(reply: string): boolean {
+  const value = normalizeText(reply);
+  return /\bnao (?:estava|esta|estavam|estao) (?:validad|confirmad)|\bnao tenho\b.{0,25}\b(?:valor|valores|preco|precos)\b|precisa(?:m)? ser confirmad|nao consigo (?:informar|confirmar|garantir|afirmar)|no tengo\b.{0,20}\b(?:precio|valor)|i do not have\b.{0,20}\bprice/.test(value);
+}
+
+function userBudget(history: ChatMessage[]): number | null {
+  const value = normalizeText(userText(history));
+  const match = value.match(/\b(?:ate|hasta|teto de|orcamento de|tenho)\s+(?:r\$\s*)?(\d+(?:[.,]\d+)?)\s*(milhao|milhoes|mi|mil)?\b/);
+  if (!match) return null;
+  const base = Number(match[1].replace(/\.(?=\d{3})/g, '').replace(',', '.'));
+  const unit = match[2] ?? '';
+  const amount = unit.startsWith('mi') ? base * 1_000_000 : unit === 'mil' ? base * 1_000 : base;
+  return amount >= 50_000 ? amount : null;
+}
+
+function naturalPriceReply(range: PriceRange, history: ChatMessage[], context: AiTrainingContext = {}): string {
+  const language = conversationLanguage(history);
+  const conversion = context.foreign?.fx
+    ? context.foreign.conversions.find((item) => item.development === range.empreendimento && Math.round(item.brl) === Math.round(range.valor_minimo))
+    : undefined;
+  const min = `${formatBrlExact(range.valor_minimo)}${conversion ? ` (≈ ${formatForeign(conversion.foreign, conversion.currency)}${language === 'en' ? ', approximate PTAX' : language === 'es' ? ', PTAX aproximada' : ' pela PTAX do dia'})` : ''}`;
+  const max = range.valor_maximo > range.valor_minimo ? formatBrlExact(range.valor_maximo) : '';
+  const name = range.empreendimento;
+  const asked = normalizeText(userText(history));
+  const mentionsTotal = /\b(total|balao|baloes|por fora|entrada|cabe no bolso)\b/.test(asked);
+  const budget = userBudget(history);
+  const belowBudget = budget !== null && budget < range.valor_minimo;
+  const paused = qualificationPaused(history);
+  const focus = enterpriseInFocus(history);
+  const offerPlant = !paused && !belowBudget && (focus === 'alma' || focus === 'flow');
+  if (language === 'es') {
+    return [
+      `${name} empieza en ${min}${max ? ` y llega a ${max}` : ''}.`,
+      mentionsTotal ? 'Es el precio total: entrada, cuotas, anuales y llaves ya están dentro de ese valor.' : '',
+      belowBudget ? 'Así que, hasta tu presupuesto, no tiene opción en este proyecto.' : '',
+      offerPlant ? '¿Te envío la planta de la opción de menor valor?' : '',
+    ].filter(Boolean).join(' ');
+  }
+  if (language === 'en') {
+    return [
+      `${name} starts at ${min}${max ? ` and goes up to ${max}` : ''}.`,
+      mentionsTotal ? 'That is the total price: down payment, installments, annual payments and keys are all inside it.' : '',
+      belowBudget ? 'So, within your budget, there is no option in this project.' : '',
+      offerPlant ? 'Want me to send the floor plan of the lowest-priced option?' : '',
+    ].filter(Boolean).join(' ');
+  }
+  return [
+    `O ${name} começa em ${min}${max ? ` e vai até ${max}` : ''}.`,
+    mentionsTotal ? 'Esse é o preço total: entrada, parcelas, anuais e chaves já estão dentro dele.' : '',
+    belowBudget ? 'Então, dentro do seu teto, ele não tem opção.' : '',
+    offerPlant ? 'Quer que eu te mande a planta da opção de menor valor?' : '',
+  ].filter(Boolean).join(' ');
+}
+
+function mentionsOtherEnterprisePrice(reply: string, focus: Enterprise): boolean {
+  if (!moneyValues(reply).length) return false;
+  const value = normalizeText(reply);
+  const others = (['soul', 'flow', 'alma'] as const).filter((name) => name !== focus);
+  return !new RegExp(`\\b${focus}\\b`).test(value) && others.some((name) => new RegExp(`\\b${name}\\b`).test(value));
+}
+
+function missingPriceReply(focus: Enterprise, history: ChatMessage[]): string {
+  const language = conversationLanguage(history);
+  const name = ENTERPRISE_NAME[focus];
+  if (qualificationPaused(history) || refusesHandoff(lastUserText(history))) {
+    if (language === 'es') return `El valor actualizado de ${name} no está conmigo ahora. Cuando quieras retomar, escríbeme por aquí.`;
+    if (language === 'en') return `I do not have the updated price for ${name} with me right now. Whenever you want to pick this up again, just message me here.`;
+    return `O valor atualizado do ${name} não está aqui comigo agora. Quando quiser retomar, é só me chamar por aqui.`;
+  }
+  if (language === 'es') return `El valor actualizado de ${name} no está conmigo ahora. ¿Quieres que le pida al equipo que te lo envíe por mensaje?`;
+  if (language === 'en') return `I do not have the updated price for ${name} with me right now. Want me to ask the team to send it to you by message?`;
+  return `O valor atualizado do ${name} não está aqui comigo agora. Quer que eu peça para o time te mandar por mensagem?`;
+}
+
+/** Pedido de planta: escolhe pelo catálogo oficial, anexa e explica. */
+function plantRequestTurn(turn: AiTurn, history: ChatMessage[], context: AiTrainingContext): AiTurn | null {
+  const latest = lastUserText(history);
+  const latestNormalized = normalizeText(latest);
+  const previousAssistant = [...history].reverse().find((item) => item.role === 'assistant')?.content ?? '';
+  const acceptsOffer = !mentionsPlant(latest)
+    && /^(sim|s|pode|pode mandar|pode sim|manda|me manda|quero|quero ver|claro|ok|beleza|bora|si|sí|dale|yes|sure)\b/.test(latestNormalized)
+    && mentionsPlant(previousAssistant) && previousAssistant.includes('?');
+  // "3 suítes", "a de 103 m²", "Tipo 01" respondendo a uma pergunta da Nara sobre planta.
+  const answersPlantQuestion = !mentionsPlant(latest) && !acceptsOffer
+    && mentionsPlant(previousAssistant) && previousAssistant.includes('?')
+    && /\b(\d|dois|duas|tres|quatro)\s*(?:suites?|quartos?)\b|\b\d{2,3}(?:[.,]\d)?\s*(?:m2|m²|m\b|metros)|\btipo\s*0?\d\b|\bduplex\b|\b(?:menor|maior)\b/.test(latestNormalized);
+  if (!mentionsPlant(latest) && !acceptsOffer && !answersPlantQuestion) return null;
+  const development = developmentFromHistory(history);
+  if (!development) return null;
+
+  const request = acceptsOffer
+    ? /\bduplex\b/.test(normalizeText(previousAssistant))
+      ? resolvePlantRequest(development, 'duplex')
+      : resolvePlantRequest(development, previousAssistant)
+    : resolvePlantRequest(development, latest, previousAssistant);
+  const sent: PlantEntry[] = [];
+  const ids: string[] = [];
+  for (const entry of request.entries) {
+    const files = filesForPlant(entry, context.files ?? []);
+    if (!files.length) continue;
+    sent.push(entry);
+    ids.push(...files.slice(0, 2).map((file) => file.id));
+  }
+  turn.attachment_ids = [...new Set(ids)].slice(0, 3);
+  if (!sent.length) {
+    // Biblioteca com nomes genéricos ("Planta Flow 2 suítes"): usa o arquivo do empreendimento que
+    // bate com as suítes pedidas, em vez de deixar o cliente sem planta.
+    const suites = [...new Set(request.entries.map((entry) => entry.suites))];
+    const projectFiles = (context.files ?? []).filter((file) => isPlantFile(file)
+      && new RegExp(`\\b${development}\\b`).test(normalizeText([file.category, file.title, file.description ?? '', file.original_name ?? '', ...(file.trigger_keywords ?? [])].join(' '))));
+    const bySuites = suites.length === 1
+      ? projectFiles.filter((file) => new RegExp(`\\b${suites[0]}\\s*suites?\\b`).test(normalizeText([file.title, file.description ?? '', ...(file.trigger_keywords ?? [])].join(' '))))
+      : [];
+    const fallback = bySuites.length ? bySuites : projectFiles.length === 1 ? projectFiles : [];
+    if (fallback.length) {
+      turn.attachment_ids = fallback.slice(0, 2).map((file) => file.id);
+      const language = conversationLanguage(history);
+      const areas = [...new Set(request.entries.map((entry) => entry.areaLabel))].join(language === 'en' ? ' or ' : language === 'es' ? ' o ' : ' ou ');
+      const name = ENTERPRISE_NAME[development];
+      const suiteText = suites.length === 1 ? `${suites[0]} ${language === 'pt' ? 'suítes' : 'suites'}` : '';
+      turn.reply = language === 'es'
+        ? `Aquí está la planta de ${name}${suiteText ? ` de ${suiteText}` : ''}, con ${areas}.`
+        : language === 'en'
+          ? `Here is the ${name} floor plan${suiteText ? ` with ${suiteText}` : ''}, ${areas}.`
+          : `Aqui está a planta do ${name}${suiteText ? ` de ${suiteText}` : ''}, com ${areas}.`;
+      if (!explicitHumanRequest(latest) && !purchaseIntent(latest)) turn.handoff = false;
+      turn.summary = 'Planta enviada pelo arquivo genérico do empreendimento.';
+      turn.next_action = 'Continuar a conversa a partir da planta enviada, sem interrogar.';
+      return turn;
+    }
+  }
+  turn.reply = plantReply({
+    development,
+    request,
+    sentEntries: sent,
+    language: conversationLanguage(history),
+    allowQuestion: !qualificationPaused(history),
+  });
+  if (!explicitHumanRequest(latest) && !purchaseIntent(latest)) turn.handoff = false;
+  turn.summary = sent.length
+    ? `Planta enviada pelo catálogo oficial: ${sent.map((entry) => `${entry.label} (${entry.areaLabel})`).join(', ')}.`
+    : 'Cliente pediu planta, mas o arquivo correspondente não está na biblioteca; Nara explicou a planta em texto.';
+  turn.next_action = sent.length
+    ? 'Continuar a conversa a partir da planta enviada, sem interrogar.'
+    : 'Cadastrar o arquivo dessa planta na biblioteca da Nara.';
+  return turn;
+}
+
+/** Pedido de foto da fachada: anexa a fachada do empreendimento em discussão. */
+function facadeRequestFile(history: ChatMessage[], context: AiTrainingContext): { id: string; reply: string } | null {
+  const latest = normalizeText(lastUserText(history));
+  if (!/\b(fachada|foto do predio|foto do prédio|foto (?:dele|do alma|do flow|do soul|do empreendimento)|como (?:ele )?e por fora|fachada|frente del edificio)\b/.test(latest)) return null;
+  const focus = enterpriseInFocus(history);
+  if (!focus) return null;
+  const id = facadeFor(context.files ?? [], focus);
+  if (!id) return null;
+  const language = conversationLanguage(history);
+  const detail: Record<Enterprise, Record<'pt' | 'es' | 'en', string>> = {
+    alma: { pt: 'Aqui está a fachada do Alma: são 30 andares, com só dois apartamentos por andar.', es: 'Aquí está la fachada de Alma: son 30 pisos, con solo dos departamentos por piso.', en: 'Here is the Alma facade: 30 floors, with only two apartments per floor.' },
+    flow: { pt: 'Aqui está a fachada do Flow, a 800 m do mar.', es: 'Aquí está la fachada de Flow, a 800 m del mar.', en: 'Here is the Flow facade, 800 m from the beach.' },
+    soul: { pt: 'Aqui está a fachada do Soul, já pronto em Itapema.', es: 'Aquí está la fachada de Soul, ya terminado en Itapema.', en: 'Here is the Soul facade, already finished in Itapema.' },
+  };
+  return { id, reply: detail[focus][language] };
+}
+
 export function postProcessNaraTurn(
   turn: AiTurn,
   history: ChatMessage[],
@@ -331,8 +565,7 @@ export function postProcessNaraTurn(
   const isLanguageRequest = Boolean(requestedNaraLanguage(latestRaw));
   if (isLanguageRequest) return finishTurn(turn, history);
   const nonApartmentValue = /\b(?:valor|preco|precio|quanto custa|cuanto cuesta|how much)\b.{0,28}\b(?:condominio|iptu|aluguel|taxa|laudemio|itbi|escritura|entrada|parcelas?|reforcos?|chaves)\b/.test(latestNormalized);
-  const asksPriceNow = !nonApartmentValue && /\b(preco|precio|prices?|valor|quanto custa|cuanto cuesta|how much|dolar|usd)\b/.test(latestNormalized);
-  const asksPlan = /\b(entrada|parcelas?|reforcos?|chaves|condicao de pagamento)\b/.test(latestNormalized);
+  const asksPriceNow = !nonApartmentValue && asksApartmentPrice(latestNormalized);
   const exactUsCampaignSeed = /^ola[!.]?\s+moro nos (?:eua|estados unidos|usa) e quero conhecer os imoveis da bossa em sc\.?$/.test(latestNormalized);
 
   if (context.foreign?.us_campaign_lead && exactUsCampaignSeed && history.filter((item) => item.role === 'user').length === 1) {
@@ -362,29 +595,38 @@ export function postProcessNaraTurn(
     return finishTurn(turn, history);
   }
 
-  if (asksPlan) {
-    const specific = context.commercial?.calls.flatMap((call) => call.name === 'consultar_apartamento'
-      ? call.result && !Array.isArray(call.result) ? [call.result] : []
-      : call.name === 'buscar_apartamentos' && Array.isArray(call.result) ? call.result : []) ?? [];
-    if (specific.length) {
-      const offer = specific[0] as NaraUnitOffer;
-      turn.reply = `${offer.empreendimento} ${offer.unidade}: valor total ${formatBrl(offer.valor)}. Vou pedir ao comercial o plano completo, incluindo entrada, mensais, reforços e saldo nas chaves.`;
-      turn.handoff = true;
-      turn.summary = 'Lead pediu plano de pagamento completo; tabela não discrimina todas as parcelas do total.';
-      turn.next_action = 'Confirmar plano completo antes de informar parcelas.';
-      return finishTurn(turn, history);
-    }
-  }
   if (asksPriceNow) {
-    const verified = verifiedStartingPrices(context, history);
-    if (verified) {
+    const focus = enterpriseInFocus(history);
+    const range = rangeForEnterprise(context, focus);
+    const portfolio = !focus ? verifiedStartingPrices(context, history) : '';
+    if (!range && portfolio) {
+      // Pergunta de preço sem empreendimento definido: mostra a carteira inteira.
       const foreignPurchase = /\b(puedo comprar|buy from|buy remotely|comprar desde|comprar morando)\b/.test(latestNormalized);
       turn.reply = foreignPurchase
-        ? `${spanish ? 'Sí, puedes comprar desde el exterior con firma electrónica.' : 'Yes, you can buy remotely with an electronic signature.'} ${verified}`
-        : verified;
+        ? `${spanish ? 'Sí, puedes comprar desde el exterior con firma electrónica.' : 'Yes, you can buy remotely with an electronic signature.'} ${portfolio}`
+        : portfolio;
       turn.handoff = false;
       turn.summary = 'Valores iniciais informados a partir da tabela vigente consultada neste turno.';
       turn.next_action = 'Continuar o atendimento e confirmar empreendimento de interesse.';
+      return finishTurn(turn, history);
+    }
+    if (range) {
+      const alreadyHasPrice = replyHasRangeValue(turn.reply, range);
+      const asksWhichWithOneProject = Boolean(focus) && /qual deles te interessa|cual te interesa mas|which one interests you/.test(normalizeText(turn.reply));
+      if (!alreadyHasPrice || retractsPrice(turn.reply) || asksPermissionToAnswer(turn.reply) || asksWhichWithOneProject) {
+        turn.reply = naturalPriceReply(range, history, context);
+        turn.attachment_ids = [];
+      }
+      if (!explicitHumanRequest(latestRaw) && !purchaseIntent(latestRaw)) turn.handoff = false;
+      turn.summary = `Valor de ${range.empreendimento} informado a partir da tabela vigente consultada neste turno.`;
+      turn.next_action = 'Continuar a conversa sobre o empreendimento em discussão, sem pressionar.';
+      return finishTurn(turn, history);
+    }
+    if (focus && mentionsOtherEnterprisePrice(turn.reply, focus)) {
+      // Cliente perguntou de um empreendimento e a resposta trouxe o preço de outro (ex.: Soul → Alma).
+      turn.reply = missingPriceReply(focus, history);
+      turn.attachment_ids = [];
+      if (!explicitHumanRequest(latestRaw)) turn.handoff = false;
       return finishTurn(turn, history);
     }
   }
@@ -450,51 +692,15 @@ export function postProcessNaraTurn(
     turn.attachment_ids = promisedFiles;
   }
 
-  const asksPlantNow = /\b(planta|plantas|plano|planos)\b/.test(latestNormalized);
-  const latestPlantQualifier = plantQualifier(latestRaw);
-  const conversationQualifier = plantQualifier(history.map((item) => item.content).join(' '));
-  const plantIntent = conversationHasPlantIntent(history);
-  const allPlantIds = new Set((context.files ?? []).filter(isPlantFile).map((file) => file.id));
+  const plantTurn = plantRequestTurn(turn, history, context);
+  if (plantTurn) return finishTurn(plantTurn, history);
 
-  if (plantIntent && latestPlantQualifier) {
-    const projectPlants = projectPlantFiles(history, context);
-    const candidates = projectPlants.filter((file) => plantFileMatchesQualifier(file, latestPlantQualifier));
-    turn.attachment_ids = turn.attachment_ids.filter((id) => !allPlantIds.has(id));
-
-    if (candidates.length === 1) {
-      const file = candidates[0];
-      turn.attachment_ids = [file.id, ...turn.attachment_ids].slice(0, 3);
-      turn.reply = spanish
-        ? `Aquí tienes ${file.title}.`
-        : `Aqui está ${file.title}.`;
-      turn.handoff = false;
-      turn.summary = `Planta selecionada de forma determinística: ${file.title}.`;
-      turn.next_action = 'Continuar qualificação após confirmar o envio do arquivo correto.';
-    } else if (candidates.length > 1) {
-      const options = candidates.slice(0, 3).map((file) => file.title).join(' ou ');
-      turn.reply = spanish
-        ? `Encontré más de una planta compatible: ${options}. ¿Cuál quieres?`
-        : `Encontrei mais de uma planta compatível: ${options}. Qual você quer?`;
-      turn.handoff = false;
-      turn.summary = 'Mais de uma planta corresponde à informação de suítes; Nara pediu o tipo antes de anexar.';
-      turn.next_action = 'Aguardar o lead indicar o tipo exato e enviar somente a planta correspondente.';
-    } else if (/suite/.test(latestPlantQualifier) && projectPlants.length > 1) {
-      const options = projectPlants.slice(0, 3).map((file) => file.title).join(' ou ');
-      turn.reply = spanish
-        ? `Tengo estas plantas para el proyecto: ${options}. ¿Cuál quieres?`
-        : `Tenho estas plantas para o projeto: ${options}. Qual você quer?`;
-      turn.handoff = false;
-      turn.summary = 'Quantidade de suítes informada, mas a base não identificou uma única planta correspondente.';
-      turn.next_action = 'Aguardar o tipo exato; não enviar planta arbitrária.';
-    }
-  } else if (asksPlantNow && !conversationQualifier) {
-    turn.attachment_ids = turn.attachment_ids.filter((id) => !allPlantIds.has(id));
-    turn.reply = spanish
-      ? 'Tengo las plantas. Para enviarte la correcta, ¿cuántas suites buscas?'
-      : 'Tenho as plantas. Para te enviar a correta, quantas suítes você procura?';
-    turn.handoff = false;
-    turn.summary = 'Lead pediu planta sem informar tipologia/suítes.';
-    turn.next_action = 'Aguardar quantidade de suítes/tipologia antes de enviar planta; não escolher arquivo arbitrariamente.';
+  const facade = facadeRequestFile(history, context);
+  if (facade && !turn.attachment_ids.includes(facade.id)) {
+    turn.attachment_ids = [facade.id, ...turn.attachment_ids.filter((id) => id !== facade.id)].slice(0, 3);
+    turn.reply = facade.reply;
+    if (!explicitHumanRequest(latestRaw)) turn.handoff = false;
+    return finishTurn(turn, history);
   }
 
   const asksLocationNow = /\b(localizacao|endereco|mapa|onde fica|ubicacion|direccion|donde queda)\b/.test(latestNormalized);
@@ -514,13 +720,18 @@ export function postProcessNaraTurn(
     turn.next_action = 'Continuar atendimento pela Nara e fazer uma pergunta de qualificação na próxima interação se necessário.';
   }
 
-  const asksIfRobot = /\b(voce e|vc e|e uma|eh uma)\s*(?:um |uma )?(?:robo|robot|ia|inteligencia artificial)|\bassistente digital\b/.test(latest);
+  const asksIfRobot = /\b(voce e|vc e|e uma|eh uma|e um|eh um|isso e|aqui e|falando com)\s*(?:um |uma )?(?:robo|robot|bot|ia|inteligencia artificial|maquina|pessoa de verdade|humano|humana|gente de verdade)\b|\b(?:robo|bot|ia) ou (?:pessoa|humano|gente)\b|\b(?:pessoa|humano|gente) ou (?:robo|bot|ia)\b|\bassistente digital\b|\b(?:eres|es) (?:un )?(?:robot|bot|ia|humano)\b|\bare you (?:a )?(?:bot|robot|human|ai)\b/.test(latest);
   if (asksIfRobot) {
+    const firstTurn = priorMessages.length === 0;
+    const hasOwnQuestion = /\?|\b(duvida|pergunta|queria saber|quero saber)\b/.test(latest.replace(/\b(?:robo|bot|ia|pessoa|humano)\b[^?]*\?/, ''));
+    const answer = spanish
+      ? `${firstTurn ? '¡Hola! ' : ''}Soy Nara, la asistente digital de Bossa 🙂 Respondo por aquí mismo y, si prefieres, llamo a alguien del equipo.${hasOwnQuestion ? ' ¿Cuál es tu duda?' : ''}`
+      : `${firstTurn ? 'Oi! ' : ''}Sou a Nara, assistente digital da Bossa 🙂 Respondo tudo por aqui mesmo, só por mensagem, e se preferir chamo alguém do time.${hasOwnQuestion ? ' Qual é a sua dúvida?' : ''}`;
     return applyConversationDecision(turn, {
-      reply: 'Sou a assistente digital da Bossa, sim 🙂 Se preferir falar com uma pessoa, chamo alguém do time agora. Quer que eu faça isso?',
+      reply: answer,
       handoff: false,
       summary: 'Contato perguntou se a Nara é uma inteligência artificial.',
-      nextAction: 'Oferecer passagem imediata para atendimento humano.',
+      nextAction: 'Responder a dúvida do contato por mensagem; oferecer pessoa só se ele pedir.',
     });
   }
 
@@ -554,13 +765,11 @@ export function postProcessNaraTurn(
     });
   }
 
-  const isUndecided = /\b(ainda nao sei|nao sei ainda|estou pensando|ainda estou pensando|nao decidi|so estou olhando|so quero entender|estou avaliando|tenho duvida)\b/.test(latest);
-  if (isUndecided) {
-    return applyConversationDecision(turn, {
-      reply: 'Sem problema — você pode conhecer primeiro, sem decidir agora. Posso te explicar rapidamente os empreendimentos, a localização ou como funcionam os valores; por onde prefere começar?',
-      summary: 'Contato ainda está avaliando e quer entender melhor antes de decidir.',
-      nextAction: 'Apresentar informações introdutórias sem pressionar e descobrir o tema de maior interesse.',
-    });
+  // "Ainda não sei"/"não decidi" não troca mais a resposta por uma frase genérica: a pergunta concreta
+  // da mesma mensagem (ladeira, fotos, fachada) precisa ser respondida. A qualificação é pausada em finishTurn.
+  if (qualificationPaused(history) && !explicitHumanRequest(latestRaw) && !purchaseIntent(latestRaw)) {
+    turn.handoff = false;
+    if (turn.classification === 'quente') turn.classification = 'morno';
   }
 
   const currentOpening = naraReplyOpeningKey(turn.reply);
@@ -575,12 +784,13 @@ export function postProcessNaraTurn(
   const repeatedTriage = hasPriorTriage(history) && looksLikeTriageQuestion(turn.reply);
   if (repeated || repeatedTriage) {
     const topic = topicFromQuestion(latestRaw);
-    turn.reply = clearBuyerContext
+    const alreadyInHandoff = priorMessages.some((message) => /ta[ií]s.*comercial|chamando a ta[ií]s|llamando a ta[ií]s/.test(normalizeText(message)));
+    turn.reply = alreadyInHandoff
       ? `Essa dúvida sobre ${topic} já ficou registrada para a Taís; você não precisa repetir. Ela continua daqui.`
-      : `Vou focar em ${topic} agora, sem repetir a mensagem anterior.`;
-    if (clearBuyerContext) turn.handoff = true;
+      : `Sobre ${topic}: me conta o que ficou faltando que eu respondo direto.`;
+    turn.handoff = alreadyInHandoff;
     turn.summary = `Resposta anterior seria repetida. Dúvida atual: ${latestRaw.slice(0, 280)}`;
-    turn.next_action = clearBuyerContext
+    turn.next_action = alreadyInHandoff
       ? 'Taís deve continuar a partir da dúvida registrada, sem pedir o assunto novamente.'
       : 'Responder especificamente à última mensagem e avançar.';
     return finishTurn(turn, history);
