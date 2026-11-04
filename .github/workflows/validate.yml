@@ -51,6 +51,12 @@ jobs:
         run: npm run test:flow-table
       - name: Test AI files commercial access
         run: npm run test:ai-files-commercial
+      - name: Test Nara conversation policy
+        run: npm run test:nara-conversation-policy
+      - name: Test Nara current commercial quotes
+        run: npm run test:nara-commercial-guard
+      - name: Test Nara conversation and price integration
+        run: npm run test:nara-integration
       - name: Test Nara prompt contract
         run: npm run test:nara-prompt
       - name: Test Nara fixed layer

@@ -1,22 +1,12 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-function normalizeGuardrailText(value) {
-  return value.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLocaleLowerCase('pt-BR').replace(/\s+/g, ' ').trim();
-}
-function naraReplyWordCount(value) {
-  return value.match(/[\p{L}\p{N}]+(?:['’.-][\p{L}\p{N}]+)*/gu)?.length ?? 0;
-}
-function hasForbiddenScarcityClaim(value) {
-  const normalized = normalizeGuardrailText(value);
-  return /\b(acabou de ser (?:vendid[oa]|reservad[oa]|bloquead[oa])|acabou de (?:vender|reservar|bloquear)|foi (?:vendid[oa]|reservad[oa]) (?:agora|hoje|ha pouco))\b/.test(normalized);
-}
-function naraReplyGuardrailViolations(value) {
-  const violations = [];
-  if (!value.trim()) violations.push('resposta_vazia');
-  if (naraReplyWordCount(value) > 45) violations.push('mais_de_45_palavras');
-  if (hasForbiddenScarcityClaim(value)) violations.push('escassez_fabricada');
-  return violations;
-}
+import {
+  enforceNaraReplyGuardrails,
+  hasForbiddenScarcityClaim,
+  naraReplyGuardrailViolations,
+  naraReplyQuestionCount,
+  naraReplyWordCount,
+} from '../src/lib/ai.ts';
 import { buildNaraOfferAuditRecords } from '../src/lib/nara-offer-log.ts';
 import { loadNaraCommercialTurnContext } from '../src/lib/nara-unit-queries.ts';
 
@@ -52,8 +42,35 @@ assert.equal(currentCustomer?.blocked_reason, 'cliente_atual');
 assert.match(currentCustomer?.source_text ?? '', /pós-venda/);
 
 assert.equal(naraReplyWordCount('Uma resposta curta com seis palavras.'), 6);
-const longReply = Array.from({ length: 46 }, (_, index) => `palavra${index + 1}`).join(' ');
-assert.deepEqual(naraReplyGuardrailViolations(longReply), ['mais_de_45_palavras']);
+const longReply = 'Entendi que você está começando a comparar os apartamentos e ainda quer conhecer as possibilidades com calma. Podemos olhar a distribuição dos ambientes, a integração da sala com a cozinha e os espaços que fazem diferença na rotina da sua família. Você prefere receber plantas ou fotos primeiro? Tem algum ambiente que quer conhecer melhor?';
+assert.ok(naraReplyWordCount(longReply) > 45);
+assert.equal(naraReplyQuestionCount(longReply), 2);
+assert.deepEqual(naraReplyGuardrailViolations(longReply), []);
+assert.deepEqual(naraReplyGuardrailViolations('   '), ['resposta_vazia']);
+
+// Exercise the same final enforcement used by the application. Length and two
+// useful questions must not trigger a model rewrite, truncation, or network call.
+const originalFetch = globalThis.fetch;
+let externalCalls = 0;
+globalThis.fetch = async () => {
+  externalCalls += 1;
+  throw new Error('Uma resposta válida não deve precisar de chamada externa para encurtamento.');
+};
+try {
+  const result = await enforceNaraReplyGuardrails({
+    reply: longReply, classification: 'morno', score: 45, stage: 'ia',
+    summary: 'Contato está comparando plantas.', next_action: 'Esclarecer a preferência.',
+    handoff: false, attachment_ids: [], extracted: {},
+  }, baseLead, [
+    { role: 'assistant', content: 'Olá! Sou a Nara, da Bossa.' },
+    { role: 'user', content: 'Quero entender como comparar as plantas com calma.' },
+  ], {});
+  assert.equal(result.reply, longReply);
+  assert.equal(externalCalls, 0);
+} finally {
+  globalThis.fetch = originalFetch;
+}
+
 assert.equal(hasForbiddenScarcityClaim('A unidade acabou de ser vendida agora.'), true);
 assert.ok(naraReplyGuardrailViolations('A unidade acabou de ser vendida.').includes('escassez_fabricada'));
 assert.equal(hasForbiddenScarcityClaim('A unidade não está disponível; posso verificar alternativas.'), false);
@@ -105,14 +122,10 @@ assert.equal(genericRecords.length, 1);
 assert.equal(genericRecords[0].scope, 'unstructured');
 assert.equal(genericRecords[0].quoted_amounts[0].amount, 777000);
 
-const aiSource = await readFile(new URL('../src/lib/ai.ts', import.meta.url), 'utf8');
 const wrapperSource = await readFile(new URL('../src/lib/ai-v120.ts', import.meta.url), 'utf8');
 const webhookSource = await readFile(new URL('../src/lib/whatsapp/webhookProcessor.ts', import.meta.url), 'utf8');
 const migrationSource = await readFile(new URL('../supabase/migrations/017_nara_offer_logs.sql', import.meta.url), 'utf8');
 
-assert.match(aiSource, /NARA_REPLY_REGENERATION_ATTEMPTS = 2/);
-assert.match(aiSource, /Nunca diga que algo acabou de ser vendido/);
-assert.doesNotMatch(aiSource, /slice\(0,\s*NARA_REPLY_WORD_LIMIT\)/);
 assert.ok(wrapperSource.indexOf('postProcessNaraTurn') < wrapperSource.lastIndexOf('enforceNaraReplyGuardrails'));
 const offerAuditIndex = webhookSource.indexOf('prepareNaraOfferAudit(args.admin');
 const aiSendTextIndex = webhookSource.indexOf('provider.sendText', offerAuditIndex);
@@ -125,4 +138,4 @@ assert.match(migrationSource, /entry_amount numeric\(14,2\)/);
 assert.match(migrationSource, /installment_amount numeric\(14,2\)/);
 assert.match(migrationSource, /delivery_status/);
 
-console.log('Guardrails da Fase 6 validados: bloqueios de perfil, regeneração, teto de palavras e auditoria pré-envio.');
+console.log('Guardrails validados no código real: explicação preservada, perguntas úteis, bloqueios de perfil, escassez e auditoria pré-envio.');

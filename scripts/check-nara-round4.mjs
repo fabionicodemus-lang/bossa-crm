@@ -3,7 +3,7 @@
 // a corrige: preço consistente, contexto mantido, planta enviada e explicada, sem "robô",
 // sem apresentação duplicada e transferência respeitando a recusa do cliente.
 import assert from 'node:assert/strict';
-import { ensureFirstTurnIntroduction, naraReplyWordCount } from '../src/lib/ai.ts';
+import { ensureFirstTurnIntroduction } from '../src/lib/ai.ts';
 import { postProcessNaraTurn } from '../src/lib/ai-v120.ts';
 import { loadNaraCommercialTurnContext } from '../src/lib/nara-unit-queries.ts';
 import {
@@ -52,7 +52,6 @@ const soulNoPrice = { files, commercial: { calls: [soulEmpty], source_text: '' }
 
 const u = (content) => ({ role: 'user', content });
 const a = (content) => ({ role: 'assistant', content });
-const withinLimit = (reply) => assert.ok(naraReplyWordCount(reply) <= 45, `mais de 45 palavras: ${reply}`);
 const oneQuestionMax = (reply) => assert.ok((reply.match(/\?/g) ?? []).length <= 1, `mais de uma pergunta: ${reply}`);
 
 // ---------- Sinais de conversa ----------
@@ -87,7 +86,7 @@ accept('Planta pela metragem, "o menor", suítes e duplex sem nome interno', () 
 });
 
 // ---------- Cenários do relatório ----------
-accept('16 Boston: valor não é desmentido depois de informado', () => {
+accept('16 Boston: correção de preço anterior é preservada com clareza', () => {
   const history = [
     u('Oi. Quanto tá o menor do Alma?'),
     a('Oi, sou a Nara, da Bossa; o menor do Alma tem 103 m² e 3 suítes. Você pensa nele para morar ou aproveitar a praia?'),
@@ -95,11 +94,11 @@ accept('16 Boston: valor não é desmentido depois de informado', () => {
     a('Não precisa. No Alma Seahouses, os valores partem de R$ 1.285.350,85.'),
     u('Tá. E sobe durante a obra?'),
   ];
-  const result = postProcessNaraTurn(turn({
-    reply: 'O saldo é corrigido pelo CUB durante a obra. Desculpe: o valor que mencionei antes também não estava validado e precisa de confirmação.',
-  }), history, alma);
-  assert.doesNotMatch(result.reply, /n[aã]o estava validado/i);
+  const reply = 'O saldo é corrigido pelo CUB durante a obra. Desculpe: o valor que mencionei antes também não estava validado e precisa de confirmação.';
+  const result = postProcessNaraTurn(turn({ reply }), history, alma);
+  assert.match(result.reply, /n[aã]o estava validado/i);
   assert.match(result.reply, /CUB/);
+  assert.equal(result.reply, reply, 'o pós-processamento não deve esconder a correção');
 });
 
 accept('16 Boston: "não pedi reserva" e "não encaminha" desligam a transferência', () => {
@@ -119,7 +118,6 @@ accept('17 Orlando: teto de R$ 1 milhão recebe a faixa real e a resposta certa'
   assert.match(final, /n[aã]o tem op[cç][aã]o/i);
   assert.doesNotMatch(final, /\?/, 'cliente só queria saber isso; sem pergunta');
   assert.equal((final.match(/Nara/g) ?? []).length, 1);
-  withinLimit(final);
 });
 
 accept('17 Orlando: conversa no Soul não volta ao preço do Alma', () => {
@@ -137,7 +135,7 @@ accept('17 Orlando: conversa no Soul não volta ao preço do Alma', () => {
   oneQuestionMax(result.reply);
 });
 
-accept('18 Miami: "total ou balão?" responde o total sem desmentir nem encaminhar', () => {
+accept('18 Miami: "total ou balão?" responde o total vigente sem encaminhamento automático', () => {
   const history = [
     u('Vi o anúncio do Alma. Falam da condição, mas qual é o valor total mesmo?'),
     a('Oi! Aqui é a Nara, da Bossa 😊 No Alma Seahouses, o valor total parte de R$ 1.285.350,85.'),
@@ -149,9 +147,8 @@ accept('18 Miami: "total ou balão?" responde o total sem desmentir nem encaminh
   }), history, alma);
   assert.match(result.reply, /R\$\s1\.285\.350,85/);
   assert.match(result.reply, /pre[cç]o total/i);
-  assert.doesNotMatch(result.reply, /n[aã]o estava confirmado|encaminhar/i);
+  assert.doesNotMatch(result.reply, /encaminhar/i);
   assert.equal(result.handoff, false);
-  withinLimit(result.reply);
 });
 
 accept('18 Miami: pedir alguém para confirmar encaminha, mas não vira lead quente', () => {
@@ -184,7 +181,6 @@ accept('20 Newark: planta de 103 m² é enviada e explicada, sem pedir Tipo 01/0
   assert.match(result.reply, /3 su[ií]tes/);
   assert.doesNotMatch(result.reply, /\?/);
   assert.equal(result.handoff, false);
-  withinLimit(result.reply);
 });
 
 accept('21 Lisboa: "o total do menor, não a entrada" responde o total, sem escolher unidade', () => {
@@ -284,7 +280,6 @@ accept('25 Madrid: "manda a planta desse menor, sem cadastro" envia Tipo 02 sem 
   assert.deepEqual(result.attachment_ids, ['alma-tipo-02']);
   assert.match(result.reply, /103 m²/);
   assert.doesNotMatch(result.reply, /f[eé]rias|morar\?/i);
-  withinLimit(result.reply);
 });
 
 accept('Planta sem especificar: manda as duas de 3 suítes e oferece o duplex', () => {
@@ -294,7 +289,6 @@ accept('Planta sem especificar: manda as duas de 3 suítes e oferece o duplex', 
   assert.match(result.reply, /103 m².*114 m²/);
   assert.match(result.reply, /duplex/i);
   const final = ensureFirstTurnIntroduction(result.reply, history, {});
-  withinLimit(final);
   oneQuestionMax(final);
   const yes = postProcessNaraTurn(turn({ reply: 'Claro!' }), [...history, a(result.reply), u('Quero ver')], alma);
   assert.deepEqual([...yes.attachment_ids].sort(), ['alma-duplex', 'alma-duplex-02']);

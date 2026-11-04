@@ -1,5 +1,3 @@
-import { naraReplyWordCount, truncateNaraReplyToWordLimit } from './ai';
-
 export type AgendaAction = 'schedule' | 'reschedule' | 'cancel' | 'none';
 export type AgendaConversationMessage = { role: 'user' | 'assistant'; content: string };
 
@@ -49,15 +47,12 @@ export function hasNonAgendaQuestion(text: string): boolean {
   return /\b(?:valor|preco|condominio|iptu|tamanho|metragem|area|suites?|quartos?|entrega|obra|pagamento|parcelas?|entrada|localizacao|onde fica|quanto custa)\b/.test(value);
 }
 
-export function appendAgendaMessageToReply(reply: string, agendaMessage: string, limit = 45): string {
+/** Preserve the answer and the confirmed scheduling step; do not truncate either. */
+export function appendAgendaMessageToReply(reply: string, agendaMessage: string): string {
   const trimmedReply = reply.trim();
   const withoutTrailingQuestion = trimmedReply.replace(/\s*[^.!?]*\?\s*$/s, '').trim();
-  const base = withoutTrailingQuestion || trimmedReply.replace(/\?/g, '.');
-  const combined = `${base} ${agendaMessage.trim()}`.replace(/\s+/g, ' ').trim();
-  if (naraReplyWordCount(combined) <= limit) return combined;
-
-  const agendaWords = naraReplyWordCount(agendaMessage);
-  const replyBudget = Math.max(1, limit - agendaWords);
-  const shortened = truncateNaraReplyToWordLimit(base, replyBudget);
-  return `${shortened} ${agendaMessage.trim()}`.replace(/\s+/g, ' ').trim();
+  const base = withoutTrailingQuestion || trimmedReply;
+  const agenda = agendaMessage.trim();
+  if (!agenda || base.includes(agenda)) return base;
+  return [base, agenda].filter(Boolean).join('\n\n');
 }

@@ -2,9 +2,11 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import {
   enforceNaraTriage,
+  enforceNaraReplyGuardrails,
   hasForbiddenScarcityClaim,
   naraReplyGuardrailViolations,
   naraReplyQuestionCount,
+  naraReplyWordCount,
 } from '../src/lib/ai.ts';
 import { naraReplyOpeningKey, postProcessNaraTurn } from '../src/lib/ai-v120.ts';
 import { aiCanReply, deriveHybridDecision } from '../src/lib/hybrid.ts';
@@ -37,8 +39,10 @@ function turn(overrides = {}) {
   };
 }
 
+const consultedAt = new Date().toISOString();
+const tableValidUntil = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 const generalCommercial = {
-  consulted_at: '2026-08-05T12:00:00Z', source_table: 'development_units',
+  consulted_at: consultedAt, source_table: 'development_units',
   calls: [{
     name: 'faixa_empreendimento', arguments: { empreendimento: 'Flow' },
     result: { empreendimento: 'Flow Aptos', valor_minimo: 900000, valor_maximo: 1050000, entrada_minima: 180000, qtd_disponiveis: 4 },
@@ -46,12 +50,12 @@ const generalCommercial = {
   source_text: '[faixa_empreendimento] empreendimento=Flow Aptos; valor_minimo=R$ 900.000,00; valor_maximo=R$ 1.050.000,00; entrada_minima=R$ 180.000,00; qtd_disponiveis=4',
 };
 const unitCommercial = {
-  consulted_at: '2026-08-05T12:00:00Z', source_table: 'development_units',
+  consulted_at: consultedAt, source_table: 'development_units',
   calls: [{
     name: 'consultar_apartamento', arguments: { empreendimento: 'Flow', unidade: '901' },
-    result: { empreendimento: 'Flow Aptos', unidade: '901', andar: 9, tipologia: '2 suítes', valor: 900000, entrada: 180000, parcela_media: 4500, quantidade_parcelas: 60, indice_correcao: 'CUB/SC', validade_tabela: '2026-08-31', referencia_tabela: '2026-08', preco_atualizado_em: '2026-08-05T10:00:00Z' },
+    result: { empreendimento: 'Flow Aptos', unidade: '901', andar: 9, tipologia: '2 suítes', valor: 900000, entrada: 180000, parcela_media: 12000, quantidade_parcelas: 60, indice_correcao: 'CUB/SC', validade_tabela: tableValidUntil, referencia_tabela: 'teste-vigente', preco_atualizado_em: consultedAt },
   }],
-  source_text: '[consultar_apartamento] empreendimento=Flow Aptos; unidade=901; andar=9; tipologia=2 suítes; valor=R$ 900.000,00; entrada=R$ 180.000,00; parcela_media=R$ 4.500,00; quantidade_parcelas=60; indice_correcao=CUB/SC; validade_tabela=2026-08-31',
+  source_text: `[consultar_apartamento] empreendimento=Flow Aptos; unidade=901; andar=9; tipologia=2 suítes; valor=R$ 900.000,00; entrada=R$ 180.000,00; parcela_media=R$ 12.000,00; quantidade_parcelas=60; indice_correcao=CUB/SC; validade_tabela=${tableValidUntil}`,
 };
 
 class Query {
@@ -138,19 +142,21 @@ await accept(5, 'Faixa sem intenção passa com origem comprovada', () => {
   assert.equal(result.handoff, false);
 });
 
-await accept(6, 'Apartamento específico sem intenção é bloqueado', () => {
-  const result = enforceNaraTriage(turn({ reply: 'O 901 custa R$ 900 mil, entrada de R$ 180 mil e parcela de R$ 4.500.', attachment_ids: ['tabela'] }), baseLead, [{ role: 'user', content: 'Qual o valor da unidade 901?' }], { commercial: unitCommercial });
-  assert.doesNotMatch(result.reply, /901|900 mil|180 mil|4\.500/);
-  assert.deepEqual(result.attachment_ids, []);
-  assert.ok(result.score <= 20);
+await accept(6, 'Unidade identificada recebe preço vigente sem exigir finalidade de uso', () => {
+  const result = enforceNaraTriage(turn({ reply: 'A unidade 901 do Flow custa R$ 900 mil.' }), baseLead, [{ role: 'user', content: 'Qual o valor da unidade 901 do Flow? Ainda estou pesquisando.' }], { commercial: unitCommercial });
+  assert.match(result.reply, /901/);
+  assert.match(result.reply, /R\$\s*(?:900 mil|900\.000,00)/);
+  assert.doesNotMatch(result.reply, /(?:morar|investir|uso|finalidade)[^?]*\?/i);
+  assert.equal(result.handoff, false);
+  assert.ok(result.score < 80, 'consulta de preço não comprova intenção de fechar');
 });
 
 await accept(7, 'Apartamento específico com intenção mantém condição completa', () => {
-  const reply = 'O 901, 9º andar, custa R$ 900 mil, entrada de R$ 180 mil e parcelas de R$ 4.500. Valor atual, corrigido pelo CUB/SC até a entrega.';
+  const reply = 'O 901, 9º andar, custa R$ 900 mil, entrada de R$ 180 mil e 60 parcelas de R$ 12.000. Valor atual, corrigido pelo CUB/SC até a entrega.';
   const result = enforceNaraTriage(turn({ reply, score: 88, classification: 'quente', handoff: true }), baseLead, [{ role: 'user', content: 'Quero comprar para morar. Qual o valor da unidade 901 do Flow?' }], { commercial: unitCommercial });
   assert.ok(result.reply.endsWith(reply));
   assert.match(result.reply, /entrada de R\$ 180 mil/);
-  assert.match(result.reply, /parcelas de R\$ 4\.500/);
+  assert.match(result.reply, /60 parcelas de R\$ 12\.000/);
   assert.match(result.reply, /CUB\/SC/);
 });
 
@@ -228,15 +234,27 @@ await accept(17, 'Janela de 24 horas bloqueia envio e registra atividade', async
   assert.match(source, /type: 'janela_whatsapp_fechada'/);
 });
 
-await accept(18, 'Nenhuma resposta passa de 45 palavras', () => {
-  const long = Array.from({ length: 46 }, (_, index) => `palavra${index}`).join(' ');
-  assert.ok(naraReplyGuardrailViolations(long).includes('mais_de_45_palavras'));
+await accept(18, 'Explicação completa é preservada mesmo com mais de 45 palavras', async () => {
+  const reply = 'Podemos comparar as plantas olhando primeiro para a sua rotina: como a família usa a sala, se precisa de um ambiente de trabalho e como prefere organizar a cozinha. Depois, vale observar a circulação entre os ambientes e a posição dos quartos. Assim a comparação fica ligada ao que realmente faz diferença para vocês, sem precisar decidir tudo agora.';
+  const history = [
+    { role: 'assistant', content: 'Olá! Sou a Nara, da Bossa.' },
+    { role: 'user', content: 'Como posso comparar as plantas para a minha família?' },
+  ];
+  assert.ok(naraReplyWordCount(reply) > 45);
+  assert.deepEqual(naraReplyGuardrailViolations(reply), []);
+  const result = await enforceNaraReplyGuardrails(turn({ reply }), baseLead, history, {});
+  assert.equal(result.reply, reply);
 });
 
-await accept(19, 'Nenhuma resposta contém duas perguntas', () => {
-  const reply = 'Você prefere o Flow? Quer que eu mande a planta?';
+await accept(19, 'Duas perguntas úteis não são uma violação automática', async () => {
+  const reply = 'Você prefere receber plantas ou fotos? Tem algum ambiente que quer conhecer primeiro?';
   assert.equal(naraReplyQuestionCount(reply), 2);
-  assert.ok(naraReplyGuardrailViolations(reply).includes('mais_de_uma_pergunta'));
+  assert.deepEqual(naraReplyGuardrailViolations(reply), []);
+  const result = await enforceNaraReplyGuardrails(turn({ reply }), baseLead, [
+    { role: 'assistant', content: 'Olá! Sou a Nara, da Bossa.' },
+    { role: 'user', content: 'Quero conhecer melhor o projeto.' },
+  ], {});
+  assert.equal(result.reply, reply);
 });
 
 await accept(20, 'Pergunta sobre robô oferece humano sem passagem prematura', () => {
