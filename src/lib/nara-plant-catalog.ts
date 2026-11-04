@@ -127,8 +127,10 @@ function areaInText(haystack: string, area: number): boolean {
   return new RegExp(`\\b(?:${whole}|${decimal.replace(',', '[,.]')})\\s*(?:m2|m²|m\\b|metros)`).test(haystack);
 }
 
-function typeInText(haystack: string, type: string): boolean {
-  return new RegExp(`\\btipos?\\s*0?${type}\\b|\\btipo\\s*0?\\d\\s*e\\s*0?${type}\\b`).test(haystack);
+function typeInText(haystack: string, type: string, duplex = false): boolean {
+  if (new RegExp(`\\btipos?\\s*0?${type}\\b|\\btipo\\s*0?\\d\\s*e\\s*0?${type}\\b`).test(haystack)) return true;
+  // Biblioteca do Alma: "Planta Duplex 01" / "Duplex 02.jpg", sem a palavra "tipo".
+  return duplex && new RegExp(`\\bduplex\\s*0?${type}\\b`).test(haystack);
 }
 
 /** Arquivos da biblioteca que correspondem a uma planta do catálogo. */
@@ -139,7 +141,7 @@ export function filesForPlant(entry: PlantEntry, files: AiFileOption[] = []): Ai
     if (!new RegExp(`\\b${entry.development}\\b`).test(haystack)) return false;
     const fileIsDuplex = /\bduplex\b/.test(haystack);
     if (fileIsDuplex !== entry.duplex) return false;
-    return entry.types.some((type) => typeInText(haystack, type)) || areaInText(haystack, entry.area);
+    return entry.types.some((type) => typeInText(haystack, type, entry.duplex)) || areaInText(haystack, entry.area);
   });
 }
 
@@ -153,11 +155,29 @@ export type PlantRequest = {
 export function resolvePlantRequest(development: PlantDevelopment, latest: string, previousAssistant = ''): PlantRequest {
   const own = PLANT_CATALOG.filter((entry) => entry.development === development);
   const standard = own.filter((entry) => !entry.duplex);
+  const extreme = (entries: PlantEntry[], value: string): PlantEntry[] => {
+    if (entries.length < 2) return entries;
+    if (/\b(maior|mais espacos[oa]|mas grande|largest|biggest)\b/.test(value)) {
+      const max = Math.max(...entries.map((entry) => entry.area));
+      return entries.filter((entry) => entry.area === max);
+    }
+    if (/\b(menor|mais barat[oa]|mais em conta|compacto|pequen[oa]|mas chico|smallest|cheapest)\b/.test(value)) {
+      const min = Math.min(...entries.map((entry) => entry.area));
+      return entries.filter((entry) => entry.area === min);
+    }
+    return entries;
+  };
   const fromText = (text: string): PlantEntry[] => {
     const value = normalize(text);
     const area = value.match(/\b(\d{2,3}(?:[.,]\d)?)\s*(?:m2|m²|m\b|metros)/)?.[1];
     if (area) {
       const target = Number(area.replace(',', '.'));
+      const matches = own.filter((entry) => Math.abs(entry.area - target) <= 1.5);
+      if (matches.length) return matches;
+    }
+    // "duplex de 145", "a de 103": número que bate com uma metragem do catálogo, mesmo sem "m²".
+    for (const number of value.match(/\b\d{2,3}(?:[.,]\d)?\b/g) ?? []) {
+      const target = Number(number.replace(',', '.'));
       const matches = own.filter((entry) => Math.abs(entry.area - target) <= 1.5);
       if (matches.length) return matches;
     }
@@ -171,9 +191,9 @@ export function resolvePlantRequest(development: PlantDevelopment, latest: strin
     if (suites) {
       const count = ({ dois: 2, duas: 2, tres: 3, quatro: 4 } as Record<string, number>)[suites] ?? Number(suites);
       const matches = own.filter((entry) => entry.suites === count);
-      if (matches.length) return /\bduplex\b/.test(value) ? matches.filter((entry) => entry.duplex) : matches;
+      if (matches.length) return extreme(/\bduplex\b/.test(value) ? matches.filter((entry) => entry.duplex) : matches, value);
     }
-    if (/\bduplex\b/.test(value)) return own.filter((entry) => entry.duplex);
+    if (/\bduplex\b/.test(value)) return extreme(own.filter((entry) => entry.duplex), value);
     if (/\b(menor|mais barat[oa]|mais em conta|compacto|pequen[oa]|mas chico|mas barato|smallest|cheapest)\b/.test(value)) {
       const min = Math.min(...standard.map((entry) => entry.area));
       return standard.filter((entry) => entry.area === min);

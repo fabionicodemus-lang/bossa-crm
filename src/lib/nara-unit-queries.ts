@@ -438,7 +438,7 @@ function filtersFromMessage(enterprise: string, message: string): NaraApartmentF
 }
 
 function hasCommercialSignal(message: string): boolean {
-  return /\b(precos?|prices?|precio|cuanto cuesta|how much|valor(?:es)?|quanto custa|quanto fica|quanto (?:ta|sai|e|esta|da)|(?:comeca|fica|sai|custa) (?:em |por )?quanto|cabe no bolso|valor total|o total|mais barat[oa]|faixa|a partir de|tabela|disponibilidade|disponive(?:l|is)|unidade|apto|apartamento|entrada|parcela|andar|suites?|quartos?|duplex|dolar|usd|euro|eur|moeda)\b/.test(normalizeText(message));
+  return /\b(precos?|prices?|precio|cuanto cuesta|how much|valor(?:es)?|quanto custa|quanto fica|quanto (?:ta|sai|e|esta|da)|(?:comeca|fica|sai|custa) (?:em |por )?quanto|cabe no bolso|valor total|o total|mais barat[oa]|orcamento|ate (?:r\$\s*)?\d|tenho (?:r\$\s*)?\d|faixa|a partir de|tabela|disponibilidade|disponive(?:l|is)|unidade|apto|apartamento|entrada|parcela|andar|suites?|quartos?|duplex|dolar|usd|euro|eur|moeda)\b/.test(normalizeText(message));
 }
 
 function asksForSpecificOptions(message: string): boolean {

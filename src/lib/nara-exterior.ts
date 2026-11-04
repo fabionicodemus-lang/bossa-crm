@@ -7,7 +7,7 @@ export type NaraFxQuote = {
   currency: 'USD' | 'EUR';
   rate_date: string;
   brl_per_currency: number;
-  source: 'BCB PTAX';
+  source: 'BCB PTAX' | 'Cotação comercial (AwesomeAPI)';
   source_timestamp: string | null;
 };
 
@@ -131,6 +131,23 @@ async function fetchBcbFx(currency: 'USD' | 'EUR', now = new Date()): Promise<Na
   };
 }
 
+async function fetchFallbackFx(currency: 'USD' | 'EUR'): Promise<NaraFxQuote | null> {
+  const response = await fetch(`https://economia.awesomeapi.com.br/json/last/${currency}-BRL`, { cache: 'no-store', signal: AbortSignal.timeout(6000) });
+  if (!response.ok) return null;
+  const payload = await response.json().catch(() => ({})) as Record<string, { bid?: string; create_date?: string }>;
+  const row = payload[`${currency}BRL`];
+  const rate = Number(row?.bid);
+  if (!Number.isFinite(rate) || rate <= 0) return null;
+  const timestamp = row?.create_date ? new Date(row.create_date.replace(' ', 'T') + '-03:00') : new Date();
+  return {
+    currency,
+    rate_date: localDateKey(timestamp),
+    brl_per_currency: rate,
+    source: 'Cotação comercial (AwesomeAPI)',
+    source_timestamp: row?.create_date ?? null,
+  };
+}
+
 async function getDailyFx(
   client: SupabaseClient,
   currency: 'USD' | 'EUR',
@@ -139,7 +156,9 @@ async function getDailyFx(
   const today = localDateKey(now);
   const cached = await loadCachedFx(client, currency, today);
   if (cached) return cached;
-  const fresh = await fetchBcbFx(currency, now);
+  // O serviço PTAX do Banco Central costuma recusar acessos de servidores fora do Brasil (a Vercel
+  // roda nos EUA). Se falhar, usa a cotação comercial do dia como reserva (rodada 4, 04/11/2026).
+  const fresh = await fetchBcbFx(currency, now).catch(() => null) ?? await fetchFallbackFx(currency).catch(() => null);
   if (!fresh) return null;
 
   const { error } = await client.from('nara_fx_daily').upsert({
@@ -226,7 +245,7 @@ export async function loadNaraForeignContext(
     '- Se o cliente pedir referência em moeda estrangeira, apresente-a apenas como conversão aproximada do dia e mantenha também o valor em reais.',
     ...campaignRules,
     fx
-      ? `- Cotação de referência do dia: 1 ${currency} = R$ ${fx.brl_per_currency.toFixed(4).replace('.', ',')} (BCB PTAX, referência aproximada).`
+      ? `- Cotação de referência do dia: 1 ${currency} = R$ ${fx.brl_per_currency.toFixed(4).replace('.', ',')} (${fx.source}, referência aproximada).`
       : `- A cotação ${currency} não pôde ser obtida agora. Não calcule nem estime conversão por conta própria.`,
     ...conversions.map((item) => `- ${item.development}: a partir de R$ ${Math.round(item.brl).toLocaleString('pt-BR')} ≈ ${currency} ${Math.round(item.foreign).toLocaleString('pt-BR')} pela PTAX de hoje.`),
     '- Nunca calcule câmbio mentalmente. Use somente as conversões prontas deste bloco.',

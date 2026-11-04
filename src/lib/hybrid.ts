@@ -1,5 +1,6 @@
 import type { AiTurn } from './ai';
 import type { Lead, LeadKind } from './types';
+import { explicitHumanRequest, purchaseIntent, refusesHandoff, withoutNegatedRequests } from './nara-conversation-signals';
 
 export type WorkflowStage =
   | 'novo_triagem' | 'qualificacao_ia' | 'nutricao_ativa' | 'passagem_pendente'
@@ -49,6 +50,15 @@ function currentOwnerMode(lead: Lead): OwnerMode {
 
 function explicitHighIntent(text: string, kind: LeadKind): string | null {
   const value = normalize(text);
+  if (kind !== 'corretor') {
+    // Nara (rodada 4, 04/11/2026): "não pedi reserva", "videochamada não", "sem ligação" não são pedidos;
+    // perguntar de entrada, condição ou do Soul é pedido de informação, que a Nara responde sozinha.
+    if (refusesHandoff(text) && !explicitHumanRequest(text) && !purchaseIntent(text)) return null;
+    const affirmative = withoutNegatedRequests(value);
+    if (explicitHumanRequest(text) || /\b(quero falar com (?:uma pessoa|alguem|consultor|corretor)|atendimento humano|me liga|pode me ligar|quero (?:uma )?(?:ligacao|videochamada)|pode ser (?:uma )?(?:ligacao|videochamada))\b/.test(affirmative)) return 'O contato pediu atendimento humano ou ligação.';
+    if (purchaseIntent(text) || /\b(proposta|reservar|fechar negocio|negociar|contraproposta|desconto)\b/.test(affirmative)) return 'O contato entrou em proposta, reserva ou negociação.';
+    return null;
+  }
   if (/\b(quero falar com (?:uma pessoa|alguem|consultor|corretor)|atendimento humano|me liga|pode me ligar|ligacao|videochamada)\b/.test(value)) return 'O contato pediu atendimento humano ou ligação.';
   if (kind === 'corretor') {
     // Plantão (Fábio, 20/10/2026): tabela, unidades, entrada, parcelas e desconto o Plantão responde sozinho.
@@ -58,8 +68,6 @@ function explicitHighIntent(text: string, kind: LeadKind): string | null {
     if (/\b(tenho (?:um |uma )?cliente|cliente ativo|estou com (?:um |uma )?cliente|meu cliente|minha cliente|visita com (?:o |a )?cliente|proposta do cliente|reserva para (?:o |a )?cliente)\b/.test(value)) return 'Corretor informou cliente ativo ou oportunidade concreta.';
     return null;
   }
-  if (/\b(proposta|reservar|reserva|fechar|negociar|contraproposta|desconto|condicao|entrada|reforco|parcelamento)\b/.test(value)) return 'O contato entrou em proposta, condição ou negociação.';
-  if (/\b(unidade disponivel|qual unidade|apartamento pronto|pronto para morar|soul)\b/.test(value)) return 'O contato pediu unidade específica ou demonstrou aderência à unidade pronta do Soul.';
   return null;
 }
 function proposalSignal(text: string) { return /\b(proposta|reservar|reserva|fechar|negociar|contraproposta|desconto|condicao|entrada|reforco|parcelamento)\b/.test(normalize(text)); }
