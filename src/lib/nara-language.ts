@@ -49,7 +49,7 @@ export function naraConversationLanguage(history: ChatMessage[]): NaraLanguage {
 }
 
 // \b não funciona depois de letra acentuada ("Olá"), por isso a fronteira é feita com lookahead Unicode.
-const introductionPattern = /^\s*[¡!]?\s*(?:hola|oi|olá|ola|hi|hello)(?![\p{L}\p{N}])[\s\S]{0,105}?\bbossa\b(?:\s+empreendimentos)?[.!]?\s*(?:\p{Extended_Pictographic}\uFE0F?\s*)*/iu;
+const introductionPattern = /^\s*[¡!]?\s*(?:hola|oi|olá|ola|hi|hello|bom dia|boa tarde|boa noite|good morning|good afternoon|good evening)(?![\p{L}\p{N}])[\s\S]{0,105}?\bbossa\b(?:\s+empreendimentos)?[.!]?\s*(?:\p{Extended_Pictographic}\uFE0F?\s*)*/iu;
 
 function comparableIntroduction(text: string): string {
   return norm(text).replace(/[\s\p{P}\p{S}]+/gu, '');

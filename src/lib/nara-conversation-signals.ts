@@ -116,7 +116,11 @@ export function explicitHumanRequest(text: string): boolean {
 
 /** Intenção real de compra nesta mensagem (não apenas pedido de informação). */
 export function purchaseIntent(text: string): boolean {
-  const value = withoutNegatedRequests(normalizeSignalText(text));
+  const value = withoutNegatedRequests(normalizeSignalText(text))
+    // "Não sei se quero comprar" is uncertainty, not a closing instruction.
+    // Remove only the negated clause so a later explicit "quero reservar" still counts.
+    .replace(/\b(?:ainda )?(?:nao sei se|nao tenho certeza se|nao decidi se|estou em duvida se)\s+(?:eu\s+)?(?:quero|vou|pretendo)\s+(?:comprar|fechar|reservar)\b/g, ' ')
+    .replace(/\b(?:nao|nem)\s+(?:quero|vou|pretendo)\s+(?:comprar|fechar|reservar)\b/g, ' ');
   // Visita não entra aqui: a Nara agenda pela agenda conectada, sem transferir.
   return /\b(quero (?:reservar|comprar|fechar|fazer (?:uma )?proposta)|vou (?:reservar|comprar|fechar)|reservar a unidade|fazer (?:uma )?proposta|quiero (?:reservar|comprar)|hacer una propuesta)\b/.test(value);
 }

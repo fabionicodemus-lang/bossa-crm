@@ -296,6 +296,7 @@ export default function AgentTrainingPage() {
   const [examples, setExamples] = useState<TrainingExample[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [scenario, setScenario] = useState('');
+  const [simulationModel, setSimulationModel] = useState<'gpt-6.1-sol' | 'gpt-6.1-terra'>('gpt-6.1-sol');
   const [input, setInput] = useState('');
   const [feedbackText, setFeedbackText] = useState('');
   const [feedbackMode, setFeedbackMode] = useState<FeedbackMode>('rewrite');
@@ -499,7 +500,7 @@ async function restorePromptVersion(version: PromptVersion) {
       const data = await readJson<{ reply: string; model: string; source: 'openai'; classification: string; score: number; stage: string; handoff: boolean; priority: string; word_count: number; price_consulted: boolean; returned_units: string[]; consultation_names: string[]; attachments: SimulationResult['attachments'] }>(await fetch('/api/ai-training', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ action: 'simulate', agent, messages: nextMessages, scenario, config: simulationConfig }),
+        body: JSON.stringify({ action: 'simulate', agent, messages: nextMessages, scenario, config: simulationConfig, ...(isNara ? { model_override: simulationModel } : {}) }),
       }));
       const diagnostics: SimulationResult = {
         model: data.model,
@@ -654,7 +655,7 @@ async function restorePromptVersion(version: PromptVersion) {
           <div className="wa-head">
             <div className="wa-icon">💬</div>
             <div><strong>Conversa de treino</strong><div className="faint" style={{ fontSize: 10 }}>{isNara ? 'Testa o conteúdo atual do prompt, mesmo antes de salvar.' : 'Você interpreta o corretor e avalia a resposta.'}</div></div>
-            <span className="connection-pill" title={ai?.configured ? `Fallback: ${ai.fallback_model || 'não configurado'} · Resumos: ${ai.light_model || 'não configurado'}` : undefined}>{ai?.configured ? `OPENAI · ${ai.model}` : 'SEM API'}</span>
+            <span className="connection-pill" title={isNara ? 'Comparação sem fallback. O modelo escolhido vale somente para o simulador.' : (ai?.configured ? 'Fallback: ' + (ai.fallback_model || 'não configurado') : undefined)}>{ai?.configured ? 'OPENAI · ' + (isNara ? simulationModel : ai.model) : 'SEM API'}</span>
           </div>
           <div className="messages">
             {messages.length === 0 && <div className="empty-state">Escolha um cenário para começar.</div>}
@@ -697,6 +698,22 @@ async function restorePromptVersion(version: PromptVersion) {
           </div>
         </section>
         <aside className="side-stack">
+          {isNara && <section className="card">
+            <div className="card-head"><h3>Comparar modelos</h3></div>
+            <div className="card-body">
+              <label className="form-label" htmlFor="nara-simulation-model">Modelo deste teste</label>
+              <select id="nara-simulation-model" className="select" value={simulationModel} onChange={(event) => {
+                setSimulationModel(event.target.value as 'gpt-6.1-sol' | 'gpt-6.1-terra');
+                setMessages([]);
+                setScenario('');
+                setLastSimulation(null);
+              }} disabled={sending}>
+                <option value="gpt-6.1-sol">Sol 6.1</option>
+                <option value="gpt-6.1-terra">Terra 6.1</option>
+              </select>
+              <p className="faint" style={{ fontSize: 11, marginTop: 8 }}>A escolha vale só para o simulador. O atendimento real mantém a configuração atual.</p>
+            </div>
+          </section>}
           <section className="card"><div className="card-head"><h3>Cenários de teste</h3></div><div className="card-body grid">
             {scenarios.map((item) => <button key={item.key} className={`btn ${scenario === item.key ? 'btn-secondary' : 'btn-ghost'} btn-block`} onClick={() => startScenario(item.key)} disabled={sending}>{item.name}</button>)}
           </div></section>

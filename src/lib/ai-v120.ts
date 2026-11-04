@@ -1,6 +1,6 @@
 import { enforceNaraReplyGuardrails, ensureFirstTurnIntroduction, generateAiTurn as generateCoreAiTurn } from './ai';
 import { naraConversationLanguage, requestedNaraLanguage } from './nara-language';
-import { isAssistedSaleSignal, isBrokerRoutingSignal, isPostSaleRoutingSignal } from './nara-contact-routing';
+import { isAssistedSaleSignal, isBrokerRoutingSignal, isPostSaleRoutingSignal, isSupplierRoutingSignal } from './nara-contact-routing';
 import type { AiTrainingContext, AiTurn } from './ai';
 import type { Lead } from './types';
 import type { NaraUnitOffer } from './nara-unit-queries';
@@ -60,7 +60,8 @@ function buyerContextIsClear(history: ChatMessage[]): boolean {
 }
 
 function asksHuman(text: string): boolean {
-  const value = normalizeText(text);
+  if (refusesHandoff(text) && !explicitHumanRequest(text)) return false;
+  const value = withoutNegatedRequests(normalizeText(text));
   return /\b(falar com (?:uma pessoa|alguem|um corretor|corretor|atendente)|quero um corretor|quero falar com gente|atendimento humano|me liga|pode me ligar|hablar con (?:una persona|alguien|un corredor|un asesor|un vendedor)|quiero (?:hablar con|un) (?:asesor|corredor|vendedor|persona)|atencion humana|pueden llamarme|me pueden llamar)\b/.test(value);
 }
 
@@ -233,11 +234,12 @@ function ensureFirstReplyIdentity(reply: string, history: ChatMessage[]): string
 }
 
 /** Corretor, pós-venda ou venda assistida: atendimento sai da Nara e a passagem não pode ser desfeita. */
-function outsideBuyerDestination(history: ChatMessage[]): 'plantao' | 'pos_venda' | 'venda_assistida' | null {
+function outsideBuyerDestination(history: ChatMessage[]): 'plantao' | 'pos_venda' | 'venda_assistida' | 'suprimentos' | null {
   const messages = history.filter((item) => item.role === 'user').map((item) => item.content);
   if (messages.some(isAssistedSaleSignal)) return 'venda_assistida';
   if (messages.some(isBrokerRoutingSignal)) return 'plantao';
   if (messages.some(isPostSaleRoutingSignal)) return 'pos_venda';
+  if (messages.some(isSupplierRoutingSignal)) return 'suprimentos';
   return null;
 }
 
@@ -558,6 +560,15 @@ export function postProcessNaraTurn(
   const spanish = isSpanishLead(history);
   const isLanguageRequest = Boolean(requestedNaraLanguage(latestRaw));
   if (isLanguageRequest) return finishTurn(turn, history);
+  const riskObjection = /\b(?:comprar na planta|compra na planta|construtoras? quebrando|construtora quebrar|risco(?:s)? de comprar|arriscad[oa] demais)\b/.test(latestNormalized);
+  const riskAnswered = /\b(?:riscos?|arriscad|patrimonio de afetacao|entrega|entregou|jazz|soul|obras?|construtora)\b/.test(normalizeText(turn.reply));
+  if (riskObjection && !riskAnswered) {
+    turn.reply = 'É uma preocupação legítima. A Bossa entregou o Jazz em 2019, antes do prazo, e o Soul em dezembro de 2023. O Flow e o Alma ainda estão em desenvolvimento. Esse histórico ajuda a avaliar a construtora, mas não elimina os riscos de comprar na planta nem garante entregas futuras.';
+    turn.handoff = false;
+    turn.summary = 'Contato pediu informações sobre o risco de comprar na planta.';
+    turn.next_action = 'Responder com fatos verificáveis sobre entregas, obras e garantias; não desviar para preço.';
+    return finishTurn(turn, history);
+  }
   const nonApartmentValue = /\b(?:valor|preco|precio|quanto custa|cuanto cuesta|how much)\b.{0,28}\b(?:condominio|iptu|aluguel|taxa|laudemio|itbi|escritura|entrada|parcelas?|reforcos?|chaves)\b/.test(latestNormalized);
   const asksPriceNow = !nonApartmentValue && asksApartmentPrice(latestNormalized);
   const exactUsCampaignSeed = /^ola[!.]?\s+moro nos (?:eua|estados unidos|usa) e quero conhecer os imoveis da bossa em sc\.?$/.test(latestNormalized);
@@ -780,7 +791,7 @@ export function postProcessNaraTurn(
     const topic = topicFromQuestion(latestRaw);
     const alreadyInHandoff = priorMessages.some((message) => /ta[ií]s.*comercial|chamando a ta[ií]s|llamando a ta[ií]s/.test(normalizeText(message)));
     const destination = outsideBuyerDestination(history);
-    const closing = /^(ok|valeu|obrigad[oa]|blz|beleza|show|certo|perfeito|tchau|gracias|thanks)/.test(latest);
+    const closing = /^(ok|valeu|obrigad[oa]|blz|beleza|show|certo|perfeito|tchau|gracias|thanks)\b/.test(latest);
     turn.reply = destination === 'plantao'
       ? closing ? 'Por nada! O Plantão da Bossa já foi avisado e continua com você por aqui.' : 'Isso o Plantão da Bossa responde para você: tabela, comissão e unidades. Já avisei a equipe e eles te chamam por aqui.'
       : destination === 'pos_venda' || destination === 'venda_assistida'

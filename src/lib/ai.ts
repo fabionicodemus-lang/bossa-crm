@@ -3,7 +3,7 @@ import { buildNaraConversationInstructions, NARA_CONVERSATION_POLICY, NARA_COMME
 import { protectNaraCommercialReply, naraReplyNeedsCommercialProtection } from './nara-commercial-guard';
 import { collapseRepeatedNaraIntroductions, hasNaraIntroduction, naraConversationLanguage, naraLanguageSwitchReply, removeRepeatedNaraIntroduction, requestedNaraLanguage } from './nara-language';
 import { aiModelRoutingSettings, pricingFor, selectAiModels, supportsExplicitCaching, type AiWorkload } from './openai-model-routing';
-import { isAssistedSaleSignal, isBrokerRoutingSignal, isPostSaleRoutingSignal } from './nara-contact-routing';
+import { isAssistedSaleSignal, isBrokerRoutingSignal, isPostSaleRoutingSignal, isSupplierRoutingSignal } from './nara-contact-routing';
 import type { NaraDynamicTurnContext } from './nara-dynamic-context';
 import type { NaraForeignContext } from './nara-exterior';
 import type { NaraOperationalContext } from './nara-operations';
@@ -45,6 +45,8 @@ export interface AiTrainingContext {
   foreign?: NaraForeignContext | null;
   operational?: NaraOperationalContext | null;
   supervisor_instruction?: string | null;
+  /** Allowed only by the authenticated training simulator; never set by WhatsApp. */
+  model_override?: 'gpt-6.1-sol' | 'gpt-6.1-terra';
 }
 
 export interface AiUsageRecord {
@@ -380,7 +382,7 @@ const NARA_PRODUCT_FACTS = `\n\nFATOS CONFIRMADOS DOS EMPREENDIMENTOS (USE COM S
 - Soul Residence: em Itapema, pronto para morar (entregue em dezembro de 2023, no prazo); apartamentos de 2 suítes com cerca de 70 m².
 - Flow Aptos: em Balneário Perequê, Porto Belo, a 800 m do mar; 57 apartamentos; entrega prevista para novembro de 2027. Apartamentos de 2 suítes com 62 m² (Tipos 2 e 3) e 73 m² (Tipo 1, com lavabo); duplex de 3 suítes com 93 m² e 117,7 m², living com pé-direito duplo; lazer em dois pavimentos e rooftop. Parcelamento direto pode chegar a 60 vezes.
 - Alma Seahouses: em Balneário Perequê, Porto Belo, a 300 m do mar (cerca de 4 minutos a pé; não é frente mar); 30 andares, só 2 apartamentos por andar; entrega prevista para julho de 2030. Apartamentos de 3 suítes com 103 m² (Tipo 02) e 114 m² (Tipo 01), com living integrado à cozinha, lavabo e churrasqueira a carvão; duplex de 4 suítes com 145 m² e 168 m²; todas as plantas com 2 vagas. Parcelamento direto pode chegar a 100 vezes.
-- A Bossa é de 2017 e entregou todos os projetos que lançou: Jazz (2019, antes do prazo) e Soul (2023, no prazo).
+- A Bossa atua desde 2017 e já entregou Jazz (2019, antes do prazo) e Soul (dezembro de 2023, no prazo). Flow e Alma ainda não foram entregues: estão em desenvolvimento, com entregas previstas para 2027 e 2030. Não diga que todos os projetos lançados já foram entregues.
 - Se perguntarem algo que não está aqui nem nas consultas (ex.: vagas do Soul, trajeto plano), diga com naturalidade que vai confirmar com o time, sem inventar.`;
 
 const NARA_HUMAN_CONVERSATION_RULES = `\n\nCONVERSA HUMANA — REGRAS FIXAS (VALEM ACIMA DO PROMPT FINAL QUANDO HOUVER CONFLITO):
@@ -394,6 +396,9 @@ const NARA_HUMAN_CONVERSATION_RULES = `\n\nCONVERSA HUMANA — REGRAS FIXAS (VAL
 - Mantenha o empreendimento em discussão: se a conversa passou para o Soul, responda sobre o Soul, não volte ao Alma.
 - Só chame o contato pelo nome se ele disser claramente como se chama. Palavras como "robô", "pessoa" ou o nome de uma cidade nunca são nome.
 - Se perguntarem se você é robô ou IA: diga de forma leve que é a Nara, assistente virtual da Bossa, e siga respondendo a dúvida.
+- Se houver objeção sobre risco de comprar na planta, acolha a preocupação e explique fatos verificáveis: entregas do Jazz e Soul, andamento do Flow e do Alma e patrimônio de afetação quando aplicável. Histórico não elimina riscos nem garante entrega futura; nunca responda com um aviso de preço.
+- Quando o cliente perguntar por entrada física do apartamento (porta, hall, circulação, sala), não trate como entrada financeira. Se ele pedir condições alternativas de pagamento, responda que precisam de análise; não troque isso por uma lista de unidades.
+- Ao apresentar plantas do Flow, diga que existem dois tipos com 62 m² (tipos 2 e 3); evite repetir a mesma metragem de forma confusa.
 - Apresente o preço e o plano completos conforme a consulta comercial: entrada, mensais, reforços, chaves, índices e juros precisam corresponder à unidade. Não presuma que o plano está completo nem generalize um indexador entre empreendimentos ou contratos.`;
 
 /**
@@ -491,7 +496,7 @@ function assistantMessages(history: ChatMessage[]): string[] {
   return history.filter((item) => item.role === 'assistant').map((item) => item.content);
 }
 
-type OutsideBuyerDestination = 'plantao' | 'pos_venda' | 'equipe' | 'venda_assistida';
+type OutsideBuyerDestination = 'plantao' | 'pos_venda' | 'suprimentos' | 'equipe' | 'venda_assistida';
 
 function routingText(value: string): string {
   let normalized = normalizeText(value);
@@ -515,7 +520,8 @@ function outsideBuyerDestination(history: ChatMessage[]): OutsideBuyerDestinatio
   if (userMessages.some(isAssistedSaleSignal)) return 'venda_assistida';
   if (userMessages.some(isBrokerRoutingSignal)) return 'plantao';
   if (userMessages.some(isPostSaleRoutingSignal)) return 'pos_venda';
-  if (/(fornecedor|prestador|curriculo|vaga|trabalhar com voces|cobranca|imprensa)/.test(fullHistory)) return 'equipe';
+  if (userMessages.some(isSupplierRoutingSignal)) return 'suprimentos';
+  if (/\b(fornecedor|prestador|curriculo|vaga|trabalhar com voces|cobranca|imprensa)\b/.test(fullHistory)) return 'equipe';
 
   return null;
 }
@@ -541,7 +547,22 @@ function outsideBuyerReply(history: ChatMessage[], context: AiTrainingContext): 
     return 'Vou direcionar você para o Plantão da Bossa, que atende corretores parceiros.';
   }
   if (destination === 'pos_venda') {
-    return 'Vou encaminhar seu pedido de pós-venda ou obra para a Cíntia, no Canal 2 do Plantão. Pode me dizer em uma frase o assunto e a unidade?';
+    const requests = history.filter((item) => item.role === 'user').map((item) => normalizeText(item.content)).join(' ');
+    const unit = requests.match(/\b(?:unidade|apto|apartamento)\s*(?:n(?:umero)?\s*)?(\d{2,4})\b/)?.[1] ?? '';
+    const boleto = /\b(?:boleto|segunda via|emitir|vencimento)\b/.test(requests);
+    const topic = boleto ? 'segunda via do boleto' : /\b(?:garantia|infiltracao|vazamento|assistencia tecnica)\b/.test(requests)
+      ? 'assistência técnica' : '';
+    const answer = boleto ? 'Eu não consigo emitir o boleto diretamente por aqui. ' : '';
+    if (topic && unit) return answer + 'O pedido de ' + topic + ' da unidade ' + unit + ' será direcionado à Cíntia, do pós-venda.';
+    if (topic) return answer + 'Vou direcionar seu pedido de ' + topic + ' à Cíntia, do pós-venda. Qual é o número da sua unidade?';
+    if (unit) return 'Vou direcionar seu pedido à Cíntia, do pós-venda, para a unidade ' + unit + '. Qual assunto você precisa resolver?';
+    return 'Vou direcionar você à Cíntia, do pós-venda. Qual é o assunto e o número da sua unidade?';
+  }
+  if (destination === 'suprimentos') {
+    const phone = runtimeVariable(context, 'supplies_phone');
+    return phone
+      ? 'Esse assunto é do setor de suprimentos da Bossa, que atende pelo ' + phone + '. Vou direcionar sua apresentação para o setor responsável.'
+      : 'Esse assunto é do setor de suprimentos da Bossa. Vou direcionar seu contato para a equipe responsável; pode enviar o nome da empresa e a apresentação por aqui.';
   }
   const phone = /\b(fornecedor|prestador|suprimento)\b/.test(current)
     ? runtimeVariable(context, 'supplies_phone')
@@ -559,6 +580,7 @@ function outsideBuyerSummary(history: ChatMessage[]): string {
   if (destination === 'plantao') return 'Contato se identificou como corretor ou imobiliária e deve continuar pelo Plantão.';
   if (destination === 'venda_assistida') return 'Possível comprador informou que veio indicado por corretor ou imobiliária; a venda deve preservar a parceria.';
   if (destination === 'pos_venda') return 'Contato indicou que já é cliente e precisa de atendimento de pós-venda.';
+  if (destination === 'suprimentos') return 'Fornecedor deseja apresentar serviços ou produtos ao setor de suprimentos.';
   return 'Contato precisa de atendimento da equipe responsável fora da esteira de compradores.';
 }
 
@@ -567,6 +589,7 @@ function outsideBuyerNextAction(history: ChatMessage[]): string {
   if (destination === 'plantao') return 'Continuar o atendimento pelo Plantão no pipeline de corretores.';
   if (destination === 'venda_assistida') return 'Registrar o corretor e a imobiliária de origem e encaminhar ao comercial sem conduzir venda direta.';
   if (destination === 'pos_venda') return 'Encaminhar para o pós-venda e identificar o assunto informado pelo cliente.';
+  if (destination === 'suprimentos') return 'Encaminhar ao setor de suprimentos e preservar a apresentação fornecida.';
   return 'Encaminhar para a equipe humana responsável e identificar o assunto solicitado.';
 }
 
@@ -855,6 +878,16 @@ export async function enforceNaraReplyGuardrails(
         ? 'Availability needs a current confirmation. I can help with the project information.'
         : 'A disponibilidade precisa de confirmação atual. Posso te ajudar com as informações do empreendimento.';
   }
+  // A model cannot turn two delivered projects into a claim that every launch is finished.
+  turn.reply = turn.reply.replace(
+    /\b(?:entregou|concluiu)\s+todos\s+os\s+(?:projetos|empreendimentos)\s+que\s+lan[cç]ou\s*:?/giu,
+    'já entregou Jazz e Soul; Flow e Alma seguem em andamento.',
+  );
+  // Both 62 m² Flow types are real; repeating the number as if it were an unfinished sentence is not.
+  turn.reply = turn.reply.replace(
+    /\bA de 62 m² e 62 m² não está comigo agora/giu,
+    'As plantas dos tipos 2 e 3, ambas de 62 m², não estão comigo agora',
+  );
   if (!turn.reply.trim()) throw new NaraReplyGuardrailError(['resposta_vazia']);
   if (lead.kind === 'cliente') turn.reply = ensureFirstTurnIntroduction(turn.reply, history, context);
   return turn;
@@ -1121,8 +1154,13 @@ async function runRequest(options: RequestOptions): Promise<RequestResult> {
 async function runWithRetryAndFallback(
   buildOptions: (model: string, fallbackUsed: boolean) => RequestOptions,
   workload: AiWorkload = 'conversation',
+  modelOverride?: AiTrainingContext['model_override'],
 ): Promise<RequestResult> {
-  const { primary, fallback } = selectAiModels(openAiSettings(), workload);
+  const configured = selectAiModels(openAiSettings(), workload);
+  const primary = modelOverride || configured.primary;
+  // Model comparisons must never silently fall back to Luna (or to the other
+  // candidate), otherwise an apparently successful A/B run is not reproducible.
+  const fallback = modelOverride ? null : configured.fallback;
   const errors: string[] = [];
   const primaryOptions = buildOptions(primary, false);
 
@@ -1203,7 +1241,7 @@ export async function generateAiTurn(
       fallbackUsed,
       promptCacheKey: explicitCache ? `bossa:${lead.organization_id}:${lead.kind}:v1` : undefined,
     };
-  });
+  }, 'conversation', context.model_override);
   usageRecords.push(result.usage);
 
   try {

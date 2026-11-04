@@ -104,7 +104,7 @@ function assertRequestContract(request) {
   assert.equal(Object.hasOwn(request, 'top_p'), false);
 }
 
-async function runScenario({ history, context = {}, output, failPrimary = false }) {
+async function runScenario({ history, context = {}, output, failPrimary = false, modelOverride = null }) {
   const previousFetch = globalThis.fetch;
   const requests = [];
   globalThis.fetch = async (url, init) => {
@@ -124,7 +124,9 @@ async function runScenario({ history, context = {}, output, failPrimary = false 
     return Response.json(responseEnvelope(body.model, output, requests.length));
   };
   try {
-    const result = await generateAiTurn(lead, history, context);
+    const result = await generateAiTurn(lead, history, {
+      ...context, ...(modelOverride ? { model_override: modelOverride } : {}),
+    });
     assert.ok(result, 'the real wrapper must return a turn');
     // A final enforcement pass is idempotent and does not generate another reply.
     const finalPass = await enforceNaraReplyGuardrails(structuredClone(result), lead, history, context);
@@ -135,8 +137,8 @@ async function runScenario({ history, context = {}, output, failPrimary = false 
     assert.equal(counts.length, generations.length);
     if (!failPrimary) {
       assert.equal(generations.length, 1, 'post-processing must not ask a model to shorten/rewrite the answer');
-      assert.equal(generations[0].body.model, 'gpt-6.1-sol');
-      assert.equal(result.model_used, 'gpt-6.1-sol');
+      assert.equal(generations[0].body.model, modelOverride || 'gpt-6.1-sol');
+      assert.equal(result.model_used, modelOverride || 'gpt-6.1-sol');
       assert.equal(result.usage_records?.length, 1);
       assert.equal(result.usage_records[0].fallback_used, false);
     }
@@ -183,6 +185,17 @@ try {
     });
     assert.equal(result.reply, reply);
     assert.equal(naraReplyQuestionCount(result.reply), 2);
+  });
+
+  await accept('Comparação A/B permite Terra só no simulador, sem alterar o padrão Sol', async () => {
+    const { result, generations } = await runScenario({
+      history: conversation('Me mostre o Flow para minha família.'),
+      modelOverride: 'gpt-6.1-terra',
+      output: aiTurn('O Flow tem opções de duas e três suítes. Posso explicar as plantas para sua família.'),
+    });
+    assert.equal(result.model_used,'gpt-6.1-terra');
+    assert.deepEqual(generations.map((request)=>request.body.model),['gpt-6.1-terra']);
+    assert.equal(openAiSettings().primary,'gpt-6.1-sol');
   });
 
   await accept('Orçamento de R$ 900 mil não autoriza o preço da unidade', async () => {
