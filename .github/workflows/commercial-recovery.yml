@@ -1,0 +1,47 @@
+name: Validate durable commercial recovery
+on:
+  push:
+    branches: [main]
+    paths-ignore: ['site/**']
+  pull_request:
+    paths-ignore: ['site/**']
+permissions:
+  contents: read
+jobs:
+  recovery:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: isolated-ci-only
+          POSTGRES_DB: commercial_recovery_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres -d commercial_recovery_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: 5432
+      PGUSER: postgres
+      PGPASSWORD: isolated-ci-only
+      PGDATABASE: commercial_recovery_test
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - name: Test durable command recovery with nine migrations
+        run: node scripts/commercial/check-recovery.mjs
+      - name: Test recovery endpoint without real providers
+        run: node --experimental-strip-types --loader ./scripts/recovery/loader.mjs scripts/recovery/check-route.mjs
+      - name: Ensure PostgreSQL client
+        run: command -v psql || (sudo apt-get update -qq && sudo apt-get install -y postgresql-client)
+      - name: Test recovery versus abandonment in real independent transactions
+        run: node scripts/commercial/check-recovery-concurrency.mjs

@@ -1,3 +1,4 @@
+import { manualPilot } from '@/lib/homologation/manual-pilot';
 import { PageTopbar } from '@/components/PageTopbar';
 import {
   DevelopmentsManager,
@@ -18,14 +19,14 @@ export default async function DevelopmentsPage() {
   const context = await getCurrentContext();
   const supabase = await createClient();
   const organizationId = context!.organization.id;
-  const canEdit = context!.role !== 'viewer';
+  const canEdit = !manualPilot() && context!.role !== 'viewer';
 
   const [developmentsResult, typologiesResult, unitsResult, filesResult] = await Promise.all([
     supabase.from('developments').select('*').eq('organization_id', organizationId).order('name'),
     supabase.from('development_typologies').select('*').eq('organization_id', organizationId).order('code'),
     supabase.from('development_units').select('*').eq('organization_id', organizationId)
       .order('floor', { ascending: false, nullsFirst: false }).order('unit_code'),
-    supabase.from('development_files').select('*').eq('organization_id', organizationId)
+    manualPilot() ? Promise.resolve({data:[],error:null}) : supabase.from('development_files').select('*').eq('organization_id', organizationId)
       .order('created_at', { ascending: false }),
   ]);
 
@@ -48,11 +49,11 @@ export default async function DevelopmentsPage() {
             initialUnits={unitRows}
             initialFiles={(filesResult.data ?? []) as DevelopmentFile[]}
           />
-          <DevelopmentLogosPanel
+          {!manualPilot() && <DevelopmentLogosPanel
             organizationId={organizationId}
             canEdit={canEdit}
             initialDevelopments={developmentRows as DevelopmentLogoItem[]}
-          />
+          />}
           <div className="page-content" style={{ paddingBottom: 0 }}>
             <SalesTablePrintPanel
               developments={developmentRows as SalesTablePrintDevelopment[]}

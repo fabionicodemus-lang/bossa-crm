@@ -1,3 +1,4 @@
+import { manualPilot } from '@/lib/homologation/manual-pilot';
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { isAiStage, isHumanStage, stageLabel, stagesFor } from '@/lib/stages';
@@ -7,6 +8,7 @@ type BulkLead = {
   id: string;
   opt_out: boolean | null;
   automation_paused: boolean | null;
+  ai_enabled: boolean | null;
 };
 
 const CHUNK_SIZE = 400;
@@ -29,7 +31,7 @@ export async function POST(request: Request) {
     .limit(1)
     .maybeSingle();
 
-  if (!membership || membership.role === 'viewer') {
+  if (!membership || !['admin','comercial'].includes(membership.role)) {
     return NextResponse.json({ error: 'Você não possui permissão para movimentar leads em massa.' }, { status: 403 });
   }
 
@@ -41,6 +43,7 @@ export async function POST(request: Request) {
   const kind = String(body.kind ?? '') as LeadKind;
   const fromStage = String(body.fromStage ?? '');
   const toStage = String(body.toStage ?? '');
+  if (manualPilot() && ['qualificacao_ia','passagem_pendente'].includes(toStage)) return NextResponse.json({error:'Etapa indisponível no piloto manual.'},{status:400});
 
   if (!['cliente', 'corretor'].includes(kind)) {
     return NextResponse.json({ error: 'Pipeline inválida.' }, { status: 400 });
@@ -58,7 +61,7 @@ export async function POST(request: Request) {
 
   const { data, error: findError } = await supabase
     .from('leads')
-    .select('id,opt_out,automation_paused')
+    .select('id,opt_out,automation_paused,ai_enabled')
     .eq('organization_id', membership.organization_id)
     .eq('kind', kind)
     .eq('stage', fromStage)
@@ -68,9 +71,10 @@ export async function POST(request: Request) {
   if (findError) return NextResponse.json({ error: findError.message }, { status: 400 });
   const leads = (data ?? []) as BulkLead[];
   if (!leads.length) return NextResponse.json({ updated: 0 });
+  if (manualPilot() && leads.some(lead=>lead.automation_paused!==true||lead.ai_enabled!==false)) return NextResponse.json({error:'Há contatos fora do estado manual seguro. Nenhuma movimentação foi iniciada.'},{status:409});
 
   const now = new Date().toISOString();
-  const aiStage = isAiStage(toStage);
+  const aiStage = !manualPilot() && isAiStage(toStage);
   const humanStage = isHumanStage(toStage);
   const terminalStage = ['fechado_ganho', 'encerrado'].includes(toStage);
 
@@ -78,7 +82,7 @@ export async function POST(request: Request) {
     const ids = batch.map((lead) => lead.id);
     const commonUpdate: Record<string, unknown> = {
       stage: toStage,
-      owner_mode: aiStage ? 'ai' : humanStage ? 'human' : 'none',
+      owner_mode: manualPilot() && !terminalStage ? 'human' : aiStage ? 'ai' : humanStage ? 'human' : 'none',
       ai_enabled: false,
       updated_at: now,
     };
@@ -92,18 +96,25 @@ export async function POST(request: Request) {
       commonUpdate.next_action = null;
       commonUpdate.next_action_type = null;
       commonUpdate.next_action_due_at = null;
-    } else if (toStage === 'futuro') {
+    } else if (toStage === 'futuro' && !manualPilot()) {
       commonUpdate.next_action = 'Aguardar inclusão em campanha de reativação comercial.';
       commonUpdate.next_action_type = 'campanha_reativacao';
       commonUpdate.next_action_due_at = null;
     }
 
-    const { error: updateError } = await supabase
+    let updateQuery = supabase
       .from('leads')
       .update(commonUpdate)
       .eq('organization_id', membership.organization_id)
       .in('id', ids);
+    if (manualPilot()) updateQuery = updateQuery.eq('stage',fromStage).eq('automation_paused',true).eq('ai_enabled',false);
+    const {data:changed,error:updateError} = manualPilot() ? await updateQuery.select('id') : await updateQuery;
     if (updateError) return NextResponse.json({ error: updateError.message }, { status: 400 });
+    // Each PATCH and the existing stage-history trigger form one transaction.
+    if (manualPilot()) {
+      if (changed?.length!==ids.length) return NextResponse.json({error:'O pipeline mudou durante a movimentação. Atualize a lista e confira as etapas já registradas.'},{status:409});
+      continue;
+    }
 
     if (aiStage) {
       const enabledIds = batch.filter((lead) => !lead.opt_out && !lead.automation_paused).map((lead) => lead.id);

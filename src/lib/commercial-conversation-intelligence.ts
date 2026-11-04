@@ -600,7 +600,7 @@ async function saveConversationSummary(args: {
     last_source_message_id: args.source.id,
     proposal_id: args.proposalId,
     proposal_number: args.proposalNumber,
-    proposal_detected: args.analysis.bossa_proposal_detected,
+    proposal_detected: Boolean(args.proposalId) || args.analysis.bossa_proposal_detected,
     proposal_confidence: args.analysis.proposal_confidence,
   };
   const payload = {
@@ -638,26 +638,6 @@ async function saveProposal(args: {
     totalPrice: args.analysis.total_price,
     date: proposalDate,
   });
-
-  const { data: recentProposals } = await args.admin
-    .from('proposals')
-    .select('id,proposal_number,snapshot,version,development_id,unit_id,proposed_price')
-    .eq('lead_id', args.lead.id)
-    .order('updated_at', { ascending: false })
-    .limit(30);
-
-  const recovered = (recentProposals ?? []).find((proposal) => {
-    const snapshot = asRecord(proposal.snapshot);
-    return snapshot?.source === 'broker_performance'
-      && proposal.development_id === args.development.id
-      && Number(proposal.proposed_price) === args.analysis.total_price
-      && (args.unit ? proposal.unit_id === args.unit.id : Boolean(args.analysis.client_name) && normalize(String(snapshot.client_name ?? '')) === normalize(args.analysis.client_name));
-  });
-  if (recovered) return { proposalId: recovered.id, proposalNumber: Number(recovered.proposal_number) };
-  const existing = (recentProposals ?? []).find((proposal) =>
-    asRecord(proposal.snapshot)?.auto_signature === signature,
-  ) ?? null;
-
   const listPrice = numberValue(args.unit?.list_price);
   const total = args.analysis.total_price;
   const paymentPlan = {
@@ -671,8 +651,10 @@ async function saveProposal(args: {
     post_keys_adjustment: args.analysis.post_keys_adjustment || null,
     source: 'whatsapp_commercial_intelligence',
   };
+  const sourceMessageIds = [...new Set([...args.messages.map((message) => message.id), args.source.id])].slice(-45);
   const snapshot = {
-    workflow_status: 'negociacao',
+    // A detection is a draft for review, never proof that Bossa sent an offer.
+    workflow_status: 'rascunho',
     origin: args.lead.kind,
     lead_name: args.lead.name,
     client_name: args.analysis.client_name || (args.lead.kind === 'corretor' ? `Cliente do ${args.lead.name}` : args.lead.name),
@@ -686,146 +668,52 @@ async function saveProposal(args: {
     auto_confidence: args.analysis.proposal_confidence,
     auto_signature: signature,
     proposal_direction: args.analysis.proposal_direction,
-    source_message_ids: args.messages.map((message) => message.id),
+    source_message_ids: sourceMessageIds,
+    source_message_at: args.source.created_at,
     source: 'whatsapp_commercial_intelligence',
   };
-  const proposalPayload = {
-    organization_id: args.lead.organization_id,
-    development_id: args.development.id,
-    unit_id: args.unit?.id ?? null,
-    lead_id: args.lead.id,
-    status: 'enviada',
-    list_price: listPrice,
-    proposed_price: total,
-    discount_amount: listPrice > 0 ? listPrice - total : 0,
-    notes: args.analysis.notes || 'Proposta detectada automaticamente na conversa do WhatsApp.',
-    payment_plan: paymentPlan,
-    snapshot,
-  };
-
-  let proposalId: string;
-  let proposalNumber: number;
-  if (existing?.id) {
-    const { data, error } = await args.admin
-      .from('proposals')
-      .update({ ...proposalPayload, version: Number(existing.version || 1) + 1 })
-      .eq('id', existing.id)
-      .select('id,proposal_number')
-      .single();
-    if (error) throw error;
-    proposalId = data.id;
-    proposalNumber = Number(data.proposal_number);
-  } else {
-    const { data, error } = await args.admin
-      .from('proposals')
-      .insert(proposalPayload)
-      .select('id,proposal_number')
-      .single();
-    if (error) throw error;
-    proposalId = data.id;
-    proposalNumber = Number(data.proposal_number);
-  }
-
-  await args.admin.from('proposal_payment_items').delete().eq('proposal_id', proposalId);
   const items: Array<Record<string, unknown>> = [];
-  if (args.analysis.entry_amount > 0) {
-    items.push({
-      organization_id: args.lead.organization_id,
-      proposal_id: proposalId,
-      kind: 'entrada',
-      label: 'Entrada / ato',
-      quantity: 1,
-      amount: args.analysis.entry_amount,
-      sort_order: 1,
-      metadata: { auto_detected: true },
-    });
-  }
-  if (args.analysis.reinforcement_count > 0 && args.analysis.reinforcement_amount > 0) {
-    items.push({
-      organization_id: args.lead.organization_id,
-      proposal_id: proposalId,
-      kind: 'reforco_anual',
-      label: 'Reforços / balões',
-      quantity: args.analysis.reinforcement_count,
-      amount: args.analysis.reinforcement_amount,
-      sort_order: 2,
-      metadata: { auto_detected: true, frequency_unconfirmed: true },
-    });
-  }
-  if (args.analysis.monthly_count > 0 && args.analysis.monthly_amount > 0) {
-    items.push({
-      organization_id: args.lead.organization_id,
-      proposal_id: proposalId,
-      kind: 'outro',
-      label: 'Parcelas da proposta',
-      quantity: args.analysis.monthly_count,
-      amount: args.analysis.monthly_amount,
-      sort_order: 3,
-      metadata: { auto_detected: true },
-    });
-  }
-  if (args.analysis.keys_amount > 0) {
-    items.push({
-      organization_id: args.lead.organization_id,
-      proposal_id: proposalId,
-      kind: 'chaves',
-      label: 'Parcela nas chaves',
-      quantity: 1,
-      amount: args.analysis.keys_amount,
-      sort_order: 4,
-      metadata: { auto_detected: true },
-    });
-  }
-  if (items.length) {
-    const { error } = await args.admin.from('proposal_payment_items').insert(items);
-    if (error) throw error;
-  }
-
-  const metadata = {
-    ...(args.lead.metadata ?? {}),
-    auto_proposal_detected_at: new Date().toISOString(),
-    auto_proposal_signature: signature,
-  };
-  const update: Record<string, unknown> = {
-    stage: 'proposta_negociacao',
-    enterprise: args.development.name,
-    owner_mode: 'human',
-    ai_enabled: false,
-    automation_paused: true,
-    metadata,
-    updated_at: new Date().toISOString(),
-  };
-  if (
-    args.lead.kind === 'corretor'
-    && args.analysis.broker_company
-    && (!args.lead.company || ['não informada', 'autônomo'].includes(args.lead.company.toLocaleLowerCase('pt-BR')))
-  ) {
-    update.company = args.analysis.broker_company;
-  }
-  const { error: leadError } = await args.admin
-    .from('leads')
-    .update(update)
-    .eq('id', args.lead.id);
-  if (leadError) throw leadError;
-
-  if (!existing?.id) {
-    await args.admin.from('activities').insert({
-      organization_id: args.lead.organization_id,
+  if (args.analysis.entry_amount > 0) items.push({
+    kind: 'entrada', label: 'Entrada / ato', quantity: 1, amount: args.analysis.entry_amount,
+    metadata: { auto_detected: true },
+  });
+  if (args.analysis.reinforcement_count > 0 && args.analysis.reinforcement_amount > 0) items.push({
+    kind: 'reforco_anual', label: 'Reforços / balões', quantity: args.analysis.reinforcement_count,
+    amount: args.analysis.reinforcement_amount,
+    metadata: { auto_detected: true, frequency_unconfirmed: true },
+  });
+  if (args.analysis.monthly_count > 0 && args.analysis.monthly_amount > 0) items.push({
+    kind: 'outro', label: 'Parcelas da proposta', quantity: args.analysis.monthly_count,
+    amount: args.analysis.monthly_amount, metadata: { auto_detected: true },
+  });
+  if (args.analysis.keys_amount > 0) items.push({
+    kind: 'chaves', label: 'Parcela nas chaves', quantity: 1, amount: args.analysis.keys_amount,
+    metadata: { auto_detected: true },
+  });
+  const { data, error } = await args.admin.rpc('commercial_record_detected_proposal', {
+    p_org: args.lead.organization_id,
+    p_source: args.source.id,
+    p_signature: signature,
+    p_data: {
       lead_id: args.lead.id,
-      type: 'proposta_detectada_whatsapp',
-      title: `Proposta #${proposalNumber} detectada no WhatsApp`,
-      description: args.analysis.summary || `Proposta de ${args.development.name} detectada automaticamente.`,
-      metadata: {
-        proposal_id: proposalId,
-        proposal_number: proposalNumber,
-        auto_signature: signature,
-        source_message_id: args.source.id,
-        proposal_confidence: args.analysis.proposal_confidence,
-      },
-    });
+      development_id: args.development.id,
+      unit_id: args.unit?.id ?? null,
+      list_price: listPrice,
+      proposed_price: total,
+      discount_amount: listPrice > 0 ? listPrice - total : 0,
+      notes: args.analysis.notes || 'Proposta detectada automaticamente na conversa do WhatsApp.',
+      payment_plan: paymentPlan,
+      snapshot,
+      broker_company: args.analysis.broker_company,
+      summary: args.analysis.summary,
+    },
+    p_items: items,
+  });
+  if (error) throw error;
+  if (typeof data?.proposalId !== 'string' || !Number.isSafeInteger(Number(data.proposalNumber))) {
+    throw new Error('A detecção não teve confirmação do banco; a mesma mensagem deve ser conferida antes de repetir.');
   }
-
-  return { proposalId, proposalNumber };
+  return { proposalId: data.proposalId, proposalNumber: Number(data.proposalNumber) };
 }
 
 async function markProcessed(
@@ -838,7 +726,8 @@ async function markProcessed(
     bossa_commercial_intelligence_processed_at: new Date().toISOString(),
     bossa_commercial_intelligence: result,
   };
-  await admin.from('messages').update({ raw_payload: raw }).eq('id', row.id);
+  const { error } = await admin.from('messages').update({ raw_payload: raw }).eq('id', row.id);
+  if (error) throw error;
 }
 
 export async function processCommercialConversationMessage(
@@ -914,18 +803,32 @@ export async function processCommercialConversationMessage(
   ]);
   const developments = (developmentsData ?? []) as DevelopmentRow[];
   const units = (unitsData ?? []) as UnitRow[];
+  // A later summary/meeting/marker failure may retry this source after the
+  // proposal transaction committed. Recover the durable receipt before asking
+  // a nondeterministic analysis to identify the same proposal again.
+  const { data: priorDetection, error: detectionError } = await admin
+    .from('commercial_ai_proposal_detections')
+    .select('proposal_id,proposal_number')
+    .eq('organization_id', lead.organization_id)
+    .eq('origin', 'whatsapp_commercial_intelligence')
+    .eq('source_message_id', source.id)
+    .maybeSingle();
+  if (detectionError) throw detectionError;
   const analysis = await analyzeConversation({ lead, messages: enriched, developments, units });
   if (!analysis) {
+    if (priorDetection) return { processed: false, reason: 'analysis_unavailable_with_committed_proposal',
+      proposalId: priorDetection.proposal_id, proposalNumber: Number(priorDetection.proposal_number) };
     await markProcessed(admin, source, { relevant: true, analyzed: false });
     return { processed: true, reason: 'analysis_unavailable' };
   }
 
-  let proposalId: string | null = null;
-  let proposalNumber: number | null = null;
+  let proposalId: string | null = priorDetection?.proposal_id ?? null;
+  let proposalNumber: number | null = priorDetection ? Number(priorDetection.proposal_number) : null;
   let development: DevelopmentRow | null = null;
   let unit: UnitRow | null = null;
   if (
-    analysis.bossa_proposal_detected
+    !priorDetection
+    && analysis.bossa_proposal_detected
     && analysis.proposal_confidence >= 0.86
     && analysis.total_price > 0
   ) {

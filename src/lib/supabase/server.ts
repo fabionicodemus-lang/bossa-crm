@@ -1,13 +1,18 @@
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
+import { serverSupabaseOptions } from '../homologation/server';
 
 export async function createClient() {
+  // Establish the dynamic request boundary before Next's prerender pass reaches the guard.
+  // Reading cookies performs no Supabase/network access; the guard still precedes the SDK.
   const cookieStore = await cookies();
+  const homologation = serverSupabaseOptions();
 
   return createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
+    homologation?.url ?? process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    homologation?.key ?? process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
     {
+      ...(homologation ? { global: homologation.global } : {}),
       cookies: {
         getAll() {
           return cookieStore.getAll();

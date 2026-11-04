@@ -1,5 +1,6 @@
 'use client';
 
+import { manualPilot, manualPilotPath } from '@/lib/homologation/manual-pilot';
 import Link from 'next/link';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { FormEvent, useState } from 'react';
@@ -24,9 +25,9 @@ export function LoginForm({ allowSignup }: { allowSignup: boolean }) {
       setLoading(false);
       return;
     }
-    const requestedNext = params.get('next') || '/dashboard';
+    const requestedNext = params.get('next') || (manualPilot() ? '/clientes' : '/dashboard');
     const next = requestedNext.startsWith('/') && !requestedNext.startsWith('//') ? requestedNext : '/dashboard';
-    router.replace(next);
+    router.replace(manualPilot() && !manualPilotPath(next) ? '/clientes' : next);
     router.refresh();
   }
 
@@ -38,7 +39,7 @@ export function LoginForm({ allowSignup }: { allowSignup: boolean }) {
       <button className="btn btn-primary btn-block" disabled={loading}>{loading ? 'Entrando…' : 'Entrar no Bossa CRM'}</button>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 16, fontSize: 12 }}>
         {allowSignup ? <Link className="link" href="/cadastro">Criar usuário</Link> : <span className="faint">Acesso somente por convite</span>}
-        <Link className="link" href="/recuperar-senha">Esqueci minha senha</Link>
+        {!manualPilot() && <Link className="link" href="/recuperar-senha">Esqueci minha senha</Link>}
       </div>
     </form>
   );

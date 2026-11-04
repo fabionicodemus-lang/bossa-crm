@@ -1,0 +1,82 @@
+name: Validate commercial identity integrity
+on:
+  pull_request:
+    paths-ignore:
+      - 'site/**'
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - 'site/**'
+permissions:
+  contents: read
+jobs:
+  identity-integrity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: isolated-ci-only
+          POSTGRES_DB: commercial_integrity_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d commercial_integrity_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: 5432
+      PGUSER: postgres
+      PGPASSWORD: isolated-ci-only
+      PGDATABASE: commercial_integrity_test
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - name: Test canonical merge outcomes without contacting WhatsApp
+        run: node --experimental-strip-types scripts/commercial/check-canonical-merge.mjs
+      - name: Test original legacy merge and seven migrations in PGlite
+        run: node scripts/commercial/check-contact-integrity.mjs
+      - name: Test explicit contact reconciliation in PGlite
+        run: node scripts/commercial/check-contact-reconciliation.mjs
+      - name: Test real contact reconciliation server actions
+        run: node --experimental-strip-types --loader ./scripts/commercial/reconciliation-actions-loader.mjs scripts/commercial/check-reconciliation-actions.mjs
+      - name: Test atomic quick proposal status and durable recovery
+        run: |
+          node scripts/commercial/check-proposal-status.mjs
+          node --experimental-strip-types --loader ./scripts/commercial/proposal-status-route-loader.mjs scripts/commercial/check-proposal-status-route.mjs
+      - name: Test concurrent quick proposal status in disposable PostgreSQL
+        run: node scripts/commercial/check-proposal-status-concurrency.mjs
+      - name: Test transactional WhatsApp AI proposal detection and actual producer
+        run: |
+          node scripts/commercial/check-ai-proposal.mjs
+          node --experimental-strip-types --loader ./scripts/commercial/ai-proposal-loader.mjs scripts/commercial/check-ai-proposal-producer.mjs
+      - name: Test concurrent WhatsApp AI detections in disposable PostgreSQL
+        run: node scripts/commercial/check-ai-proposal-concurrency.mjs
+      - name: Rebuild complete repository business schema and validate integrated commercial flows
+        run: node scripts/commercial/check-integrated-schema.mjs
+      - name: Preserve repository integration evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: commercial-repository-schema-evidence
+          path: /tmp/bossa-commercial-homologation/*.json
+          if-no-files-found: ignore
+      - name: Ensure PostgreSQL client
+        run: command -v psql || (sudo apt-get update -qq && sudo apt-get install -y postgresql-client)
+      - name: Test real concurrent identity mutations
+        run: node scripts/commercial/check-integrity-concurrency.mjs
+      - name: Test contact review races in separate isolated database
+        run: |
+          psql -X -v ON_ERROR_STOP=1 -d postgres -c 'create database commercial_reconciliation_test'
+          PGDATABASE=commercial_reconciliation_test node scripts/commercial/check-reconciliation-concurrency.mjs

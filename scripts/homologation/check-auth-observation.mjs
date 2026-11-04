@@ -1,0 +1,27 @@
+import assert from 'node:assert/strict';
+import { collectAuthObservation } from './auth-observation.mjs';
+import { authAudit } from './contract-fixture.mjs';
+const reference = authAudit().users;
+const now = Date.now();
+const observations = reference.map(u=>({userId:u.id,checkedAt:new Date(now).toISOString(),loginStatus:200,userStatus:200,logoutStatus:204,identityMatches:true}));
+let calls=[];
+const user = u=>({id:u.id,email:u.email,role:'authenticated',is_anonymous:false,email_confirmed_at:new Date(now).toISOString()});
+const transport = async (url,init)=>{
+  calls.push([url,init]);
+  assert.equal(init.method,'GET');assert.equal(init.redirect,'error');assert.equal(init.headers.has('authorization'),false);
+  assert.equal(new URL(url).origin,'https://okhtfibuexfsgkobjxtu.supabase.co');
+  if (url.includes('page=1&'))return Response.json({users:reference.map(user)});
+  if (url.includes('page=2&'))return Response.json({users:[]});
+  const id=new URL(url).pathname.split('/').at(-1);return Response.json({user:user(reference.find(u=>u.id===id))});
+};
+const args = {key:'sb_secret_contract_test_only',expectedUsers:reference,loginObservations:observations,transport,now};
+const report = await collectAuthObservation(args);
+assert.equal(report.users.length,7);assert.equal(report.paginationComplete,true);assert.equal(calls.length,9);
+assert.equal(report.source,'supabase-auth-admin-api');
+await assert.rejects(()=>collectAuthObservation({...args,transport:async()=>new Response('denied',{status:401})}),/UNAVAILABLE/);
+await assert.rejects(()=>collectAuthObservation({...args,key:'sb_publishable_wrong'}),/ADMIN_CREDENTIAL/);
+await assert.rejects(()=>collectAuthObservation({...args,transport:async()=>Response.json({users:reference.map(user)})}),/MISMATCH/);
+await assert.rejects(()=>collectAuthObservation({...args,loginObservations:[]}),/OBSERVATION_REJECTED/);
+await assert.rejects(()=>collectAuthObservation({...args,loginObservations:observations.map(o=>({...o,checkedAt:'2000-01-01T00:00:00Z'}))}),/OBSERVATION_REJECTED/);
+await assert.rejects(()=>collectAuthObservation({...args,transport:async(url,init)=>url.includes('?')?transport(url,init):Response.json({user:{...user(reference[0]),is_anonymous:true}})}),/OBSERVATION_REJECTED/);
+console.log('PASS operator Auth collector: full inventory pagination, per-ID official endpoint, existing login/getUser/logout evidence, apikey-only GETs; invalid key/HTTP401, repeated pages, stale/missing observations and anonymous users rejected. Mock transport only, no real proof or signature.');

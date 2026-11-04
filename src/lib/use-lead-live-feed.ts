@@ -1,5 +1,6 @@
 'use client';
 
+import { manualPilot } from './homologation/manual-pilot';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import type { Activity, LeadTask, Message } from '@/lib/types';
@@ -73,6 +74,7 @@ export function useLeadLiveFeed(leadId: string, handlers: LeadFeedHandlers) {
   }, [leadId]);
 
   useEffect(() => {
+    if (manualPilot()) return;
     const supabase = createClient();
     let disposed = false;
     let channel: ReturnType<typeof supabase.channel> | null = null;

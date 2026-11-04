@@ -1,0 +1,53 @@
+import fs from 'node:fs';
+import assert from 'node:assert/strict';
+import {execFile} from 'node:child_process';
+import {promisify} from 'node:util';
+import {sourceRequestSetupSql,id,org,user,dev,unit} from './source-request-fixture.mjs';
+const exec=promisify(execFile);
+const sql=async(text)=>(await exec('psql',['-X','-A','-t','-v','ON_ERROR_STOP=1','-c',text],{timeout:20000,maxBuffer:8*1024*1024})).stdout.trim();
+if(process.env.PGHOST!=='127.0.0.1'||process.env.PGDATABASE!=='commercial_recovery_test')throw Error('Requires disposable recovery PostgreSQL database');
+for(const text of sourceRequestSetupSql())await sql(text);
+await sql(fs.readFileSync(new URL('../../supabase/migrations/20261021182758_commercial_recoverable_requests.sql',import.meta.url),'utf8'));
+const auth=`select set_config('request.jwt.claim.sub','${user}',false);set role authenticated;`;
+const quote=x=>`'${JSON.stringify(x).replaceAll("'","''")}'::jsonb`;
+const data={development_id:dev,unit_id:unit,lead_id:id(50),status:'rascunho',list_price:100000,proposed_price:90000,discount_amount:10000,payment_plan:{},snapshot:{}};
+const items=[{kind:'entrada',quantity:1,amount:90000}];
+const payload={data,items,id:null,expected_updated_at:null};
+const agenda={assigned_to:user,title:'Recovered visit',event_type:'visita',meeting_mode:'presencial',starts_at:'2030-01-01T12:00:00Z',ends_at:'2030-01-01T13:00:00Z'};
+const prepare=(k,type='proposals',p=payload)=>`select commercial_prepare_source_request('${org}','${id(k)}','${type}',${quote(p)});`;
+const save=k=>`select commercial_save_proposal_once('${org}','${id(k)}',${quote(data)},${quote(items)},null,null);`;
+const create=k=>`select commercial_create_agenda_once('${org}','${id(k)}',${quote(agenda)});`;
+const finish=(k,action='abandon')=>`select commercial_finish_source_recovery('${org}','${id(k)}','${action}');`;
+const pause=ms=>new Promise(r=>setTimeout(r,ms));
+async function gate(n){for(let i=0;i<100;i++){if(await sql(`select exists(select 1 from pg_locks where locktype='advisory' and objid=${n} and granted);`)==='t')return;await pause(20);}throw Error('Lock barrier not reached');}
+async function race(n,a,b){
+ const first=sql(`begin;set local lock_timeout='5s';${auth}${a}select pg_advisory_xact_lock(${n});select pg_sleep(1.2);commit;`);
+ try{await gate(n);return await Promise.allSettled([first,sql(`begin;set local lock_timeout='5s';${auth}${b}commit;`)]);}catch(e){await first.catch(()=>{});throw e;}
+}
+let result=await race(983001,prepare(9100),prepare(9100));
+assert.ok(result.every(r=>r.status==='fulfilled'));assert.equal(await sql(`select count(*) from commercial_pending_source_requests where request_id='${id(9100)}';`),'1');
+console.log('PASS recovery concurrency: identical preparations persist one recoverable command');await sql(auth+finish(9100));
+result=await race(983002,prepare(9101),prepare(9102));
+assert.equal(result[0].status,'fulfilled');assert.equal(result[1].status,'rejected');assert.match(result[1].reason.stderr,/COMMERCIAL_RECOVERY_PENDING/);
+console.log('PASS recovery concurrency: another tab cannot silently replace an unresolved command with a new key');await sql(auth+finish(9101));
+await sql(auth+prepare(9103));result=await race(983003,finish(9103),save(9103));
+assert.equal(result[0].status,'fulfilled');assert.equal(result[1].status,'rejected');assert.match(result[1].reason.stderr,/COMMERCIAL_RECOVERY_ABANDONED/);
+assert.equal(await sql(`select count(*) from commercial_source_requests where request_id='${id(9103)}';`),'0');
+assert.equal(await sql(`select count(*) from proposals where commercial_request->>'id'='${id(9103)}';`),'0');
+console.log('PASS recovery concurrency: abandonment wins and the late legacy save rolls back proposal and receipt');
+await sql(auth+prepare(9104));result=await race(983004,save(9104),finish(9104));
+assert.ok(result.every(r=>r.status==='fulfilled'));assert.match(result[1].value,/"state": "committed"/);
+assert.equal(await sql(`select count(*) from proposals where commercial_request->>'id'='${id(9104)}';`),'1');
+console.log('PASS recovery concurrency: save wins and abandonment cannot erase the committed source');await sql(auth+finish(9104,'acknowledge'));
+await sql(auth+prepare(9105));result=await race(983005,save(9105),save(9105));
+assert.ok(result.every(r=>r.status==='fulfilled'));assert.match(result[1].value,/"replayed": true/);
+assert.equal(await sql(`select count(*) from activities where metadata->>'request_id'='${id(9105)}';`),'1');
+console.log('PASS recovery concurrency: simultaneous resume keeps one proposal and one activity');await sql(auth+finish(9105,'acknowledge'));
+await sql(auth+prepare(9106,'agenda_events',agenda));result=await race(983006,finish(9106),create(9106));
+assert.equal(result[1].status,'rejected');assert.match(result[1].reason.stderr,/COMMERCIAL_RECOVERY_ABANDONED/);
+assert.equal(await sql(`select count(*) from agenda_events where commercial_request->>'id'='${id(9106)}';`),'0');
+console.log('PASS recovery concurrency: abandoned agenda request cannot produce a later source row');
+await sql(auth+prepare(9107));result=await race(983007,save(9107),`update commercial_pending_source_requests set status='abandoned' where organization_id='${org}' and request_id='${id(9107)}';`);
+assert.equal(result[0].status,'fulfilled');assert.equal(result[1].status,'rejected');assert.match(result[1].reason.stderr,/COMMERCIAL_RECOVERY_ALREADY_COMMITTED/);
+assert.equal(await sql(`select count(*) from proposals where commercial_request->>'id'='${id(9107)}';`),'1');
+console.log('PASS recovery concurrency: direct status update also rechecks the receipt after waiting, without deadlock');

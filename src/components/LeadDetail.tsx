@@ -1,5 +1,6 @@
 "use client";
 
+import { manualPilot } from '@/lib/homologation/manual-pilot';
 import {
   FormEvent,
   useCallback,
@@ -219,7 +220,7 @@ export function LeadDetail({
   const [messages, setMessages] = useState(initialMessages);
   const [activities, setActivities] = useState(initialActivities);
   const [tasks, setTasks] = useState(initialTasks);
-  const [tab, setTab] = useState<Tab>(initialTab);
+  const [tab, setTab] = useState<Tab>(manualPilot() ? "dados" : initialTab);
   const [text, setText] = useState("");
   const [note, setNote] = useState("");
   const [nextAction, setNextAction] = useState("");
@@ -978,13 +979,13 @@ export function LeadDetail({
               disabled={!canEdit}
               onChange={(event) => void changeStage(event.target.value)}
             >
-              {stagesFor(lead.kind).map((stage) => (
+              {stagesFor(lead.kind).filter(stage => !manualPilot() || !["qualificacao_ia","passagem_pendente"].includes(stage.id)).map((stage) => (
                 <option value={stage.id} key={stage.id}>
                   {stage.label}
                 </option>
               ))}
             </select>
-            {canEdit && (
+            {!manualPilot() && canEdit && (
               <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                 <select
                   className="select"
@@ -1010,7 +1011,7 @@ export function LeadDetail({
                 </button>
               </div>
             )}
-            {canEdit && lead.stage === "passagem_pendente" && (
+            {!manualPilot() && canEdit && lead.stage === "passagem_pendente" && (
               <button
                 className="btn btn-primary btn-sm"
                 disabled={loading}
@@ -1019,7 +1020,7 @@ export function LeadDetail({
                 ✅ Aceitar lead
               </button>
             )}
-            {canEdit && lead.owner_mode === "human" && (
+            {!manualPilot() && canEdit && lead.owner_mode === "human" && (
               <button
                 className="btn btn-ghost btn-sm"
                 disabled={loading}
@@ -1028,7 +1029,7 @@ export function LeadDetail({
                 🤖 Devolver para {persona}
               </button>
             )}
-            {canEdit &&
+            {!manualPilot() && canEdit &&
               lead.owner_mode !== "human" &&
               !lead.ai_enabled &&
               canReactivateAi && (
@@ -1043,14 +1044,14 @@ export function LeadDetail({
           )}
         </div>
         <div className="lead-quick-actions">
-          <button
+          {!manualPilot() && <button
             className="btn btn-primary btn-sm"
             onClick={() => setTab("whatsapp")}
           >
             <MessageCircle size={14} />
             WhatsApp
-          </button>
-          {lead.phone && (
+          </button>}
+          {!manualPilot() && lead.phone && (
             <a
               className="btn btn-ghost btn-sm"
               href={`tel:+${lead.phone.replace(/\D/g, "")}`}
@@ -1061,7 +1062,7 @@ export function LeadDetail({
           )}
           {canEdit && (
             <>
-              <button
+              {!manualPilot() && <button
                 className="btn btn-ghost btn-sm"
                 onClick={() =>
                   ui.openTask({
@@ -1074,7 +1075,7 @@ export function LeadDetail({
               >
                 <Plus size={14} />
                 Tarefa
-              </button>
+              </button>}
               {lead.kind !== "geral" && (
                 <Link
                   className="btn btn-ghost btn-sm"
@@ -1086,7 +1087,7 @@ export function LeadDetail({
               )}
             </>
           )}
-          {drawerMode && canEdit && (
+          {!manualPilot() && drawerMode && canEdit && (
             <label className="lead-owner-inline">
               Responsável
               <select
@@ -1165,7 +1166,7 @@ export function LeadDetail({
               <small>{formatDateTime(nextTask.due_at)}</small>
             )}
           </div>
-          {canEdit &&
+          {!manualPilot() && canEdit &&
             (nextTask ? (
               <button
                 className="btn btn-ghost btn-sm"
@@ -1202,7 +1203,7 @@ export function LeadDetail({
               { id: "arquivos", label: "Arquivos" },
               { id: "historico", label: "Histórico" },
             ] as Array<{ id: Tab; label: string }>
-          ).map((item) => (
+          ).filter(item => !manualPilot() || ["dados","negociacao","historico"].includes(item.id)).map((item) => (
             <button
               className={`tab ${tab === item.id ? "on" : ""}`}
               key={item.id}

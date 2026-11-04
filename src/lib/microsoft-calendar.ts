@@ -1,3 +1,4 @@
+import { microsoftEventCreateOptions } from '@/lib/microsoft-event-write';
 import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
 import { createAdminClient } from '@/lib/supabase/admin';
 
@@ -180,8 +181,7 @@ export async function pushMicrosoftEvent(event: CrmEvent): Promise<'not_connecte
   const admin = createAdminClient();
   try {
     const path = event.microsoft_event_id ? `${GRAPH}/me/events/${encodeURIComponent(event.microsoft_event_id)}` : `${GRAPH}/me/calendar/events`;
-    const body = { ...graphPayload(event), ...(!event.microsoft_event_id && event.meeting_mode === 'video'
-      ? { isOnlineMeeting: true, onlineMeetingProvider: 'teamsForBusiness', transactionId: event.id } : {}) };
+    const body = { ...graphPayload(event), ...microsoftEventCreateOptions(event) };
     const response = await graphRequest(connection, path, { method: event.microsoft_event_id ? 'PATCH' : 'POST', body: JSON.stringify(body) });
     const remote = await response.json() as GraphEvent;
     const patch: Record<string, unknown> = { microsoft_event_id: remote.id || event.microsoft_event_id, microsoft_sync_status: 'synced' };

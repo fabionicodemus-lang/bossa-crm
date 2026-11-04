@@ -21,6 +21,7 @@ import {
 } from '@/lib/whatsapp/window';
 import { normalizeWaId } from '@/lib/whatsapp/utils';
 import { findCanonicalLeadByPhone } from '@/lib/contact-identity';
+import { checkCanonicalMerge, mergeAfterConfirmedSend } from '@/lib/commercial/canonical-merge';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -80,6 +81,16 @@ export async function POST(request: Request) {
     if (!lead.phone) return NextResponse.json({ error: 'O contato não possui telefone válido.' }, { status: 400 });
 
     const canonicalizedFromLeadId = requestedLead.id !== lead.id ? requestedLead.id : null;
+    if (canonicalizedFromLeadId) {
+      const eligibility = await checkCanonicalMerge(admin, lead.id, canonicalizedFromLeadId);
+      if (eligibility.status !== 'ready') return NextResponse.json({
+        error: eligibility.status === 'unavailable'
+          ? 'Não foi possível verificar a identidade dos contatos. Nenhuma mensagem foi enviada. Atualize a página ou contate o administrador.'
+          : 'Os contatos exigem revisão antes de unificar a conversa e o histórico comercial. Nenhuma mensagem foi enviada. Abra a ficha correta para continuar.',
+        code: 'COMMERCIAL_MERGE_REVIEW_REQUIRED',
+        canonicalLeadId: lead.id,
+      }, { status: eligibility.status === 'unavailable' ? 503 : 409 });
+    }
     const isBroker = lead.kind === 'corretor';
     const isGeneral = lead.kind === 'geral';
     const sharedPlantaoContact = isBroker || isGeneral;
@@ -127,6 +138,13 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: 'A conversa selecionada não pertence a este contato.' }, { status: 404 });
       }
       if (requestedConversation.lead_id !== lead.id) {
+        const eligibility = requestedConversation.lead_id
+          ? await checkCanonicalMerge(admin, lead.id, requestedConversation.lead_id)
+          : { status: 'review_required' as const };
+        if (eligibility.status !== 'ready') return NextResponse.json({
+          error: 'Esta conversa não pode ser transferida automaticamente. Confira o contato e seus vínculos comerciais. Nenhuma mensagem foi enviada.',
+          code: 'COMMERCIAL_MERGE_REVIEW_REQUIRED',
+        }, { status: eligibility.status === 'unavailable' ? 503 : 409 });
         const { data: relinked, error: relinkError } = await admin
           .from('whatsapp_conversations')
           .update({ lead_id: lead.id, updated_at: new Date().toISOString() })
@@ -300,23 +318,15 @@ export async function POST(request: Request) {
       });
     }
 
-    if (canonicalizedFromLeadId) {
-      try {
-        await admin.rpc('merge_duplicate_lead', {
-          p_keep: lead.id,
-          p_dup: canonicalizedFromLeadId,
-        });
-      } catch (mergeError) {
-        console.error('[whatsapp send canonical merge]', mergeError);
-      }
-    }
-
+    const merge = await mergeAfterConfirmedSend(admin, lead.id, canonicalizedFromLeadId);
     return NextResponse.json({
       message,
       windowExpiresAt,
       manualTakeover: sharedPlantaoContact,
       canonicalLeadId: lead.id,
-      mergedFromLeadId: canonicalizedFromLeadId,
+      mergedFromLeadId: merge.mergedFromLeadId,
+      mergeStatus: merge.status,
+      mergeWarning: merge.warning,
     });
   } catch (error) {
     console.error('[whatsapp send]', error);

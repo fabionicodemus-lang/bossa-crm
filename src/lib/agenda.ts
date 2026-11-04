@@ -1,5 +1,7 @@
 import { microsoftBusyConflicts } from '@/lib/microsoft-calendar';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { createClient } from '@/lib/supabase/server';
+import { isHomologation } from '@/lib/homologation/policy';
 
 export type AgendaEventType = 'reuniao_cliente' | 'apresentacao' | 'visita' | 'ligacao' | 'tarefa' | 'outro';
 export type AgendaMeetingMode = 'presencial' | 'video' | 'telefone';
@@ -34,8 +36,9 @@ export async function findAgendaConflicts(input: {
   excludeEventId?: string | null;
   excludeMicrosoftId?: string | null;
 }) {
-  const admin = createAdminClient();
-  let query = admin
+  const isolated = isHomologation();
+  const db = isolated ? await createClient() : createAdminClient();
+  let query = db
     .from('agenda_events')
     .select('id,title,starts_at,ends_at,assigned_to,event_type,meeting_mode')
     .eq('organization_id', input.organizationId)
@@ -47,6 +50,7 @@ export async function findAgendaConflicts(input: {
   if (input.excludeEventId) query = query.neq('id', input.excludeEventId);
   const { data, error } = await query;
   if (error) throw error;
+  if (isolated) return data ?? [];
   // Consulta diretamente a Microsoft para incluir inclusive eventos ainda não importados.
   // Se a Microsoft falhar com uma conta conectada, não declaramos disponibilidade.
   const remote = await microsoftBusyConflicts(input.organizationId, input.assignedTo, input.startsAt, input.endsAt, input.excludeMicrosoftId);
@@ -67,6 +71,7 @@ export async function createAgendaEventFromAi(input: {
   location?: string | null;
   metadata?: Record<string, unknown>;
 }) {
+  if (isHomologation()) throw new Error('HOMOLOGATION_EXTERNAL_EFFECT_BLOCKED');
   const conflicts = await findAgendaConflicts({ organizationId: input.organizationId, assignedTo: input.assignedTo,
     startsAt: input.startsAt, endsAt: input.endsAt });
   if (conflicts.length) return { created: false as const, conflicts };
