@@ -11,8 +11,8 @@ import type { LeadKind } from '@/lib/types';
 // Lê as tabelas site_* e lead_site_links, criadas pela migração do site, e cruza
 // com os marcos do funil do CRM (lead_funnel_milestones).
 
-type Sessao = { visitor_code: string; utm: Record<string, string> | null; referrer: string | null; entry_page: string | null; visit_number: number; started_at: string; city: string | null; region: string | null; country: string | null };
-type Evento = { visitor_code: string; name: string; props: Record<string, unknown> | null; page: string | null; created_at: string };
+type Sessao = { visitor_code: string; hostname: string | null; utm: Record<string, string> | null; referrer: string | null; entry_page: string | null; visit_number: number; started_at: string; city: string | null; region: string | null; country: string | null };
+type Evento = { visitor_code: string; hostname: string | null; name: string; props: Record<string, unknown> | null; page: string | null; created_at: string };
 type Ligacao = { lead_id: string; visitor_code: string; method: string; linked_at: string };
 type LeadInfo = { id: string; name: string | null; kind: LeadKind; stage: string; enterprise: string | null; created_at: string };
 type Marco = { lead_id: string; qualified_at: string | null; meeting_at: string | null; proposal_at: string | null; won_at: string | null };
@@ -23,6 +23,23 @@ type Comportamento = {
 
 const DAY = 86_400_000;
 const PERIODOS = [{ k: '7', t: '7 dias' }, { k: '30', t: '30 dias' }, { k: '90', t: '90 dias' }, { k: '365', t: '12 meses' }];
+const AMBIENTES = [
+  { k: 'oficial', t: 'Site oficial' },
+  { k: 'testes', t: 'Testes' },
+  { k: 'historico', t: 'Histórico sem identificação' },
+  { k: 'todos', t: 'Todos' },
+] as const;
+type Ambiente = (typeof AMBIENTES)[number]['k'];
+type SessaoHistorica = Pick<Sessao, 'visitor_code' | 'hostname' | 'started_at'>;
+
+function noAmbiente(host: string | null, ambiente: Ambiente): boolean {
+  if (ambiente === 'todos') return true;
+  const nome = host?.toLowerCase().replace(/\.$/, '') ?? '';
+  const oficial = nome === 'bossaempreendimentos.com.br' || nome === 'www.bossaempreendimentos.com.br';
+  if (ambiente === 'oficial') return oficial;
+  if (ambiente === 'testes') return Boolean(nome) && !oficial;
+  return !nome; // histórico registrado antes de coletarmos o domínio
+}
 const EMP: Record<string, string> = { 'alma-seahouses': 'Alma', 'flow-aptos': 'Flow', 'soul-residence': 'Soul', 'jazz-residence': 'Jazz' };
 const METODO: Record<string, string> = { whatsapp: 'WhatsApp', formulario: 'Formulário', manual: 'Manual', provavel: 'Provável' };
 const NOME_EVENTO: Record<string, string> = {
@@ -109,12 +126,13 @@ function Barra({ valor, max, cor = 'var(--ink)' }: { valor: number; max: number;
   return <span aria-hidden="true" style={{ display: 'block', height: 6, borderRadius: 3, background: 'var(--sunken)', overflow: 'hidden' }}><span style={{ display: 'block', height: '100%', width: `${w}%`, background: cor }} /></span>;
 }
 
-export default async function SitePage({ searchParams }: { searchParams: Promise<{ dias?: string }> }) {
+export default async function SitePage({ searchParams }: { searchParams: Promise<{ dias?: string; ambiente?: string }> }) {
   const params = await searchParams;
   const context = await getCurrentContext();
   if (!context || context.role === 'viewer') redirect('/hoje');
   const orgId = context.organization.id;
   const dias = PERIODOS.some((p) => p.k === params.dias) ? Number(params.dias) : 30;
+  const ambiente: Ambiente = AMBIENTES.some((a) => a.k === params.ambiente) ? params.ambiente as Ambiente : 'oficial';
   const inicio = inicioDoPeriodo(dias);
   const admin = createAdminClient();
 
@@ -124,21 +142,20 @@ export default async function SitePage({ searchParams }: { searchParams: Promise
   let sessoes: Sessao[] = [], eventos: Evento[] = [], ligacoes: Ligacao[] = [];
   const leads: LeadInfo[] = [], marcos: Marco[] = [], comport: Comportamento[] = [];
   try {
-    [sessoes, eventos, ligacoes] = await Promise.all([
-      todas<Sessao>((a, b) => admin.from('site_sessions').select('visitor_code,utm,referrer,entry_page,visit_number,started_at,city,region,country').gte('started_at', inicio).order('started_at').range(a, b)),
-      todas<Evento>((a, b) => admin.from('site_events').select('visitor_code,name,props,page,created_at').gte('created_at', inicio).neq('name', 'scroll_depth').order('id').range(a, b)),
+    const [sessoesPeriodo, eventosPeriodo, todasLigacoes, historico] = await Promise.all([
+      todas<Sessao>((a, b) => admin.from('site_sessions').select('visitor_code,hostname,utm,referrer,entry_page,visit_number,started_at,city,region,country').gte('started_at', inicio).order('started_at').range(a, b)),
+      todas<Evento>((a, b) => admin.from('site_events').select('visitor_code,hostname,name,props,page,created_at').gte('created_at', inicio).neq('name', 'scroll_depth').order('id').range(a, b)),
       todas<Ligacao>((a, b) => admin.from('lead_site_links').select('lead_id,visitor_code,method,linked_at').eq('organization_id', orgId).order('linked_at', { ascending: false }).range(a, b)),
+      // O histórico por ambiente permite atribuir leads que visitaram antes do período selecionado.
+      todas<SessaoHistorica>((a, b) => admin.from('site_sessions').select('visitor_code,hostname,started_at').order('started_at').range(a, b)),
     ]);
-    // Consultas leves para a média histórica, sem baixar todos os acessos do site.
-    const [totalHistorico, primeiraVisita] = await Promise.all([
-      admin.from('site_visitors').select('code', { count: 'exact', head: true }),
-      admin.from('site_visitors').select('first_seen_at').order('first_seen_at', { ascending: true }).limit(1).maybeSingle(),
-    ]);
-    // Falhas no benchmark não podem impedir a leitura dos números principais.
-    if (!totalHistorico.error && !primeiraVisita.error) {
-      totalVisitantesSite = totalHistorico.count ?? 0;
-      primeiraVisitaSite = primeiraVisita.data?.first_seen_at ?? null;
-    }
+    sessoes = sessoesPeriodo.filter((s) => noAmbiente(s.hostname, ambiente));
+    eventos = eventosPeriodo.filter((e) => noAmbiente(e.hostname, ambiente));
+    const historicoSelecionado = historico.filter((s) => noAmbiente(s.hostname, ambiente));
+    const codigosDoAmbiente = new Set(historicoSelecionado.map((s) => s.visitor_code));
+    ligacoes = todasLigacoes.filter((l) => codigosDoAmbiente.has(l.visitor_code));
+    totalVisitantesSite = codigosDoAmbiente.size;
+    primeiraVisitaSite = historicoSelecionado[0]?.started_at ?? null;
 
     const ids = [...new Set(ligacoes.map((l) => l.lead_id))];
     for (let i = 0; i < ids.length; i += 200) {
@@ -278,12 +295,24 @@ export default async function SitePage({ searchParams }: { searchParams: Promise
     <>
       <PageTopbar title="Site" subtitle="O que acontece no site e quanto ele ajuda a vender" actions={
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-          {PERIODOS.map((p) => <Link key={p.k} href={`/site?dias=${p.k}`} className={`btn btn-sm ${Number(p.k) === dias ? 'btn-primary' : 'btn-ghost'}`}>{p.t}</Link>)}
+          {PERIODOS.map((p) => <Link key={p.k} href={`/site?dias=${p.k}&ambiente=${ambiente}`} className={`btn btn-sm ${Number(p.k) === dias ? 'btn-primary' : 'btn-ghost'}`}>{p.t}</Link>)}
         </div>
       } />
       <div className="page-content">
+        <div className="card" style={{ marginBottom: 14, padding: '14px 18px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <strong style={{ fontSize: 12, marginRight: 6 }}>Ambiente:</strong>
+            {AMBIENTES.map((a) => <Link key={a.k} href={`/site?dias=${dias}&ambiente=${a.k}`} className={`btn btn-sm ${ambiente === a.k ? 'btn-primary' : 'btn-ghost'}`}>{a.t}</Link>)}
+          </div>
+          <div className="muted" style={{ marginTop: 8, fontSize: 12 }}>
+            {ambiente === 'oficial' ? 'Somente bossaempreendimentos.com.br e www.bossaempreendimentos.com.br.' :
+              ambiente === 'testes' ? 'Acessos por endereços de desenvolvimento, prévias e outros domínios.' :
+              ambiente === 'historico' ? 'Registros anteriores à identificação do domínio; não é possível atribuí-los com segurança.' :
+              'Todos os ambientes juntos, inclusive testes e registros anteriores à identificação do domínio.'}
+          </div>
+        </div>
         {erro && <div className="error-box" style={{ marginBottom: 14 }}>Não foi possível ler os dados do site: {erro}</div>}
-        {!erro && visitantes.size === 0 && <div className="info-box" style={{ marginBottom: 14 }}>Ainda não há visitas registradas nos últimos {periodoTxt}. Os números aparecem assim que o site novo recebe visitantes.</div>}
+        {!erro && visitantes.size === 0 && <div className="info-box" style={{ marginBottom: 14 }}>Ainda não há visitas registradas em “{AMBIENTES.find((a) => a.k === ambiente)?.t}” nos últimos {periodoTxt}. Os números aparecem conforme as visitas forem registradas.</div>}
 
         <div className="kpis">
           <div className="kpi"><div className="kpi-label">Vendas com participação do site</div><div className="kpi-value">{num(vendasTotal)}</div><div className="kpi-note">desde o início · lead passou pelo site antes de comprar</div></div>
@@ -292,7 +321,7 @@ export default async function SitePage({ searchParams }: { searchParams: Promise
           <div className="kpi"><div className="kpi-label">Conversão visitante → lead</div><div className="kpi-value">{pct(leadsPeriodo.length, visitantes.size)}</div><div className="kpi-note">{periodoTxt}</div><ComparativoHistorico atual={conversaoAtual} referencia={mediaConversao} percentual /></div>
         </div>
         <div className="muted" style={{ fontSize: 11, margin: '-2px 0 14px' }}>
-          Comparativos: variação sobre a média de todo o histórico do site, proporcional a {periodoTxt}. Na conversão, comparamos as taxas.
+          Comparativos: variação sobre a média histórica do ambiente selecionado, proporcional a {periodoTxt}. Na conversão, comparamos as taxas.
           {!historicoSuficiente && !erro ? ` A comparação ficará disponível após ${periodoTxt} completos de medição.` : ''}
         </div>
 
@@ -402,7 +431,7 @@ export default async function SitePage({ searchParams }: { searchParams: Promise
         </section>
 
         <div className="muted" style={{ marginBottom: 24 }}>
-          O site grava as visitas de forma anônima, por um código de visita. Quando a pessoa envia um formulário ou chama no WhatsApp pelo site, esse código é ligado ao lead e o comportamento anterior passa a aparecer aqui. “Vendas com participação do site” conta leads que passaram pelo site antes de a venda ser registrada no funil.
+          Os indicadores acima respeitam o ambiente selecionado. Dados anteriores à identificação do domínio permanecem preservados na aba “Histórico sem identificação”. O site grava as visitas de forma anônima, por um código de visita. Quando a pessoa envia um formulário ou chama no WhatsApp pelo site, esse código é ligado ao lead e o comportamento anterior passa a aparecer aqui. “Vendas com participação do site” conta leads que passaram pelo site antes de a venda ser registrada no funil.
         </div>
       </div>
     </>
