@@ -1,12 +1,17 @@
 import { NextResponse } from "next/server";
 import { banco, ORG, normalizarTelefone } from "@/lib/banco";
+import { erroPublico, lerObjetoJson, limparUtm, limitarEnvios, validarOrigem } from "@/lib/seguranca-api";
 
 const FORMULARIOS = new Set(["book", "visita", "interesse", "corretor", "contato"]);
 const COD = /^[A-Z2-9]{4,8}$/;
 
 export async function POST(req: Request) {
   let c: Record<string, unknown>;
-  try { c = await req.json(); } catch { return NextResponse.json({ erro: "Não foi possível ler o envio." }, { status: 400 }); }
+  try {
+    validarOrigem(req);
+    limitarEnvios(req, "leads");
+    c = await lerObjetoJson(req, 16_384);
+  } catch (error) { return erroPublico(error); }
 
   // Campo-armadilha: pessoas não veem, robôs preenchem.
   if (typeof c.site === "string" && c.site.length > 0) return NextResponse.json({ ok: true });
@@ -32,7 +37,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true, gravado: false });
   }
 
-  const { data, error } = await db.rpc("site_registrar_lead", {
+  const { error } = await db.rpc("site_registrar_lead", {
     p_organizacao: ORG(),
     p_nome: nome,
     p_telefone: telefone,
@@ -41,11 +46,11 @@ export async function POST(req: Request) {
     p_interesse: interesse || null,
     p_creci: creci || null,
     p_visitante: visitante,
-    p_utm: (c.utm && typeof c.utm === "object") ? c.utm : {},
+    p_utm: limparUtm(c.utm),
   });
   if (error) {
-    console.error("[leads]", error.message);
+    console.error("[leads] falha ao registrar", { code: error.code });
     return NextResponse.json({ erro: "Não conseguimos registrar agora. Fale com a gente pelo WhatsApp." }, { status: 500 });
   }
-  return NextResponse.json({ ok: true, gravado: true, lead: data });
+  return NextResponse.json({ ok: true, gravado: true }, { headers: { "Cache-Control": "no-store" } });
 }

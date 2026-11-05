@@ -41,24 +41,27 @@
     "test:nara-sales-signals": "node --experimental-strip-types --experimental-loader ./scripts/ts-extension-loader.mjs scripts/check-nara-sales-signals.mjs",
     "test:nara-sales-conversion": "node --experimental-strip-types --experimental-loader ./scripts/ts-extension-loader.mjs scripts/check-nara-sales-conversion.mjs",
     "test:nara-conversion-agenda": "node --experimental-strip-types --experimental-loader ./scripts/ts-extension-loader.mjs scripts/check-nara-conversion-agenda.mjs",
-    "test:nara-handoff-persistence": "node --experimental-strip-types --experimental-loader ./scripts/ts-extension-loader.mjs scripts/check-nara-handoff-persistence.mjs"
+    "test:nara-handoff-persistence": "node --experimental-strip-types --experimental-loader ./scripts/ts-extension-loader.mjs scripts/check-nara-handoff-persistence.mjs",
+    "test:security:crm": "node --experimental-strip-types --experimental-loader ./scripts/security/crm-security-loader.mjs scripts/security/check-crm-security.mjs",
+    "test:security:site": "node --experimental-strip-types scripts/security/check-site-api.mjs",
+    "test:security": "npm run test:security:crm && npm run test:security:site && node scripts/security/check-spreadsheet-dependency.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.3",
     "@supabase/supabase-js": "^2.110.8",
     "geist": "1.7.2",
     "lucide-react": "1.49.0",
-    "next": "^16.2.11",
-    "react": "^19.2.0",
-    "react-dom": "^19.2.0",
-    "xlsx": "^0.18.5"
+    "next": "16.4.5",
+    "react": "19.2.9",
+    "react-dom": "19.2.9",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.0.0",
     "eslint": "^9.0.0",
-    "eslint-config-next": "^16.2.11",
+    "eslint-config-next": "16.4.5",
     "typescript": "^5.9.0"
   }
 }

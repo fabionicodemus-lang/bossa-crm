@@ -19,7 +19,7 @@
     "@fontsource/ephesis": "^5.3.0",
     "@fontsource/michroma": "^5.3.0",
     "@supabase/supabase-js": "^2.57.4",
-    "next": "^16.4.2",
+    "next": "16.4.5",
     "react": "^19.2.9",
     "react-dom": "^19.2.9",
     "server-only": "^0.0.1"

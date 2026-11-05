@@ -1,7 +1,8 @@
 import { getCurrentContext } from '@/lib/auth';
 import { findAgendaConflicts } from '@/lib/agenda';
-import { deleteMicrosoftEvent, getMicrosoftConnection, pushMicrosoftEvent } from '@/lib/microsoft-calendar';
+import { deleteMicrosoftEvent, pushMicrosoftEvent } from '@/lib/microsoft-calendar';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { createClient } from '@/lib/supabase/server';
 
 export const runtime = 'nodejs';
 
@@ -17,6 +18,30 @@ const err = (message: string, status = 400) => Response.json({ error: message },
 function validDate(value: string | undefined) { return Boolean(value && Number.isFinite(new Date(value).getTime())); }
 function validateTime(start?: string, end?: string) {
   return validDate(start) && validDate(end) && new Date(end!).getTime() > new Date(start!).getTime();
+}
+function referenceId(value: unknown): string | null | undefined {
+  if (value == null) return null;
+  if (typeof value !== 'string') return undefined;
+  return value.trim() || null;
+}
+async function verifyReferences(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  organizationId: string,
+  assignedTo: string,
+  leadId: string | null,
+): Promise<Response | null> {
+  // Reference IDs are untrusted. Verify them through the caller's RLS view and
+  // explicit company filters before any privileged write or Outlook operation.
+  const [assignee, lead] = await Promise.all([
+    supabase.from('memberships').select('user_id')
+      .eq('organization_id', organizationId).eq('user_id', assignedTo).maybeSingle(),
+    leadId ? supabase.from('leads').select('id')
+      .eq('organization_id', organizationId).eq('id', leadId).maybeSingle() : null,
+  ]);
+  if (assignee.error || lead?.error) return err('Não foi possível verificar o responsável e o contato. Tente novamente.', 503);
+  if (!assignee.data) return err('Responsável não encontrado nesta empresa.', 404);
+  if (leadId && !lead?.data) return err('Contato não encontrado nesta empresa.', 404);
+  return null;
 }
 async function authorization(write = false) {
   const context = await getCurrentContext({ redirectIfMissing: false });
@@ -50,16 +75,23 @@ export async function POST(request: Request) {
   const auth = await authorization(true);
   if (!auth.context) return auth.response!;
   const body = await request.json().catch(() => ({})) as AgendaPayload;
-  if (!body.title?.trim() || !body.assigned_to) return err('Informe título e responsável.');
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return err('Dados inválidos.');
+  const assignedTo = referenceId(body.assigned_to);
+  const leadId = referenceId(body.lead_id);
+  if (typeof body.title !== 'string' || !body.title.trim() || !assignedTo) return err('Informe título e responsável.');
+  if (leadId === undefined) return err('Contato inválido.');
   if (!validateTime(body.starts_at, body.ends_at)) return err('Informe início e término válidos.');
   if (!eventTypes.has(body.event_type || '') || !meetingModes.has(body.meeting_mode || '')) return err('Tipo ou formato inválido.');
+  const supabase = await createClient();
+  const referenceError = await verifyReferences(supabase, auth.context.organization.id, assignedTo, leadId);
+  if (referenceError) return referenceError;
   const availability = await conflictsOrFailure({ organizationId: auth.context.organization.id,
-    assignedTo: body.assigned_to, startsAt: body.starts_at!, endsAt: body.ends_at! });
+    assignedTo, startsAt: body.starts_at!, endsAt: body.ends_at! });
   if (availability.error) return err(availability.error, 503);
   if (availability.conflicts.length) return Response.json({ error: 'Responsável já possui compromisso nesse horário.', conflicts: availability.conflicts }, { status: 409 });
   const admin = createAdminClient();
   const { data, error } = await admin.from('agenda_events').insert({
-    organization_id: auth.context.organization.id, lead_id: body.lead_id || null, assigned_to: body.assigned_to,
+    organization_id: auth.context.organization.id, lead_id: leadId, assigned_to: assignedTo,
     created_by: auth.context.userId, created_by_kind: 'human', title: body.title.trim(),
     description: body.description?.trim() || null, event_type: body.event_type, meeting_mode: body.meeting_mode,
     location: body.location?.trim() || null, video_url: body.video_url?.trim() || null,
@@ -80,21 +112,27 @@ export async function PATCH(request: Request) {
   const auth = await authorization(true);
   if (!auth.context) return auth.response!;
   const body = await request.json().catch(() => ({})) as AgendaPayload;
-  if (!body.id) return err('Evento não informado.');
-  const admin = createAdminClient();
-  const { data: current } = await admin.from('agenda_events').select('*').eq('id', body.id)
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return err('Dados inválidos.');
+  if (typeof body.id !== 'string' || !body.id.trim()) return err('Evento não informado.');
+  const supabase = await createClient();
+  const { data: current, error: currentError } = await supabase.from('agenda_events').select('*').eq('id', body.id)
     .eq('organization_id', auth.context.organization.id).maybeSingle();
+  if (currentError) return err('Não foi possível verificar o compromisso. Tente novamente.', 503);
   if (!current) return err('Evento não encontrado.', 404);
   if (current.microsoft_sync_status === 'imported') return err('Este bloqueio veio do Outlook. Edite-o diretamente no Outlook e sincronize novamente.', 403);
-  const assignedTo = body.assigned_to ?? current.assigned_to;
+  const assignedTo = referenceId(body.assigned_to ?? current.assigned_to);
+  const leadId = referenceId('lead_id' in body ? body.lead_id : current.lead_id);
   const startsAt = body.starts_at ?? current.starts_at;
   const endsAt = body.ends_at ?? current.ends_at;
   if (!assignedTo || !validateTime(startsAt, endsAt)) return err('Responsável ou período inválido.');
+  if (leadId === undefined) return err('Contato inválido.');
   if (current.microsoft_event_id && assignedTo !== current.assigned_to) return err('Para trocar o responsável de um evento sincronizado, cancele e crie um novo compromisso.', 409);
   const nextStatus = body.status ?? current.status;
   if (!statuses.has(nextStatus)) return err('Status inválido.');
   if (body.event_type !== undefined && !eventTypes.has(body.event_type)) return err('Tipo inválido.');
   if (body.meeting_mode !== undefined && !meetingModes.has(body.meeting_mode)) return err('Formato inválido.');
+  const referenceError = await verifyReferences(supabase, auth.context.organization.id, assignedTo, leadId);
+  if (referenceError) return referenceError;
   if (nextStatus === 'scheduled') {
     const availability = await conflictsOrFailure({ organizationId: auth.context.organization.id, assignedTo,
       startsAt, endsAt, excludeEventId: body.id, excludeMicrosoftId: current.microsoft_event_id });
@@ -102,9 +140,12 @@ export async function PATCH(request: Request) {
     if (availability.conflicts.length) return Response.json({ error: 'Responsável já possui compromisso nesse horário.', conflicts: availability.conflicts }, { status: 409 });
   }
   const patch: Record<string, unknown> = {};
-  for (const key of ['lead_id','assigned_to','title','description','location','video_url','starts_at','ends_at','status','event_type','meeting_mode'] as const) {
+  if ('lead_id' in body) patch.lead_id = leadId;
+  if ('assigned_to' in body) patch.assigned_to = assignedTo;
+  for (const key of ['title','description','location','video_url','starts_at','ends_at','status','event_type','meeting_mode'] as const) {
     if (key in body) patch[key] = body[key] ?? null;
   }
+  const admin = createAdminClient();
   const { data, error } = await admin.from('agenda_events').update(patch).eq('id', body.id)
     .eq('organization_id', auth.context.organization.id).select('*').single();
   if (error) return err(error.code === '23P01' ? 'Conflito de horário; atualize a agenda.' : error.message, error.code === '23P01' ? 409 : 500);

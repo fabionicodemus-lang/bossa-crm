@@ -1,37 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
-
-function isLocalHostname(hostname: string) {
-  return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1';
-}
-
-function resolveAppOrigin(request: Request) {
-  const requestUrl = new URL(request.url);
-  const forwardedHost = request.headers.get('x-forwarded-host')?.split(',')[0]?.trim();
-  const forwardedProto = request.headers.get('x-forwarded-proto')?.split(',')[0]?.trim();
-  const host = forwardedHost || request.headers.get('host') || requestUrl.host;
-  const protocol = forwardedProto || requestUrl.protocol.replace(':', '') || 'https';
-
-  try {
-    const requestOrigin = new URL(`${protocol}://${host}`);
-    if (!isLocalHostname(requestOrigin.hostname)) return requestOrigin.origin;
-  } catch {
-    // Tenta a URL configurada abaixo.
-  }
-
-  const configuredUrl = process.env.NEXT_PUBLIC_APP_URL;
-  if (configuredUrl) {
-    try {
-      const configuredOrigin = new URL(configuredUrl);
-      if (!isLocalHostname(configuredOrigin.hostname)) return configuredOrigin.origin;
-    } catch {
-      // Usa o domínio público de produção como último recurso.
-    }
-  }
-
-  return 'https://bossa-crm-phi.vercel.app';
-}
+import { crmAccountOrigin, globalAccountManagementScope } from '@/lib/security/crm-user-access';
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -56,17 +26,25 @@ export async function POST(request: Request) {
   }
 
   const admin = createAdminClient();
-  const { data: profile } = await admin.from('profiles').select('id,email').eq('email', email).maybeSingle();
+  const { data: profile, error: profileError } = await admin.from('profiles').select('id,email').eq('email', email).maybeSingle();
+  if (profileError) return NextResponse.json({ error: 'Não foi possível verificar as permissões desta conta.' }, { status: 503 });
 
   if (profile) {
-    const { data: targetMembership } = await admin
-      .from('memberships')
-      .select('id')
-      .eq('organization_id', membership.organization_id)
-      .eq('user_id', profile.id)
-      .maybeSingle();
-    if (!targetMembership) {
-      return NextResponse.json({ error: 'Este usuário não pertence à sua empresa.' }, { status: 403 });
+    const scope = await globalAccountManagementScope(admin, membership.organization_id, profile.id);
+    if (scope === 'unavailable') {
+      return NextResponse.json({ error: 'Não foi possível verificar as permissões desta conta.' }, { status: 503 });
+    }
+    if (scope !== 'allowed') {
+      return NextResponse.json({ error: 'Esta conta não pode ter um link de senha emitido por esta empresa. O titular deve usar “Esqueci minha senha”.' }, { status: 403 });
+    }
+    // Profile fields are editable. The account's verified Auth identity determines
+    // which email may receive a global recovery token for this scoped user ID.
+    const { data: authAccount, error: authAccountError } = await admin.auth.admin.getUserById(profile.id);
+    if (authAccountError || !authAccount.user) {
+      return NextResponse.json({ error: 'Não foi possível verificar a identidade desta conta.' }, { status: 503 });
+    }
+    if (authAccount.user.email?.trim().toLowerCase() !== email) {
+      return NextResponse.json({ error: 'O e-mail cadastrado não corresponde à conta de acesso. O titular deve usar “Esqueci minha senha”.' }, { status: 403 });
     }
   } else {
     const { data: pendingInvite } = await admin
@@ -86,13 +64,28 @@ export async function POST(request: Request) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
 
+  // Check the actual identity returned by Auth, including pending invitations.
+  // An editable profile or an invitation row alone cannot authorize a global token.
+  const generatedUser = data.user;
+  if (!generatedUser?.id || generatedUser.email?.trim().toLowerCase() !== email
+    || (profile && generatedUser.id !== profile.id)) {
+    return NextResponse.json({ error: 'Não foi possível confirmar o destinatário do link de senha.' }, { status: 403 });
+  }
+  const generatedScope = await globalAccountManagementScope(admin, membership.organization_id, generatedUser.id);
+  if (generatedScope === 'unavailable') {
+    return NextResponse.json({ error: 'Não foi possível verificar as permissões desta conta.' }, { status: 503 });
+  }
+  if (generatedScope !== 'allowed') {
+    return NextResponse.json({ error: 'Esta conta não pode ter um link de senha emitido por esta empresa. O titular deve usar “Esqueci minha senha”.' }, { status: 403 });
+  }
+
   const properties = data.properties as { hashed_token?: string } | undefined;
   const tokenHash = properties?.hashed_token;
   if (!tokenHash) {
     return NextResponse.json({ error: 'A Supabase não devolveu o token seguro para gerar o link.' }, { status: 500 });
   }
 
-  const callbackUrl = new URL('/auth/callback', resolveAppOrigin(request));
+  const callbackUrl = new URL('/auth/callback', crmAccountOrigin());
   callbackUrl.searchParams.set('token_hash', tokenHash);
   callbackUrl.searchParams.set('type', type);
   callbackUrl.searchParams.set('next', '/atualizar-senha');

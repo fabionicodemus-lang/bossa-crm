@@ -1,0 +1,43 @@
+name: Security regressions
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  application-security:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - name: Known runtime dependency vulnerabilities
+        run: npm audit --omit=dev --audit-level=high
+      - name: Isolated authorization, attachment, webhook and form regressions
+        run: npm run test:security
+  public-site:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: site
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - name: Known site dependency vulnerabilities
+        run: npm audit --omit=dev --audit-level=high
+      - run: npm run typecheck
+      - run: npm run build

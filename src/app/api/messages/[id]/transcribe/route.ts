@@ -57,6 +57,9 @@ export async function POST(
   if (!message) return Response.json({ error: 'Mensagem não encontrada.' }, { status: 404 });
   const cached = existingTranscript(message.raw_payload);
   if (cached) return Response.json({ transcript: cached, cached: true });
+  if (!['admin', 'comercial'].includes(context.role)) {
+    return Response.json({ error: 'Você não possui permissão para gerar transcrições.' }, { status: 403 });
+  }
 
   const audio = readAudio(message.raw_payload);
   if (!audio) return Response.json({ error: 'Esta mensagem não contém um áudio do WhatsApp.' }, { status: 400 });
@@ -90,14 +93,16 @@ export async function POST(
     const { error: messageUpdateError } = await admin
       .from('messages')
       .update({ body, raw_payload: enrichedPayload })
-      .eq('id', message.id);
+      .eq('id', message.id)
+      .eq('organization_id', context.organization.id);
     if (messageUpdateError) throw messageUpdateError;
 
     if (message.whatsapp_message_id) {
       const { error: transportUpdateError } = await admin
         .from('whatsapp_messages')
         .update({ body, payload: enrichedPayload })
-        .eq('wamid', message.whatsapp_message_id);
+        .eq('wamid', message.whatsapp_message_id)
+        .eq('organization_id', context.organization.id);
       if (transportUpdateError) throw transportUpdateError;
     }
 
