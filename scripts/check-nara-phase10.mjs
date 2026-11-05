@@ -151,13 +151,21 @@ await accept(6, 'Unidade identificada recebe preço vigente sem exigir finalidad
   assert.ok(result.score < 80, 'consulta de preço não comprova intenção de fechar');
 });
 
-await accept(7, 'Apartamento específico com intenção mantém condição completa', () => {
+await accept(7, 'Entrada e parcelas de unidade específica acionam comercial, não simulação automática', () => {
   const reply = 'O 901, 9º andar, custa R$ 900 mil, entrada de R$ 180 mil e 60 parcelas de R$ 12.000. Valor atual, corrigido pelo CUB/SC até a entrega.';
-  const result = enforceNaraTriage(turn({ reply, score: 88, classification: 'quente', handoff: true }), baseLead, [{ role: 'user', content: 'Quero comprar para morar. Qual o valor da unidade 901 do Flow?' }], { commercial: unitCommercial });
-  assert.ok(result.reply.endsWith(reply));
-  assert.match(result.reply, /entrada de R\$ 180 mil/);
-  assert.match(result.reply, /60 parcelas de R\$ 12\.000/);
-  assert.match(result.reply, /CUB\/SC/);
+  const message = 'Quero comprar para morar. Como ficam a entrada e as parcelas da unidade 901 do Flow?';
+  const result = enforceNaraTriage(turn({ reply, score: 88, classification: 'quente', handoff: false }), baseLead, [{ role: 'user', content: message }], { commercial: unitCommercial });
+  assert.equal(result.handoff, true);
+  assert.equal(result.classification, 'quente');
+  assert.equal(result.stage, 'qualificado');
+  assert.match(result.reply, /nossa equipe comercial/i);
+  assert.match(result.next_action, /passagem comercial imediata/i);
+  assert.ok(result.summary.includes(message));
+  assert.doesNotMatch(result.reply, /entrada de R\$|60 parcelas|aprovad[oa]|\?/i);
+  const decision = deriveHybridDecision({ lead: baseLead, turn: result, lastUserMessage: message });
+  assert.equal(decision.handoffRequired, true);
+  assert.equal(decision.stage, 'passagem_pendente');
+  assert.equal(decision.priorityClass, 'A1');
 });
 
 await accept(8, 'Indisponível retorna vazio e não fabrica escassez', async () => {
