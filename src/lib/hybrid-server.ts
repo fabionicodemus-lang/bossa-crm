@@ -3,6 +3,7 @@ import type { AiTurn } from './ai';
 import { deriveHybridDecision, type HybridDecision } from './hybrid';
 import type { Lead } from './types';
 import { isAssistedSaleSignal, isBrokerRoutingSignal, isPostSaleRoutingSignal } from './nara-contact-routing';
+import { explicitHumanRequest, refusesHandoff } from './nara-conversation-signals';
 
 export type AdminClient = SupabaseClient;
 
@@ -147,6 +148,28 @@ export async function applyHybridDecision(args: {
   lastUserMessage: string;
   sourceMessageId?: string | null;
 }): Promise<HybridDecision> {
+  const declinedContact = args.lead.kind === 'cliente'
+    && refusesHandoff(args.lastUserMessage) && !explicitHumanRequest(args.lastUserMessage);
+  let revokePendingHandoff = false;
+  if (declinedContact && args.lead.owner_mode === 'ai'
+    && (args.lead.stage === 'passagem_pendente' || args.lead.metadata?.nara_handoff_revocation_pending === true)) {
+    // The caller's lead can be stale after a salesperson accepts the handoff.
+    // Re-read only this lead, then use a compare-and-set before any cleanup.
+    const { data: current, error } = await args.admin.from('leads')
+      .select('id,stage,owner_mode,owner_id,ai_enabled,handoff_requested_at,handoff_accepted_at,metadata')
+      .eq('organization_id', args.organizationId).eq('id', args.lead.id).maybeSingle();
+    if (error) throw error;
+    if (!current) throw new Error('Contato indisponível para revogar a passagem pendente.');
+    args = { ...args, lead: { ...args.lead, ...current } };
+    const safeTurn = { ...args.turn, handoff: false, agenda_confirmed: false };
+    if (args.lead.owner_mode !== 'ai' || args.lead.handoff_accepted_at
+      || (args.lead.stage !== 'passagem_pendente' && args.lead.metadata?.nara_handoff_revocation_pending !== true)) {
+      // Do not overwrite a takeover or clear any of its tasks/alerts.
+      return deriveHybridDecision({ lead: args.lead, turn: safeTurn, lastUserMessage: args.lastUserMessage });
+    }
+    args = { ...args, turn: safeTurn };
+    revokePendingHandoff = true;
+  }
   const baseDecision = deriveHybridDecision({
     lead: args.lead,
     turn: args.turn,
@@ -156,11 +179,11 @@ export async function applyHybridDecision(args: {
   // Regra de proteção: CLIENTE é uma classificação humana/persistente.
   // A IA nunca converte cliente em corretor. Somente um contato GERAL ainda
   // não classificado pode ser promovido automaticamente para CORRETOR.
-  const routedToAssistedSale = args.lead.kind === 'cliente'
+  const routedToAssistedSale = !revokePendingHandoff && args.lead.kind === 'cliente'
     && isAssistedSaleSignal(args.lastUserMessage);
   const routedToBroker = args.lead.kind === 'geral'
     && isBrokerRoutingSignal(args.lastUserMessage);
-  const postSaleHandoff = args.lead.kind === 'cliente'
+  const postSaleHandoff = !revokePendingHandoff && args.lead.kind === 'cliente'
     && isPostSaleRoutingSignal(args.lastUserMessage);
 
   const decision = postSaleHandoff
@@ -192,6 +215,11 @@ export async function applyHybridDecision(args: {
     : decision.nextAction;
   const metadata = {
     ...(args.lead.metadata || {}),
+    ...(revokePendingHandoff ? {
+      nara_handoff_revocation_pending: true,
+      nara_handoff_revoked_at: now,
+      nara_handoff_revocation_source_message_id: args.sourceMessageId ?? null,
+    } : {}),
     ...(routedToBroker ? {
       contact_kind_routed_from: 'geral',
       contact_kind_routed_to: 'corretor',
@@ -258,13 +286,61 @@ export async function applyHybridDecision(args: {
   if (decision.stage === 'encerrado' && /opt-out/i.test(decision.nextAction)) {
     updatePayload.opt_out = true;
   }
+  if (revokePendingHandoff) updatePayload.handoff_requested_at = null;
 
-  const { error: updateError } = await args.admin
+  const updateLead = args.admin
     .from('leads')
     .update(updatePayload)
     .eq('id', args.lead.id)
     .eq('organization_id', args.organizationId);
-  if (updateError) throw updateError;
+  if (revokePendingHandoff) {
+    const { data: claimed, error: updateError } = await updateLead
+      .eq('stage', args.lead.stage).eq('owner_mode', 'ai').is('handoff_accepted_at', null)
+      .select('id').maybeSingle();
+    if (updateError) throw updateError;
+    if (!claimed) throw new Error('O atendimento mudou durante a revogação; nenhuma pendência foi cancelada.');
+
+    const { error: handoffError } = await args.admin.from('lead_handoffs')
+      .update({ status: 'cancelled' })
+      .eq('organization_id', args.organizationId).eq('lead_id', args.lead.id).eq('status', 'pending');
+    if (handoffError) throw handoffError;
+    // Include already-cancelled IDs so a retry can finish partial cleanup.
+    // Accepted handoffs are never targets of the queued-alert cancellation.
+    const { data: cancelled, error: cancelledError } = await args.admin.from('lead_handoffs')
+      .select('id').eq('organization_id', args.organizationId)
+      .eq('lead_id', args.lead.id).eq('status', 'cancelled');
+    if (cancelledError) throw cancelledError;
+    const cancelledIds = (cancelled ?? []).map((row: { id: string }) => row.id);
+    const { error: taskError } = await args.admin.from('lead_tasks')
+      .update({ status: 'cancelled', completed_at: now })
+      .eq('organization_id', args.organizationId).eq('lead_id', args.lead.id)
+      .eq('status', 'pending').like('dedupe_key', 'handoff:%');
+    if (taskError) throw taskError;
+    if (cancelledIds.length) {
+      // Each recipient has its own status: never rewrite sent/processing/skipped.
+      const { error: ownerAlertError } = await args.admin.from('client_handoff_alert_jobs')
+        .update({ owner_status: 'cancelled', updated_at: now })
+        .eq('organization_id', args.organizationId).eq('lead_id', args.lead.id)
+        .in('handoff_id', cancelledIds).eq('owner_status', 'queued');
+      if (ownerAlertError) throw ownerAlertError;
+      const { error: managerAlertError } = await args.admin.from('client_handoff_alert_jobs')
+        .update({ manager_status: 'cancelled', updated_at: now })
+        .eq('organization_id', args.organizationId).eq('lead_id', args.lead.id)
+        .in('handoff_id', cancelledIds).eq('manager_status', 'queued');
+      if (managerAlertError) throw managerAlertError;
+    }
+    // No schema change: the marker only makes retrying checked updates safe.
+    const { data: completed, error: completeError } = await args.admin.from('leads')
+      .update({ metadata: { ...metadata, nara_handoff_revocation_pending: false } })
+      .eq('organization_id', args.organizationId).eq('id', args.lead.id)
+      .eq('stage', decision.stage).eq('owner_mode', 'ai').is('handoff_accepted_at', null)
+      .select('id').maybeSingle();
+    if (completeError) throw completeError;
+    if (!completed) throw new Error('O atendimento mudou durante a conclusão da revogação.');
+  } else {
+    const { error: updateError } = await updateLead;
+    if (updateError) throw updateError;
+  }
 
   if (routedToBroker) {
     await Promise.all([

@@ -68,9 +68,9 @@ const operationalContext = {
   },
 };
 
-// 1. Lead do exterior
+// 1. Lead do exterior: informação sobre compra remota não exige negociação.
 {
-  const history = [{ role: 'user', content: 'Moro em Orlando, dá pra comprar morando fora? Como pago? Preciso ir aí assinar?' }];
+  const history = [{ role: 'user', content: 'Moro em Orlando, dá pra comprar morando fora? Preciso ir aí assinar?' }];
   const result = postProcessNaraTurn(turn(), history, foreignContext);
   assert.match(result.reply, /d[aá] sim/i);
   assert.match(result.reply, /negocia[cç][aã]o.*dist[aâ]ncia|dist[aâ]ncia/i);
@@ -78,6 +78,19 @@ const operationalContext = {
   assert.match(result.reply, /documenta[cç][aã]o.*assinatura/i);
   assert.doesNotMatch(result.reply, /reais, d[oó]lar ou moeda local/i);
   assert.doesNotMatch(result.reply, /EUA.*Dinamarca.*Portugal.*Chile/i);
+}
+
+// 1b. Ao entrar em pagamento, o mesmo lead vai ao comercial com todas as dúvidas no briefing.
+{
+  const message = 'Moro em Orlando, dá pra comprar morando fora? Como pago? Preciso ir aí assinar?';
+  const result = postProcessNaraTurn(turn(), [{ role: 'user', content: message }], foreignContext);
+  assert.equal(result.handoff, true);
+  assert.equal(result.classification, 'quente');
+  assert.equal(result.stage, 'qualificado');
+  assert.match(result.reply, /nossa equipe comercial/i);
+  assert.match(result.next_action, /passagem comercial imediata/i);
+  assert.ok(result.summary.includes(message), 'perguntas sobre pagamento e assinatura devem chegar ao comercial');
+  assert.doesNotMatch(result.reply, /aprovad[oa]|pagamento em d[oó]lar|entrada de R\$|\?/i);
 }
 
 // 2. Valor em dólar vem pronto do sistema
@@ -115,9 +128,10 @@ const operationalContext = {
   ];
   const result = postProcessNaraTurn(turn(), history, {});
   assert.equal(result.handoff, true);
-  assert.match(result.reply, /Ta[ií]s.*comercial/i);
+  assert.match(result.reply, /nossa equipe comercial/i);
   assert.doesNotMatch(result.reply, /qual assunto|compra de im[oó]vel, cliente atual/i);
-  assert.match(result.reply, /à vista ou parcelado/i);
+  assert.match(result.next_action, /assumir imediatamente/i);
+  assert.doesNotMatch(result.reply, /à vista ou parcelado|qual prazo|qual faixa|\?/i, 'passagem não prolonga a qualificação');
 }
 
 // 5. Tempo de espera usa SLA
@@ -157,9 +171,10 @@ const operationalContext = {
     history,
     {},
   );
-  assert.match(result.reply, /aluguel/i);
   assert.equal(result.handoff, true);
-  assert.doesNotMatch(result.reply, /comprar ou outro assunto|confirmação do envio/i);
+  assert.match(result.summary, /Parcelado\. E voc[eê]s cuidam do aluguel\?/i);
+  assert.match(result.next_action, /passagem comercial imediata/i);
+  assert.doesNotMatch(result.reply, /comprar ou outro assunto|confirmação do envio|aprovad[oa]|\?/i);
 }
 
 // Orlando 18h em 24/09/2026 = Brasília 19h (DST real via IANA)

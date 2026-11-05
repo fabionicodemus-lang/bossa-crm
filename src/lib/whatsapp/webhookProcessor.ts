@@ -1,6 +1,9 @@
 import { generateAiTurn, ensureFirstTurnIntroduction, type AiFileOption } from '@/lib/ai-v120';
 import { naraReplyNeedsCommercialProtection, protectNaraCommercialReply } from '@/lib/nara-commercial-guard';
 import { naraConversationLanguage } from '@/lib/nara-language';
+import { financialNegotiationIntent } from '@/lib/nara-conversation-signals';
+import { applyNaraFinancialHandoff } from '@/lib/nara-sales-handoff';
+import { isAssistedSaleSignal, isBrokerRoutingSignal, isPostSaleRoutingSignal, isSupplierRoutingSignal } from '@/lib/nara-contact-routing';
 import { loadAiContext } from '@/lib/ai-context';
 import { recordAiUsage } from '@/lib/ai-usage';
 import { loadNaraDynamicTurnContext } from '@/lib/nara-dynamic-context';
@@ -12,8 +15,8 @@ import { markNaraOfferAuditFailed, markNaraOfferAuditSent, prepareNaraOfferAudit
 import { aiCanReply } from '@/lib/hybrid';
 import { optOutSignal } from '@/lib/hybrid';
 import { whatsappCanStillReply, whatsappClaimAiTurn, whatsappMarkAiTurnSent } from '@/lib/whatsapp/aiTurnSafety';
-import { maybeScheduleAgendaFromAi } from '@/lib/agenda-ai-core';
-import { appendAgendaMessageToReply, hasNonAgendaQuestion, shouldHandleAgendaTurn } from '@/lib/nara-agenda-intent';
+import { maybeScheduleAgendaFromAi, type AgendaAiResult } from '@/lib/agenda-ai-core';
+import { appendAgendaMessageToReply, confirmedAgendaReply, hasNonAgendaQuestion, shouldHandleAgendaTurn } from '@/lib/nara-agenda-intent';
 import { mergeMetaAdAttribution } from '@/lib/meta-ad-attribution';
 import { applyHybridDecision } from '@/lib/hybrid-server';
 import {
@@ -722,17 +725,27 @@ export async function processConversation(args: {
     }
     return;
   }
+  const outsideBuyerProfile = history.some((item) => item.role === 'user'
+    && (isAssistedSaleSignal(item.content) || isBrokerRoutingSignal(item.content)
+      || isPostSaleRoutingSignal(item.content) || isSupplierRoutingSignal(item.content)));
   let agendaReply = '';
-  if (lead.kind === 'cliente' && shouldHandleAgendaTurn(history, lastUserMessage)) {
+  if (lead.kind === 'cliente' && !outsideBuyerProfile && !financialNegotiationIntent(lastUserMessage, history) && shouldHandleAgendaTurn(history, lastUserMessage)) {
     const officeAddress = context.dynamic?.values.office_address?.trim();
-    const appointment = await maybeScheduleAgendaFromAi({ admin: args.admin,
-      organizationId: args.channel.organization_id, lead, turn, lastUserMessage,
-      officeAddress,
-      weekdayHours: context.dynamic?.values.office_weekday_hours,
-      saturdayHours: context.dynamic?.values.office_saturday_hours });
+    let appointment: AgendaAiResult;
+    try {
+      appointment = await maybeScheduleAgendaFromAi({ admin: args.admin,
+        organizationId: args.channel.organization_id, lead, turn, lastUserMessage,
+        officeAddress,
+        weekdayHours: context.dynamic?.values.office_weekday_hours,
+        saturdayHours: context.dynamic?.values.office_saturday_hours });
+    } catch (error) {
+      console.error('[nara agenda]', error instanceof Error ? error.message : 'Falha na confirmação da agenda');
+      turn.agenda_confirmed = false;
+      appointment = { status: 'needs_details', requiresHuman: true,
+        message: 'Não consegui confirmar esse horário na agenda. Vou chamar a equipe para combinar com você, sem considerar o compromisso agendado ainda.' };
+    }
     if (appointment.status === 'created') {
-      const maps = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(officeAddress || '')}`;
-      turn.reply = `Sua visita ficou marcada para ${new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo', dateStyle: 'short', timeStyle: 'short' }).format(new Date(appointment.startsAt))}, no escritório da Bossa, ${officeAddress}. ${maps} Se precisar mudar, avise por aqui.`;
+      turn.reply = confirmedAgendaReply(appointment);
       agendaReply = turn.reply;
       turn.stage = 'agendado'; turn.classification = 'agendamento'; turn.handoff = false;
     } else if (appointment.status !== 'none') {
@@ -740,7 +753,9 @@ export async function processConversation(args: {
       turn.reply = hasNonAgendaQuestion(lastUserMessage)
         ? appendAgendaMessageToReply(turn.reply, appointment.message)
         : appointment.message;
-      turn.stage = 'ia'; turn.handoff = false;
+      turn.stage = 'ia';
+      turn.handoff = appointment.status === 'needs_details' && appointment.requiresHuman === true;
+      if (turn.handoff) turn.next_action = 'Confirmar com o cliente o formato, o local ou acesso e o horário solicitado; ainda não há agendamento confirmado.';
     }
   }
   const decision = await applyHybridDecision({
@@ -873,6 +888,19 @@ export async function processConversation(args: {
       admin: args.admin, leadId: lead.id, conversationId: args.conversation.id,
       sourceId: args.sourceMessageId, allowDisabledLead: forceBroadcastReply,
     }))) return;
+  }
+
+  // A price refresh may re-render the current table merely because the contact
+  // asked about an entry/instalment. The final outbound message must still obey
+  // the pre-sales boundary: a person handles terms, not another payment quote.
+  // The hybrid workflow above has already persisted the pending handoff. Keep
+  // this wording prospective; assignment is not proof a person has answered.
+  if (lead.kind === 'cliente' && !outsideBuyerProfile) {
+    turn.reply = reply;
+    if (applyNaraFinancialHandoff(turn, history)) {
+      reply = ensureFirstTurnIntroduction(turn.reply, history, context);
+      turn.reply = reply;
+    }
   }
 
   let offerAuditIds: string[] = [];

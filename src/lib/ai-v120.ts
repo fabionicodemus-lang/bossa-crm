@@ -1,4 +1,6 @@
 import { enforceNaraReplyGuardrails, ensureFirstTurnIntroduction, generateAiTurn as generateCoreAiTurn } from './ai';
+import { applyNaraFinancialHandoff } from './nara-sales-handoff';
+import { shouldHandleAgendaTurn } from './nara-agenda-intent';
 import { naraConversationLanguage, requestedNaraLanguage } from './nara-language';
 import { isAssistedSaleSignal, isBrokerRoutingSignal, isPostSaleRoutingSignal, isSupplierRoutingSignal } from './nara-contact-routing';
 import type { AiTrainingContext, AiTurn } from './ai';
@@ -79,21 +81,6 @@ function requiresHumanHandoff(text: string): boolean {
     || /\b(proposta|reservar|reserva|negociar|negociacao|desconto|reclamacao|propuesta|negociacion|reclamo)\b/.test(value);
 }
 
-function handoffQuestion(history: ChatMessage[]): string {
-  const value = normalizeText(userText(history));
-  const spanish = isSpanishLead(history);
-  if (!/\b(a vista|avista|parcelad|financi|entrada|sinal|mensal|contado|cuotas|financi|entrada|mensual)\b/.test(value)) {
-    return spanish ? 'Mientras tanto, ¿piensas pagar al contado o en cuotas?' : 'Enquanto isso: você pensa em pagar à vista ou parcelado?';
-  }
-  if (!/\b(agora|este mes|esse mes|\d+ meses|ano que vem|202\d|sem pressa|prazo|ahora|este mes|proximo mes|sin apuro|plazo)\b/.test(value)) {
-    return spanish ? 'Mientras tanto, ¿en qué plazo piensas comprar?' : 'Enquanto isso: você pensa em comprar em qual prazo?';
-  }
-  if (!/\b(melhor horario|depois das|apos as|a partir das|manha|tarde|noite|mejor horario|despues de|a partir de|manana|tarde|noche)\b/.test(value)) {
-    return spanish ? 'Mientras tanto, ¿cuál es el mejor horario para que Taís te contacte?' : 'Enquanto isso: qual é o melhor horário para a Taís te chamar?';
-  }
-  return '';
-}
-
 function topicFromQuestion(text: string): string {
   const value = normalizeText(text);
   if (/\baluguel|locacao|administracao\b/.test(value)) return 'a administração do aluguel';
@@ -156,10 +143,10 @@ function foreignPurchaseReply(name: string, spanish: boolean): string {
 
 function slaReply(context: AiTrainingContext, spanish: boolean): string {
   const op = context.operational;
-  if (!op) return spanish ? 'Ya pasé tu atención a Taís, del equipo comercial.' : 'Já passei para a Taís do comercial. Ela assume seu atendimento agora.';
+  if (!op) return spanish ? 'El equipo comercial continuará por aquí. No tengo un horario de respuesta confirmado.' : 'O comercial continua por aqui. Ainda não tenho um horário de retorno confirmado.';
   return op.business_open_now
-    ? (spanish ? `Taís, del equipo comercial, te contacta en hasta ${op.hot_lead_sla_minutes} minutos.` : `A Taís do comercial te chama em até ${op.hot_lead_sla_minutes} minutos.`)
-    : (spanish ? `Nuestro equipo vuelve ${op.next_business_label} y tu atención queda como prioridad.` : `Nosso time volta ${op.next_business_label} e você será o primeiro a ser atendido.`);
+    ? (spanish ? `La meta de nuestro equipo es responder en hasta ${op.hot_lead_sla_minutes} minutos durante el horario comercial; no puedo garantizar el momento exacto.` : `A meta do nosso time é retornar em até ${op.hot_lead_sla_minutes} minutos no horário comercial; ainda não consigo garantir o momento exato.`)
+    : (spanish ? `Nuestro equipo vuelve ${op.next_business_label}. Tu solicitud queda pendiente de atención, sin un horario exacto confirmado.` : `Nosso time volta ${op.next_business_label}. Seu pedido fica pendente de atendimento, ainda sem um horário exato confirmado.`);
 }
 
 function plantQualifier(text: string): string | null {
@@ -249,6 +236,10 @@ function finishTurn(turn: AiTurn, history: ChatMessage[]): AiTurn {
   if (outsideBuyerDestination(history)) {
     turn.handoff = true;
     return turn;
+  }
+  if (applyNaraFinancialHandoff(turn, history)) return turn;
+  if (shouldHandleAgendaTurn(history, latest) && !requiresHumanHandoff(latest)) {
+    turn.handoff = false;
   }
   if (isPureInformationRequest(latest) && !requiresHumanHandoff(latest)) {
     turn.handoff = false;
@@ -676,24 +667,28 @@ export function postProcessNaraTurn(
     }
   }
 
-  if (/\b(demora muito|quanto tempo|em quanto tempo|quando (?:ele|ela|o corretor|a corretora|o comercial) (?:me )?(?:chama|responde|liga))\b/.test(latestNormalized)) {
+  const asksCommercialReturn = /\b(?:quando|em quanto tempo|quanto tempo(?: demora)?)\b.{0,45}\b(?:comercial|tais|corretor|corretora|me chama|me responde|me liga|retorn\w*)\b/.test(latestNormalized);
+  const awaitingCommercial = priorReplies.slice(-2).some((reply) => /\b(?:chamar|chamando|encaminh\w*|llamando|connecting)\b.{0,35}\b(?:tais|comercial|corretor|corretora|equipo)\b/.test(reply));
+  const vagueWaitQuestion = /^(?:e )?(?:demora muito|quanto tempo|em quanto tempo|quando ela me chama)[?.!\s]*$/.test(latestNormalized);
+  if (asksCommercialReturn || (awaitingCommercial && vagueWaitQuestion)) {
     turn.reply = slaReply(context, spanish);
     turn.handoff = true;
     turn.classification = 'quente';
     turn.score = Math.max(turn.score, 80);
     turn.summary = turn.summary || 'Lead perguntou o prazo para retorno do comercial.';
-    turn.next_action = 'Taís deve assumir o atendimento dentro do SLA informado.';
+    turn.next_action = 'A equipe comercial deve assumir o atendimento dentro do SLA informado.';
     return finishTurn(turn, history);
   }
 
   if (asksHuman(latestRaw) && clearBuyerContext) {
-    const extra = handoffQuestion(history);
-    turn.reply = spanish ? `Ya estoy llamando a Taís, del equipo comercial.${extra ? ` ${extra}` : ''}` : `Já estou chamando a Taís do comercial.${extra ? ` ${extra}` : ''}`;
+    turn.reply = isEnglishLead(history)
+      ? "I'll ask our sales team to continue here with the context of our conversation."
+      : spanish ? 'Voy a llamar a nuestro equipo comercial para continuar por aquí con el contexto de nuestra conversación.' : 'Vou chamar nossa equipe comercial para continuar por aqui com o contexto da nossa conversa.';
     turn.handoff = true;
     turn.classification = 'quente';
     turn.score = Math.max(turn.score, 80);
     turn.summary = turn.summary || 'Lead de compra pediu atendimento humano.';
-    turn.next_action = 'Taís deve assumir imediatamente usando o histórico e os dados já coletados.';
+    turn.next_action = 'A equipe comercial deve assumir imediatamente usando o histórico e os dados já coletados.';
     return finishTurn(turn, history);
   }
 
@@ -702,11 +697,11 @@ export function postProcessNaraTurn(
     turn.reply = spanish
       ? `Sobre ${topic}, no tengo esa información confirmada en mi base. Te digo lo que sí está disponible y, si hace falta, el equipo comercial complementa sin que tengas que repetir.`
       : `Sobre ${topic}, isso não está confirmado na minha base. Posso te passar o que está disponível e, se precisar, o comercial complementa sem você repetir.`;
-    const alreadyInHandoff = priorMessages.some((message) => /ta[ií]s.*comercial|chamando a ta[ií]s|llamando a ta[ií]s|equipo comercial/.test(normalizeText(message)));
+    const alreadyInHandoff = priorMessages.some((message) => /tais.*comercial|(?:chamar|chamando).{0,30}comercial|equipo comercial|ask our sales team/.test(normalizeText(message)));
     turn.handoff = alreadyInHandoff;
     turn.summary = `Dúvida fora da base: ${latestRaw.slice(0, 300)}`;
     turn.next_action = alreadyInHandoff
-      ? 'Taís deve continuar a partir do histórico sem pedir o assunto novamente.'
+      ? 'A equipe comercial deve continuar a partir do histórico sem pedir o assunto novamente.'
       : 'Responder com o que estiver confirmado e só escalar se houver pedido explícito de atendimento humano.';
   }
 
@@ -745,6 +740,20 @@ export function postProcessNaraTurn(
 
   const asksIfRobot = /\b(voce e|vc e|e uma|eh uma|e um|eh um|isso e|aqui e|falando com)\s*(?:um |uma )?(?:robo|robot|bot|ia|inteligencia artificial|maquina|pessoa de verdade|humano|humana|gente de verdade)\b|\b(?:robo|bot|ia) ou (?:pessoa|humano|gente)\b|\b(?:pessoa|humano|gente) ou (?:robo|bot|ia)\b|\bassistente digital\b|\b(?:eres|es) (?:un )?(?:robot|bot|ia|humano)\b|\bare you (?:a )?(?:bot|robot|human|ai)\b/.test(latest);
   if (asksIfRobot) {
+    // A combined question still deserves its property answer. Do not erase it
+    // just to repeat the AI introduction and ask what the question was.
+    const answersPropertyQuestion = /\b(?:m2|metragem|suites?|quartos?|entrega|localizacao|mar|leisure|bedrooms?)\b/.test(normalizeText(turn.reply))
+      && /\b(?:metragem|metragens|suites?|quartos?|quando|onde|planta|lazer|bedrooms?|size)\b/.test(latest);
+    const admitsDigitalIdentity = /\b(?:assistente (?:digital|virtual)|asistente (?:digital|virtual)|digital assistant|virtual assistant)\b/.test(normalizeText(turn.reply));
+    const falselyClaimsHuman = /\b(?:sou (?:uma )?pessoa|sou human[oa]|nao sou (?:ia|robo)|soy human[oa]|i am human)\b/.test(normalizeText(turn.reply));
+    if (answersPropertyQuestion && !falselyClaimsHuman) {
+      if (!admitsDigitalIdentity) {
+        const identity = isEnglishLead(history) ? "I'm Nara, Bossa's digital assistant."
+          : spanish ? 'Soy Nara, la asistente digital de Bossa.' : 'Sou a Nara, assistente digital da Bossa.';
+        turn.reply = `${identity} ${turn.reply}`;
+      }
+      return finishTurn(turn, history);
+    }
     const firstTurn = priorMessages.length === 0;
     const hasOwnQuestion = /\?|\b(duvida|pergunta|queria saber|quero saber)\b/.test(latest.replace(/\b(?:robo|bot|ia|pessoa|humano)\b[^?]*\?/, ''));
     const answer = spanish
@@ -815,7 +824,7 @@ export function postProcessNaraTurn(
   const repeatedTriage = hasPriorTriage(history) && looksLikeTriageQuestion(turn.reply);
   if (repeated || repeatedTriage) {
     const topic = topicFromQuestion(latestRaw);
-    const alreadyInHandoff = priorMessages.some((message) => /ta[ií]s.*comercial|chamando a ta[ií]s|llamando a ta[ií]s/.test(normalizeText(message)));
+    const alreadyInHandoff = priorMessages.some((message) => /tais.*comercial|(?:chamar|chamando).{0,30}comercial|equipo comercial|ask our sales team/.test(normalizeText(message)));
     const destination = outsideBuyerDestination(history);
     const closing = /^(ok|valeu|obrigad[oa]|blz|beleza|show|certo|perfeito|tchau|gracias|thanks)\b/.test(latest);
     turn.reply = destination === 'plantao'
@@ -823,12 +832,12 @@ export function postProcessNaraTurn(
       : destination === 'pos_venda' || destination === 'venda_assistida'
         ? 'Já registrei e avisei a equipe; eles continuam seu atendimento por aqui, sem você precisar repetir.'
         : alreadyInHandoff
-          ? `Essa dúvida sobre ${topic} já ficou registrada para a Taís; você não precisa repetir. Ela continua daqui.`
+          ? `Essa dúvida sobre ${topic} já ficou registrada para a equipe comercial; você não precisa repetir. O atendimento continua daqui.`
           : spanish ? 'Cuéntame un poco más de lo que quieres saber y te respondo directo.' : 'Me conta um pouco mais do que você quer saber, que eu te respondo direto.';
     turn.handoff = alreadyInHandoff || Boolean(destination);
     turn.summary = `Resposta anterior seria repetida. Dúvida atual: ${latestRaw.slice(0, 280)}`;
     turn.next_action = alreadyInHandoff
-      ? 'Taís deve continuar a partir da dúvida registrada, sem pedir o assunto novamente.'
+      ? 'A equipe comercial deve continuar a partir da dúvida registrada, sem pedir o assunto novamente.'
       : 'Responder especificamente à última mensagem e avançar.';
     return finishTurn(turn, history);
   }

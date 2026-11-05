@@ -130,8 +130,7 @@ async function runScenario({ history, context = {}, output, failPrimary = false,
     assert.ok(result, 'the real wrapper must return a turn');
     // A final enforcement pass is idempotent and does not generate another reply.
     const finalPass = await enforceNaraReplyGuardrails(structuredClone(result), lead, history, context);
-    assert.equal(finalPass.reply, result.reply);
-    assert.deepEqual(finalPass.attachment_ids, result.attachment_ids);
+    assert.deepEqual(finalPass, result, 'a repeated final gate must preserve reply, handoff, classification, briefing, attachments and usage metadata');
     const generations = requests.filter((request) => request.path === '/v1/responses');
     const counts = requests.filter((request) => request.path === '/v1/responses/input_tokens');
     assert.equal(counts.length, generations.length);
@@ -209,23 +208,68 @@ try {
     assert.doesNotMatch(result.reply, /(?:custa|preço|valor)[^.!?\n]*R\$\s*(?:900 mil|900\.000(?:,00)?)/i);
   });
 
-  await accept('Preço correto com condições inventadas vira a condição completa do CRM', async () => {
+  await accept('Pergunta de pagamento passa ao humano e descarta condições inventadas, mesmo com plano válido no CRM', async () => {
     const { result } = await runScenario({
       history: conversation('Qual é o preço e como funciona o pagamento da unidade 1602 do Flow?'),
       context: { commercial: currentCommercial() },
       output: aiTurn('A unidade 1602 custa R$ 1.234.567,89. Consigo sem juros, sem correção e com desconto garantido.'),
     });
-    assert.match(result.reply, /R\$\s*1\.234\.567,89/);
-    assert.match(result.reply, /Entrada:\s*R\$\s*234\.567,89/);
-    assert.match(result.reply, /Parcelas mensais:\s*60\s*×\s*R\$\s*10\.000,00/);
-    assert.match(result.reply, /Reforços:\s*4\s*×\s*R\$\s*50\.000,00/);
-    assert.match(result.reply, /Nas chaves:\s*R\$\s*200\.000,00/);
-    assert.match(result.reply, /CUB durante a obra; IPCA após as chaves/);
-    assert.match(result.reply, /0,59% ao mês após as chaves/);
-    assert.doesNotMatch(result.reply, /sem juros|sem correção|desconto garantido/i);
+    assert.equal(result.handoff, true);
+    assert.equal(result.stage, 'qualificado');
+    assert.equal(result.classification, 'quente');
+    assert.ok(result.score >= 60);
+    assert.match(result.reply, /nossa equipe comercial/i);
+    assert.match(result.next_action, /passagem comercial imediata/i);
+    assert.match(result.summary, /pagamento da unidade 1602 do Flow/);
+    assert.doesNotMatch(result.reply, /sem juros|sem correção|desconto garantido|Entrada:\s*R\$|Parcelas mensais:|Reforços:|Nas chaves:|\?/i);
   });
 
-  await accept('Duas falhas no Sol acionam Luna com a mesma proteção e metadados corretos', async () => {
+  await accept('Entrada declarada passa imediatamente mesmo sem consulta e fica no briefing, não em oferta aprovada', async () => {
+    const message = 'Consigo dar R$ 200 mil de entrada e pagar R$ 8 mil por mês no Flow. Pode montar uma proposta?';
+    const { result } = await runScenario({
+      history: conversation(message),
+      output: aiTurn('Está aprovado: entrada de R$ 200 mil e R$ 8 mil por mês, sem correção.'),
+    });
+    assert.equal(result.handoff, true);
+    assert.equal(result.stage, 'qualificado');
+    assert.equal(result.classification, 'quente');
+    assert.match(result.reply, /avaliar sua proposta/i);
+    assert.match(result.next_action, /passagem comercial imediata/i);
+    assert.ok(result.summary.includes(message), 'the exact declared proposal must reach the human briefing');
+    assert.doesNotMatch(result.reply, /est[aá] aprovado|aceitamos|sem corre[cç][aã]o|fica em|\?/i);
+    assert.equal((result.reply.match(/nossa equipe comercial/gi) ?? []).length, 1, 'repeated gates must not append duplicate handoff messages');
+  });
+
+  await accept('Resposta curta à pergunta financeira mantém handoff e gates idempotentes', async () => {
+    const history = [
+      user('Quero conhecer o Flow.'),
+      assistant('Qual valor você considera dar de entrada?'),
+      user('200 mil.'),
+    ];
+    const { result } = await runScenario({ history, output: aiTurn('Ótimo! E qual o prazo para comprar?') });
+    assert.equal(result.handoff, true);
+    assert.equal(result.stage, 'qualificado');
+    assert.equal(result.classification, 'quente');
+    assert.match(result.next_action, /passagem comercial imediata/i);
+    assert.match(result.summary, /200 mil/);
+    assert.doesNotMatch(result.reply, /\?|aprovad[oa]|aceitamos/i);
+  });
+
+  await accept('Recusa explícita preserva atendimento por mensagem, sem negociar nem autorizar contato humano', async () => {
+    const { result } = await runScenario({
+      history: conversation('Tenho R$ 200 mil para entrada, mas não me encaminhe para ninguém agora.'),
+      output: { ...aiTurn('Vou chamar o comercial agora, já aprovaram sua entrada.'), handoff: true, classification: 'quente', score: 85 },
+    });
+    assert.equal(result.handoff, false);
+    assert.equal(result.stage, 'ia');
+    assert.equal(result.classification, 'morno');
+    assert.ok(result.score <= 59);
+    assert.match(result.reply, /sem te encaminhar/i);
+    assert.match(result.next_action, /respeitar a recusa/i);
+    assert.doesNotMatch(result.reply, /vou chamar|j[aá] aprovaram|aceitamos|\?/i);
+  });
+
+  await accept('Duas falhas no Sol acionam Luna, preservando passagem financeira e metadados corretos', async () => {
     const { result, generations } = await runScenario({
       history: conversation('Qual é o preço e a condição de pagamento da unidade 1602 do Flow?'),
       context: { commercial: currentCommercial() }, failPrimary: true,
@@ -237,9 +281,12 @@ try {
     assert.equal(result.usage_records[0].model, 'gpt-6-luna');
     assert.equal(result.usage_records[0].fallback_used, true);
     assert.equal(result.usage_records[0].request_kind, 'response');
-    assert.match(result.reply, /R\$\s*1\.234\.567,89/);
-    assert.match(result.reply, /0,59% ao mês após as chaves/);
-    assert.doesNotMatch(result.reply, /R\$\s*900|sem juros|20%|desconto[^.!?]*aprovado/i);
+    assert.equal(result.handoff, true);
+    assert.equal(result.stage, 'qualificado');
+    assert.match(result.reply, /nossa equipe comercial/i);
+    assert.match(result.next_action, /passagem comercial imediata/i);
+    assert.match(result.summary, /condi[cç][aã]o de pagamento da unidade 1602/);
+    assert.doesNotMatch(result.reply, /R\$\s*900|sem juros|20%|desconto[^.!?]*aprovado|Parcelas mensais:|\?/i);
   });
 
   await accept('Consulta indisponível não reaproveita valor antigo da própria Nara', async () => {

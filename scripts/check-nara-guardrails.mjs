@@ -89,7 +89,7 @@ const urgentBuyer = await enforceNaraReplyGuardrails({
   classification: 'quente', score: 85, stage: 'ia', summary: '', next_action: '',
   handoff: true, attachment_ids: [], extracted: {},
 }, baseLead, [{ role: 'user', content: 'Tenho 1,5 milhão para investir e quero fechar rápido nesta semana.' }], {});
-assert.match(urgentBuyer.reply, /Taís do comercial/);
+assert.match(urgentBuyer.reply, /equipe comercial/);
 assert.match(urgentBuyer.reply, /Qual empreendimento te interessou mais\?/);
 assert.equal(urgentBuyer.handoff, true);
 
@@ -103,7 +103,7 @@ const almaReservation = await enforceNaraReplyGuardrails({
 ], {});
 assert.match(almaReservation.reply, /não consigo garantir o preço de hoje/);
 assert.match(almaReservation.reply, /registro saia nas próximas semanas/);
-assert.match(almaReservation.reply, /Taís do comercial/);
+assert.match(almaReservation.reply, /equipe comercial/);
 assert.doesNotMatch(almaReservation.reply, /R\$ 1\.500\.000/);
 assert.equal(almaReservation.handoff, true);
 

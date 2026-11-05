@@ -135,7 +135,7 @@ accept('17 Orlando: conversa no Soul não volta ao preço do Alma', () => {
   oneQuestionMax(result.reply);
 });
 
-accept('18 Miami: "total ou balão?" responde o total vigente sem encaminhamento automático', () => {
+accept('18 Miami: dúvida sobre balão passa ao comercial sem montar plano de pagamento', () => {
   const history = [
     u('Vi o anúncio do Alma. Falam da condição, mas qual é o valor total mesmo?'),
     a('Oi! Aqui é a Nara, da Bossa 😊 No Alma Seahouses, o valor total parte de R$ 1.285.350,85.'),
@@ -145,10 +145,13 @@ accept('18 Miami: "total ou balão?" responde o total vigente sem encaminhamento
     reply: 'Desculpe, o valor que mencionei não estava confirmado. Vou encaminhar à equipe comercial para confirmar o total.',
     handoff: true,
   }), history, alma);
-  assert.match(result.reply, /R\$\s1\.285\.350,85/);
-  assert.match(result.reply, /pre[cç]o total/i);
-  assert.doesNotMatch(result.reply, /encaminhar/i);
-  assert.equal(result.handoff, false);
+  assert.equal(result.handoff, true);
+  assert.equal(result.classification, 'quente');
+  assert.equal(result.stage, 'qualificado');
+  assert.match(result.reply, /nossa equipe comercial/i);
+  assert.match(result.next_action, /passagem comercial imediata/i);
+  assert.match(result.summary, /Esse [eé] o total ou tem bal[aã]o por fora\?/i);
+  assert.doesNotMatch(result.reply, /bal[aã]o (?:j[aá] est[aá] inclu[ií]do|aprovado)|sem bal[aã]o|entrada:\s*R\$|parcelas mensais:|\?/i);
 });
 
 accept('18 Miami: pedir alguém para confirmar encaminha, mas não vira lead quente', () => {
@@ -339,14 +342,19 @@ accept('34: corretor continua no Plantão, sem frase repetida sem sentido', () =
   assert.equal(tabela.handoff, true, 'pedido de tabela de corretor não desfaz a passagem');
 });
 
-accept('Transferência forçada só com pedido real (Soul, entrada, videochamada não)', () => {
+accept('Preço total e recusa mantêm Nara; entrada, parcelas e proposta passam imediatamente', () => {
   const lead = { id: 'l', organization_id: 'org', kind: 'cliente', stage: 'qualificacao_ia', owner_mode: 'ai', ai_enabled: true, metadata: {} };
   const t = (handoff = false) => turn({ handoff, classification: 'morno', score: 45 });
-  for (const message of ['Quanto custa esse Soul?', 'Como fica o pagamento dela? Entrada e parcelas.', 'Videochamada não. Só queria saber preço mesmo. Eu volto depois.', 'Tô em Boston e só pesquisando. Não pedi reserva.', 'Vocês têm algo pronto pra morar?']) {
+  for (const message of ['Quanto custa esse Soul?', 'Videochamada não. Só queria saber preço mesmo. Eu volto depois.', 'Tô em Boston e só pesquisando. Não pedi reserva.', 'Vocês têm algo pronto pra morar?', 'Quero o total do menor, não a entrada.']) {
     assert.equal(deriveHybridDecision({ lead, turn: t(), lastUserMessage: message }).handoffRequired, false, message);
   }
-  for (const message of ['Quero reservar, como faço?', 'Quero falar com uma pessoa, pode me ligar amanhã de manhã?']) {
-    assert.equal(deriveHybridDecision({ lead, turn: t(), lastUserMessage: message }).handoffRequired, true, message);
+  for (const message of ['Como fica o pagamento dela? Entrada e parcelas.', 'Quero reservar, como faço?', 'Quero falar com uma pessoa, pode me ligar amanhã de manhã?']) {
+    const decision = deriveHybridDecision({ lead, turn: t(), lastUserMessage: message });
+    assert.equal(decision.handoffRequired, true, message);
+    assert.equal(decision.stage, 'passagem_pendente', message);
+    assert.equal(decision.priorityClass, 'A1', message);
+    assert.equal(decision.nextActionType, 'aceitar_passagem', message);
+    assert.equal(decision.taskPriority, 'urgent', message);
   }
 });
 
