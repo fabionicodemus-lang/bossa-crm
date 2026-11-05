@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "npm run test:nara-15-regressions && npm run test:nara-conversation-policy && npm run test:nara-commercial-guard && npm run test:nara-integration && npm run test:ai-model-routing && npm run test:nara-language && npm run test:nara-round3 && npm run test:nara-round4 && npm run test:nara-phase10 && next build",
+    "build": "npm run test:nara-sales-signals && npm run test:nara-sales-conversion && npm run test:nara-conversion-agenda && npm run test:nara-handoff-persistence && npm run test:nara-15-regressions && npm run test:nara-conversation-policy && npm run test:nara-commercial-guard && npm run test:nara-integration && npm run test:ai-model-routing && npm run test:nara-language && npm run test:nara-round3 && npm run test:nara-round4 && npm run test:nara-phase10 && next build",
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
@@ -37,7 +37,11 @@
     "test:nara-conversation-policy": "node --experimental-strip-types --experimental-loader ./scripts/ts-extension-loader.mjs scripts/check-nara-conversation-policy.mjs",
     "test:nara-commercial-guard": "node --experimental-strip-types --experimental-loader ./scripts/ts-extension-loader.mjs scripts/check-nara-commercial-guard.mjs",
     "test:nara-integration": "node --experimental-strip-types --experimental-loader ./scripts/ts-extension-loader.mjs scripts/check-nara-integration.mjs",
-    "test:nara-15-regressions": "node --experimental-strip-types --experimental-loader ./scripts/ts-extension-loader.mjs scripts/check-nara-15-regressions.mjs"
+    "test:nara-15-regressions": "node --experimental-strip-types --experimental-loader ./scripts/ts-extension-loader.mjs scripts/check-nara-15-regressions.mjs",
+    "test:nara-sales-signals": "node --experimental-strip-types --experimental-loader ./scripts/ts-extension-loader.mjs scripts/check-nara-sales-signals.mjs",
+    "test:nara-sales-conversion": "node --experimental-strip-types --experimental-loader ./scripts/ts-extension-loader.mjs scripts/check-nara-sales-conversion.mjs",
+    "test:nara-conversion-agenda": "node --experimental-strip-types --experimental-loader ./scripts/ts-extension-loader.mjs scripts/check-nara-conversion-agenda.mjs",
+    "test:nara-handoff-persistence": "node --experimental-strip-types --experimental-loader ./scripts/ts-extension-loader.mjs scripts/check-nara-handoff-persistence.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.3",
