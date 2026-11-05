@@ -2,6 +2,7 @@ import { extractNaraPrompt } from './nara-prompt-config';
 import { buildNaraConversationInstructions, NARA_CONVERSATION_POLICY, NARA_COMMERCIAL_SAFETY_POLICY } from './nara-conversation-policy';
 import { protectNaraCommercialReply, naraReplyNeedsCommercialProtection } from './nara-commercial-guard';
 import { applyNaraFinancialHandoff } from './nara-sales-handoff';
+import { agendaActionFromText, shouldHandleAgendaTurn } from './nara-agenda-intent';
 import { collapseRepeatedNaraIntroductions, hasNaraIntroduction, naraConversationLanguage, naraLanguageSwitchReply, removeRepeatedNaraIntroduction, requestedNaraLanguage } from './nara-language';
 import { aiModelRoutingSettings, pricingFor, selectAiModels, supportsExplicitCaching, type AiWorkload } from './openai-model-routing';
 import { isAssistedSaleSignal, isBrokerRoutingSignal, isPostSaleRoutingSignal, isSupplierRoutingSignal } from './nara-contact-routing';
@@ -645,6 +646,15 @@ function contextualBuyerReply(history: ChatMessage[], context: AiTrainingContext
   return /\b(sim|isso|exatamente|quero saber mais|gostaria de saber mais|vi (?:um )?anuncio|vim pelo anuncio|anuncio.*empreendimento|sobre (?:um |o |a )?empreendimento|quero conhecer|apartamento|imovel|empreendimento|flow|alma|comprar|morar|investir|investimento)\b/.test(answer);
 }
 
+function hasConsentedAgendaInterest(history: ChatMessage[]): boolean {
+  const latest = lastUserText(history);
+  if (agendaActionFromText(latest) === 'cancel') return false;
+  if (refusesHandoff(latest) && !explicitHumanRequest(latest)) return false;
+  // A real request or an answer to the immediately preceding agenda offer is
+  // engagement. Questions about a video, moving dates and refusals are not.
+  return shouldHandleAgendaTurn(history, latest);
+}
+
 function hasExplicitBuyerIntent(lead: Lead, history: ChatMessage[], context: AiTrainingContext): boolean {
   if (lead.metadata?.triage_confirmed === true) return true;
   if (contextualBuyerReply(history, context)) return true;
@@ -653,7 +663,7 @@ function hasExplicitBuyerIntent(lead: Lead, history: ChatMessage[], context: AiT
   // Todo contato é tratado como possível comprador (Fábio, 20/10/2026): citar um empreendimento
   // junto de qualquer assunto comercial já confirma a conversa de compra.
   const projectConversation = /\b(flow|alma|soul)\b/.test(value)
-    && /\b(vi|anuncio|interesse|foto|fotos|imagem|video|planta|plantas|tabela|preco|valor|valores|pagamento|localizacao|obra|entrega|entrada|parcelas?|quanto|menor|maior|total|metragem|m2|suites?|fachada|reserva|condicao|me interesa|vi el|vi la|imagenes|plano|tabla|precio|pago|ubicacion|cuanto)\b/.test(value);
+    && /\b(vi|anuncio|interesse|gostei|gostamos|interessad[oa]|conhecer|distribuicao|ambientes|lazer|areas comuns|foto|fotos|imagem|video|planta|plantas|tabela|preco|valor|valores|pagamento|localizacao|obra|entrega|entrada|parcelas?|quanto|menor|maior|total|metragem|m2|suites?|fachada|reserva|condicao|me interesa|vi el|vi la|imagenes|plano|tabla|precio|pago|ubicacion|cuanto)\b/.test(value);
   if (projectConversation) return true;
 
   const strongIntent = /\b(para morar|quero morar|pretendo morar|moradia|para investir|quero investir|pretendo investir|investimento|renda com aluguel|para revenda|quero comprar|pretendo comprar|busco (?:um |uma )?(?:apartamento|imovel)|procuro (?:um |uma )?(?:apartamento|imovel)|tenho interesse(?: no| na| em)?|quero conhecer (?:o |a )?(?:flow|alma)|vi (?:um )?anuncio.*(?:flow|alma|apartamento|imovel|empreendimento)|vi (?:um )?anuncio(?: de voces| da bossa)?|quero saber mais.*empreendimento|quiero comprar|busco (?:un )?(?:departamento|apartamento|inmueble)|me interesa|quiero conocer (?:el )?(?:flow|alma)|vi (?:un )?anuncio|para vivir|para invertir|inversion)\b/.test(value);
@@ -976,7 +986,15 @@ export async function enforceNaraReplyGuardrails(
     turn.next_action = 'Verificar a agenda para o formato, dia e horário pedidos; confirmar somente após gravação bem-sucedida.';
   }
   if (lead.kind === 'cliente' && !routeOutsideBuyerProfile(history) && !asksAlmaReservationGuarantee) {
-    applyNaraFinancialHandoff(turn, history);
+    const financialHandoff = applyNaraFinancialHandoff(turn, history);
+    if (!financialHandoff && !lead.opt_out && turn.classification !== 'sem_interesse'
+      && turn.agenda_confirmed !== true && hasConsentedAgendaInterest(history)) {
+      // Wanting a presentation/visit is concrete engagement even without a
+      // budget or buying deadline. It is not a confirmed calendar operation.
+      turn.classification = 'quente';
+      turn.score = Math.max(60, Number.isFinite(turn.score) ? turn.score : 60);
+      if (!explicitHumanRequest(lastQuestion) && !purchaseIntent(lastQuestion)) turn.handoff = false;
+    }
   }
   if (!turn.reply.trim()) throw new NaraReplyGuardrailError(['resposta_vazia']);
   if (lead.kind === 'cliente') {
@@ -1019,13 +1037,14 @@ export function enforceNaraTriage(turn: AiTurn, lead: Lead, history: ChatMessage
     turn.reply = ensureFirstTurnIntroduction(turn.reply, history, context);
     return turn;
   }
-  const buyerConfirmed = hasExplicitBuyerIntent(lead, history, context);
+  const agendaInterest = hasConsentedAgendaInterest(history);
+  const buyerConfirmed = agendaInterest || hasExplicitBuyerIntent(lead, history, context);
   const canKeepGeneralPriceRange = asksCommercialValue(lastUser)
     && !asksProtectedCommercialDetail(lastUser)
     && isGeneralPriceRangeReply(turn.reply)
     && Boolean(context.commercial?.calls.some((call) => call.result));
 
-  if (canKeepGeneralPriceRange && !routed && !/\b(quero comprar|pretendo comprar|quero investir|quero morar|proposta|reserva)\b/.test(normalizeText(userText(history)))) {
+  if (canKeepGeneralPriceRange && !routed && !agendaInterest && !/\b(quero comprar|pretendo comprar|quero investir|quero morar|proposta|reserva)\b/.test(normalizeText(userText(history)))) {
     turn.classification = 'frio';
     turn.score = Math.min(turn.score, 20);
     turn.stage = 'ia';
