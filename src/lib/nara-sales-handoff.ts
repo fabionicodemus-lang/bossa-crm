@@ -46,7 +46,21 @@ export function applyNaraFinancialHandoff(turn: AiTurn, history: ChatMessage[]):
     : language === 'en'
       ? `I'll ask our sales team to ${proposal ? 'review your proposal' : 'confirm the down payment and payment terms'}${project ? ` for ${project}` : ''}. The team can continue here with the context of our conversation, so you won't need to start over.`
       : `Vou chamar nossa equipe comercial para ${proposal ? 'avaliar' : 'confirmar'} ${subject}${project ? ` do ${project}` : ''} com você. O atendimento continua por aqui com o contexto da nossa conversa, sem você precisar começar do zero.`;
-  turn.summary = `Contato quer tratar de ${subject}${project ? ` do ${project}` : ''}. Pedido declarado, ainda não aprovado: ${latest.slice(0, 700)}`;
+  // Rebuild the briefing only from the client's messages. Never recycle a
+  // model-generated summary or an older assistant offer as commercial evidence.
+  // A bounded source-based rebuild is also idempotent across repeated gates.
+  const previousClientStatements = history
+    .filter((message) => message.role === 'user')
+    .slice(-5, -1)
+    .map((message) => message.content.replace(/\s+/g, ' ').trim().slice(0, 350))
+    .filter(Boolean);
+  turn.summary = [
+    `Contato quer tratar de ${subject}${project ? ` do ${project}` : ''}.`,
+    previousClientStatements.length
+      ? `Declarações anteriores do cliente (não são ofertas nem aprovações): ${previousClientStatements.map((statement, index) => `${index + 1}. ${statement}`).join(' | ')}`
+      : '',
+    `Pedido declarado, ainda não aprovado: ${latest.slice(0, 700)}`,
+  ].filter(Boolean).join(' ');
   turn.next_action = `Passagem comercial imediata para avaliar ${subject}${project ? ` do ${project}` : ''}. Não condicionar o atendimento a novas perguntas. Preservar preferências, objeções e valores declarados no histórico; nenhuma condição foi aprovada.`;
   return true;
 }
