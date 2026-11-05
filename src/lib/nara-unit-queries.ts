@@ -2,7 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Lead } from './types';
 import { isAssistedSaleSignal, isBrokerRoutingSignal, isCurrentCustomerSignal } from './nara-contact-routing';
 import { adDevelopment } from './nara-first-message';
-import { isNaraAlternativePaymentProposal } from './nara-commercial-guard';
+import { isNaraAlternativePaymentProposal, isNaraArchitecturalEntranceQuestion } from './nara-commercial-guard';
 
 type ChatMessage = { role: 'user' | 'assistant'; content: string };
 type JsonRecord = Record<string, unknown>;
@@ -669,15 +669,6 @@ function hasCommercialSignal(message: string): boolean {
   return /\b(precos?|prices?|precio|cuanto cuesta|how much|valor(?:es)?|quanto custa|quanto fica|quanto (?:ta|sai|e|esta|da)|(?:comeca|fica|sai|custa) (?:em |por )?quanto|cabe no bolso|valor total|o total|mais barat[oa]|orcamento|ate (?:r\$\s*)?\d|tenho (?:r\$\s*)?\d|faixa|a partir de|tabela|disponibilidade|disponive(?:l|is)|unidade|apto|apartamento|entrada|parcelas?|reforcos?|chaves|juros|correcao|desconto|pagamento|andar|suites?|quartos?|duplex|dolar|usd|euro|eur|moeda)\b/.test(normalizeText(message));
 }
 
-/** The door and internal circulation of an apartment are not a down-payment query. */
-function isArchitecturalEntranceQuestion(message: string): boolean {
-  const value = normalizeText(message);
-  const layout = /\b(?:entrada (?:do|da|no|na) (?:apartamento|apto|unidade|casa)|porta de entrada|acesso (?:a|ao|para) (?:sala|corredor|hall))\b/.test(value)
-    && /\b(?:porta|sala|corredor|hall|acesso|circulacao|ambiente|abre|da acesso)\b/.test(value);
-  const financial = /\b(?:preco|valor|quanto custa|pagamento|financiamento|parcela|juros|correcao|desconto|sinal)\b|%/.test(value);
-  return layout && !financial;
-}
-
 function asksForSpecificOptions(message: string): boolean {
   return /\b(disponibilidade|disponive(?:l|is)|unidade|apto|apartamento|entrada|parcela|andar|suites?|quartos?|duplex|opcoes?)\b/.test(normalizeText(message));
 }
@@ -755,7 +746,7 @@ export async function loadNaraCommercialTurnContext(
   const consultedAt = new Date().toISOString();
   const blockedReason = blockedCommercialProfile(lead, history);
   if (blockedReason) return blockedCommercialContext(blockedReason, consultedAt);
-  if (isArchitecturalEntranceQuestion(latest) || isNaraAlternativePaymentProposal(latest)) return null;
+  if (isNaraArchitecturalEntranceQuestion(latest) || isNaraAlternativePaymentProposal(latest)) return null;
   const latestUnits = unitCodesFromMessage(latest);
   const hasCurrentRequest = hasCommercialSignal(latest) || latestUnits.length > 0;
   // O histórico indica o assunto a consultar novamente, nunca os valores autorizados.

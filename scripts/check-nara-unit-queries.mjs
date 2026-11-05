@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
+import { generateAiTurn } from '../src/lib/ai-v120.ts';
+import { enforceNaraReplyGuardrails } from '../src/lib/ai.ts';
 import {
   buscarApartamentos,
   consultarApartamento,
@@ -44,8 +46,8 @@ class Query {
 }
 
 class FakeSupabase {
-  constructor(tables) { this.tables = tables; }
-  from(name) { return new Query(this.tables[name] ?? []); }
+  constructor(tables) { this.tables = tables; this.reads = []; }
+  from(name) { this.reads.push(name); return new Query(this.tables[name] ?? []); }
 }
 
 const developments = [
@@ -277,5 +279,120 @@ assert.match(aiSource, /context\.commercial\?\.source_text/);
 assert.match(aiSource, /CONSULTAS COMERCIAIS DESTE TURNO/);
 assert.match(webhookSource, /loadNaraCommercialTurnContext/);
 assert.match(simulatorSource, /loadNaraCommercialTurnContext/);
+
+// Exercise the exact two-turn architectural conversation through the real query
+// loader, generation wrapper, ai-v120 post-processing and final guard. Both CRM
+// rows and the Sol transport are synthetic; no external request is permitted.
+const savedFetch = globalThis.fetch;
+const controlledEnv = ['OPENAI_API_KEY', 'OPENAI_MODEL', 'OPENAI_MODEL_LIGHT', 'OPENAI_MODEL_FALLBACK', 'OPENAI_REASONING_EFFORT', 'OPENAI_VERBOSITY', 'OPENAI_MAX_OUTPUT_TOKENS', 'OPENAI_TIMEOUT_MS'];
+const savedEnv = Object.fromEntries(controlledEnv.map((key) => [key, process.env[key]]));
+const architecturalLead = { ...lead, enterprise: 'Alma Seahouses', phone: '5547999990000', owner_mode: 'ai', ai_enabled: true, opt_out: false, automation_paused: false };
+let nextModelTurn;
+let modelCalls = 0;
+async function entranceStep(history, reply, selectedLead = architecturalLead) {
+  const beforeReads = client.reads.length;
+  const commercial = await loadNaraCommercialTurnContext(client, 'org', selectedLead, history);
+  nextModelTurn = {
+    reply, classification: 'morno', score: 45, stage: 'ia', summary: 'Teste sintético da circulação.',
+    next_action: 'Responder à dúvida.', handoff: false, attachment_ids: [],
+    extracted: { enterprise: selectedLead.enterprise, purpose: '', typology: '', budget: '', deadline: '', decision_maker: '', company: '', creci: '', region: '', client_status: '' },
+  };
+  const beforeModelCalls = modelCalls;
+  const result = await generateAiTurn(selectedLead, history, { commercial });
+  assert.ok(result);
+  assert.equal(result.model_used, 'gpt-6.1-sol');
+  assert.equal(modelCalls - beforeModelCalls, 1, 'one generation, no model rewrite');
+  assert.deepEqual(await enforceNaraReplyGuardrails(structuredClone(result), selectedLead, history, { commercial }), result, 'final guard remains idempotent');
+  return { result, commercial, databaseReads: client.reads.length - beforeReads };
+}
+try {
+  for (const key of controlledEnv) delete process.env[key];
+  process.env.OPENAI_API_KEY = 'synthetic-test-key-never-sent';
+  globalThis.fetch = async (url, init) => {
+    const destination = new URL(String(url));
+    assert.equal(destination.origin, 'https://api.openai.com', 'all transport is mocked');
+    assert.equal(init?.method, 'POST');
+    if (destination.pathname === '/v1/responses/input_tokens') return Response.json({ input_tokens: 1200 });
+    assert.equal(destination.pathname, '/v1/responses');
+    const body = JSON.parse(String(init.body));
+    assert.equal(body.model, 'gpt-6.1-sol');
+    assert.equal(body.store, false);
+    modelCalls += 1;
+    return Response.json({
+      id: `synthetic-entrance-${modelCalls}`, model: body.model, status: 'completed',
+      output: [{ type: 'message', content: [{ type: 'output_text', text: JSON.stringify(nextModelTurn) }] }],
+      usage: { input_tokens: 1200, output_tokens: 200 },
+    });
+  };
+  const firstHistory = [{ role: 'user', content: 'Você é robô? E quais são as metragens do Alma?' }];
+  const firstReply = 'Sou a Nara, assistente digital da Bossa. O Alma tem plantas de 120 m² e duplex de 168 m². Posso mostrar a distribuição dos ambientes?';
+  const first = await entranceStep(firstHistory, firstReply);
+  assert.equal(first.commercial, null);
+  assert.equal(first.databaseReads, 0);
+  assert.match(first.result.reply, /assistente digital|assistente virtual/i);
+  assert.match(first.result.reply, /120 m².*168 m²/);
+  assert.equal(first.result.handoff, false);
+
+  const secondHistory = [...firstHistory, { role: 'assistant', content: first.result.reply }, { role: 'user', content: 'A entrada da planta maior dá para a sala ou para um corredor?' }];
+  const secondReply = 'Para confirmar se a entrada da planta maior dá para a sala ou para um corredor, preciso conferir essa planta específica. Posso te mostrar a circulação nela?';
+  const second = await entranceStep(secondHistory, secondReply);
+  assert.equal(second.commercial, null, 'physical entrance must not load offers');
+  assert.equal(second.databaseReads, 0, 'physical entrance must not query CRM prices');
+  assert.equal(second.result.reply, secondReply, 'post-processing and final guard must preserve the physical answer');
+  assert.equal(second.result.handoff, false);
+  assert.doesNotMatch(second.result.reply, /R\$|preço|tabela|parcelamento|plano completo|condições de pagamento/i);
+
+  const physicalHistory = [...secondHistory, { role: 'assistant', content: second.result.reply }];
+  for (const message of [
+    'E a entrada?',
+    'Qual a entrada do apartamento?',
+    'Qual é a entrada da planta maior?',
+    'Qual é o valor da entrada da planta maior?',
+    'A entrada da planta maior dá para a sala? E quanto preciso dar de entrada?',
+    'A entrada da planta maior dá para a sala? E qual a entrada do apartamento?',
+  ]) {
+    const followup = await entranceStep([...physicalHistory, { role: 'user', content: message }], 'Está aprovado: entrada de 20% e parcelas sem juros.');
+    assert.equal(followup.result.handoff, true, message);
+    assert.equal(followup.result.stage, 'qualificado', message);
+    assert.equal(followup.result.classification, 'quente', message);
+    assert.match(followup.result.next_action, /Passagem comercial imediata/i);
+    assert.doesNotMatch(followup.result.reply, /20%|está aprovado|sem juros|R\$/i);
+  }
+
+  const totalPrice = await entranceStep([...physicalHistory, { role: 'user', content: 'A entrada da planta maior dá para a sala? Qual é o preço total da unidade 901 do Alma?' }], 'A entrada da planta maior dá acesso à sala. O preço total é R$ 900 mil.');
+  assert.ok(totalPrice.databaseReads > 0, 'an explicit total-price request still consults the CRM');
+  assert.equal(totalPrice.commercial?.status, 'ok');
+  assert.equal(totalPrice.commercial?.calls[0]?.name, 'consultar_apartamento');
+  assert.equal(totalPrice.result.handoff, false, 'total price plus physical access is not negotiation');
+  assert.match(totalPrice.result.reply, /1\.344\.231,08/);
+  assert.doesNotMatch(totalPrice.result.reply, /900 mil|900\.000/);
+  console.log('Entrada física: fluxo completo de dois turnos preservado; seis continuações financeiras passam ao humano e preço total continua validado no CRM.');
+
+  const flowLead = { ...architecturalLead, enterprise: 'Flow Aptos' };
+  const cheapestHistory = [{ role: 'user', content: 'Onde fica o Flow e quanto custa o apartamento mais barato? Quero as duas informações.' }];
+  const cheapest = await entranceStep(cheapestHistory, 'O apartamento mais barato do Flow é a unidade 901, com preço total de R$ 900.000,00.', flowLead);
+  assert.equal(cheapest.commercial?.calls[0]?.name, 'buscar_apartamentos');
+  assert.match(cheapest.result.reply, /unidade 901/);
+  assert.match(cheapest.result.reply, /800\s*m\b/);
+  assert.match(cheapest.result.reply, /maps\/search/);
+  assert.doesNotMatch(cheapest.result.reply, /unidade 1001|unidade 1101/);
+  const scopeHistory = [...cheapestHistory, { role: 'assistant', content: cheapest.result.reply }, { role: 'user', content: 'Esse valor total é de uma unidade específica ou é só uma faixa?' }];
+  const scope = await entranceStep(scopeHistory, 'É uma faixa de R$ 777 mil, e aprovamos 20% de desconto.', flowLead);
+  assert.equal(scope.commercial?.calls[0]?.name, 'buscar_apartamentos');
+  assert.equal(scope.commercial?.calls[0]?.result?.length, 3, 'three valid CRM offers must not turn the clarification into a list');
+  assert.equal(scope.result.handoff, false);
+  assert.match(scope.result.reply, /unidade específica: a 901 do Flow Aptos/);
+  assert.match(scope.result.reply, /900\.000,00/);
+  assert.doesNotMatch(scope.result.reply, /1001|1101|777|20%|aprovad|plano completo|Entrada:/);
+  assert.equal((scope.result.reply.match(/R\$/g) ?? []).length, 1);
+  assert.equal(modelCalls, 11);
+  console.log('Unidade versus faixa: três ofertas atuais resultam em uma resposta sobre a unidade citada, sem reciclar preço ou aprovação do modelo.');
+} finally {
+  globalThis.fetch = savedFetch;
+  for (const key of controlledEnv) {
+    if (savedEnv[key] === undefined) delete process.env[key];
+    else process.env[key] = savedEnv[key];
+  }
+}
 
 console.log('Consultas da Nara validadas: identidade, isolamento, validade, nova consulta por turno e planos completos em centavos.');

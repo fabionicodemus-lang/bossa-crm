@@ -18,6 +18,15 @@ const financialMessages = [
   'A entrada do apartamento seria 200 mil?',
   'Qual a entrada mínima?',
   'Qual é o valor da entrada do apartamento?',
+  'Qual a entrada do apartamento?',
+  'Qual é a entrada do apartamento?',
+  'Qual é a entrada da planta maior?',
+  'Qual seria a entrada da unidade?',
+  'Qual a entrada do apartamento com a sala maior?',
+  'A entrada da planta maior dá para a sala? E qual a entrada do apartamento?',
+  'A entrada da unidade dá para a sala, e qual é a entrada da planta maior?',
+  'A entrada do empreendimento é pela rua principal? Qual a entrada do apartamento?',
+  'Qual a entrada do apartamento? A entrada física abre para a sala?',
   'Quanto preciso dar de entrada do apartamento?',
   'A entrada pode ser menor?',
   'Não tenho entrada. Dá para conversar?',
@@ -111,6 +120,21 @@ const informationMessages = [
   'A entrada é acessível?',
   'A entrada da garagem tem rampa?',
   'A entrada da planta maior dá para a sala ou para um corredor?',
+  'A entrada da unidade dá para a sala ou para um corredor?',
+  'A entrada do apto dá acesso à sala?',
+  'A entrada da casa abre para a cozinha?',
+  'A entrada do imóvel dá para a sala?',
+  'A entrada do empreendimento é pela rua principal?',
+  'A entrada da torre dá acesso ao hall?',
+  'Qual é a entrada do apartamento: a que abre para a sala ou para o corredor?',
+  'Qual é a entrada da planta maior, a que dá para a sala ou para o corredor?',
+  'Qual é a entrada do apartamento mais iluminada?',
+  'Qual entrada devo usar?',
+  'Qual é a entrada que devo usar?',
+  'Por qual entrada eu entro?',
+  'Por onde entra no apartamento?',
+  'A entrada fica por onde?',
+  'A entrada dá acesso à sala?',
   'A entrada principal fica na rua da frente?',
   'A porta tem 100 x 80 cm?',
   'Como ficou o reforço estrutural?',
@@ -175,6 +199,18 @@ assert.equal(financialNegotiationIntent('200 mil', [
   ...entryQuestion,
   { role: 'user', content: 'Vamos mudar de assunto.' },
 ]), false);
+
+const physicalEntryHistory = [
+  { role:'user', content:'A entrada da planta maior dá para a sala ou para um corredor?' },
+  { role:'assistant', content:'Para confirmar se ela abre para a sala ou um corredor, posso mostrar a planta.' },
+];
+for (const question of ['Qual a entrada do apartamento?', 'Qual é a entrada do apartamento?', 'Qual é a entrada da planta maior?']) {
+  assert.equal(financialNegotiationIntent(question, physicalEntryHistory), true, `Pergunta financeira atual não herda contexto físico: ${question}`);
+  assert.equal(financialNegotiationIntent(question, [...physicalEntryHistory, {role:'user',content:question}]), true);
+}
+for (const question of ['Qual entrada devo usar?', 'Qual é a entrada do apartamento: a que abre para a sala ou para o corredor?']) {
+  assert.equal(financialNegotiationIntent(question, physicalEntryHistory), false, `Acesso físico inequívoco não é negociação: ${question}`);
+}
 
 // A conversa financeira é um sinal separado, não uma troca de perfil/consentimento.
 assert.equal(refusesHandoff('Quero saber a entrada, mas sem corretor.'), true);
