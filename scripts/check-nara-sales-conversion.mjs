@@ -151,4 +151,57 @@ await check('Resposta curta herda só a pergunta financeira imediatamente anteri
   assert.equal(output.handoff, true);
   assert.doesNotMatch(output.reply, /200 mil|R\$/);
 });
+await check('Briefing preserva unidade e preferências das quatro falas anteriores sem reciclar oferta da IA', () => {
+  const longStatement = 'Minha esposa participa da decisão. ' + 'Contexto declarado pelo cliente. '.repeat(16) + 'EXCESSO_NAO_PERSISTIR';
+  const history = [
+    user('MENSAGEM_ANTIGA_FORA_DO_RECORTE: inicialmente eu olhava o Soul.'),
+    assistant('Posso apresentar os projetos.'),
+    user('Agora quero a unidade 1403 do Flow para morar.'),
+    assistant('Vamos olhar o Flow.'),
+    user('Preciso de 2 suítes, silêncio e uma vaga.'),
+    assistant('OFERTA_ANTIGA_DA_IA: R$ 750.000 com desconto aprovado.'),
+    user('Tenho receio da distância da praia e prefiro apresentação por vídeo.'),
+    assistant('Podemos conversar sobre o projeto.'),
+    user(longStatement),
+    assistant('Quanto você considera para a entrada?'),
+    user('200 mil'),
+  ];
+  const result = turn('Sua entrada foi aprovada.', {
+    summary: 'RESUMO_INSEGURO_DA_IA: oferta aprovada por R$ 750.000.',
+  });
+  assert.equal(applyNaraFinancialHandoff(result, history), true);
+  const decision = deriveHybridDecision({ lead, turn: result, lastUserMessage: history.at(-1).content });
+  assert.equal(result.handoff, true);
+  assert.equal(decision.stage, 'passagem_pendente');
+  assert.match(result.summary, /Declarações anteriores do cliente \(não são ofertas nem aprovações\)/);
+  assert.match(result.summary, /unidade 1403 do Flow para morar/);
+  assert.match(result.summary, /2 suítes, silêncio e uma vaga/);
+  assert.match(result.summary, /receio da distância da praia e prefiro apresentação por vídeo/);
+  const retainedFourth = result.summary.match(/ \| 4\. ([\s\S]*?) Pedido declarado, ainda não aprovado:/)?.[1];
+  assert.equal(retainedFourth, longStatement.slice(0, 350), 'the fourth prior statement is truncated exactly at 350 characters');
+  assert.equal(retainedFourth.length, 350);
+  assert.match(result.summary, /Pedido declarado, ainda não aprovado: 200 mil/);
+  assert.doesNotMatch(result.summary, /MENSAGEM_ANTIGA_FORA_DO_RECORTE|EXCESSO_NAO_PERSISTIR|OFERTA_ANTIGA_DA_IA|RESUMO_INSEGURO_DA_IA|750\.000|desconto aprovado/);
+  assert.doesNotMatch(result.reply, /200 mil|750\.000|aprovad[oa]|R\$/);
+  const again = structuredClone(result);
+  assert.equal(applyNaraFinancialHandoff(again, history), true);
+  assert.deepEqual(again, result, 'reapplying the financial gate rebuilds the same bounded briefing without duplication');
+  assert.equal((again.summary.match(/unidade 1403/g) ?? []).length, 1);
+});
+await check('Preferência por vaga de garagem não vira emprego nem apaga passagem', async () => {
+  const history = [user('Quero a unidade 1403 do Flow, 2 suítes e uma vaga.'), assistant('Quanto você considera para a entrada?'), user('200 mil')];
+  const {result, decision} = await run(history, turn('Sua entrada foi aprovada.'));
+  assert.equal(result.handoff, true);
+  assert.equal(decision.handoffRequired, true);
+  assert.match(result.reply, /Vou chamar nossa equipe comercial/);
+  assert.match(result.summary, /1403.*uma vaga/);
+  const again = await enforceNaraReplyGuardrails(structuredClone(result), lead, history, {});
+  assert.deepEqual(again, result);
+});
+await check('Pedido real de emprego continua fora da pré-venda', async () => {
+  const {result} = await run([user('Quero enviar meu currículo para uma vaga de emprego na Bossa.')]);
+  assert.equal(result.handoff, true);
+  assert.match(result.summary, /fora da esteira de compradores/);
+  assert.doesNotMatch(result.reply, /entrada e as condições de pagamento|avaliar sua proposta/);
+});
 console.log(`${passed} verificações de conversão e passagem aprovadas sem ações externas.`);
