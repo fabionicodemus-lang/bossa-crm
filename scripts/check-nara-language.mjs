@@ -61,7 +61,9 @@ assert.equal(naraConversationLanguage([{role:'user',content:'Hello, I am Jack'}]
   const almaFiles = [...files, { id: 'alma-f', category: 'imagem', title: 'Fachada Alma', description: null, trigger_keywords: [], storage_bucket: '', storage_path: '', original_name: 'a.jpg', mime_type: 'image/jpeg' }];
   const fromAd = turn('Oi! Aqui é a Nara, da Bossa 😊 Em que posso te ajudar?');
   replaceGenericHelpWithPortfolio(fromAd, [{ role: 'user', content: 'Olá! Tenho interesse' }], { files: almaFiles }, { metadata: { ad: { headline: 'Alma Seahouses · casa na praia', captured_at: '2026-10-20T10:00:00Z' } }, source: 'Meta' });
-  assert.match(fromAd.reply, /^Oi! Aqui é a Nara, da Bossa 😊 Que bom que o Alma te chamou atenção!/);
+  assert.match(fromAd.reply, /^Oi! Aqui é a Nara, da Bossa 😊 O Alma tem uma proposta mais reservada:/);
+  assert.match(fromAd.reply, /dois apartamentos por andar/);
+  assert.match(fromAd.reply, /300 m do mar/);
   assert.doesNotMatch(fromAd.reply, /Soul|Flow/);
   assert.deepEqual(fromAd.attachment_ids, ['alma-f']);
 }
