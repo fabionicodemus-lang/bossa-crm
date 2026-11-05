@@ -512,6 +512,11 @@ function routingText(value: string): string {
   return normalized.replace(/\s+/g, ' ').trim();
 }
 
+function isEmploymentInquiry(text: string): boolean {
+  // A parking space ("uma vaga") is a normal buyer preference, not a job inquiry.
+  return /\b(?:curriculo|emprego|estagio|processo seletivo|recursos humanos|trabalhar (?:com|para) voces|trabalhar na bossa|candidat[oa] a (?:uma )?vaga|vagas? (?:de|para) (?:emprego|trabalho|pedreiro|engenheir[oa]|servente|estagio|assistente))\b/.test(text);
+}
+
 function outsideBuyerDestination(history: ChatMessage[]): OutsideBuyerDestination | null {
   const userMessages = history
     .filter((item) => item.role === 'user')
@@ -524,7 +529,7 @@ function outsideBuyerDestination(history: ChatMessage[]): OutsideBuyerDestinatio
   if (userMessages.some(isBrokerRoutingSignal)) return 'plantao';
   if (userMessages.some(isPostSaleRoutingSignal)) return 'pos_venda';
   if (userMessages.some(isSupplierRoutingSignal)) return 'suprimentos';
-  if (/\b(fornecedor|prestador|curriculo|vaga|trabalhar com voces|cobranca|imprensa)\b/.test(fullHistory)) return 'equipe';
+  if (/\b(fornecedor|prestador|cobranca|imprensa)\b/.test(fullHistory) || isEmploymentInquiry(fullHistory)) return 'equipe';
 
   return null;
 }
@@ -569,7 +574,7 @@ function outsideBuyerReply(history: ChatMessage[], context: AiTrainingContext): 
   }
   const phone = /\b(fornecedor|prestador|suprimento)\b/.test(current)
     ? runtimeVariable(context, 'supplies_phone')
-    : /\b(curriculo|vaga|trabalhar)\b/.test(current)
+    : isEmploymentInquiry(current)
       ? runtimeVariable(context, 'hr_phone')
       : /\b(imprensa|marketing|midia)\b/.test(current)
         ? runtimeVariable(context, 'marketing_phone')
