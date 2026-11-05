@@ -135,7 +135,9 @@ async function ampliar(p) {
         "lazer",
         "localizacao",
         "conforto",
+        "engenharia",
         "obra",
+        "relatos",
         "duvidas",
         "contato",
       ]) {

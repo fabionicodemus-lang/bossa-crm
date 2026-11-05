@@ -69,7 +69,7 @@ export const almaFaq = [
   {
     id: "13",
     p: "Quais cuidados de conforto estão previstos nos apartamentos?",
-    r: "O projeto prevê isolamento acústico e térmico entre lajes e paredes de divisa, porcelanato no living, vinílico nas suítes e área de serviço fechada e ventilada. Também há infraestrutura para split e automação, que não significa fornecimento dos aparelhos. Consulte a seção de conforto e converse com a equipe sobre o detalhamento das especificações.",
+    r: "O Alma contará com alvenaria de concreto celular, manta acústica entre laje e contrapiso, impermeabilização reforçada nas áreas molhadas e ralo linear nos boxes. O projeto também prevê isolamento acústico e térmico entre lajes e paredes de divisa, porcelanato no living, vinílico nas suítes e área de serviço fechada e ventilada. Há infraestrutura para split e automação, sem fornecimento dos aparelhos. Conheça os métodos na seção de engenharia e consulte o memorial para os detalhes técnicos.",
   },
 ];
 export const avisoDuplex =
@@ -165,6 +165,78 @@ export const especificacoesAlma = [
     "Dois elevadores; hall mobiliado, decorado e sonorizado; lazer mobiliado, decorado, equipado e com enxoval; medição individual de água, energia e gás; previsão de gerador de emergência e reuso de água da chuva.",
   ],
 ];
+
+/**
+ * Fábio confirmou em 05/11/2026 a adoção destes quatro métodos também no Alma.
+ * Os registros fotográficos e valores de referência seguem sendo do Flow.
+ * Marcas, espessuras e ensaios específicos não foram confirmados para o Alma.
+ */
+export const metodosConstrutivosBossa = [
+  {
+    numero: "01",
+    categoria: "Alvenaria",
+    titulo: "Concreto celular: a escolha começa na parede.",
+    texto:
+      "O Alma terá alvenaria de concreto celular, uma solução que a Bossa já utiliza no Flow. O sistema contribui para o conforto térmico e integra o conjunto de cuidados com o isolamento entre ambientes.",
+    detalhe: "Referência real do Flow: blocos Celucon de 20 cm entre unidades, 14 cm nas fachadas e 11 cm nas divisões internas. No Alma, as espessuras seguem o projeto específico.",
+    href: "/empreendimentos/flow-aptos#engenharia",
+    link: "Ver a alvenaria do Flow",
+  },
+  {
+    numero: "02",
+    categoria: "Conforto acústico",
+    titulo: "Uma camada de cuidado entre os andares.",
+    texto:
+      "Assim como no Flow, o Alma terá manta acústica entre a laje e o contrapiso para ajudar a reduzir ruídos de impacto, como passos e móveis. O cuidado complementa o isolamento acústico e térmico previsto para o empreendimento.",
+    detalhe: "Referência real do Flow: manta FS Floor Fibersoft de 8 mm. Material e espessura do Alma seguem seu projeto específico.",
+    href: "/empreendimentos/flow-aptos#isolamento-piso",
+    link: "Ver a manta aplicada no Flow",
+  },
+  {
+    numero: "03",
+    categoria: "Áreas molhadas",
+    titulo: "Impermeabilização antes do revestimento.",
+    texto:
+      "O Alma seguirá o método da Bossa para áreas molhadas: preparação da base e dos caimentos, reforço de encontros e ralos, aplicação do sistema impermeabilizante e verificação da estanqueidade antes dos revestimentos. É um cuidado que já praticamos no Flow.",
+    detalhe: "Referência real do Flow: Vedatop Ultraflex 12000 e ensaio de estanqueidade de 72 horas. Os detalhes executivos do Alma seguem seu projeto.",
+    href: "/empreendimentos/flow-aptos#impermeabilizacao",
+    link: "Conhecer o processo no Flow",
+  },
+  {
+    numero: "04",
+    categoria: "Detalhe do banheiro",
+    titulo: "Ralo linear e nicho pensado desde o projeto.",
+    texto:
+      "Os boxes do Alma terão ralo linear e nicho embutido revestido. A solução de ralo linear, já adotada no Flow, favorece o caimento do piso em um único plano e revela a atenção da Bossa aos detalhes de uso diário.",
+    detalhe: "Veja o exemplo de execução no boletim de setembro de 2026 do Flow.",
+    href: "/obras/flow-aptos/2026-09",
+    link: "Ver o detalhe do box no boletim",
+  },
+] as const;
+
+export const registrosConstrutivosBossa = [
+  {
+    src: "/img/flow/engenharia/alvenaria-celucon.webp",
+    alt: "Execução de alvenaria de concreto celular na obra do Flow Aptos",
+    legenda: "Alvenaria de concreto celular · registro real do Flow",
+    largura: 640,
+    altura: 1138,
+  },
+  {
+    src: "/img/flow/engenharia/manta-fs-floor-aplicacao.webp",
+    alt: "Manta acústica aplicada no piso do Flow antes do contrapiso",
+    legenda: "Manta acústica entre laje e contrapiso · registro real do Flow",
+    largura: 1600,
+    altura: 1200,
+  },
+  {
+    src: "/img/flow/engenharia/impermeabilizacao-aplicacao.webp",
+    alt: "Aplicação de impermeabilizante sobre a tela de reforço no Flow Aptos",
+    legenda: "Impermeabilização com reforço · registro real do Flow",
+    largura: 640,
+    altura: 1138,
+  },
+] as const;
 
 /** Só preencher após conferir o arquivo, direitos, legenda e aprovação editorial.
  * Fotos de obra precisam de data própria, independente do mês da medição.

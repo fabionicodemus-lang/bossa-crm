@@ -6,7 +6,7 @@ const base=process.env.BASE_URL || 'http://localhost:3200';
 assert.match(base,/^http:\/\/(localhost|127\.0\.0\.1):\d+$/);
 const dir=process.env.EVIDENCIAS_DIR || 'docs/alma/fase5',publica=process.argv.includes('--publica');
 fs.mkdirSync(dir,{recursive:true});
-const slug='/empreendimentos/alma-seahouses',secoes=['inicio','apartamentos','plantas','posicao','lazer','localizacao','conforto','obra','duvidas','contato'];
+const slug='/empreendimentos/alma-seahouses',secoes=['inicio','apartamentos','plantas','posicao','lazer','localizacao','conforto','engenharia','obra','relatos','duvidas','contato'];
 const resultado={data:new Date().toISOString(),base,publica,modo:'Chromium local; viewports CSS; sem aparelho físico, rede móvel ou teclado virtual',acessibilidade:[],secoes:[],links:[],erros:[]};
 let b;
 async function posicionar(p,id){await p.locator(id.startsWith('.')?id:'#'+id).evaluate(el=>scrollTo({top:scrollY+el.getBoundingClientRect().top-150,behavior:'instant'}));await p.waitForTimeout(150);console.log('seção',id);await p.locator('img').evaluateAll(async ims=>{await Promise.all(ims.filter(im=>{const r=im.getBoundingClientRect();return r.bottom>0&&r.top<innerHeight}).map(im=>Promise.race([im.decode().catch(()=>{}),new Promise(resolve=>setTimeout(resolve,4000))])))});}

@@ -22,7 +22,9 @@ const secoes = [
   "lazer",
   "localizacao",
   "conforto",
+  "engenharia",
   "obra",
+  "relatos",
   "duvidas",
   "contato",
 ];

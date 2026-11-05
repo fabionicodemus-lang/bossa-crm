@@ -6,6 +6,12 @@ import { meta } from "@/lib/seo";
 import { Andamento, CartaoEmpreendimento, Cota, Pct, pct } from "@/components/Blocos";
 import { AoVer } from "@/components/AoVer";
 import { LinkWhatsApp } from "@/components/LinkWhatsApp";
+import {
+  relatosPublicaveisBossa,
+  relatosDestaqueHome,
+  relatosComplementaresHome,
+  relatosParceirosBossa,
+} from "@/content/relatos-bossa";
 
 export const metadata = meta({
   titulo: "Bossa Empreendimentos · Incorporadora em Porto Belo e Itapema",
@@ -106,6 +112,66 @@ export default function Home() {
           </div>
         </div>
       </AoVer>
+
+      {/* Relatos recebidos da direção, com autoria e empreendimento identificados. */}
+      {relatosPublicaveisBossa.length > 0 && (
+        <section className="sec sec--elev" id="relatos-clientes">
+          <div className="wrap pilha" style={{ gap: 40 }}>
+            <div className="pilha" style={{ maxWidth: 780 }}>
+              <p className="rotulo">Histórias de clientes</p>
+              <h2 className="h2">A confiança também tem voz.</h2>
+              <p className="p">Quem já comprou com a Bossa conta o que fez diferença. São experiências de clientes dos nossos empreendimentos, com seus nomes e vínculos identificados.</p>
+            </div>
+            <div className="bossa-relatos-grade">
+              {relatosDestaqueHome.map((relato) => (
+                <figure className="bossa-relato" key={`${relato.nomePublico}-${relato.identificacao}`}>
+                  <blockquote>{relato.textoOriginal}</blockquote>
+                  <figcaption>
+                    <strong>{relato.nomePublico}</strong>
+                    <span>{relato.identificacao}</span>
+                  </figcaption>
+                </figure>
+              ))}
+            </div>
+            {(relatosComplementaresHome.length > 0 || relatosParceirosBossa.length > 0) && (
+              <details className="bossa-relatos-mais">
+                <summary>
+                  Ler outros {relatosComplementaresHome.length + relatosParceirosBossa.length} relatos
+                </summary>
+                {relatosComplementaresHome.length > 0 && (
+                  <div className="bossa-relatos-grade">
+                    {relatosComplementaresHome.map((relato) => (
+                      <figure className="bossa-relato" key={`${relato.nomePublico}-${relato.identificacao}`}>
+                        <blockquote>{relato.textoOriginal}</blockquote>
+                        <figcaption>
+                          <strong>{relato.nomePublico}</strong>
+                          <span>{relato.identificacao}</span>
+                        </figcaption>
+                      </figure>
+                    ))}
+                  </div>
+                )}
+                {relatosParceirosBossa.length > 0 && (
+                  <div className="bossa-relatos-parceiros">
+                    <h3 className="h3">Quem constrói ao nosso lado</h3>
+                    <div className="bossa-relatos-grade">
+                      {relatosParceirosBossa.map((relato) => (
+                        <figure className="bossa-relato" key={`${relato.nomePublico}-${relato.identificacao}`}>
+                          <blockquote>{relato.textoOriginal}</blockquote>
+                          <figcaption>
+                            <strong>{relato.nomePublico}</strong>
+                            <span>{relato.identificacao}</span>
+                          </figcaption>
+                        </figure>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </details>
+            )}
+          </div>
+        </section>
+      )}
 
       {/* Obra de perto */}
       <section className="sec sec--elev">

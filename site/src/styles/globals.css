@@ -60,6 +60,23 @@ a { color: inherit; }
 .nota { font-size: 13px; line-height: 19px; color: var(--tinta-suave); margin: 0; }
 .mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
 
+/* Depoimentos escritos: somente quando houver relatos autorizados no conteúdo. */
+.bossa-relatos-grade { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-5); }
+.bossa-relato { margin: 0; padding: clamp(28px, 4vw, 52px); background: #fff; border: 1px solid var(--junta); display: flex; flex-direction: column; justify-content: space-between; gap: 32px; }
+.bossa-relato blockquote { margin: 0; white-space: pre-line; font: 300 clamp(23px, 2.4vw, 32px)/1.3 var(--font-display); }
+.bossa-relato blockquote::before { content: '“'; display: block; color: var(--alma-salvia); font-size: 60px; line-height: .9; }
+.bossa-relato figcaption { display: grid; gap: 3px; font: 500 14px/1.4 var(--font-sans); }
+.bossa-relato figcaption span { color: var(--tinta-suave); }
+.bossa-relatos-mais { border-top: 1px solid var(--junta); padding-top: 20px; }
+.bossa-relatos-mais summary { cursor: pointer; list-style: none; min-height: 48px; display: flex; align-items: center; justify-content: space-between; gap: 16px; font: 600 15px/1.5 var(--font-sans); }
+.bossa-relatos-mais summary::-webkit-details-marker { display: none; }
+.bossa-relatos-mais summary::after { content: '+'; font-size: 26px; font-weight: 300; }
+.bossa-relatos-mais[open] summary::after { content: '−'; }
+.bossa-relatos-mais .bossa-relatos-grade { margin-top: 28px; }
+.bossa-relatos-parceiros { display: grid; gap: 20px; margin-top: 44px; }
+.bossa-relatos-parceiros .bossa-relatos-grade { grid-template-columns: minmax(0, 1fr); max-width: 760px; margin-top: 0; }
+@media (max-width: 860px) { .bossa-relatos-grade { grid-template-columns: 1fr; } }
+
 /* Universos */
 .u-alma { background: var(--alma-salvia); color: var(--chao-elevado); }
 .u-alma .rotulo { color: var(--alma-nevoa); }
