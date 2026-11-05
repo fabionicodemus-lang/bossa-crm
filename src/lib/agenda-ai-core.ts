@@ -1,18 +1,19 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { findAgendaConflicts } from '@/lib/agenda';
 import type { AiTurn } from '@/lib/ai';
-import { agendaActionFromText, shouldHandleAgendaTurn, type AgendaConversationMessage } from '@/lib/nara-agenda-intent';
+import { agendaActionFromText, agendaModeFromConversation, shouldHandleAgendaTurn, type AgendaConversationMessage, type AgendaRequestedMode } from '@/lib/nara-agenda-intent';
+import { financialNegotiationIntent } from '@/lib/nara-conversation-signals';
 import type { Lead } from '@/lib/types';
 import { officeHours } from '@/lib/nara-office-hours';
 
 type AdminClient = SupabaseClient;
 export type AgendaAiResult =
   | { status: 'none' }
-  | { status: 'needs_details'; message: string }
+  | { status: 'needs_details'; message: string; requiresHuman?: boolean }
   | { status: 'conflict'; message: string }
   | { status: 'cancelled'; message: string }
   | { status: 'options'; message: string }
-  | { status: 'created'; eventId: string; assignedTo: string; startsAt: string; endsAt: string };
+  | { status: 'created'; eventId: string; assignedTo: string; startsAt: string; endsAt: string; meetingMode: AgendaRequestedMode; location: string | null };
 
 const weekdays: Record<string, number> = {
   domingo: 0, segunda: 1, 'segunda-feira': 1, terca: 2, 'terça': 2, 'terça-feira': 2,
@@ -58,6 +59,41 @@ function parseTimeFromText(raw: string): string | null {
   if (plain) return `${String(Number(plain[1])).padStart(2,'0')}:00`;
   return null;
 }
+
+function unrelatedDateTimeContext(text: string): boolean {
+  return /\b(?:mudar|mudanca|entrega|entregar|ser entregue|fica(?:r)? pront[oa]|prazo de compra|(?:quero|vou|pretendo|preciso) comprar|trabalho|trabalhar|saio do trabalho|expediente pessoal)\b/.test(normalize(text));
+}
+
+function schedulingDetailsText(text: string): string {
+  return text.split(/[.!?;,]|\bmas\b/iu)
+    // A move-in deadline, building delivery or working hours is not a selected
+    // appointment time, even when mentioned beside an invitation acceptance.
+    .filter((clause) => !unrelatedDateTimeContext(clause)
+      && !/\b(?:nao posso|nao consigo|nao funciona|nao da|amanha nao|hoje nao)\b/.test(normalize(clause)))
+    .join(' ');
+}
+
+/** Carry day/time only inside the current, consented scheduling exchange. */
+function schedulingUserTexts(history: AgendaConversationMessage[]): string[] {
+  let selected: string[] = [];
+  for (let index = 0; index < history.length; index += 1) {
+    const message = history[index];
+    if (message.role !== 'user') continue;
+    const previous = history.slice(0, index);
+    const lastAssistant = [...previous].reverse().find((item) => item.role === 'assistant')?.content ?? '';
+    const action = agendaActionFromText(message.content);
+    const answersOtherTopic = action === 'none' && unrelatedDateTimeContext(lastAssistant)
+      && !/\b(?:agenda|agendamento|visita|videochamada|ligacao|reuniao)\b/.test(normalize(lastAssistant));
+    if (!shouldHandleAgendaTurn(previous, message.content) || answersOtherTopic || action === 'cancel') {
+      selected = [];
+      continue;
+    }
+    if (action === 'reschedule') selected = [];
+    selected.push(schedulingDetailsText(message.content));
+  }
+  return selected.slice(-6);
+}
+
 function durationMinutes(text: string) {
   const normalized = normalize(text);
   const minutes = normalized.match(/\b(?:duracao|durar|por)\s+(\d{1,3})\s*(?:min|minutos)\b/);
@@ -65,12 +101,6 @@ function durationMinutes(text: string) {
   const hours = normalized.match(/\b(?:duracao|durar|por)\s+(\d(?:[.,]5)?)\s*(?:h|hora|horas)\b/);
   if (hours) return Math.max(15, Math.min(180, Math.round(Number(hours[1].replace(',', '.')) * 60)));
   return 60;
-}
-function appointmentMode(text: string) {
-  const value = normalize(text);
-  if (/\b(video|videochamada|meet|online|teams)\b/.test(value)) return 'video' as const;
-  if (/\b(ligacao|ligar|telefone|chamada)\b/.test(value)) return 'telefone' as const;
-  return 'presencial' as const;
 }
 function appointmentType(text: string) {
   const value = normalize(text);
@@ -135,20 +165,26 @@ async function ensureOfficeAddressTask(admin: AdminClient, organizationId: strin
 }
 
 export async function maybeScheduleAgendaFromAi(args: { admin: AdminClient; organizationId: string; lead: Lead; turn: AiTurn; lastUserMessage: string; officeAddress?: string; weekdayHours?: string; saturdayHours?: string; }): Promise<AgendaAiResult> {
+  // This flag is runtime evidence, not an AI classification or a promise.
+  args.turn.agenda_confirmed = false;
   const rows = await recentConversation(args.admin,args.lead.id,
     typeof args.lead.metadata?.nara_reset_at === 'string' ? args.lead.metadata.nara_reset_at : undefined);
   const chatHistory: AgendaConversationMessage[] = rows.map((row) => ({
     role: row.direction === 'in' ? 'user' : 'assistant',
     content: row.body,
   }));
+  // Negotiation is handled by a person immediately, including mixed requests
+  // such as "quero uma videochamada e tenho 200 mil de entrada".
+  if (args.lead.kind === 'cliente' && financialNegotiationIntent(args.lastUserMessage, chatHistory)) return {status:'none'};
   if (!shouldHandleAgendaTurn(chatHistory, args.lastUserMessage)) return {status:'none'};
 
   // Data/hora precisam ter sido informados pelo contato, nunca inventados na resposta da IA.
-  const userText = rows.filter((row) => row.direction === 'in').slice(-6).map((row) => row.body).join('\n');
+  const userTexts = schedulingUserTexts(chatHistory);
+  const userText = userTexts.join('\n');
   const action = agendaActionFromText(args.lastUserMessage);
   const current = normalize(args.lastUserMessage);
   const { data: existing, error: existingError } = await args.admin.from('agenda_events')
-    .select('id,assigned_to,starts_at,ends_at').eq('organization_id',args.organizationId)
+    .select('id,assigned_to,starts_at,ends_at,meeting_mode,location').eq('organization_id',args.organizationId)
     .eq('lead_id',args.lead.id).eq('status','scheduled').gte('starts_at',new Date().toISOString())
     .order('starts_at',{ascending:true}).limit(1).maybeSingle();
   if (existingError) throw existingError;
@@ -157,24 +193,30 @@ export async function maybeScheduleAgendaFromAi(args: { admin: AdminClient; orga
   if (action === 'cancel' && existing) {
     const {error} = await args.admin.from('agenda_events').update({status:'cancelled'}).eq('id',existing.id).eq('status','scheduled');
     if (error) throw error;
-    return {status:'cancelled',message:'Sua visita foi cancelada no CRM. Se quiser marcar outra data, é só me avisar.'};
+    return {status:'cancelled',message:'Seu compromisso foi cancelado no CRM. Se quiser marcar outra data, é só me avisar.'};
   }
-  if (!args.officeAddress?.trim()) {
-    const createdTask = await ensureOfficeAddressTask(args.admin, args.organizationId, args.lead);
-    return createdTask
-      ? {status:'needs_details',message:'Vou pedir ao time para confirmar o endereço do escritório antes de marcar sua visita.'}
-      : {status:'none'};
+  if (action === 'cancel') return {status:'needs_details',message:'Não encontrei um compromisso ativo para cancelar. Vou pedir à equipe que confira seu pedido.', requiresHuman:true};
+  const rememberedMode = existing && ['presencial', 'video', 'telefone'].includes(existing.meeting_mode)
+    ? existing.meeting_mode as AgendaRequestedMode : null;
+  const mode = agendaModeFromConversation(chatHistory, args.lastUserMessage) || rememberedMode;
+  if (!mode) return {status:'needs_details',message:'Você prefere uma videochamada para conhecer o empreendimento e a Bossa ou uma visita presencial?'};
+  const meetingLabel = mode === 'video' ? 'videochamada' : mode === 'telefone' ? 'ligação' : 'visita';
+  const location = mode === 'presencial' ? args.officeAddress?.trim() || null : null;
+  if (mode === 'presencial' && !location) {
+    await ensureOfficeAddressTask(args.admin, args.organizationId, args.lead);
+    return {status:'needs_details',message:'Vou pedir ao time para confirmar o endereço do escritório antes de marcar sua visita.', requiresHuman:true};
   }
-  const date = parseDateFromText(args.lastUserMessage)
-    || (action === 'reschedule' ? null : parseDateFromText(userText));
-  const time = parseTimeFromText(args.lastUserMessage)
-    || (action === 'reschedule' ? null : parseTimeFromText(userText));
-  if (!date) return {status:'needs_details',message:'Qual dia você prefere para a visita?'};
+  const currentSchedulingDetails = userTexts.at(-1) ?? '';
+  const date = parseDateFromText(currentSchedulingDetails)
+    || (action === 'reschedule' ? null : [...userTexts].reverse().map((text) => parseDateFromText(text)).find(Boolean));
+  const time = parseTimeFromText(currentSchedulingDetails)
+    || (action === 'reschedule' ? null : [...userTexts].reverse().map(parseTimeFromText).find(Boolean));
+  if (!date) return {status:'needs_details',message:`Qual dia você prefere para a ${meetingLabel}?`};
   const candidates = await candidateMembers(args.admin,args.organizationId,args.lead.owner_id);
-  if (!candidates.length) return {status:'needs_details',message:'Vou pedir ao time para confirmar quem ficará responsável pela visita.'};
+  if (!candidates.length) return {status:'needs_details',message:`Vou chamar a equipe para confirmar quem ficará responsável pela ${meetingLabel}.`, requiresHuman:true};
   if (!time) {
     const hours = officeHours(date,args.weekdayHours,args.saturdayHours);
-    if (!hours) return {status:'needs_details',message:'Ainda não tenho o expediente desse dia confirmado. Vou pedir ao time para combinar um horário com você.'};
+    if (!hours) return {status:'needs_details',message:'Ainda não tenho o expediente desse dia confirmado. Vou pedir ao time para combinar um horário com você.', requiresHuman:true};
     const preferred = /\bmanha\b/.test(current) ? [9,10,11] : /\btarde\b/.test(current) ? [14,15,16] : [];
     const slots = preferred.length ? preferred.map((h)=>h*60) : Array.from({length:Math.max(0,Math.floor((hours.close-hours.open-60)/60)+1)},(_,i)=>hours.open+i*60);
     const free:string[]=[];
@@ -192,16 +234,24 @@ export async function maybeScheduleAgendaFromAi(args: { admin: AdminClient; orga
       : {status:'conflict',message:'Não encontrei horários livres nesse período. Qual outro dia funciona para você?'};
   }
   const minutes = durationMinutes(userText);
+  if (!officeHours(date,args.weekdayHours,args.saturdayHours)) return {status:'needs_details',message:'Ainda não tenho o expediente desse dia confirmado. Vou pedir ao time para combinar um horário com você.', requiresHuman:true};
   if (!withinOfficeHours(date,time,minutes,args.weekdayHours,args.saturdayHours)) return {status:'needs_details',message:'Esse horário está fora do expediente confirmado do escritório. Qual outro horário você prefere?'};
   const startsAt = new Date(`${date}T${time}:00-03:00`);
   if (!Number.isFinite(startsAt.getTime()) || startsAt.getTime() <= Date.now()-5*60_000)
     return {status:'needs_details',message:'Esse horário já passou. Qual outro dia e horário funciona melhor?'};
   const endsAt = new Date(startsAt.getTime()+minutes*60_000);
   const startsIso = startsAt.toISOString(); const endsIso = endsAt.toISOString();
-  const {data:duplicate} = await args.admin.from('agenda_events').select('id,assigned_to,starts_at,ends_at')
+  const {data:duplicate, error: duplicateError} = await args.admin.from('agenda_events').select('id,assigned_to,starts_at,ends_at,meeting_mode,location')
     .eq('organization_id',args.organizationId).eq('lead_id',args.lead.id).eq('status','scheduled')
     .eq('starts_at',startsIso).maybeSingle();
-  if (duplicate) return {status:'created',eventId:duplicate.id,assignedTo:duplicate.assigned_to,startsAt:duplicate.starts_at,endsAt:duplicate.ends_at};
+  if (duplicateError) throw duplicateError;
+  if (duplicate) {
+    const duplicateMode = ['presencial', 'video', 'telefone'].includes(duplicate.meeting_mode)
+      ? duplicate.meeting_mode as AgendaRequestedMode : null;
+    if (!duplicateMode || !duplicate.id || !duplicate.assigned_to || !duplicate.starts_at || !duplicate.ends_at) return {status:'needs_details',message:'Já existe um horário registrado, mas a equipe precisa confirmar os dados do compromisso.', requiresHuman:true};
+    args.turn.agenda_confirmed = true;
+    return {status:'created',eventId:duplicate.id,assignedTo:duplicate.assigned_to,startsAt:duplicate.starts_at,endsAt:duplicate.ends_at, meetingMode:duplicateMode, location:duplicate.location ?? null};
+  }
   let assignedTo:string|null = null; let preferredBusy = false;
   for (const userId of candidates) {
     const conflicts = await findAgendaConflicts({organizationId:args.organizationId,assignedTo:userId,startsAt:startsIso,endsAt:endsIso});
@@ -211,14 +261,13 @@ export async function maybeScheduleAgendaFromAi(args: { admin: AdminClient; orga
   if (!assignedTo) return {status:'conflict',message:preferredBusy
     ? 'Esse horário já está ocupado na agenda do responsável. Pode me passar outro horário?'
     : 'Esse horário está ocupado na agenda da equipe. Pode me passar outro horário?'};
-  const mode = appointmentMode(userText);
-  const type = appointmentType(userText);
+  const type = mode === 'video' ? 'apresentacao' : mode === 'telefone' ? 'ligacao' : appointmentType(userText);
   const label = type==='apresentacao'?'Apresentação':type==='visita'?'Visita':type==='ligacao'?'Ligação':'Reunião';
   const {data:event,error} = await args.admin.from('agenda_events').insert({
     organization_id:args.organizationId,lead_id:args.lead.id,assigned_to:assignedTo,created_by_kind:'ai',
     agent:args.lead.kind==='cliente'?'nara':'plantao',title:`${label} · ${args.lead.name}`,
     description:args.turn.summary||args.turn.next_action||null,event_type:type,meeting_mode:mode,
-    location: mode==='presencial' ? args.officeAddress || 'Escritório da Bossa (endereço a confirmar)' : null,
+    location,
     starts_at:startsIso,ends_at:endsIso,metadata:{source:'whatsapp_ai',lead_name:args.lead.name,
       last_user_message:args.lastUserMessage,ai_summary:args.turn.summary},
   }).select('id,assigned_to,starts_at,ends_at').single();
@@ -226,9 +275,16 @@ export async function maybeScheduleAgendaFromAi(args: { admin: AdminClient; orga
     if (error.code==='23P01') return {status:'conflict',message:'Esse horário acabou de ser ocupado. Pode me informar outra opção?'};
     throw error;
   }
+  if (!event?.id || !event.assigned_to || !event.starts_at || !event.ends_at) {
+    return {status:'needs_details',message:'Não consegui confirmar o registro na agenda. Vou chamar a equipe para combinar o horário com você.', requiresHuman:true};
+  }
   if (existing && existing.id!==event.id && action === 'reschedule') {
     const {error:cancelError}=await args.admin.from('agenda_events').update({status:'cancelled'}).eq('id',existing.id).eq('status','scheduled');
     if (cancelError) throw cancelError;
   }
-  return {status:'created',eventId:event.id,assignedTo:event.assigned_to,startsAt:event.starts_at,endsAt:event.ends_at};
+  args.turn.agenda_confirmed = true;
+  args.turn.next_action = mode === 'video'
+    ? 'Realizar a apresentação do empreendimento e da Bossa por videochamada; confirmar o link de acesso com o cliente.'
+    : mode === 'telefone' ? 'Realizar a ligação no horário registrado na agenda.' : 'Receber o cliente para a visita no local e horário registrados na agenda.';
+  return {status:'created',eventId:event.id,assignedTo:event.assigned_to,startsAt:event.starts_at,endsAt:event.ends_at, meetingMode:mode, location};
 }
