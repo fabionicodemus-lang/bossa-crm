@@ -738,13 +738,12 @@ export function AlmaPagina({
           <CabecalhoSecao
             n="08"
             titulo="O que você não vê no render também faz a diferença."
-            sub="Conheça quatro cuidados de engenharia que a Bossa já demonstra na prática."
+            sub="Quatro soluções de engenharia que também estarão no Alma."
           >
-            A Bossa registra na obra do Flow decisões sobre alvenaria, conforto
-            acústico, impermeabilização e o detalhamento dos banheiros. No Alma,
-            o projeto já prevê isolamento entre lajes e paredes de divisa.
-            Abaixo, mostramos como trabalhamos e o que ainda deve ser confirmado
-            para este empreendimento.
+            O Alma seguirá métodos que a Bossa já aplica no Flow: alvenaria de
+            concreto celular, manta acústica sob o contrapiso, impermeabilização
+            reforçada e ralo linear nos boxes. Veja registros reais da nossa
+            engenharia em ação e entenda os cuidados por trás dos acabamentos.
           </CabecalhoSecao>
           <div className="al-engenharia-registros" aria-label="Registros reais da engenharia da Bossa no Flow">
             {registrosConstrutivosBossa.map((registro) => (
@@ -778,10 +777,10 @@ export function AlmaPagina({
           </div>
           <div className="al-engenharia-rodape">
             <p className="al-aviso">
-              As imagens e os processos acima são registros do <strong>Flow Aptos</strong>,
-              não da obra do Alma. Marcas, espessuras, sistemas de impermeabilização
-              e ralos do Alma dependem das especificações vigentes do projeto e do
-              memorial aplicável; não devem ser presumidos a partir do Flow.
+              As fotos mostram a execução real no <strong>Flow Aptos</strong>.
+              A Bossa adotará esses quatro métodos também no Alma. Marcas,
+              espessuras e detalhes executivos seguem os projetos e o memorial
+              específico de cada empreendimento.
             </p>
             <a href="#contato" className="al-bt al-bt--linha">
               Consultar a engenharia sobre o Alma
