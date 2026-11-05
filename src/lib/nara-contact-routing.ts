@@ -51,6 +51,10 @@ export function hasPostSaleCorrection(value: string): boolean {
 export function isCurrentCustomerSignal(value: string): boolean {
   const text = normalizeNaraRoutingText(value);
   if (hasPostSaleCorrection(text)) return false;
+  // "Aceitam meu apartamento como parte do pagamento?" describes a purchase
+  // proposal, not ownership of a Bossa unit or a post-sale service request.
+  const propertyAsPayment = /\b(?:permuta|troca|parte do pagamento|parte de pagamento|como entrada|dar (?:meu|minha|um|uma) (?:apartamento|imovel|casa|terreno))\b/.test(text);
+  if (propertyAsPayment && !/\b(?:boleto|segunda via|meu contrato|assistencia tecnica|pos-venda|ja comprei com voces)\b/.test(text)) return false;
   return /\b(?:ja comprei|sou cliente|comprei com voces|segunda via|boleto|meu contrato|minha unidade|meu apartamento|assistencia tecnica|pos-venda)\b/.test(text);
 }
 
