@@ -166,6 +166,78 @@ export const especificacoesAlma = [
   ],
 ];
 
+/**
+ * Referências reais da engenharia Bossa no Flow — não são um memorial do Alma.
+ * A ficha do Alma confirma isolamento entre lajes/divisas e nicho revestido,
+ * mas não confirma aqui marcas, espessuras ou o tipo de ralo do empreendimento.
+ */
+export const metodosConstrutivosBossa = [
+  {
+    numero: "01",
+    categoria: "Alvenaria",
+    titulo: "Concreto celular: a escolha começa na parede.",
+    texto:
+      "No Flow, a Bossa utiliza blocos de concreto celular Celucon, com espessuras definidas conforme a função de cada parede. É uma escolha pensada para o conforto térmico e para integrar o conjunto de isolamento sonoro.",
+    detalhe: "No Flow: blocos de 20 cm entre unidades, 14 cm nas fachadas e 11 cm nas divisões internas.",
+    href: "/empreendimentos/flow-aptos#engenharia",
+    link: "Ver a alvenaria do Flow",
+  },
+  {
+    numero: "02",
+    categoria: "Conforto acústico",
+    titulo: "Uma camada de cuidado entre os andares.",
+    texto:
+      "No Flow, a manta de lã de PET FS Floor é aplicada entre a laje e o contrapiso para ajudar a reduzir ruídos de impacto, como passos e móveis. O projeto do Alma também prevê isolamento acústico e térmico entre lajes.",
+    detalhe: "No Flow: manta Fibersoft de 8 mm. A solução específica do Alma deve ser conferida em projeto.",
+    href: "/empreendimentos/flow-aptos#isolamento-piso",
+    link: "Ver a manta aplicada no Flow",
+  },
+  {
+    numero: "03",
+    categoria: "Áreas molhadas",
+    titulo: "Impermeabilização antes do revestimento.",
+    texto:
+      "Na obra do Flow, preparamos a base com caimento, reforçamos encontros e ralos, aplicamos o sistema impermeabilizante e conferimos a estanqueidade antes de liberar o acabamento. É um exemplo de controle de execução da Bossa.",
+    detalhe: "No Flow: Vedatop Ultraflex 12000 e teste de estanqueidade de 72 horas.",
+    href: "/empreendimentos/flow-aptos#impermeabilizacao",
+    link: "Conhecer o processo no Flow",
+  },
+  {
+    numero: "04",
+    categoria: "Detalhe do banheiro",
+    titulo: "Ralo linear e nicho pensado desde o projeto.",
+    texto:
+      "O box do Flow foi detalhado com ralo linear para direcionar a água em um plano de caimento, além de nicho embutido revestido. No Alma, o nicho revestido está previsto; o tipo de ralo ainda deve ser confirmado com a engenharia.",
+    detalhe: "Exemplo documentado no boletim de setembro de 2026 do Flow.",
+    href: "/obras/flow-aptos/2026-09",
+    link: "Ver o detalhe do box no boletim",
+  },
+] as const;
+
+export const registrosConstrutivosBossa = [
+  {
+    src: "/img/flow/engenharia/alvenaria-celucon.webp",
+    alt: "Execução de alvenaria de concreto celular na obra do Flow Aptos",
+    legenda: "Alvenaria de concreto celular · registro real do Flow",
+    largura: 640,
+    altura: 1138,
+  },
+  {
+    src: "/img/flow/engenharia/manta-fs-floor-aplicacao.webp",
+    alt: "Manta acústica aplicada no piso do Flow antes do contrapiso",
+    legenda: "Manta acústica entre laje e contrapiso · registro real do Flow",
+    largura: 1600,
+    altura: 1200,
+  },
+  {
+    src: "/img/flow/engenharia/impermeabilizacao-aplicacao.webp",
+    alt: "Aplicação de impermeabilizante sobre a tela de reforço no Flow Aptos",
+    legenda: "Impermeabilização com reforço · registro real do Flow",
+    largura: 640,
+    altura: 1138,
+  },
+] as const;
+
 /** Só preencher após conferir o arquivo, direitos, legenda e aprovação editorial.
  * Fotos de obra precisam de data própria, independente do mês da medição.
  * Vídeos narrados exigem legendas revisadas e transcrição. */

@@ -14,7 +14,10 @@ import {
   midiasAprovadasAlma,
   mensagemApresentacao,
   mensagemPlanta,
+  metodosConstrutivosBossa,
+  registrosConstrutivosBossa,
 } from "@/content/alma";
+import { relatosDestaqueAlma } from "@/content/relatos-bossa";
 import { empreendimentoLd, perguntasLd } from "@/lib/seo";
 import { rastrear } from "@/lib/rastreio";
 import { JsonLd } from "../Blocos";
@@ -86,7 +89,9 @@ const nav = [
   ["plantas", "Plantas"],
   ["lazer", "Lazer"],
   ["localizacao", "Localização"],
+  ["engenharia", "Engenharia"],
   ["obra", "Obra"],
+  ...(relatosDestaqueAlma.length ? [["relatos", "Relatos"]] : []),
 ];
 function CabecalhoSecao({
   n,
@@ -225,6 +230,7 @@ export function AlmaPagina({
     "5": ["#localizacao", "Ver o trajeto"],
     "6": ["#lazer", "Ver os ambientes"],
     "8": [`/obras/${e.slug}/${ed.mes}`, "Ver boletim"],
+    "13": ["#engenharia", "Ver exemplos da engenharia Bossa"],
   };
   const msg = contexto ? mensagemPlanta(p) : mensagemAlma;
   const wa = (
@@ -727,10 +733,67 @@ export function AlmaPagina({
         </div>
       </section>
 
-      <section id="obra" className="al-sec al-noite al-relevo">
+      <section id="engenharia" className="al-sec al-cla-2">
         <div className="al-wrap">
           <CabecalhoSecao
             n="08"
+            titulo="O que você não vê no render também faz a diferença."
+            sub="Conheça quatro cuidados de engenharia que a Bossa já demonstra na prática."
+          >
+            A Bossa registra na obra do Flow decisões sobre alvenaria, conforto
+            acústico, impermeabilização e o detalhamento dos banheiros. No Alma,
+            o projeto já prevê isolamento entre lajes e paredes de divisa.
+            Abaixo, mostramos como trabalhamos e o que ainda deve ser confirmado
+            para este empreendimento.
+          </CabecalhoSecao>
+          <div className="al-engenharia-registros" aria-label="Registros reais da engenharia da Bossa no Flow">
+            {registrosConstrutivosBossa.map((registro) => (
+              <figure className="al-engenharia-registro" key={registro.src}>
+                <div className="al-engenharia-foto">
+                  <Image
+                    src={registro.src}
+                    alt={registro.alt}
+                    width={registro.largura}
+                    height={registro.altura}
+                    sizes="(max-width: 600px) 82vw, (max-width: 860px) 45vw, 31vw"
+                  />
+                </div>
+                <figcaption>{registro.legenda}</figcaption>
+              </figure>
+            ))}
+          </div>
+          <div className="al-engenharia-cartoes">
+            {metodosConstrutivosBossa.map((metodo) => (
+              <article className="al-engenharia-cartao" key={metodo.numero}>
+                <div className="al-engenharia-cartao__topo">
+                  <span className="al-engenharia-numero" aria-hidden="true">{metodo.numero}</span>
+                  <span className="al-rot">{metodo.categoria}</span>
+                </div>
+                <h3 className="al-h3">{metodo.titulo}</h3>
+                <p className="al-p">{metodo.texto}</p>
+                <p className="al-engenharia-detalhe">{metodo.detalhe}</p>
+                <Link href={metodo.href}>{metodo.link} <span aria-hidden="true">↗</span></Link>
+              </article>
+            ))}
+          </div>
+          <div className="al-engenharia-rodape">
+            <p className="al-aviso">
+              As imagens e os processos acima são registros do <strong>Flow Aptos</strong>,
+              não da obra do Alma. Marcas, espessuras, sistemas de impermeabilização
+              e ralos do Alma dependem das especificações vigentes do projeto e do
+              memorial aplicável; não devem ser presumidos a partir do Flow.
+            </p>
+            <a href="#contato" className="al-bt al-bt--linha">
+              Consultar a engenharia sobre o Alma
+            </a>
+          </div>
+        </div>
+      </section>
+
+      <section id="obra" className="al-sec al-noite al-relevo">
+        <div className="al-wrap">
+          <CabecalhoSecao
+            n="09"
             titulo="Conheça quem constrói. Acompanhe o que acontece."
             sub="O Alma é um empreendimento da Bossa Empreendimentos."
           >
@@ -788,10 +851,40 @@ export function AlmaPagina({
         </div>
       </section>
 
+      {relatosDestaqueAlma.length > 0 && (
+        <section id="relatos" className="al-sec al-cla">
+          <div className="al-wrap">
+            <CabecalhoSecao
+              n="10"
+              titulo="Histórias reais de quem já escolheu a Bossa."
+              sub="Confiança construída em diferentes empreendimentos, ao longo dos anos."
+            >
+              Quem compra um apartamento também escolhe em quem confiar.
+              Conheça experiências de clientes do Jazz, Soul, Flow e Alma,
+              cada uma identificada com seu empreendimento.
+            </CabecalhoSecao>
+            <div className="al-relatos-grade">
+              {relatosDestaqueAlma.map((relato) => (
+                <figure className="al-relato" key={`${relato.nomePublico}-${relato.identificacao}`}>
+                  <blockquote>{relato.textoOriginal}</blockquote>
+                  <figcaption>
+                    <strong>{relato.nomePublico}</strong>
+                    <span>{relato.identificacao}</span>
+                  </figcaption>
+                </figure>
+              ))}
+            </div>
+            <Link href="/#relatos-clientes" className="al-relatos-todos">
+              Ler mais depoimentos de clientes da Bossa <span aria-hidden="true">↗</span>
+            </Link>
+          </div>
+        </section>
+      )}
+
       <section id="duvidas" className="al-sec al-cla-2">
         <div className="al-wrap">
           <CabecalhoSecao
-            n="09"
+            n={relatosDestaqueAlma.length ? "11" : "10"}
             titulo="Algumas respostas antes da nossa conversa."
             sub="Informações para conhecer o projeto com mais clareza."
           />
@@ -827,7 +920,7 @@ export function AlmaPagina({
       <section id="contato" className="al-sec al-sal al-relevo">
         <div className="al-wrap" ref={contato}>
           <CabecalhoSecao
-            n="10"
+            n={relatosDestaqueAlma.length ? "12" : "11"}
             titulo="Conte como você imagina viver aqui."
             sub="Uma conversa pode ajudar a encontrar a opção que combina com a sua rotina."
           >

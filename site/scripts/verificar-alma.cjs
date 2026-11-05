@@ -61,7 +61,9 @@ const esperar = (p, ms = 1200) => p.waitForTimeout(ms);
       "lazer",
       "localizacao",
       "conforto",
+      "engenharia",
       "obra",
+      "relatos",
       "duvidas",
       "contato",
     ],
@@ -81,7 +83,7 @@ const esperar = (p, ms = 1200) => p.waitForTimeout(ms);
       .evaluate((v) => v.paused),
   );
   ok(
-    "Dez seções na ordem, treze perguntas, contato inicial geral, movimento reduzido e nenhuma planta vista fora da tela",
+    "Doze seções na ordem, treze perguntas, contato inicial geral, movimento reduzido e nenhuma planta vista fora da tela",
   );
   const opções = [
     ["tipo-02", "103", 3],
