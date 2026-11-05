@@ -93,8 +93,7 @@ export function agendaModeFromConversation(history: AgendaConversationMessage[],
   const latest = agendaModes(lastUserMessage);
   if (latest.length === 1) return latest[0];
   if (latest.length > 1) return null;
-  const lastAssistantIndex = history.findLastIndex((item) => item.role === 'assistant');
-  const lastAssistant = history[lastAssistantIndex]?.content ?? '';
+  const lastAssistant = [...history].reverse().find((item) => item.role === 'assistant')?.content ?? '';
   if (isAgendaOffer(lastAssistant) && (affirmativeAgendaReply(lastUserMessage) || isAgendaDetailReply(lastUserMessage))) {
     const offered = agendaModes(lastAssistant);
     // "Sim" to "vídeo ou presencial?" still requires choosing the format.
