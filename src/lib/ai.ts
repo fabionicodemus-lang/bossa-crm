@@ -942,7 +942,17 @@ export async function enforceNaraReplyGuardrails(
     'As plantas dos tipos 2 e 3, ambas de 62 m², não estão comigo agora',
   );
   if (!turn.reply.trim()) throw new NaraReplyGuardrailError(['resposta_vazia']);
-  if (lead.kind === 'cliente') turn.reply = ensureFirstTurnIntroduction(turn.reply, history, context);
+  if (lead.kind === 'cliente') {
+    // A classificação e o score precisam concordar para a fila comercial:
+    // frio 0–20, morno 21–59, quente 60–100, agendamento 80–100.
+    turn.score = Number.isFinite(turn.score) ? Math.max(0, Math.min(100, Math.round(turn.score))) : 0;
+    if (turn.classification === 'sem_interesse') turn.score = 0;
+    if (turn.classification === 'frio') turn.score = Math.min(turn.score, 20);
+    if (turn.classification === 'morno') turn.score = Math.max(21, Math.min(turn.score, 59));
+    if (turn.classification === 'quente') turn.score = Math.max(60, turn.score);
+    if (turn.classification === 'agendamento') turn.score = Math.max(80, turn.score);
+    turn.reply = ensureFirstTurnIntroduction(turn.reply, history, context);
+  }
   return turn;
 }
 
