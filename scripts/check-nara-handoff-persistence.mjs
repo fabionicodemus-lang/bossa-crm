@@ -7,6 +7,7 @@ import { stripTypeScriptTypes } from 'node:module';
 import { aiCanReply, deriveHybridDecision } from '../src/lib/hybrid.ts';
 import { applyNaraFinancialHandoff } from '../src/lib/nara-sales-handoff.ts';
 import { isAssistedSaleSignal, isBrokerRoutingSignal, isPostSaleRoutingSignal } from '../src/lib/nara-contact-routing.ts';
+import { explicitHumanRequest, refusesHandoff } from '../src/lib/nara-conversation-signals.ts';
 import { whatsappCanStillReply } from '../src/lib/whatsapp/aiTurnSafety.ts';
 
 const source = await readFile(new URL('../src/lib/hybrid-server.ts', import.meta.url), 'utf8');
@@ -14,8 +15,8 @@ const executable = stripTypeScriptTypes(source)
   .replace(/^import\s.*?;\s*$/gm, '')
   .replace(/export async function applyHybridDecision/, 'async function applyHybridDecision');
 const applyHybridDecision = new Function('deriveHybridDecision', 'isAssistedSaleSignal',
-  'isBrokerRoutingSignal', 'isPostSaleRoutingSignal', `${executable}\nreturn applyHybridDecision;`)(
-  deriveHybridDecision, isAssistedSaleSignal, isBrokerRoutingSignal, isPostSaleRoutingSignal,
+  'isBrokerRoutingSignal', 'isPostSaleRoutingSignal', 'explicitHumanRequest', 'refusesHandoff', `${executable}\nreturn applyHybridDecision;`)(
+  deriveHybridDecision, isAssistedSaleSignal, isBrokerRoutingSignal, isPostSaleRoutingSignal, explicitHumanRequest, refusesHandoff,
 );
 
 const baseLead = {
@@ -54,6 +55,11 @@ function createDb(options = {}) {
       update(value) { operation = 'update'; payload = value; return query; },
       upsert(value, config) { operation = 'upsert'; payload = value; upsertOptions = config; return query; },
       eq(key, value) { filters.push((row) => row[key] === value); return query; },
+      is(key, value) { filters.push((row) => (row[key] ?? null) === value); return query; },
+      like(key, pattern) {
+        assert.equal(pattern, 'handoff:%');
+        filters.push((row) => String(row[key] ?? '').startsWith('handoff:')); return query;
+      },
       neq(key, value) { filters.push((row) => row[key] !== value); return query; },
       gt(key, value) { filters.push((row) => row[key] > value); return query; },
       in(key, values) { filters.push((row) => values.includes(row[key])); return query; },
@@ -63,6 +69,7 @@ function createDb(options = {}) {
       then(resolve, reject) { return Promise.resolve(execute(false)).then(resolve, reject); },
     };
     function execute(single) {
+      if (options.beforeExecute) options.beforeExecute({ table, operation, payload, tables });
       if (options.fail?.table === table && options.fail?.operation === operation) {
         return { data: null, error: { code: 'QA_DB_ERROR', message: 'Synthetic database failure' } };
       }
@@ -204,6 +211,117 @@ await check('Recusa de contato impede passagem/fila, mesmo perguntando entrada',
   assert.equal(db.tables.client_handoff_alert_jobs.length, 0);
   assert.equal(db.tables.lead_tasks.some((task) => task.dedupe_key === 'handoff:pending'), false);
   assert.equal(db.rpcCalls.some((call) => call.name === 'next_client_handoff_owner'), false);
+});
+
+await check('Passagem pendente seguida de recusa cancela somente pendências desse contato', async () => {
+  const db = createDb(); const initial = 'Tenho 200 mil de entrada para comprar o Flow.';
+  await persist(db, financialTurn(initial), initial);
+  assert.equal(aiCanReply(db.tables.leads[0]), true, 'Nara still handles replies while the handoff is pending.');
+  const generalTask = { id: 'general-qa', organization_id: baseLead.organization_id, lead_id: baseLead.id,
+    status: 'pending', dedupe_key: 'ai:qualificacao_ia' };
+  const unrelated = { id: 'other-qa', organization_id: 'other-org', lead_id: baseLead.id,
+    status: 'pending', dedupe_key: 'handoff:pending' };
+  db.tables.lead_tasks.push(generalTask, unrelated);
+  const otherHandoff = { id: 'other-handoff', organization_id: 'other-org', lead_id: baseLead.id, status: 'pending' };
+  db.tables.lead_handoffs.push(otherHandoff);
+  const refused = 'Quanto seria a entrada? Não me encaminhe agora, prefiro continuar por mensagem.';
+  const decision = await persist(db, financialTurn(refused), refused);
+  assert.equal(decision.handoffRequired, false);
+  assert.notEqual(db.tables.leads[0].stage, 'passagem_pendente');
+  assert.equal(db.tables.leads[0].handoff_requested_at, null);
+  assert.equal(db.tables.leads[0].metadata.nara_handoff_revocation_pending, false);
+  assert.equal(db.tables.lead_handoffs[0].status, 'cancelled');
+  assert.equal(db.tables.lead_tasks[0].status, 'cancelled');
+  assert.equal(db.tables.client_handoff_alert_jobs[0].owner_status, 'cancelled');
+  assert.equal(db.tables.client_handoff_alert_jobs[0].manager_status, 'cancelled');
+  assert.equal(generalTask.status, 'pending');
+  assert.equal(unrelated.status, 'pending');
+  assert.equal(otherHandoff.status, 'pending');
+  const beforeCounts = [db.tables.lead_handoffs.length, db.tables.client_handoff_alert_jobs.length];
+  await persist(db, financialTurn(refused), refused);
+  assert.deepEqual([db.tables.lead_handoffs.length, db.tables.client_handoff_alert_jobs.length], beforeCounts);
+  assert.equal(db.tables.lead_handoffs[0].status, 'cancelled');
+});
+
+await check('Revogação preserva destinatário já enviado e cancela só a fila ainda aguardando', async () => {
+  for (const sentField of ['owner_status', 'manager_status']) {
+    const db = createDb(); const initial = 'Quero avaliar a entrada.';
+    await persist(db, financialTurn(initial), initial);
+    const job = db.tables.client_handoff_alert_jobs[0]; job[sentField] = 'sent';
+    const otherField = sentField === 'owner_status' ? 'manager_status' : 'owner_status';
+    const refused = 'Qual a entrada? Sem atendimento humano por enquanto.';
+    await persist(db, financialTurn(refused), refused);
+    assert.equal(job[sentField], 'sent');
+    assert.equal(job[otherField], 'cancelled');
+  }
+});
+
+await check('Humano já ativo e assunção concorrente não são reativados nem têm pendências canceladas', async () => {
+  for (const stale of [false, true]) {
+    const db = createDb(); const initial = 'Tenho 200 mil de entrada.';
+    await persist(db, financialTurn(initial), initial);
+    const snapshot = structuredClone(db.tables.leads[0]);
+    Object.assign(db.tables.leads[0], { stage: 'humano_ativo', owner_mode: 'human', ai_enabled: false,
+      handoff_accepted_at: new Date().toISOString() });
+    db.tables.lead_handoffs[0].status = 'accepted';
+    const refused = 'Quero entender entrada, mas não me passe para ninguém agora.';
+    if (stale) await applyHybridDecision({ admin: db, organizationId: baseLead.organization_id,
+      lead: snapshot, turn: financialTurn(refused), lastUserMessage: refused });
+    else await persist(db, financialTurn(refused), refused);
+    assert.equal(db.tables.leads[0].owner_mode, 'human');
+    assert.equal(db.tables.leads[0].ai_enabled, false);
+    assert.equal(db.tables.lead_handoffs[0].status, 'accepted');
+    assert.equal(db.tables.lead_tasks[0].status, 'pending');
+    assert.equal(db.tables.client_handoff_alert_jobs[0].owner_status, 'queued');
+  }
+});
+
+await check('CAS impede cancelamento se humano assumir entre releitura e update', async () => {
+  const options = {}; const db = createDb(options); const initial = 'Quero tratar da entrada.';
+  await persist(db, financialTurn(initial), initial);
+  options.beforeExecute = ({ table, operation, payload, tables }) => {
+    if (table === 'leads' && operation === 'update' && payload.metadata?.nara_handoff_revocation_pending) {
+      Object.assign(tables.leads[0], { stage: 'humano_ativo', owner_mode: 'human', ai_enabled: false,
+        handoff_accepted_at: new Date().toISOString() });
+      tables.lead_handoffs[0].status = 'accepted';
+      options.beforeExecute = null;
+    }
+  };
+  const refused = 'Quanto é a entrada? Não me encaminhe agora.';
+  await assert.rejects(persist(db, financialTurn(refused), refused), /atendimento mudou/);
+  assert.equal(db.tables.leads[0].owner_mode, 'human');
+  assert.equal(db.tables.leads[0].ai_enabled, false);
+  assert.equal(db.tables.lead_handoffs[0].status, 'accepted');
+  assert.equal(db.tables.lead_tasks[0].status, 'pending');
+  assert.equal(db.tables.client_handoff_alert_jobs[0].owner_status, 'queued');
+});
+
+await check('Erros na limpeza são propagados e retry conclui sem duplicar ou apagar histórico enviado', async () => {
+  for (const failedTable of ['lead_handoffs', 'lead_tasks', 'client_handoff_alert_jobs']) {
+    const options = {}; const db = createDb(options); const initial = 'Quero avaliar a entrada.';
+    await persist(db, financialTurn(initial), initial);
+    options.fail = { table: failedTable, operation: 'update' };
+    const refused = 'Quanto é a entrada? Não quero atendimento humano.';
+    await assert.rejects(persist(db, financialTurn(refused), refused), (error) => error.code === 'QA_DB_ERROR');
+    assert.equal(db.tables.leads[0].metadata.nara_handoff_revocation_pending, true);
+    options.fail = null;
+    await persist(db, financialTurn(refused), refused);
+    assert.equal(db.tables.leads[0].metadata.nara_handoff_revocation_pending, false);
+    assert.equal(db.tables.lead_handoffs.length, 1);
+    assert.equal(db.tables.lead_handoffs[0].status, 'cancelled');
+    assert.equal(db.tables.client_handoff_alert_jobs.length, 1);
+    assert.equal(db.tables.client_handoff_alert_jobs[0].owner_status, 'cancelled');
+  }
+});
+
+await check('Pedido humano positivo após recusa não revoga a passagem', async () => {
+  const db = createDb(); const initial = 'Tenho entrada para comprar o Flow.';
+  await persist(db, financialTurn(initial), initial);
+  const message = 'Não queria atendimento humano antes, mas agora quero falar com alguém sobre a entrada.';
+  const decision = await persist(db, financialTurn(message), message);
+  assert.equal(decision.handoffRequired, true);
+  assert.equal(db.tables.lead_handoffs[0].status, 'pending');
+  assert.equal(db.tables.client_handoff_alert_jobs[0].owner_status, 'queued');
 });
 
 await check('Preço total isolado não gera passagem financeira', async () => {
