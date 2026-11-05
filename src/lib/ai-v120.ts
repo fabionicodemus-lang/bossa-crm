@@ -466,10 +466,17 @@ function plantRequestTurn(turn: AiTurn, history: ChatMessage[], context: AiTrain
     || (mentionsPlant(previousAssistant) && /\b(suites?|quartos?|quantas?|qual|prefere)\b/.test(normalizedLastQuestion));
   const selectsPreviouslyDiscussedPlant = /^(?:tipo|planta|duplex)\s*0?\d+\b|^a de \d{2,3}\s*(?:m2|m²|metros)?\b/.test(latestNormalized)
     && history.some((item) => item.role === 'assistant' && mentionsPlant(item.content));
+  // Após oferecer plantas específicas, "gostei da maior, manda só ela?"
+  // continua sendo um pedido de planta, mesmo sem repetir essa palavra.
+  const asksForReferencedPlan = !offPlanPurchaseQuestion
+    && mentionsPlant(previousAssistant)
+    && /\b(?:manda|mandar|envia|enviar|mostra|mostrar|quero ver)\b/.test(latestNormalized)
+    && /\b(?:ela|essa|esse|a maior|a menor|de \d{2,3}\s*(?:m2|m²)?)\b/.test(latestNormalized)
+    && !/\b(?:endereco|localizacao|preco|valor|tabela|reserva|contrato|proposta)\b/.test(latestNormalized);
   const answersPlantQuestion = !asksForFloorPlan && !acceptsOffer && (askedAboutFloorPlan || selectsPreviouslyDiscussedPlant)
     && !/[?]/.test(latest) && latestNormalized.split(' ').length <= 12
     && /\b(\d|dois|duas|tres|quatro)\s*(?:suites?|quartos?)\b|\b\d{2,3}(?:[.,]\d)?\s*(?:m2|m²|m\b|metros)|\btipo\s*0?\d\b|\bduplex\b|\b(?:menor|maior)\b/.test(latestNormalized);
-  if (!asksForFloorPlan && !acceptsOffer && !answersPlantQuestion) return null;
+  if (!asksForFloorPlan && !acceptsOffer && !answersPlantQuestion && !asksForReferencedPlan) return null;
   const development = developmentFromHistory(history);
   if (!development) return null;
 
