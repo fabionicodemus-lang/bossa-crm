@@ -53,6 +53,14 @@ jobs:
         run: npm run test:ai-files-commercial
       - name: Test Nara conversation policy
         run: npm run test:nara-conversation-policy
+      - name: Test Nara financial handoff signals
+        run: npm run test:nara-sales-signals
+      - name: Test Nara conversion and immediate handoff
+        run: npm run test:nara-sales-conversion
+      - name: Test Nara video and in-person scheduling
+        run: npm run test:nara-conversion-agenda
+      - name: Test Nara handoff persistence and delivery safety
+        run: npm run test:nara-handoff-persistence
       - name: Test Nara current commercial quotes
         run: npm run test:nara-commercial-guard
       - name: Test Nara 15 conversation regressions
