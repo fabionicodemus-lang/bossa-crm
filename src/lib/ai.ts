@@ -895,6 +895,19 @@ export async function enforceNaraReplyGuardrails(
     turn.reply = 'Você pode solicitar uma reserva do Alma, mas não consigo garantir o preço de hoje, uma unidade reservada ou que o registro saia nas próximas semanas. A Taís do comercial precisa confirmar as condições e a situação documental atual antes de assumir qualquer compromisso. Vou chamá-la para avaliar seu pedido.';
     turn.handoff = true;
   }
+  // Em uma pergunta dupla ("onde fica e quanto custa?"), a substituição
+  // financeira segura não deve apagar a localização solicitada.
+  const asksLocation = /\b(?:onde fica|localizacao|endereco|no mapa|donde queda|ubicacion|direccion|where is|location)\b/.test(normalizedQuestion);
+  const locationFocus = enterpriseInFocus(history);
+  if (lead.kind === 'cliente' && protectedReply.changed && asksLocation && locationFocus) {
+    const locations = {
+      flow: { intro: 'O Flow fica em Balneário Perequê, Porto Belo, a 800 m do mar.', map: 'Flow%20Aptos%20Porto%20Belo%20SC' },
+      alma: { intro: 'O Alma fica em Balneário Perequê, Porto Belo, a 300 m do mar; não é frente-mar.', map: 'Alma%20Seahouses%20Porto%20Belo%20SC' },
+      soul: { intro: 'O Soul fica em Itapema, a 500 m do mar.', map: 'Soul%20Residence%20Itapema%20SC' },
+    };
+    const location = locations[locationFocus];
+    turn.reply = `${turn.reply.trim()}\n\n${location.intro} Você pode conferir no mapa: https://www.google.com/maps/search/?api=1&query=${location.map}`;
+  }
   // A blindagem comercial pode substituir uma resposta que incluía o próximo
   // passo. Preserve o encaminhamento pedido por quem realmente quer fechar.
   const alreadyAcknowledgedHandoff = /\b(?:chamando|chamar|acionando|acionar|encaminh\w*|direcion\w*|passando|conectar|contato com o comercial|contactando|llamando|connecting)\b/i.test(turn.reply);
