@@ -69,7 +69,7 @@ export const almaFaq = [
   {
     id: "13",
     p: "Quais cuidados de conforto estão previstos nos apartamentos?",
-    r: "O projeto prevê isolamento acústico e térmico entre lajes e paredes de divisa, porcelanato no living, vinílico nas suítes e área de serviço fechada e ventilada. Também há infraestrutura para split e automação, que não significa fornecimento dos aparelhos. Consulte a seção de conforto e converse com a equipe sobre o detalhamento das especificações.",
+    r: "O Alma contará com alvenaria de concreto celular, manta acústica entre laje e contrapiso, impermeabilização reforçada nas áreas molhadas e ralo linear nos boxes. O projeto também prevê isolamento acústico e térmico entre lajes e paredes de divisa, porcelanato no living, vinílico nas suítes e área de serviço fechada e ventilada. Há infraestrutura para split e automação, sem fornecimento dos aparelhos. Conheça os métodos na seção de engenharia e consulte o memorial para os detalhes técnicos.",
   },
 ];
 export const avisoDuplex =
@@ -167,9 +167,9 @@ export const especificacoesAlma = [
 ];
 
 /**
- * Referências reais da engenharia Bossa no Flow — não são um memorial do Alma.
- * A ficha do Alma confirma isolamento entre lajes/divisas e nicho revestido,
- * mas não confirma aqui marcas, espessuras ou o tipo de ralo do empreendimento.
+ * Fábio confirmou em 05/11/2026 a adoção destes quatro métodos também no Alma.
+ * Os registros fotográficos e valores de referência seguem sendo do Flow.
+ * Marcas, espessuras e ensaios específicos não foram confirmados para o Alma.
  */
 export const metodosConstrutivosBossa = [
   {
@@ -177,8 +177,8 @@ export const metodosConstrutivosBossa = [
     categoria: "Alvenaria",
     titulo: "Concreto celular: a escolha começa na parede.",
     texto:
-      "No Flow, a Bossa utiliza blocos de concreto celular Celucon, com espessuras definidas conforme a função de cada parede. É uma escolha pensada para o conforto térmico e para integrar o conjunto de isolamento sonoro.",
-    detalhe: "No Flow: blocos de 20 cm entre unidades, 14 cm nas fachadas e 11 cm nas divisões internas.",
+      "O Alma terá alvenaria de concreto celular, uma solução que a Bossa já utiliza no Flow. O sistema contribui para o conforto térmico e integra o conjunto de cuidados com o isolamento entre ambientes.",
+    detalhe: "Referência real do Flow: blocos Celucon de 20 cm entre unidades, 14 cm nas fachadas e 11 cm nas divisões internas. No Alma, as espessuras seguem o projeto específico.",
     href: "/empreendimentos/flow-aptos#engenharia",
     link: "Ver a alvenaria do Flow",
   },
@@ -187,8 +187,8 @@ export const metodosConstrutivosBossa = [
     categoria: "Conforto acústico",
     titulo: "Uma camada de cuidado entre os andares.",
     texto:
-      "No Flow, a manta de lã de PET FS Floor é aplicada entre a laje e o contrapiso para ajudar a reduzir ruídos de impacto, como passos e móveis. O projeto do Alma também prevê isolamento acústico e térmico entre lajes.",
-    detalhe: "No Flow: manta Fibersoft de 8 mm. A solução específica do Alma deve ser conferida em projeto.",
+      "Assim como no Flow, o Alma terá manta acústica entre a laje e o contrapiso para ajudar a reduzir ruídos de impacto, como passos e móveis. O cuidado complementa o isolamento acústico e térmico previsto para o empreendimento.",
+    detalhe: "Referência real do Flow: manta FS Floor Fibersoft de 8 mm. Material e espessura do Alma seguem seu projeto específico.",
     href: "/empreendimentos/flow-aptos#isolamento-piso",
     link: "Ver a manta aplicada no Flow",
   },
@@ -197,8 +197,8 @@ export const metodosConstrutivosBossa = [
     categoria: "Áreas molhadas",
     titulo: "Impermeabilização antes do revestimento.",
     texto:
-      "Na obra do Flow, preparamos a base com caimento, reforçamos encontros e ralos, aplicamos o sistema impermeabilizante e conferimos a estanqueidade antes de liberar o acabamento. É um exemplo de controle de execução da Bossa.",
-    detalhe: "No Flow: Vedatop Ultraflex 12000 e teste de estanqueidade de 72 horas.",
+      "O Alma seguirá o método da Bossa para áreas molhadas: preparação da base e dos caimentos, reforço de encontros e ralos, aplicação do sistema impermeabilizante e verificação da estanqueidade antes dos revestimentos. É um cuidado que já praticamos no Flow.",
+    detalhe: "Referência real do Flow: Vedatop Ultraflex 12000 e ensaio de estanqueidade de 72 horas. Os detalhes executivos do Alma seguem seu projeto.",
     href: "/empreendimentos/flow-aptos#impermeabilizacao",
     link: "Conhecer o processo no Flow",
   },
@@ -207,8 +207,8 @@ export const metodosConstrutivosBossa = [
     categoria: "Detalhe do banheiro",
     titulo: "Ralo linear e nicho pensado desde o projeto.",
     texto:
-      "O box do Flow foi detalhado com ralo linear para direcionar a água em um plano de caimento, além de nicho embutido revestido. No Alma, o nicho revestido está previsto; o tipo de ralo ainda deve ser confirmado com a engenharia.",
-    detalhe: "Exemplo documentado no boletim de setembro de 2026 do Flow.",
+      "Os boxes do Alma terão ralo linear e nicho embutido revestido. A solução de ralo linear, já adotada no Flow, favorece o caimento do piso em um único plano e revela a atenção da Bossa aos detalhes de uso diário.",
+    detalhe: "Veja o exemplo de execução no boletim de setembro de 2026 do Flow.",
     href: "/obras/flow-aptos/2026-09",
     link: "Ver o detalhe do box no boletim",
   },
