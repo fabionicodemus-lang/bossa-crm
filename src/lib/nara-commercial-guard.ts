@@ -260,7 +260,11 @@ export function naraReplyNeedsCommercialProtection(reply: string, history: ChatM
   if (asksForQuote(lastUserText(history))) return true;
   const value = financialSignalText(reply);
   if (moneyMatches(value).length) return true;
-  if (/\b(?:fecho|fechamos|faco|pode levar|consigo(?: fazer)?|sai|fica|aceito|aceitamos|deixo|deixamos)\s+(?:por|em)\s+(?:\d|um\b|uma\b|dois\b|duas\b|tres\b|quatro\b|cinco\b|seis\b|sete\b|oito\b|nove\b|dez\b|vinte\b|trinta\b|quarenta\b|cinquenta\b|sessenta\b|setenta\b|oitenta\b|noventa\b|cem\b|cento\b|duzentos\b|trezentos\b|quatrocentos\b|quinhentos\b|seiscentos\b|setecentos\b|oitocentos\b|novecentos\b|mil\b)/.test(value)) return true;
+  // "Fica em dois pavimentos" describes space, not an unlabeled offer. Strip only
+  // the complete physical measurement for this one detector; every other financial
+  // check still sees the original text, including any price or promise beside it.
+  const numericOfferText = value.replace(/\bfica\s+em\s+(?:\d+(?:[.,]\d+)?\s*|(?:um|uma|dois|duas|tres|quatro|cinco|seis|sete|oito|nove|dez|vinte|trinta|quarenta|cinquenta|sessenta|setenta|oitenta|noventa|cem|cento|duzentos|trezentos|quatrocentos|quinhentos|seiscentos|setecentos|oitocentos|novecentos|mil)\s+)(?:pavimentos?|andar(?:es)?|metros?)\b/g, ' ');
+  if (/\b(?:fecho|fechamos|faco|pode levar|consigo(?: fazer)?|sai|fica|aceito|aceitamos|deixo|deixamos)\s+(?:por|em)\s+(?:\d|um\b|uma\b|dois\b|duas\b|tres\b|quatro\b|cinco\b|seis\b|sete\b|oito\b|nove\b|dez\b|vinte\b|trinta\b|quarenta\b|cinquenta\b|sessenta\b|setenta\b|oitenta\b|noventa\b|cem\b|cento\b|duzentos\b|trezentos\b|quatrocentos\b|quinhentos\b|seiscentos\b|setecentos\b|oitocentos\b|novecentos\b|mil\b)/.test(numericOfferText)) return true;
   if (/\d+(?:[.,]\d+)?\s*%/.test(value)
     && (FINANCIAL_TERMS.test(value) || /\b(consigo|conseguimos|ofereco|oferecemos|garanto|garantimos|faco|fecho|fechamos|pode levar|can offer|can do|ofrezco|ofrecemos)\b/.test(value))) return true;
   if (/\b(?:milhao|milhoes|million|mil|reais|dolares|dollars|euros)\b/.test(value) && FINANCIAL_TERMS.test(value)) return true;

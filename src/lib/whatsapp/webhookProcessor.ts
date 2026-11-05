@@ -748,6 +748,7 @@ export async function processConversation(args: {
       turn.reply = confirmedAgendaReply(appointment);
       agendaReply = turn.reply;
       turn.stage = 'agendado'; turn.classification = 'agendamento'; turn.handoff = false;
+      turn.score = Math.max(80, Math.min(100, Number.isFinite(turn.score) ? turn.score : 80));
     } else if (appointment.status !== 'none') {
       agendaReply = appointment.message;
       turn.reply = hasNonAgendaQuestion(lastUserMessage)

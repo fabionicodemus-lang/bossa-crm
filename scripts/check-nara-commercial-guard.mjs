@@ -79,6 +79,56 @@ test('Architectural entry is not a payment claim', () => {
   assert.equal(naraReplyNeedsCommercialProtection(reply, [u('Como é o hall de entrada?')]), false);
 });
 
+test('Physical floors and distance preserve the complete institutional answer and invitation', () => {
+  const history = [u('Moro em Itapema e gostei do Flow. Quero entender melhor a distribuição dos ambientes e o lazer.')];
+  for (const measurement of [
+    'O lazer fica em dois pavimentos e rooftop.',
+    'O lazer fica em 2 andares.',
+    'O lazer fica em 2andares.',
+    'A distância da praia fica em 300 metros.',
+    'A distância da praia fica em 300metros.',
+    'A distância da praia fica em trezentos metros.',
+  ]) {
+    const reply = `Posso te mostrar como os ambientes se conectam na planta. ${measurement} Quer conhecer as plantas e a Bossa em uma visita?`;
+    assert.equal(naraReplyNeedsCommercialProtection(reply, history), false, measurement);
+    const result = guarded(reply, history, null);
+    assert.deepEqual(result, { reply, changed: false, commercial: false, reasons: [], source: 'model' }, measurement);
+    assert.deepEqual(guarded(result.reply, history, null), result, `idempotent: ${measurement}`);
+  }
+});
+
+test('A physical phrase cannot whitelist money or an unlabeled offer elsewhere in the answer', () => {
+  for (const reply of [
+    'O lazer fica em dois pavimentos e custa 900 mil.',
+    'O lazer fica em dois pavimentos e fica em dois milhões.',
+    'O lazer fica em 2 andares. Fica em R$ 900 mil.',
+    'A distância da praia fica em 300 metros. Fecho em 850 para você.',
+    'O lazer fica em dois pavimentos. Quer conhecer a Bossa? Consigo fazer por novecentos mil.',
+    'Fica em dois milhões.',
+    'Fica em 300 mil.',
+    'Fica em 300.',
+  ]) {
+    assert.equal(naraReplyNeedsCommercialProtection(reply), true, reply);
+    const result = guarded(reply, [u('Gostei da planta do Flow.')], null);
+    noOffer(result);
+    assert.ok(result.reasons.includes('missing_commercial_context'), reply);
+    assert.doesNotMatch(result.reply, /900|850|300|milhões|novecentos|dois pavimentos|Quer conhecer a Bossa/);
+  }
+});
+
+test('Physical measurements do not weaken discounts, interest or installment protection', () => {
+  for (const reply of [
+    'O lazer fica em dois pavimentos e conseguimos desconto.',
+    'O lazer fica em dois pavimentos. Consigo 5% para você.',
+    'O lazer fica em 2 andares e você pode pagar sem juros.',
+    'A distância da praia fica em 300 metros e as parcelas são fixas.',
+    'O lazer fica em dois pavimentos. Não consigo garantir desconto, mas as parcelas são fixas.',
+  ]) {
+    assert.equal(naraReplyNeedsCommercialProtection(reply), true, reply);
+    noOffer(guarded(reply, [u('Gostei da planta do Flow.')], null));
+  }
+});
+
 test('A clearly attributed customer budget remains a preference', () => {
   const reply = 'Entendi. Seu orçamento é de R$ 900.000. Você procura um imóvel para morar ou investir?';
   const result = guarded(reply, [u('Meu orçamento é R$ 900 mil')], null);

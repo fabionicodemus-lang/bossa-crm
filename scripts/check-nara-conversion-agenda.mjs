@@ -319,6 +319,21 @@ await check('Webhook usa resultado da agenda e preserva falha/handoff, sem confi
   assert.match(webhook, /isPostSaleRoutingSignal\(item.content\).*isSupplierRoutingSignal\(item.content\)/);
 });
 
+await check('Agendamento realmente criado recebe score mínimo80 no webhook', async () => {
+  const webhook = await readFile(new URL('../src/lib/whatsapp/webhookProcessor.ts', import.meta.url), 'utf8');
+  const block = webhook.match(/if \(appointment\.status === 'created'\) \{([\s\S]*?)\} else if/)?.[1];
+  assert.ok(block, 'Created confirmation block must be present');
+  const applyCreated = new Function('turn', 'appointment', 'confirmedAgendaReply', `let agendaReply; ${block}; return turn;`);
+  for (const [score, expected] of [[20, 80], [95, 95], [150, 100], [NaN, 80]]) {
+    const result = applyCreated({score, stage:'ia', classification:'frio', handoff:true},
+      {status:'created', startsAt:future.toISOString(), meetingMode:'video', location:null}, confirmedAgendaReply);
+    assert.equal(result.score, expected);
+    assert.equal(result.stage, 'agendado');
+    assert.equal(result.classification, 'agendamento');
+    assert.equal(result.handoff, false);
+  }
+});
+
 await check('Gate real do webhook só permite agenda de comprador, preservando outras rotas', async () => {
   const webhook = await readFile(new URL('../src/lib/whatsapp/webhookProcessor.ts', import.meta.url), 'utf8');
   const profileGate = webhook.match(/const outsideBuyerProfile = history\.some\([\s\S]*?\);\n/)?.[0];

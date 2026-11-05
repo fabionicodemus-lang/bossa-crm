@@ -85,6 +85,66 @@ await check('Duração da apresentação não aciona falsa promessa de retorno',
   assert.doesNotMatch(result.reply, /assume.*agora|primeiro.*atendido|minutos/);
   assert.equal(result.handoff, false);
 });
+for (const interest of [
+  'Moro em Itapema e gostei do Flow. Quero entender melhor a distribuição dos ambientes e o lazer.',
+  'Gostei do Alma.',
+  'Tenho interesse no Soul e quero conhecer as áreas comuns.',
+]) await check(`Interesse no empreendimento não é rebaixado por falta de cadastro: ${interest}`, async () => {
+  const { result, decision } = await run([user(interest)], turn('Posso explicar a distribuição e os espaços do empreendimento.'));
+  assert.equal(result.classification, 'morno');
+  assert.equal(result.score, 40);
+  assert.equal(decision.priorityClass, 'B');
+  assert.equal(result.handoff, false);
+  assert.equal(decision.handoffRequired, false);
+});
+for (const history of [
+  [user('Moro em Itapema e gostei do Flow. Quero entender melhor a distribuição dos ambientes e o lazer.'), assistant('Você prefere uma videochamada ou uma visita presencial?'), user('Prefiro conhecer pessoalmente. Posso visitar sábado às 15h?')],
+  [user('Quero videochamada amanhã às 15h.')],
+  [user('Gostei do Flow.'), assistant('Quer conhecer o Flow em uma videochamada?'), user('Sim, pode ser.')],
+  [user('Quero visitar o Flow.'), assistant('Qual dia e horário você prefere para a visita?'), user('Sábado às 15h.')],
+]) await check(`Pedido/aceite de agenda avança sem inventar confirmação: ${history.at(-1).content}`, async () => {
+  const { result, decision } = await run(history, turn('Vou verificar a disponibilidade. O agendamento ainda depende de confirmação.', {classification:'frio', score:20}));
+  assert.equal(result.classification, 'quente');
+  assert.equal(result.score, 60);
+  assert.equal(decision.priorityClass, 'B');
+  assert.equal(result.handoff, false);
+  assert.equal(decision.handoffRequired, false);
+  assert.notEqual(result.stage, 'agendado');
+  assert.notEqual(decision.stage, 'agendado');
+  assert.notEqual(result.agenda_confirmed, true);
+  assert.match(result.reply, /ainda depende de confirmação/);
+  const again = await enforceNaraReplyGuardrails(structuredClone(result), lead, history, {});
+  assert.equal(again.score, 60);
+  assert.equal(again.classification, 'quente');
+  assert.equal(again.handoff, false);
+});
+for (const history of [
+  [user('Quanto tempo dura a apresentação por videochamada?')],
+  [assistant('Qual dia pretende se mudar?'), user('Sábado às 15h.')],
+  [assistant('Quer agendar uma visita?'), user('Não quero visitar agora.')],
+  [assistant('Quer conhecer o Flow por videochamada?'), user('Não quero videochamada agora.')],
+  [user('Quero cancelar a visita de sábado às 15h.')],
+  [user('Quero uma visita, mas não me passe para ninguém agora.')],
+]) await check(`Informação, recusa ou cancelamento não ganha score de agenda: ${history.at(-1).content}`, async () => {
+  const { result, decision } = await run(history, turn('Podemos continuar por aqui.', {classification:'frio', score:20}));
+  assert.ok(result.score < 60);
+  assert.notEqual(result.classification, 'quente');
+  assert.notEqual(result.agenda_confirmed, true);
+  assert.notEqual(decision.stage, 'agendado');
+  assert.equal(result.handoff, false);
+  assert.equal(decision.handoffRequired, false);
+});
+for (const profile of [
+  'Sou corretor e gostaria de visitar o Flow sábado às 15h.',
+  'Sou fornecedor e quero agendar uma visita à obra.',
+  'Já comprei no Flow e quero agendar uma visita para assistência.',
+]) await check(`Roteamento específico não recebe promoção de comprador: ${profile}`, async () => {
+  const { result } = await run([user(profile)], turn('Vou encaminhar ao setor responsável.', {classification:'frio', score:20}));
+  assert.equal(result.classification, 'frio');
+  assert.ok(result.score <= 20);
+  assert.equal(result.handoff, true);
+  assert.notEqual(result.agenda_confirmed, true);
+});
 await check('Identidade digital não apaga pergunta imobiliária já feita', () => {
   const result = postProcessNaraTurn(turn('Sou a Nara, assistente digital da Bossa. O Alma tem plantas de 3 suítes com 103 e 114 m².'), [user('Você é robô? Quero saber as metragens do Alma.')], {});
   assert.match(result.reply, /assistente digital/);
