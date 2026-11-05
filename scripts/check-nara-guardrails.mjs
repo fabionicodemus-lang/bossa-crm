@@ -119,6 +119,14 @@ assert.match(combinedLocationPrice.reply, /Balneário Perequê, Porto Belo, a 80
 assert.match(combinedLocationPrice.reply, /google\.com\/maps\/search/);
 assert.doesNotMatch(combinedLocationPrice.reply, /R\$ 1\.000\.000/);
 
+const correctedScore = await enforceNaraReplyGuardrails({
+  reply: 'Essa condição precisa ser confirmada pelo comercial.',
+  classification: 'morno', score: 65, stage: 'ia', summary: '', next_action: '',
+  handoff: false, attachment_ids: [], extracted: {},
+}, baseLead, [{ role: 'user', content: 'Quero conhecer as condições do Flow.' }], {});
+assert.equal(correctedScore.classification, 'morno');
+assert.equal(correctedScore.score, 59, 'Score morno não pode ser 65 enquanto a política define máximo de 59');
+
 assert.equal(hasForbiddenScarcityClaim('A unidade acabou de ser vendida agora.'), true);
 assert.ok(naraReplyGuardrailViolations('A unidade acabou de ser vendida.').includes('escassez_fabricada'));
 assert.equal(hasForbiddenScarcityClaim('A unidade não está disponível; posso verificar alternativas.'), false);
