@@ -316,6 +316,20 @@ function customCondition(text: string): boolean {
     || /\b(?:em|in|en)\s*\d+\s*(?:x|vezes|meses|months|installments|cuotas)\b/.test(value);
 }
 
+/**
+ * A customer asking whether an alternative installment plan would be accepted
+ * is proposing terms, not asking for the list prices of arbitrary apartments.
+ * A separate explicit price question in the same turn still requires a live quote.
+ */
+export function isNaraAlternativePaymentProposal(text: string): boolean {
+  const value = norm(text);
+  const asksActualPrice = /\b(?:quanto custa|quanto fica|quanto sai|qual (?:e |o )?(?:preco|valor)|(?:preco|valor) (?:da|do|de) (?:unidade|apto|apartamento)|how much|cuanto cuesta|cuanto sale)\b/.test(value);
+  if (asksActualPrice) return false;
+  const suggestedTerms = /\b\d{1,3}(?:[.,]\d+)?\s*%\s*(?:de\s+)?entrada\b|\b\d{2,3}\s*(?:x|vezes|parcelas|meses)\b|\b(?:sem|zero)\s+(?:juros|correcao|reajuste)\b/.test(value);
+  const asksApproval = /\b(?:podem|pode|conseguem|consegue)\s+(?:aceitar|aprovar|fazer|garantir|fechar)|\b(?:aceitam|aceita|garantem|garante|aprovam|aprova|seria possivel|se eu der|posso dar)\b/.test(value);
+  return suggestedTerms && asksApproval;
+}
+
 function brl(value: number): string {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
 }
@@ -406,7 +420,12 @@ function renderValidatedReply(validation: NaraCommercialValidation, history: Cha
   const correction = correctionIntroduction(validation, history, original, language);
   if (correction) sections.push(correction);
   if (validation.offers.length) {
-    for (const offer of validation.offers) {
+    const cheapestOnly = /\b(?:mais barat[oa]|menor (?:preco|valor|apartamento|unidade)|cheapest|lowest price|mas barat[oa])\b/.test(norm(latest))
+      && !/\b(?:3|tres|three|top|opcoes|alternativas|comparar)\b/.test(norm(latest));
+    const offers = cheapestOnly
+      ? [validation.offers.reduce((a, b) => a.valor <= b.valor ? a : b)]
+      : validation.offers;
+    for (const offer of offers) {
       const price = language === 'en' ? `At ${offer.empreendimento}, the current list price of unit ${offer.unidade} is ${brl(offer.valor)}.`
         : language === 'es' ? `En ${offer.empreendimento}, el precio de tabla vigente de la unidad ${offer.unidade} es ${brl(offer.valor)}.`
           : `No ${offer.empreendimento}, o valor de tabela vigente da unidade ${offer.unidade} é ${brl(offer.valor)}.`;
@@ -450,6 +469,15 @@ export function protectNaraCommercialReply(
 ): NaraCommercialGuardResult {
   const latest = lastUserText(history);
   const quoteRequested = asksForQuote(latest);
+  if (isNaraAlternativePaymentProposal(latest)) {
+    const language = options.language ?? naraConversationLanguage(history);
+    const safeReply = language === 'en'
+      ? 'I cannot guarantee or approve the alternative payment terms you suggested. The Bossa commercial team needs to assess that proposal before confirming any down payment, installments, interest or adjustments.'
+      : language === 'es'
+        ? 'No puedo garantizar ni aprobar las condiciones de pago alternativas que propones. El equipo comercial de Bossa debe analizarlas antes de confirmar entrada, cuotas, intereses o ajustes.'
+        : 'Não posso garantir nem aprovar a condição alternativa que você sugeriu. O comercial da Bossa precisa analisar essa proposta antes de confirmar entrada, parcelas, juros ou correção.';
+    return { reply: safeReply, changed: reply !== safeReply, commercial: true, reasons: ['unapproved_customer_proposal'], source: 'unconfirmed' };
+  }
   if ((!naraReplyNeedsCommercialProtection(reply) || hasOnlyAttributedBudget(reply, history)) && !quoteRequested) {
     return { reply, changed: false, commercial: false, reasons: [], source: 'model' };
   }

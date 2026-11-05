@@ -56,9 +56,9 @@ const PORTFOLIO: Record<Language, string> = {
 
 const SINGLE: Record<Development, Record<Language, string>> = {
   alma: {
-    pt: 'Que bom que o Alma te chamou atenção! Ele é uma casa na praia: só dois apartamentos por andar, a 4 minutos a pé da areia. Você pensa nele para curtir com a família ou para morar?',
-    es: '¡Qué bueno que Alma te llamó la atención! Es una casa de playa: solo dos departamentos por piso, a 4 minutos a pie de la arena. ¿Lo imaginas para disfrutar en familia o para vivir?',
-    en: 'So glad Alma caught your eye! It is a beach house: only two apartments per floor, a 4-minute walk to the sand. Do you picture it for family time or to live in?',
+    pt: 'O Alma tem uma proposta mais reservada: apenas dois apartamentos por andar e fica a 300 m do mar. Você está pensando em morar ou aproveitar com a família nas férias?',
+    es: 'Alma es un proyecto más íntimo: solo dos departamentos por piso y a 300 m del mar. ¿Lo imaginas para vivir o disfrutar en familia durante las vacaciones?',
+    en: 'Alma is a more private project, with only two apartments per floor and 300 m from the sea. Would you use it as a home or for family holidays?',
   },
   flow: {
     pt: 'Que bom que o Flow te chamou atenção! Ele é para quem quer praia e cidade no mesmo dia: 800 m do mar e dois andares de lazer completos. Você pensa em morar, alugar ou os dois?',

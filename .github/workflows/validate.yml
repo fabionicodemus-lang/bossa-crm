@@ -55,6 +55,8 @@ jobs:
         run: npm run test:nara-conversation-policy
       - name: Test Nara current commercial quotes
         run: npm run test:nara-commercial-guard
+      - name: Test Nara 15 conversation regressions
+        run: npm run test:nara-15-regressions
       - name: Test Nara conversation and price integration
         run: npm run test:nara-integration
       - name: Test Nara prompt contract

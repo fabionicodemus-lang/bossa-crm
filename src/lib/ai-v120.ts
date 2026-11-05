@@ -1,6 +1,6 @@
 import { enforceNaraReplyGuardrails, ensureFirstTurnIntroduction, generateAiTurn as generateCoreAiTurn } from './ai';
 import { naraConversationLanguage, requestedNaraLanguage } from './nara-language';
-import { isAssistedSaleSignal, isBrokerRoutingSignal, isPostSaleRoutingSignal } from './nara-contact-routing';
+import { isAssistedSaleSignal, isBrokerRoutingSignal, isPostSaleRoutingSignal, isSupplierRoutingSignal } from './nara-contact-routing';
 import type { AiTrainingContext, AiTurn } from './ai';
 import type { Lead } from './types';
 import type { NaraUnitOffer } from './nara-unit-queries';
@@ -60,7 +60,8 @@ function buyerContextIsClear(history: ChatMessage[]): boolean {
 }
 
 function asksHuman(text: string): boolean {
-  const value = normalizeText(text);
+  if (refusesHandoff(text) && !explicitHumanRequest(text)) return false;
+  const value = withoutNegatedRequests(normalizeText(text));
   return /\b(falar com (?:uma pessoa|alguem|um corretor|corretor|atendente)|quero um corretor|quero falar com gente|atendimento humano|me liga|pode me ligar|hablar con (?:una persona|alguien|un corredor|un asesor|un vendedor)|quiero (?:hablar con|un) (?:asesor|corredor|vendedor|persona)|atencion humana|pueden llamarme|me pueden llamar)\b/.test(value);
 }
 
@@ -233,11 +234,12 @@ function ensureFirstReplyIdentity(reply: string, history: ChatMessage[]): string
 }
 
 /** Corretor, pós-venda ou venda assistida: atendimento sai da Nara e a passagem não pode ser desfeita. */
-function outsideBuyerDestination(history: ChatMessage[]): 'plantao' | 'pos_venda' | 'venda_assistida' | null {
+function outsideBuyerDestination(history: ChatMessage[]): 'plantao' | 'pos_venda' | 'venda_assistida' | 'suprimentos' | null {
   const messages = history.filter((item) => item.role === 'user').map((item) => item.content);
   if (messages.some(isAssistedSaleSignal)) return 'venda_assistida';
   if (messages.some(isBrokerRoutingSignal)) return 'plantao';
   if (messages.some(isPostSaleRoutingSignal)) return 'pos_venda';
+  if (messages.some(isSupplierRoutingSignal)) return 'suprimentos';
   return null;
 }
 
@@ -448,15 +450,33 @@ function plantRequestTurn(turn: AiTurn, history: ChatMessage[], context: AiTrain
   const latest = lastUserText(history);
   const latestNormalized = normalizeText(latest);
   const previousAssistant = [...history].reverse().find((item) => item.role === 'assistant')?.content ?? '';
-  const acceptsOffer = !mentionsPlant(latest)
+  const offPlanPurchaseQuestion = /\b(?:comprar|compra|comprando|investir|investimento|risco|arriscad\w*|seguro|garantia)\b.*\bna planta\b/.test(latestNormalized)
+    && !/\b(?:ver|enviar|mandar|mostrar|receber|olhar|conhecer)\s+(?:a |uma |as )?plantas?\b/.test(latestNormalized);
+  const asksForFloorPlan = mentionsPlant(latest) && !offPlanPurchaseQuestion;
+  const acceptsOffer = !asksForFloorPlan
     && /^(sim|s|pode|pode mandar|pode sim|manda|me manda|quero|quero ver|claro|ok|beleza|bora|si|sí|dale|yes|sure)\b/.test(latestNormalized)
     && latestNormalized.split(' ').length <= 5 && !purchaseIntent(latest) && !asksApartmentPrice(latestNormalized)
     && mentionsPlant(previousAssistant) && previousAssistant.includes('?');
-  // "3 suítes", "a de 103 m²", "Tipo 01" respondendo a uma pergunta da Nara sobre planta.
-  const answersPlantQuestion = !mentionsPlant(latest) && !acceptsOffer
-    && (mentionsPlant(previousAssistant) || /\b\d{2,3}(?:,\d)? m²/.test(previousAssistant))
+  // '800 metros é longe para ir com criança?' refere-se à praia, não à área
+  // do imóvel. Só interpretar uma resposta curta como seleção de planta se a
+  // pergunta imediatamente anterior da Nara era explicitamente sobre a planta.
+  const lastAssistantQuestion = previousAssistant.match(/[^?!.]+\?\s*$/)?.[0] ?? '';
+  const normalizedLastQuestion = normalizeText(lastAssistantQuestion);
+  const askedAboutFloorPlan = /\b(planta|plantas|tipo|tipologia|metragem|area|area util|duplex)\b/.test(normalizedLastQuestion)
+    || (mentionsPlant(previousAssistant) && /\b(suites?|quartos?|quantas?|qual|prefere)\b/.test(normalizedLastQuestion));
+  const selectsPreviouslyDiscussedPlant = /^(?:tipo|planta|duplex)\s*0?\d+\b|^a de \d{2,3}\s*(?:m2|m²|metros)?\b/.test(latestNormalized)
+    && history.some((item) => item.role === 'assistant' && mentionsPlant(item.content));
+  // Após oferecer plantas específicas, "gostei da maior, manda só ela?"
+  // continua sendo um pedido de planta, mesmo sem repetir essa palavra.
+  const asksForReferencedPlan = !offPlanPurchaseQuestion
+    && mentionsPlant(previousAssistant)
+    && /\b(?:manda|mandar|envia|enviar|mostra|mostrar|quero ver)\b/.test(latestNormalized)
+    && /\b(?:ela|essa|esse|a maior|a menor|de \d{2,3}\s*(?:m2|m²)?)\b/.test(latestNormalized)
+    && !/\b(?:endereco|localizacao|preco|valor|tabela|reserva|contrato|proposta)\b/.test(latestNormalized);
+  const answersPlantQuestion = !asksForFloorPlan && !acceptsOffer && (askedAboutFloorPlan || selectsPreviouslyDiscussedPlant)
+    && !/[?]/.test(latest) && latestNormalized.split(' ').length <= 12
     && /\b(\d|dois|duas|tres|quatro)\s*(?:suites?|quartos?)\b|\b\d{2,3}(?:[.,]\d)?\s*(?:m2|m²|m\b|metros)|\btipo\s*0?\d\b|\bduplex\b|\b(?:menor|maior)\b/.test(latestNormalized);
-  if (!mentionsPlant(latest) && !acceptsOffer && !answersPlantQuestion) return null;
+  if (!asksForFloorPlan && !acceptsOffer && !answersPlantQuestion && !asksForReferencedPlan) return null;
   const development = developmentFromHistory(history);
   if (!development) return null;
 
@@ -558,6 +578,15 @@ export function postProcessNaraTurn(
   const spanish = isSpanishLead(history);
   const isLanguageRequest = Boolean(requestedNaraLanguage(latestRaw));
   if (isLanguageRequest) return finishTurn(turn, history);
+  const riskObjection = /\b(?:comprar na planta|compra na planta|construtoras? quebrando|construtora quebrar|risco(?:s)? de comprar|arriscad[oa] demais)\b/.test(latestNormalized);
+  const riskAnswered = /\b(?:riscos?|arriscad|patrimonio de afetacao|entrega|entregou|jazz|soul|obras?|construtora)\b/.test(normalizeText(turn.reply));
+  if (riskObjection && !riskAnswered) {
+    turn.reply = 'É uma preocupação legítima. A Bossa entregou o Jazz em 2019, antes do prazo, e o Soul em dezembro de 2023. O Flow e o Alma ainda estão em desenvolvimento. Esse histórico ajuda a avaliar a construtora, mas não elimina os riscos de comprar na planta nem garante entregas futuras.';
+    turn.handoff = false;
+    turn.summary = 'Contato pediu informações sobre o risco de comprar na planta.';
+    turn.next_action = 'Responder com fatos verificáveis sobre entregas, obras e garantias; não desviar para preço.';
+    return finishTurn(turn, history);
+  }
   const nonApartmentValue = /\b(?:valor|preco|precio|quanto custa|cuanto cuesta|how much)\b.{0,28}\b(?:condominio|iptu|aluguel|taxa|laudemio|itbi|escritura|entrada|parcelas?|reforcos?|chaves)\b/.test(latestNormalized);
   const asksPriceNow = !nonApartmentValue && asksApartmentPrice(latestNormalized);
   const exactUsCampaignSeed = /^ola[!.]?\s+moro nos (?:eua|estados unidos|usa) e quero conhecer os imoveis da bossa em sc\.?$/.test(latestNormalized);
@@ -749,14 +778,22 @@ export function postProcessNaraTurn(
     });
   }
 
-  const doesNotWantToBuy = /\b(nao quero comprar|nao estou procurando|nao tenho interesse em comprar|so preciso de atendimento)\b/.test(latest);
-  if (doesNotWantToBuy) {
-    return applyConversationDecision(turn, {
-      reply: 'Entendi. Vou te direcionar para o atendimento correto da Bossa. Pode me dizer em uma frase qual assunto você precisa resolver?',
-      handoff: true,
-      summary: 'Contato informou que não está buscando comprar um imóvel.',
-      nextAction: 'Direcionar para a equipe humana e identificar o assunto.',
+  const doesNotWantToBuy = /\b(nao quero comprar|nao estou procurando|nao tenho interesse em comprar)\b/.test(latest);
+  const stillAsksForInformation = /\?/.test(latestRaw)
+    || isPureInformationRequest(latestRaw)
+    || /\b(mas|porem|so quero saber|quero conhecer|gostaria de entender)\b/.test(latest);
+  // 'Não quero comprar agora, mas quero conhecer o Flow' não é solicitação
+  // de transferência. Respeitamos tanto quem pesquisa quanto quem declina.
+  if (doesNotWantToBuy && !stillAsksForInformation) {
+    const declined = applyConversationDecision(turn, {
+      reply: 'Tudo bem, sem problema. Não vou insistir. Se quiser conhecer algum empreendimento no futuro, fico por aqui.',
+      handoff: false,
+      summary: 'Contato informou que não está buscando comprar e não pediu outro atendimento.',
+      nextAction: 'Não pressionar nem iniciar nova qualificação; respeitar desinteresse declarado.',
+      score: 0,
     });
+    declined.classification = 'sem_interesse';
+    return declined;
   }
 
   // "Ainda não sei"/"não decidi" não troca mais a resposta por uma frase genérica: a pergunta concreta
@@ -780,7 +817,7 @@ export function postProcessNaraTurn(
     const topic = topicFromQuestion(latestRaw);
     const alreadyInHandoff = priorMessages.some((message) => /ta[ií]s.*comercial|chamando a ta[ií]s|llamando a ta[ií]s/.test(normalizeText(message)));
     const destination = outsideBuyerDestination(history);
-    const closing = /^(ok|valeu|obrigad[oa]|blz|beleza|show|certo|perfeito|tchau|gracias|thanks)/.test(latest);
+    const closing = /^(ok|valeu|obrigad[oa]|blz|beleza|show|certo|perfeito|tchau|gracias|thanks)\b/.test(latest);
     turn.reply = destination === 'plantao'
       ? closing ? 'Por nada! O Plantão da Bossa já foi avisado e continua com você por aqui.' : 'Isso o Plantão da Bossa responde para você: tabela, comissão e unidades. Já avisei a equipe e eles te chamam por aqui.'
       : destination === 'pos_venda' || destination === 'venda_assistida'

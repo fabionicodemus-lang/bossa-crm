@@ -59,3 +59,13 @@ export function isPostSaleRoutingSignal(value: string): boolean {
   if (hasPostSaleCorrection(text)) return false;
   return isCurrentCustomerSignal(text) || /\b(?:pos-venda|minha obra|minha unidade)\b/.test(text);
 }
+
+/** Supplier identity and purchase-department requests, without mistaking a buyer for a vendor. */
+export function isSupplierRoutingSignal(value: string): boolean {
+  const text = normalizeNaraRoutingText(value);
+  if (/\b(?:sou|somos|trabalho|trabalhamos|atuo|atuamos)\s+(?:um |uma |como )?(?:fornecedor(?:es)?|prestador(?:es)?(?: de servicos)?)\b/.test(text)) return true;
+  if (/\b(?:setor|departamento|equipe)\s+(?:de\s+)?(?:compras|suprimentos)\b/.test(text)
+    && /\b(?:oferecer|apresentar|cadastrar|fornecedor|servicos|produtos|material|empresa|trabalhamos|atuamos)\b/.test(text)) return true;
+  if (/\b(?:quero|gostaria|queremos|gostariamos|posso|podemos)\s+(?:de\s+)?(?:oferecer|apresentar|cadastrar)\b.{0,85}\b(?:servicos|produtos|empresa|fornecimento|materiais|proposta comercial)\b/.test(text)) return true;
+  return /\b(?:trabalhamos|atuamos|fabricamos|fornecemos|comercializamos)\s+com\b.{0,70}\b(?:gostaria|queremos|apresentar|oferecer|fornecer|empresa)\b/.test(text);
+}

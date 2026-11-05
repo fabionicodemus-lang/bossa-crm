@@ -438,6 +438,11 @@ export async function POST(request: Request) {
     if (body.action !== 'simulate') {
       return NextResponse.json({ error: 'Ação inválida.' }, { status: 400 });
     }
+    const rawSimulationModel = String(body.model_override ?? '').trim();
+    if (rawSimulationModel && (body.agent !== 'nara'
+      || !['gpt-6.1-sol', 'gpt-6.1-terra'].includes(rawSimulationModel))) {
+      return NextResponse.json({ error: 'Modelo de simulação não permitido.' }, { status: 400 });
+    }
     if (!process.env.OPENAI_API_KEY) {
       return NextResponse.json({
         error: 'A OPENAI_API_KEY ainda não está configurada na Vercel. O simulador não usa mais respostas locais: ele agora utiliza exatamente o mesmo motor do WhatsApp.',
@@ -465,6 +470,9 @@ export async function POST(request: Request) {
     const config = body.config ? normalizeConfig(body.agent, body.config) : savedConfig;
     const lead = syntheticLead(body.agent, context.organizationId, String(body.scenario ?? ''));
     const aiContext = makeAiContext(config, examples, files);
+    if (rawSimulationModel === 'gpt-6.1-sol' || rawSimulationModel === 'gpt-6.1-terra') {
+      aiContext.model_override = rawSimulationModel;
+    }
     if (body.agent === 'nara') {
       const admin = createAdminClient();
       const [commercial, dynamic, operational] = await Promise.all([
