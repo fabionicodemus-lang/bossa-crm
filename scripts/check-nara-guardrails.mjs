@@ -71,6 +71,62 @@ try {
   globalThis.fetch = originalFetch;
 }
 
+const deliveryAfterUnsafePrice = await enforceNaraReplyGuardrails({
+  reply: 'O Flow fica pronto em novembro de 2027, tem lazer no rooftop e custa R$ 1.000.000.',
+  classification: 'frio', score: 18, stage: 'ia', summary: '', next_action: '',
+  handoff: false, attachment_ids: [], extracted: {},
+}, baseLead, [
+  { role: 'assistant', content: 'Temos o Flow, a 800 m do mar.' },
+  { role: 'user', content: 'Não quero comprar agora, só conhecer o Flow. Quando fica pronto e como é o lazer? Não me passe para corretor.' },
+], {});
+assert.match(deliveryAfterUnsafePrice.reply, /novembro de 2027/);
+assert.match(deliveryAfterUnsafePrice.reply, /lazer em dois pavimentos e rooftop/);
+assert.doesNotMatch(deliveryAfterUnsafePrice.reply, /pre[cç]o|valor|R\$|comercial/i);
+assert.equal(deliveryAfterUnsafePrice.handoff, false);
+
+const urgentBuyer = await enforceNaraReplyGuardrails({
+  reply: 'Soul, Flow e Alma têm unidades que podemos apresentar.',
+  classification: 'quente', score: 85, stage: 'ia', summary: '', next_action: '',
+  handoff: true, attachment_ids: [], extracted: {},
+}, baseLead, [{ role: 'user', content: 'Tenho 1,5 milhão para investir e quero fechar rápido nesta semana.' }], {});
+assert.match(urgentBuyer.reply, /Taís do comercial/);
+assert.match(urgentBuyer.reply, /Qual empreendimento te interessou mais\?/);
+assert.equal(urgentBuyer.handoff, true);
+
+const almaReservation = await enforceNaraReplyGuardrails({
+  reply: 'Claro, a reserva garante o valor de R$ 1.500.000 e o registro sai em duas semanas.',
+  classification: 'quente', score: 85, stage: 'ia', summary: '', next_action: '',
+  handoff: true, attachment_ids: [], extracted: {},
+}, { ...baseLead, enterprise: 'Alma Seahouses' }, [
+  { role: 'assistant', content: 'O Alma fica a 300 m do mar.' },
+  { role: 'user', content: 'Quero reservar agora uma unidade do Alma. Você garante o preço de hoje e que o registro sai nas próximas semanas?' },
+], {});
+assert.match(almaReservation.reply, /não consigo garantir o preço de hoje/);
+assert.match(almaReservation.reply, /registro saia nas próximas semanas/);
+assert.match(almaReservation.reply, /Taís do comercial/);
+assert.doesNotMatch(almaReservation.reply, /R\$ 1\.500\.000/);
+assert.equal(almaReservation.handoff, true);
+
+const combinedLocationPrice = await enforceNaraReplyGuardrails({
+  reply: 'O Flow custa R$ 1.000.000 e fica em uma rua a confirmar.',
+  classification: 'morno', score: 35, stage: 'ia', summary: '', next_action: '',
+  handoff: false, attachment_ids: [], extracted: {},
+}, baseLead, [
+  { role: 'user', content: 'Onde fica o Flow e quanto custa a unidade 1601? Responda as duas coisas.' },
+], {});
+assert.match(combinedLocationPrice.reply, /não consegui confirmar um preço vigente/i);
+assert.match(combinedLocationPrice.reply, /Balneário Perequê, Porto Belo, a 800 m do mar/);
+assert.match(combinedLocationPrice.reply, /google\.com\/maps\/search/);
+assert.doesNotMatch(combinedLocationPrice.reply, /R\$ 1\.000\.000/);
+
+const correctedScore = await enforceNaraReplyGuardrails({
+  reply: 'Essa condição precisa ser confirmada pelo comercial.',
+  classification: 'morno', score: 65, stage: 'ia', summary: '', next_action: '',
+  handoff: false, attachment_ids: [], extracted: {},
+}, baseLead, [{ role: 'user', content: 'Quero conhecer as condições do Flow.' }], {});
+assert.equal(correctedScore.classification, 'morno');
+assert.equal(correctedScore.score, 59, 'Score morno não pode ser 65 enquanto a política define máximo de 59');
+
 assert.equal(hasForbiddenScarcityClaim('A unidade acabou de ser vendida agora.'), true);
 assert.ok(naraReplyGuardrailViolations('A unidade acabou de ser vendida.').includes('escassez_fabricada'));
 assert.equal(hasForbiddenScarcityClaim('A unidade não está disponível; posso verificar alternativas.'), false);

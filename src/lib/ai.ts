@@ -11,7 +11,7 @@ import { asksProtectedCommercialDetail, isGeneralPriceRangeReply } from './nara-
 import type { NaraCommercialTurnContext } from './nara-unit-queries';
 import { adDevelopment, adOriginInstruction } from './nara-first-message';
 import type { Lead } from './types';
-import { declaredFirstName, declinedTopics, qualificationPaused } from './nara-conversation-signals';
+import { declaredFirstName, declinedTopics, enterpriseInFocus, purchaseIntent, refusesHandoff, qualificationPaused } from './nara-conversation-signals';
 
 export interface AiFileOption {
   id: string;
@@ -869,6 +869,59 @@ export async function enforceNaraReplyGuardrails(
   }
   const protectedReply = protectNaraCommercialReply(turn.reply, history, context.commercial, { enterprise: lead.enterprise });
   turn.reply = protectedReply.reply;
+  const lastQuestion = [...history].reverse().find((item) => item.role === 'user')?.content ?? '';
+  const normalizedQuestion = lastQuestion.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
+  const requestedPrice = /\b(?:preco|valor|quanto custa|quanto fica|tabela|mensal|parcelas?|entrada|juros|desconto|pagamento|financiamento)\b/.test(normalizedQuestion);
+  // Um trecho financeiro inseguro não pode transformar uma pergunta sobre
+  // entrega/lazer em "não consegui confirmar o preço". Recupere somente os
+  // fatos institucionais verificados, sem reaproveitar o valor descartado.
+  if (lead.kind === 'cliente' && protectedReply.source === 'unconfirmed' && !requestedPrice
+    && enterpriseInFocus(history) === 'flow') {
+    const asksDelivery = /\b(?:quando (?:fica pronto|entrega|sera entregue)|prazo de entrega|previsao de entrega|entrega prevista)\b/.test(normalizedQuestion);
+    const asksLeisure = /\b(?:lazer|areas comuns|rooftop)\b/.test(normalizedQuestion);
+    if (asksDelivery || asksLeisure) {
+      turn.reply = [
+        asksDelivery ? 'O Flow tem entrega prevista para novembro de 2027.' : '',
+        asksLeisure ? 'O projeto tem áreas de lazer em dois pavimentos e rooftop.' : '',
+      ].filter(Boolean).join(' ');
+    }
+  }
+  // Pedidos de reserva do Alma podem seguir para avaliação, porém nunca são
+  // promessa de unidade/preço bloqueados nem de registro em prazo estimado.
+  const asksAlmaReservationGuarantee = enterpriseInFocus(history) === 'alma'
+    && /\b(?:quero reservar|gostaria de reservar|pedido de reserva|fazer (?:uma )?reserva)\b/.test(normalizedQuestion)
+    && /\b(?:garant\w*|registro|incorporacao|prazo documental)\b/.test(normalizedQuestion);
+  if (lead.kind === 'cliente' && asksAlmaReservationGuarantee) {
+    turn.reply = 'Você pode solicitar uma reserva do Alma, mas não consigo garantir o preço de hoje, uma unidade reservada ou que o registro saia nas próximas semanas. A Taís do comercial precisa confirmar as condições e a situação documental atual antes de assumir qualquer compromisso. Vou chamá-la para avaliar seu pedido.';
+    turn.handoff = true;
+  }
+  // Em uma pergunta dupla ("onde fica e quanto custa?"), a substituição
+  // financeira segura não deve apagar a localização solicitada.
+  const asksLocation = /\b(?:onde fica|localizacao|endereco|no mapa|donde queda|ubicacion|direccion|where is|location)\b/.test(normalizedQuestion);
+  const locationFocus = enterpriseInFocus(history);
+  if (lead.kind === 'cliente' && protectedReply.changed && asksLocation && locationFocus) {
+    const locations = {
+      flow: { intro: 'O Flow fica em Balneário Perequê, Porto Belo, a 800 m do mar.', map: 'Flow%20Aptos%20Porto%20Belo%20SC' },
+      alma: { intro: 'O Alma fica em Balneário Perequê, Porto Belo, a 300 m do mar; não é frente-mar.', map: 'Alma%20Seahouses%20Porto%20Belo%20SC' },
+      soul: { intro: 'O Soul fica em Itapema, a 500 m do mar.', map: 'Soul%20Residence%20Itapema%20SC' },
+    };
+    const location = locations[locationFocus];
+    turn.reply = `${turn.reply.trim()}\n\n${location.intro} Você pode conferir no mapa: https://www.google.com/maps/search/?api=1&query=${location.map}`;
+  }
+  // A blindagem comercial pode substituir uma resposta que incluía o próximo
+  // passo. Preserve o encaminhamento pedido por quem realmente quer fechar.
+  const alreadyAcknowledgedHandoff = /\b(?:chamando|chamar|acionando|acionar|encaminh\w*|direcion\w*|passando|conectar|contato com o comercial|contactando|llamando|connecting)\b/i.test(turn.reply);
+  if (lead.kind === 'cliente' && turn.handoff && purchaseIntent(lastQuestion)
+    && !refusesHandoff(lastQuestion) && !alreadyAcknowledgedHandoff) {
+    const language = naraConversationLanguage(history);
+    const focus = enterpriseInFocus(history);
+    const action = language === 'es'
+      ? `Voy a llamar a Taís, del equipo comercial, para confirmar la disponibilidad y avanzar contigo.${focus ? '' : ' ¿Cuál de los proyectos te interesa más?'}`
+      : language === 'en'
+        ? `I'll ask Taís from our sales team to confirm availability and help with the next steps.${focus ? '' : ' Which development interests you most?'}`
+        : `Vou chamar a Taís do comercial para confirmar a disponibilidade e avançar com você.${focus ? '' : ' Qual empreendimento te interessou mais?'}`;
+    turn.reply = `${turn.reply.trim()}\n\n${action}`;
+  }
   // Never fabricate a recent sale/reservation, even when the quoted price is valid.
   if (hasForbiddenScarcityClaim(turn.reply)) {
     const language = naraConversationLanguage(history);
@@ -889,7 +942,17 @@ export async function enforceNaraReplyGuardrails(
     'As plantas dos tipos 2 e 3, ambas de 62 m², não estão comigo agora',
   );
   if (!turn.reply.trim()) throw new NaraReplyGuardrailError(['resposta_vazia']);
-  if (lead.kind === 'cliente') turn.reply = ensureFirstTurnIntroduction(turn.reply, history, context);
+  if (lead.kind === 'cliente') {
+    // A classificação e o score precisam concordar para a fila comercial:
+    // frio 0–20, morno 21–59, quente 60–100, agendamento 80–100.
+    turn.score = Number.isFinite(turn.score) ? Math.max(0, Math.min(100, Math.round(turn.score))) : 0;
+    if (turn.classification === 'sem_interesse') turn.score = 0;
+    if (turn.classification === 'frio') turn.score = Math.min(turn.score, 20);
+    if (turn.classification === 'morno') turn.score = Math.max(21, Math.min(turn.score, 59));
+    if (turn.classification === 'quente') turn.score = Math.max(60, turn.score);
+    if (turn.classification === 'agendamento') turn.score = Math.max(80, turn.score);
+    turn.reply = ensureFirstTurnIntroduction(turn.reply, history, context);
+  }
   return turn;
 }
 

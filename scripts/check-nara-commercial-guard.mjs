@@ -93,6 +93,14 @@ test('A customer budget cannot authorize a unit price', () => {
   assert.doesNotMatch(result.reply, /900/);
 });
 
+test('Location plus price does not invent a payment plan the customer did not request', () => {
+  const result = guarded('No Flow, custa R$ 1.000.000,20 e a entrada é R$ 200.000,20.',
+    [u('Onde fica o Flow e quanto custa a unidade 1601?')]);
+  assert.equal(result.source, 'crm');
+  assert.match(result.reply, /R\$\s+1\.000\.000,20/);
+  assert.doesNotMatch(result.reply, /Entrada:|plano completo|parcelas mensais|correção e os juros/i);
+});
+
 test('An old Nara price is never price authority', () => {
   const result = guarded('Sim, fica R$ 600 mil.', [u('Flow 1601'), a('Custa R$ 600 mil.'), u('É esse preço mesmo?')]);
   assert.equal(result.source, 'crm');

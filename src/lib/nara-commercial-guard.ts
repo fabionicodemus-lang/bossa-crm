@@ -306,7 +306,7 @@ function asksForQuote(text: string): boolean {
 }
 
 function asksPayment(text: string): boolean {
-  return /\b(pagamento|entradas?|parcelas?|parcelamento|presta(?:cao|coes)|mensal|mensais|reforcos?|balao|juros|correcao|reajuste|cub|ipca|a vista|al contado|cuotas?|interes|payment|installments?|down payment|interest)\b/.test(norm(text));
+  return /\b(pagamento|condic(?:ao|oes) de pagamento|plano de pagamento|entradas?|parcelas?|parcelamento|presta(?:cao|coes)|mensal|mensais|reforcos?|balao|juros|correcao|reajuste|cub|ipca|a vista|al contado|cuotas?|interes|payment|payment terms|installments?|down payment|interest)\b/.test(norm(text));
 }
 
 function customCondition(text: string): boolean {
@@ -415,7 +415,11 @@ function correctionIntroduction(validation: NaraCommercialValidation, history: C
 
 function renderValidatedReply(validation: NaraCommercialValidation, history: ChatMessage[], original: string, language: NaraLanguage): string {
   const latest = lastUserText(history);
-  const payment = asksPayment(latest) || asksPayment(original);
+  // Quando o cliente pediu preço + localização, não deixe o modelo acrescentar
+  // espontaneamente um plano de pagamento que ele não solicitou. Em diálogos
+  // só financeiros, preserva-se a auditoria do plano estruturado já existente.
+  const priceAndLocation = /\b(?:onde fica|localizacao|endereco|no mapa|donde queda|ubicacion|direccion|where is|location)\b/.test(norm(latest));
+  const payment = asksPayment(latest) || (asksPayment(original) && !priceAndLocation);
   const sections: string[] = [];
   const correction = correctionIntroduction(validation, history, original, language);
   if (correction) sections.push(correction);
