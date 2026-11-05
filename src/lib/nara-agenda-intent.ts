@@ -32,7 +32,7 @@ export function agendaActionFromText(text: string): AgendaAction {
 
 function isAgendaFollowupQuestion(text: string): boolean {
   const value = normalize(text);
-  if (!/\b(?:visita|agenda|agendamento|horario|dia|data|videochamada|apresentacao|presencial)\b/.test(value)) return false;
+  if (!/\b(?:visita|agenda|agendamento|horarios?|dia|data|videochamada|apresentacao|presencial)\b/.test(value)) return false;
   return /\b(?:qual dia|qual data|qual horario|qual voce prefere|horarios livres|outro dia|outro horario|dia e horario|que horario)\b/.test(value);
 }
 
