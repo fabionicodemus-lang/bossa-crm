@@ -34,7 +34,7 @@ fs.mkdirSync(capturas, { recursive: true });
       assert.equal(await page.locator("#engenharia .al-engenharia-cartao").count(), 4);
       assert.equal(await page.locator("#engenharia .al-engenharia-registro img").count(), 3);
       assert.equal(await page.locator('nav[aria-label="Nesta página do Alma"] a[href="#engenharia"]').count(), 1);
-      assert.match(await page.locator("#engenharia .al-engenharia-rodape").innerText(), /não da obra do Alma/i);
+      assert.match(await page.locator("#engenharia .al-engenharia-rodape").innerText(), /adotará esses quatro métodos também no Alma/i);
       assert.equal(await page.locator("#relatos .al-relato").count(), 4);
       await page.locator("#engenharia").scrollIntoViewIfNeeded();
       await page.locator("#engenharia img").evaluateAll(async (imgs) =>
