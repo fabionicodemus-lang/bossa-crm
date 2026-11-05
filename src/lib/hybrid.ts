@@ -1,6 +1,6 @@
 import type { AiTurn } from './ai';
 import type { Lead, LeadKind } from './types';
-import { explicitHumanRequest, purchaseIntent, refusesHandoff, withoutNegatedRequests } from './nara-conversation-signals';
+import { explicitHumanRequest, financialNegotiationIntent, purchaseIntent, refusesHandoff, withoutNegatedRequests } from './nara-conversation-signals';
 
 export type WorkflowStage =
   | 'novo_triagem' | 'qualificacao_ia' | 'nutricao_ativa' | 'passagem_pendente'
@@ -51,11 +51,12 @@ function currentOwnerMode(lead: Lead): OwnerMode {
 function explicitHighIntent(text: string, kind: LeadKind): string | null {
   const value = normalize(text);
   if (kind !== 'corretor') {
-    // Nara (rodada 4, 04/11/2026): "não pedi reserva", "videochamada não", "sem ligação" não são pedidos;
-    // perguntar de entrada, condição ou do Soul é pedido de informação, que a Nara responde sozinha.
-    if (refusesHandoff(text) && !explicitHumanRequest(text) && !purchaseIntent(text)) return null;
+    // Financeiro agora segue imediatamente ao humano. Preço total isolado não.
+    // Recusa de contato prevalece: intenção financeira não é consentimento.
+    if (refusesHandoff(text) && !explicitHumanRequest(text)) return null;
     const affirmative = withoutNegatedRequests(value);
-    if (explicitHumanRequest(text) || /\b(quero falar com (?:uma pessoa|alguem|consultor|corretor)|atendimento humano|me liga|pode me ligar|quero (?:uma )?(?:ligacao|videochamada)|pode ser (?:uma )?(?:ligacao|videochamada))\b/.test(affirmative)) return 'O contato pediu atendimento humano ou ligação.';
+    if (financialNegotiationIntent(text)) return 'O contato quer avaliar entrada, condições de pagamento ou proposta; atendimento comercial imediato.';
+    if (explicitHumanRequest(text) || /\b(quero falar com (?:uma pessoa|alguem|consultor|corretor)|atendimento humano|me liga|pode me ligar|quero (?:uma )?ligacao|pode ser (?:uma )?ligacao)\b/.test(affirmative)) return 'O contato pediu atendimento humano ou ligação.';
     if (purchaseIntent(text) || /\b(proposta|reservar|fechar negocio|negociar|contraproposta|desconto)\b/.test(affirmative)) return 'O contato entrou em proposta, reserva ou negociação.';
     return null;
   }
@@ -71,7 +72,6 @@ function explicitHighIntent(text: string, kind: LeadKind): string | null {
   return null;
 }
 function proposalSignal(text: string) { return /\b(proposta|reservar|reserva|fechar|negociar|contraproposta|desconto|condicao|entrada|reforco|parcelamento)\b/.test(normalize(text)); }
-function appointmentSignal(text: string) { return /\b(agendar|marcar|visita|visitar|decorado|conhecer pessoalmente|videochamada)\b/.test(normalize(text)); }
 function futureSignal(text: string) { return /\b(ano que vem|daqui a (?:\d+|alguns) meses|mais pra frente|sem pressa|depois que vender|quando vender|aguardando vender|aguardando credito|aguardando financiamento|so no futuro|em 20\d\d)\b/.test(normalize(text)); }
 export function optOutSignal(text: string) {
   const value = normalize(text);
@@ -91,7 +91,7 @@ function priorityFromTurn(turn: AiTurn, text: string, kind: LeadKind): PriorityC
   if (optOutSignal(text) || turn.classification === 'sem_interesse') return 'D';
   if (explicitHighIntent(text, kind)) return 'A1';
   if (kind === 'corretor' && ['negociando', 'parceiro'].includes(turn.classification)) return 'A1';
-  if (turn.handoff || turn.stage === 'agendado' || turn.score >= 80) return 'A2';
+  if (turn.handoff || turn.agenda_confirmed === true || turn.score >= 80) return 'A2';
   if (futureSignal(text)) return 'C';
   if (turn.score >= 40 || ['morno', 'quente', 'ativo'].includes(turn.classification)) return 'B';
   return 'C';
@@ -113,7 +113,7 @@ export function deriveHybridDecision({ lead, turn, lastUserMessage, now = new Da
   const won = lead.kind === 'cliente' && currentStage === 'proposta_negociacao' && ownerMode === 'human' && closedWonSignal(lastUserMessage);
   const alreadyHuman = ownerMode === 'human' || HUMAN_STAGES.has(currentStage);
   const future = futureSignal(lastUserMessage);
-  const handoffRequired = !isOptOut && !won && (Boolean(highIntentReason) || turn.handoff || (lead.kind === 'corretor' && ['negociando', 'parceiro'].includes(turn.classification)));
+  const handoffRequired = !isOptOut && !won && (Boolean(highIntentReason) || turn.handoff || turn.agenda_confirmed === true || (lead.kind === 'corretor' && ['negociando', 'parceiro'].includes(turn.classification)));
 
   let stage = currentStage;
   let resolvedOwnerMode = ownerMode;
@@ -134,9 +134,16 @@ export function deriveHybridDecision({ lead, turn, lastUserMessage, now = new Da
   } else if (isOptOut || priorityClass === 'D') {
     stage = 'encerrado'; resolvedOwnerMode = 'none'; aiEnabled = false;
     nextAction = isOptOut ? 'Respeitar o opt-out definitivo.' : nextAction; nextActionType = 'encerrar';
+  } else if (turn.agenda_confirmed === true) {
+    // Only the agenda service can set this marker after a successful write.
+    // Keep the current delivery eligible for its confirmation message. The
+    // agendado stage itself blocks future automatic turns in aiCanReply().
+    stage = 'agendado'; resolvedOwnerMode = 'ai'; aiEnabled = true;
+    nextAction = turn.next_action || 'Preparar a apresentação no horário e modalidade confirmados na agenda.';
+    nextActionType = 'confirmar_agendamento';
   } else if (alreadyHuman) {
     resolvedOwnerMode = 'human'; aiEnabled = false;
-    if (turn.stage === 'agendado' || currentStage === 'agendado' || appointmentSignal(lastUserMessage)) stage = 'agendado';
+    if (currentStage === 'agendado') stage = 'agendado';
     else if (currentStage === 'pos_reuniao') stage = 'pos_reuniao';
     else if (currentStage === 'proposta_negociacao' || proposalSignal(lastUserMessage)) stage = 'proposta_negociacao';
     else stage = 'humano_ativo';
