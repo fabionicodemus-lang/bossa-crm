@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { EVENTOS, CHAVES_DETALHE } from "@/lib/eventos";
 import { banco } from "@/lib/banco";
+import { erroPublico, lerObjetoJson, limparUtm, limitarEnvios, validarOrigem } from "@/lib/seguranca-api";
 
 const permitidos = new Set<string>(EVENTOS);
 const chaves = new Set<string>(CHAVES_DETALHE);
@@ -16,10 +17,10 @@ function limpar(v: unknown, max = 200): string | number | boolean | null {
 export async function POST(req: Request) {
   let c: Record<string, unknown>;
   try {
-    const texto = await req.text();
-    if (texto.length > 8000) return new NextResponse(null, { status: 413 });
-    c = JSON.parse(texto);
-  } catch { return new NextResponse(null, { status: 400 }); }
+    validarOrigem(req);
+    limitarEnvios(req, "eventos");
+    c = await lerObjetoJson(req, 8000);
+  } catch (error) { return erroPublico(error); }
 
   const evento = String(c.evento ?? "");
   const visitante = String(c.visitante ?? "");
@@ -36,17 +37,17 @@ export async function POST(req: Request) {
   const host = new URL(req.url).hostname.toLowerCase();
   if (/^[a-z0-9.-]{1,253}$/.test(host)) detalhe.__site_hostname = host;
 
-  const utm: Record<string, string> = {};
-  if (c.utm && typeof c.utm === "object") for (const [k, v] of Object.entries(c.utm as Record<string, unknown>)) if (/^(utm_\w+|fbclid|gclid)$/.test(k) && typeof v === "string") utm[k] = v.slice(0, 200);
+  const utm = limparUtm(c.utm);
 
   const db = banco();
   if (!db) { console.warn("[eventos] banco não configurado; evento não gravado"); return new NextResponse(null, { status: 204 }); }
 
   const pais = req.headers.get("x-vercel-ip-country") || null;
-  const cidade = decodeURIComponent(req.headers.get("x-vercel-ip-city") || "") || null;
+  let cidade: string | null = null;
+  try { cidade = decodeURIComponent(req.headers.get("x-vercel-ip-city") || "").slice(0, 200) || null; } catch { /* Cabeçalho malformado não interrompe a API. */ }
   const estado = req.headers.get("x-vercel-ip-country-region") || null;
   const sessao = typeof c.sessao === "string" && /^[0-9a-f-]{36}$/i.test(c.sessao) ? c.sessao : null;
-  const visita = typeof c.visita === "number" ? Math.min(Math.max(1, Math.floor(c.visita)), 100000) : 1;
+  const visita = typeof c.visita === "number" && Number.isFinite(c.visita) ? Math.min(Math.max(1, Math.floor(c.visita)), 100000) : 1;
 
   // Visitante e sessão são criados/atualizados aqui; o evento entra em seguida.
   const { error } = await db.rpc("site_registrar_evento", {
@@ -65,6 +66,6 @@ export async function POST(req: Request) {
     p_cidade: cidade,
     p_dispositivo: /Mobi|Android|iPhone/i.test(req.headers.get("user-agent") || "") ? "celular" : "computador",
   });
-  if (error) console.error("[eventos]", evento, error.message);
+  if (error) console.error("[eventos] falha ao registrar", { evento, code: error.code });
   return new NextResponse(null, { status: 204 });
 }

@@ -2,6 +2,7 @@ import { getCurrentContext } from '@/lib/auth';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { channelAccess, findChannelById } from '@/lib/whatsapp/channelService';
 import { fetchMetaMedia } from '@/lib/whatsapp/media';
+import { crmMediaHeaders } from '@/lib/security/crm-media-headers';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -83,24 +84,6 @@ function readMediaReference(raw: Record<string, unknown> | null): MediaReference
   return readMetaMediaReference(raw) ?? readAiFileReference(raw);
 }
 
-function safeFilename(value: string | null, fallback: string) {
-  const name = (value || fallback).replace(/[\r\n"]/g, '').trim();
-  return name || fallback;
-}
-
-function disposition(type: string, filename: string | null, download: boolean) {
-  const fallback = type === 'image'
-    ? 'imagem-whatsapp'
-    : type === 'audio'
-      ? 'audio-whatsapp'
-      : type === 'video'
-        ? 'video-whatsapp'
-        : 'arquivo-whatsapp';
-  const name = safeFilename(filename, fallback);
-  const mode = download ? 'attachment' : 'inline';
-  return `${mode}; filename="${name}"; filename*=UTF-8''${encodeURIComponent(name)}`;
-}
-
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
@@ -161,11 +144,13 @@ export async function GET(
       return new Response('Não foi possível carregar o arquivo enviado.', { status: 502 });
     }
 
-    const headers = new Headers();
-    headers.set('Content-Type', file.mime_type || media.mimeType || blob.type || 'application/octet-stream');
+    const headers = crmMediaHeaders({
+      mimeType: file.mime_type || media.mimeType || blob.type,
+      type: media.type,
+      filename: file.original_name || media.filename,
+      download,
+    });
     headers.set('Content-Length', String(blob.size));
-    headers.set('Cache-Control', 'private, max-age=300');
-    headers.set('Content-Disposition', disposition(media.type, file.original_name || media.filename, download));
     return new Response(blob.stream(), { status: 200, headers });
   }
 
@@ -178,10 +163,12 @@ export async function GET(
     const { descriptor, response } = await fetchMetaMedia(media.id!, accessToken, {
       range: request.headers.get('range'),
     });
-    const headers = new Headers();
-    headers.set('Content-Type', response.headers.get('content-type') || descriptor.mime_type || media.mimeType || 'application/octet-stream');
-    headers.set('Cache-Control', 'private, max-age=300');
-    headers.set('Content-Disposition', disposition(media.type, media.filename, download));
+    const headers = crmMediaHeaders({
+      mimeType: response.headers.get('content-type') || descriptor.mime_type || media.mimeType,
+      type: media.type,
+      filename: media.filename,
+      download,
+    });
     for (const name of ['content-length', 'content-range', 'accept-ranges']) {
       const value = response.headers.get(name);
       if (value) headers.set(name, value);

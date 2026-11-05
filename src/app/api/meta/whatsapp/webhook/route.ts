@@ -13,14 +13,6 @@ function webhookVerifyToken() {
   return value;
 }
 
-function rawJson(rawBody: string) {
-  try {
-    return JSON.parse(rawBody) as Record<string, unknown>;
-  } catch {
-    return { raw_text: rawBody };
-  }
-}
-
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const mode = url.searchParams.get('hub.mode');
@@ -40,24 +32,21 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const rawBody = await request.text();
-  const admin = createAdminClient();
-  const signatureValid = verifyMetaSignature(
-    rawBody,
-    request.headers.get('x-hub-signature-256'),
-  );
-
-  if (!signatureValid) {
-    const now = new Date().toISOString();
-    const { error } = await admin.from('whatsapp_webhook_events').insert({
-      raw: rawJson(rawBody),
-      signature_valid: false,
-      processed_at: now,
-      error: 'Assinatura X-Hub-Signature-256 inválida.',
-    });
-    if (error) console.error('[whatsapp invalid signature log]', error.message);
+  const signature = request.headers.get('x-hub-signature-256');
+  if (!/^sha256=[a-fA-F0-9]{64}$/.test(signature || '')) {
     return new Response('Invalid signature', { status: 401 });
   }
+  const rawBody = await request.text();
+  try {
+    if (!verifyMetaSignature(rawBody, signature)) {
+      // Unauthenticated traffic must not allocate database rows or persist payloads.
+      return new Response('Invalid signature', { status: 401 });
+    }
+  } catch {
+    console.error('[whatsapp webhook] Signature verification is unavailable.');
+    return new Response('Webhook unavailable', { status: 503 });
+  }
+  const admin = createAdminClient();
 
   let payload: MetaWebhookPayload;
   try {

@@ -2,6 +2,12 @@ import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 
 const AUTH_PATHS = ['/login', '/cadastro', '/recuperar-senha'];
+const PUBLIC_PATHS = new Set([
+  '/crm-theme.js',
+  '/legal/privacidade',
+  '/legal/termos',
+  '/legal/exclusao-de-dados',
+]);
 
 export async function updateSession(request: NextRequest) {
   let response = NextResponse.next({ request });
@@ -28,7 +34,7 @@ export async function updateSession(request: NextRequest) {
   const user = !claimsError && typeof claimsData?.claims?.sub === 'string' ? claimsData.claims : null;
   const pathname = request.nextUrl.pathname;
   const isAuthPath = AUTH_PATHS.some((path) => pathname.startsWith(path));
-  const isPublicPath = isAuthPath || pathname.startsWith('/auth/') || pathname.startsWith('/api/') || pathname === '/atualizar-senha';
+  const isPublicPath = isAuthPath || PUBLIC_PATHS.has(pathname) || pathname.startsWith('/auth/') || pathname.startsWith('/api/') || pathname === '/atualizar-senha';
 
   if (!user && !isPublicPath) {
     const url = request.nextUrl.clone();

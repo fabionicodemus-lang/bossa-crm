@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { globalAccountManagementScope } from '@/lib/security/crm-user-access';
 
 const MIN_PASSWORD_LENGTH = 6;
 const MAX_PASSWORD_LENGTH = 72;
@@ -35,18 +36,14 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: `A senha pode ter no máximo ${MAX_PASSWORD_LENGTH} caracteres.` }, { status: 400 });
   }
 
-  const { data: targetMembership } = await supabase
-    .from('memberships')
-    .select('id')
-    .eq('organization_id', membership.organization_id)
-    .eq('user_id', targetUserId)
-    .maybeSingle();
-
-  if (!targetMembership) {
-    return NextResponse.json({ error: 'Este usuário não pertence à sua empresa.' }, { status: 404 });
-  }
-
   const admin = createAdminClient();
+  const scope = await globalAccountManagementScope(admin, membership.organization_id, targetUserId);
+  if (scope === 'unavailable') {
+    return NextResponse.json({ error: 'Não foi possível verificar as permissões desta conta.' }, { status: 503 });
+  }
+  if (scope !== 'allowed') {
+    return NextResponse.json({ error: 'Esta conta não pode ter a senha alterada por esta empresa. O titular deve usar “Esqueci minha senha”.' }, { status: 403 });
+  }
   const { error } = await admin.auth.admin.updateUserById(targetUserId, { password });
 
   if (error) {
