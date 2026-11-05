@@ -107,6 +107,18 @@ assert.match(almaReservation.reply, /Taís do comercial/);
 assert.doesNotMatch(almaReservation.reply, /R\$ 1\.500\.000/);
 assert.equal(almaReservation.handoff, true);
 
+const combinedLocationPrice = await enforceNaraReplyGuardrails({
+  reply: 'O Flow custa R$ 1.000.000 e fica em uma rua a confirmar.',
+  classification: 'morno', score: 35, stage: 'ia', summary: '', next_action: '',
+  handoff: false, attachment_ids: [], extracted: {},
+}, baseLead, [
+  { role: 'user', content: 'Onde fica o Flow e quanto custa a unidade 1601? Responda as duas coisas.' },
+], {});
+assert.match(combinedLocationPrice.reply, /não consegui confirmar um preço vigente/i);
+assert.match(combinedLocationPrice.reply, /Balneário Perequê, Porto Belo, a 800 m do mar/);
+assert.match(combinedLocationPrice.reply, /google\.com\/maps\/search/);
+assert.doesNotMatch(combinedLocationPrice.reply, /R\$ 1\.000\.000/);
+
 assert.equal(hasForbiddenScarcityClaim('A unidade acabou de ser vendida agora.'), true);
 assert.ok(naraReplyGuardrailViolations('A unidade acabou de ser vendida.').includes('escassez_fabricada'));
 assert.equal(hasForbiddenScarcityClaim('A unidade não está disponível; posso verificar alternativas.'), false);
