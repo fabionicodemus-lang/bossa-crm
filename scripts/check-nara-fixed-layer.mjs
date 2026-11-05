@@ -20,6 +20,10 @@ assert.doesNotMatch(naraLayer, /ETAPA 2 — QUALIFICAÇÃO/);
 assert.doesNotMatch(naraLayer, /Use no máximo duas frases curtas/);
 assert.doesNotMatch(naraLayer, /(?:use|deve ter|no máximo)\s+45 palavras/i);
 assert.doesNotMatch(naraLayer, /exige USO e intenção confirmados|só podem ser informados quando a intenção de compra estiver confirmada/i);
+assert.match(naraLayer, /Distância oficial do Alma ao mar: 300 m/);
+assert.doesNotMatch(naraLayer, /cerca de 4 minutos a pé|quem reserva agora garante o preço/i);
+assert.match(naraLayer, /Não prometa unilateralmente que a reserva garante preço/);
+assert.match(naraLayer, /pré-vendedora digital da Bossa Empreendimentos/);
 
 // Verify the actual prompt sent by the application: manager customization is
 // present once, while current source/style policies follow and take precedence.

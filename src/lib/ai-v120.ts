@@ -450,15 +450,26 @@ function plantRequestTurn(turn: AiTurn, history: ChatMessage[], context: AiTrain
   const latest = lastUserText(history);
   const latestNormalized = normalizeText(latest);
   const previousAssistant = [...history].reverse().find((item) => item.role === 'assistant')?.content ?? '';
-  const acceptsOffer = !mentionsPlant(latest)
+  const offPlanPurchaseQuestion = /\b(?:comprar|compra|comprando|investir|investimento|risco|arriscad\w*|seguro|garantia)\b.*\bna planta\b/.test(latestNormalized)
+    && !/\b(?:ver|enviar|mandar|mostrar|receber|olhar|conhecer)\s+(?:a |uma |as )?plantas?\b/.test(latestNormalized);
+  const asksForFloorPlan = mentionsPlant(latest) && !offPlanPurchaseQuestion;
+  const acceptsOffer = !asksForFloorPlan
     && /^(sim|s|pode|pode mandar|pode sim|manda|me manda|quero|quero ver|claro|ok|beleza|bora|si|sí|dale|yes|sure)\b/.test(latestNormalized)
     && latestNormalized.split(' ').length <= 5 && !purchaseIntent(latest) && !asksApartmentPrice(latestNormalized)
     && mentionsPlant(previousAssistant) && previousAssistant.includes('?');
-  // "3 suítes", "a de 103 m²", "Tipo 01" respondendo a uma pergunta da Nara sobre planta.
-  const answersPlantQuestion = !mentionsPlant(latest) && !acceptsOffer
-    && (mentionsPlant(previousAssistant) || /\b\d{2,3}(?:,\d)? m²/.test(previousAssistant))
+  // '800 metros é longe para ir com criança?' refere-se à praia, não à área
+  // do imóvel. Só interpretar uma resposta curta como seleção de planta se a
+  // pergunta imediatamente anterior da Nara era explicitamente sobre a planta.
+  const lastAssistantQuestion = previousAssistant.match(/[^?!.]+\?\s*$/)?.[0] ?? '';
+  const normalizedLastQuestion = normalizeText(lastAssistantQuestion);
+  const askedAboutFloorPlan = /\b(planta|plantas|tipo|tipologia|metragem|area|area util|duplex)\b/.test(normalizedLastQuestion)
+    || (mentionsPlant(previousAssistant) && /\b(suites?|quartos?|quantas?|qual|prefere)\b/.test(normalizedLastQuestion));
+  const selectsPreviouslyDiscussedPlant = /^(?:tipo|planta|duplex)\s*0?\d+\b|^a de \d{2,3}\s*(?:m2|m²|metros)?\b/.test(latestNormalized)
+    && history.some((item) => item.role === 'assistant' && mentionsPlant(item.content));
+  const answersPlantQuestion = !asksForFloorPlan && !acceptsOffer && (askedAboutFloorPlan || selectsPreviouslyDiscussedPlant)
+    && !/[?]/.test(latest) && latestNormalized.split(' ').length <= 12
     && /\b(\d|dois|duas|tres|quatro)\s*(?:suites?|quartos?)\b|\b\d{2,3}(?:[.,]\d)?\s*(?:m2|m²|m\b|metros)|\btipo\s*0?\d\b|\bduplex\b|\b(?:menor|maior)\b/.test(latestNormalized);
-  if (!mentionsPlant(latest) && !acceptsOffer && !answersPlantQuestion) return null;
+  if (!asksForFloorPlan && !acceptsOffer && !answersPlantQuestion) return null;
   const development = developmentFromHistory(history);
   if (!development) return null;
 
@@ -760,14 +771,22 @@ export function postProcessNaraTurn(
     });
   }
 
-  const doesNotWantToBuy = /\b(nao quero comprar|nao estou procurando|nao tenho interesse em comprar|so preciso de atendimento)\b/.test(latest);
-  if (doesNotWantToBuy) {
-    return applyConversationDecision(turn, {
-      reply: 'Entendi. Vou te direcionar para o atendimento correto da Bossa. Pode me dizer em uma frase qual assunto você precisa resolver?',
-      handoff: true,
-      summary: 'Contato informou que não está buscando comprar um imóvel.',
-      nextAction: 'Direcionar para a equipe humana e identificar o assunto.',
+  const doesNotWantToBuy = /\b(nao quero comprar|nao estou procurando|nao tenho interesse em comprar)\b/.test(latest);
+  const stillAsksForInformation = /\?/.test(latestRaw)
+    || isPureInformationRequest(latestRaw)
+    || /\b(mas|porem|so quero saber|quero conhecer|gostaria de entender)\b/.test(latest);
+  // 'Não quero comprar agora, mas quero conhecer o Flow' não é solicitação
+  // de transferência. Respeitamos tanto quem pesquisa quanto quem declina.
+  if (doesNotWantToBuy && !stillAsksForInformation) {
+    const declined = applyConversationDecision(turn, {
+      reply: 'Tudo bem, sem problema. Não vou insistir. Se quiser conhecer algum empreendimento no futuro, fico por aqui.',
+      handoff: false,
+      summary: 'Contato informou que não está buscando comprar e não pediu outro atendimento.',
+      nextAction: 'Não pressionar nem iniciar nova qualificação; respeitar desinteresse declarado.',
+      score: 0,
     });
+    declined.classification = 'sem_interesse';
+    return declined;
   }
 
   // "Ainda não sei"/"não decidi" não troca mais a resposta por uma frase genérica: a pergunta concreta

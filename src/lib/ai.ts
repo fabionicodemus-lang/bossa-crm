@@ -363,11 +363,11 @@ function fileInstructions(files: AiFileOption[]): string {
  */
 const NARA_ALMA_COMMERCIAL_RULES = `\n\nALMA SEAHOUSES — COMERCIALIZAÇÃO LIBERADA (FORMATO RESERVA). ESTA REGRA SUBSTITUI QUALQUER INSTRUÇÃO ANTERIOR, NO PROMPT FINAL, NA BASE DE CONHECIMENTO OU NAS CORREÇÕES, QUE PROÍBA OU LIMITE A VENDA, OS PREÇOS OU AS CONDIÇÕES DO ALMA:
 - O Alma está liberado para atendimento comercial completo, igual ao Flow e ao Soul: apresente o projeto, informe preços, condições de pagamento (entrada, parcelas mensais, anuais, chaves e prazo de até 100 meses direto com a construtora) e unidades disponíveis, sempre a partir das consultas comerciais do sistema no turno, como nos demais empreendimentos.
-- Quando o cliente quiser garantir uma unidade do Alma, use sempre a palavra "reserva" ("reservar a unidade", "garantir a reserva no valor de hoje"). Não use "compra fechada", "venda" ou "contrato assinado" para o Alma.
-- Use a condição de pré-lançamento como argumento: quem reserva agora garante o preço e a condição atuais.
-- Não comente sobre o registro da incorporação por conta própria. Se o cliente perguntar, responda com tranquilidade e sem inventar prazo exato: a incorporação já está protocolada no cartório e o registro deve sair nas próximas semanas; a reserva garante a unidade e a condição de hoje, e a formalização segue o processo normal da Bossa.
+- Quando o cliente quiser avançar com uma unidade do Alma, fale em "pedido de reserva" e encaminhe para a equipe comercial. Não trate o pedido como reserva concluída, compra fechada, unidade bloqueada ou contrato assinado.
+- Explique que preço, validade da condição e efeitos da eventual reserva dependem da tabela vigente e dos termos formalmente confirmados pela equipe. Não prometa unilateralmente que a reserva garante preço, unidade ou condição por prazo indefinido.
+- Não antecipe prazos de cartório nem afirme registro concluído ou "sairá nas próximas semanas". Se perguntarem pelo registro da incorporação, o comercial deverá confirmar e apresentar a situação documental atual, sem suposições; a Nara não substitui essa verificação.
 - Pedido de reserva, escolha de unidade específica ou proposta segue para a equipe comercial com handoff=true, como nos demais empreendimentos.
-- Distância oficial do Alma ao mar: 300 m (cerca de 4 minutos a pé). Se alguma informação antiga disser 350 m, use 300 m.`;
+- Distância oficial do Alma ao mar: 300 m, conforme confirmado por Fábio. Se alguma informação antiga disser 350 m, use 300 m. Não prometa tempo exato de caminhada.`;
 
 /**
  * Conversa humana (rodada 3 de testes, 04/11/2026): responder a pergunta concreta, não pedir
@@ -381,7 +381,7 @@ const NARA_ALMA_COMMERCIAL_RULES = `\n\nALMA SEAHOUSES — COMERCIALIZAÇÃO LIB
 const NARA_PRODUCT_FACTS = `\n\nFATOS CONFIRMADOS DOS EMPREENDIMENTOS (USE COM SEGURANÇA; PREÇO E DISPONIBILIDADE VÊM DA CONSULTA COMERCIAL):
 - Soul Residence: em Itapema, pronto para morar (entregue em dezembro de 2023, no prazo); apartamentos de 2 suítes com cerca de 70 m².
 - Flow Aptos: em Balneário Perequê, Porto Belo, a 800 m do mar; 57 apartamentos; entrega prevista para novembro de 2027. Apartamentos de 2 suítes com 62 m² (Tipos 2 e 3) e 73 m² (Tipo 1, com lavabo); duplex de 3 suítes com 93 m² e 117,7 m², living com pé-direito duplo; lazer em dois pavimentos e rooftop. Parcelamento direto pode chegar a 60 vezes.
-- Alma Seahouses: em Balneário Perequê, Porto Belo, a 300 m do mar (cerca de 4 minutos a pé; não é frente mar); 30 andares, só 2 apartamentos por andar; entrega prevista para julho de 2030. Apartamentos de 3 suítes com 103 m² (Tipo 02) e 114 m² (Tipo 01), com living integrado à cozinha, lavabo e churrasqueira a carvão; duplex de 4 suítes com 145 m² e 168 m²; todas as plantas com 2 vagas. Parcelamento direto pode chegar a 100 vezes.
+- Alma Seahouses: em Balneário Perequê, Porto Belo, a 300 m do mar (não é frente mar); 30 andares, só 2 apartamentos por andar; entrega prevista para julho de 2030. Apartamentos de 3 suítes com 103 m² (Tipo 02) e 114 m² (Tipo 01), com living integrado à cozinha, lavabo e churrasqueira a carvão; duplex de 4 suítes com 145 m² e 168 m²; todas as plantas com 2 vagas. Parcelamento direto pode chegar a 100 vezes.
 - A Bossa atua desde 2017 e já entregou Jazz (2019, antes do prazo) e Soul (dezembro de 2023, no prazo). Flow e Alma ainda não foram entregues: estão em desenvolvimento, com entregas previstas para 2027 e 2030. Não diga que todos os projetos lançados já foram entregues.
 - Se perguntarem algo que não está aqui nem nas consultas (ex.: vagas do Soul, trajeto plano), diga com naturalidade que vai confirmar com o time, sem inventar.`;
 
