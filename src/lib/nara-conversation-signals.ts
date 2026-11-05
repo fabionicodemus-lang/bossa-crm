@@ -157,9 +157,11 @@ function withoutNegatedFinancialDiscussion(value: string): string {
 /** Acesso físico, reforço estrutural e conceito do projeto não são condições comerciais. */
 function withoutNonFinancialTerms(value: string): string {
   return value
+    .replace(/\b(?:qual|que)\s+(?:(?:e|seria|a)\s+){0,3}entrada\b(?=[^.!?;]{0,60}\b(?:usar|utilizar|entrar|entro|entramos|acessar)\b)/g, ' acesso fisico ')
+    .replace(/\bentrada\b(?=[^.!?;]{0,35}\b(?:da (?:para|acesso)|abre (?:para|na|no)|fica (?:na|no|pela|pelo)|e (?:pela|pelo)|por onde|por qual)\b)/g, ' acesso fisico ')
     .replace(/\b(?:hall|porta|portao|rampa|largura|altura|foto|imagem|cobertura)\s+(?:de|da|para a)\s+entrada\b/g, ' acesso fisico ')
     .replace(/\bentrada\s+(?:principal|social|lateral|privativa|independente|de servico|de pedestres|de veiculos)\b/g, ' acesso fisico ')
-    .replace(/\bentrada\s+(?:do|da|dos|das|de|para|para a|para o|al|del|de la)\s+(?:predio|edificio|garagem|apartamento|apartamentos|planta|plantas|obra|hall|lobby|piscina|academia|salao|rua|cozinha)\b/g, ' acesso fisico ')
+    .replace(/\bentrada\s+(?:do|da|dos|das|de|para|para a|para o|al|del|de la)\s+(?:predio|edificio|empreendimento|torre|garagem|apartamento|apartamentos|apto|aptos|unidade|unidades|casa|casas|imovel|imoveis|planta|plantas|obra|hall|lobby|piscina|academia|salao|rua|cozinha)\b/g, ' acesso fisico ')
     .replace(/\bentrada\s+(?:(?:e|esta|sera|tem|possui|vai ter)\s+)?(?:acessivel|coberta|envidracada|rampa|escada|portao|porta|elevador)\b/g, ' acesso fisico ')
     .replace(/\b(?:reforco|reforcos)\s+(?:estrutural|estruturais|do pilar|da viga|das vigas|dos pilares|da estrutura|na estrutura|na fundacao)\b/g, ' estrutura ')
     .replace(/\bproposta\s+(?:arquitetonica|do projeto|de arquitetura|de design|de lazer|paisagistica)\b/g, ' conceito do projeto ')
@@ -171,6 +173,14 @@ function withoutNonFinancialTerms(value: string): string {
 
 function hasDirectFinancialTerms(value: string): boolean {
   const affirmative = withoutNegatedFinancialDiscussion(value);
+  // "Qual a entrada do apartamento?" asks about payment unless the same
+  // question describes physical access. A room in an earlier question must
+  // never hide a separate payment question in a mixed message.
+  const entryQuestion = affirmative.split(/[.!?;\n]+|\b(?:e|mas|porem)\s+(?=(?:qual|quanto|como)\b)|,\s*(?=(?:e\s+)?(?:qual|quanto|como)\b)/).some((clause) =>
+    /\bqual\s+(?:(?:e|seria|a|o|uma|um)\s+){0,3}entrada\s+(?:(?:do|da|de|desse|dessa|deste|desta|para o|para a)\s+)?(?:apartamentos?|aptos?|unidades?|casas?|imovel|imoveis|plantas?)\b/.test(clause)
+    && !/\b(?:por onde|por qual|da para|da acesso|abre|abrir|pela|pelo|fica|localizada|localizado|acesso|porta|portao|corredor|hall|rua|rampa|escada|elevador|usar|utilizar|entrar|entro|entramos|acessar|principal|social|lateral|de servico|de pedestres|de veiculos|largura|altura|acessivel|coberta|iluminad[oa]|ventilad[oa])\b|\b(?:sala|cozinha|lavanderia)\s+ou\b/.test(clause),
+  );
+  if (entryQuestion) return true;
   // "Valor da entrada do apartamento" é financeiro, mesmo que "entrada do
   // apartamento" isolada também possa significar o acesso físico.
   if (/\b(?:valor|quanto|percentual|porcentagem|dar|dou|pagar|pago)\s+(?:(?:e|seria|da|de|a|o|uma|um|preciso|precisaria|devo|vou)\s+){0,5}entrada\b/.test(affirmative)

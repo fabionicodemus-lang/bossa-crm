@@ -1,5 +1,6 @@
 import { enforceNaraReplyGuardrails, ensureFirstTurnIntroduction, generateAiTurn as generateCoreAiTurn } from './ai';
 import { applyNaraFinancialHandoff } from './nara-sales-handoff';
+import { isNaraArchitecturalEntranceQuestion } from './nara-commercial-guard';
 import { shouldHandleAgendaTurn } from './nara-agenda-intent';
 import { naraConversationLanguage, requestedNaraLanguage } from './nara-language';
 import { isAssistedSaleSignal, isBrokerRoutingSignal, isPostSaleRoutingSignal, isSupplierRoutingSignal } from './nara-contact-routing';
@@ -439,6 +440,7 @@ function missingPriceReply(focus: Enterprise, history: ChatMessage[]): string {
 /** Pedido de planta: escolhe pelo catálogo oficial, anexa e explica. */
 function plantRequestTurn(turn: AiTurn, history: ChatMessage[], context: AiTrainingContext): AiTurn | null {
   const latest = lastUserText(history);
+  if (isNaraArchitecturalEntranceQuestion(latest)) return null;
   const latestNormalized = normalizeText(latest);
   const previousAssistant = [...history].reverse().find((item) => item.role === 'assistant')?.content ?? '';
   const offPlanPurchaseQuestion = /\b(?:comprar|compra|comprando|investir|investimento|risco|arriscad\w*|seguro|garantia)\b.*\bna planta\b/.test(latestNormalized)
@@ -742,7 +744,7 @@ export function postProcessNaraTurn(
   if (asksIfRobot) {
     // A combined question still deserves its property answer. Do not erase it
     // just to repeat the AI introduction and ask what the question was.
-    const answersPropertyQuestion = /\b(?:m2|metragem|suites?|quartos?|entrega|localizacao|mar|leisure|bedrooms?)\b/.test(normalizeText(turn.reply))
+    const answersPropertyQuestion = /\b(?:m2|metragem|suites?|quartos?|entrega|localizacao|mar|leisure|bedrooms?)\b/.test(normalizeText(turn.reply).replace(/m²/g, 'm2'))
       && /\b(?:metragem|metragens|suites?|quartos?|quando|onde|planta|lazer|bedrooms?|size)\b/.test(latest);
     const admitsDigitalIdentity = /\b(?:assistente (?:digital|virtual)|asistente (?:digital|virtual)|digital assistant|virtual assistant)\b/.test(normalizeText(turn.reply));
     const falselyClaimsHuman = /\b(?:sou (?:uma )?pessoa|sou human[oa]|nao sou (?:ia|robo)|soy human[oa]|i am human)\b/.test(normalizeText(turn.reply));

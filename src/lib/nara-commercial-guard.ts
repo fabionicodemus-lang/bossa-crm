@@ -1,5 +1,5 @@
 import type { NaraCommercialTurnContext, NaraDevelopmentRange, NaraUnitOffer } from './nara-unit-queries';
-import { enterpriseInFocus } from './nara-conversation-signals';
+import { enterpriseInFocus, financialNegotiationIntent } from './nara-conversation-signals';
 import { naraConversationLanguage, type NaraLanguage } from './nara-language';
 
 type ChatMessage = { role: 'user' | 'assistant'; content: string };
@@ -245,14 +245,32 @@ const FINANCIAL_TERMS = /\b(precos?|precios?|prices?|valores?|custa|custos?|cost
 const SAFE_FINANCIAL_REFUSAL = /\b(nao (?:posso|consigo|podemos|conseguimos|vou|tenho como) (?:\w+\s+){0,3}(?:aprovar|garantir|confirmar|prometer|oferecer)|(?:precisa|depende|necessita) (?:de |da |ser )?(?:aprovacao|confirmacao|validacao|confirmad|aprovad)|(?:comercial|equipe|time) (?:pode |vai |precisa )?(?:avaliar|confirmar|analisar)|no puedo (?:aprobar|confirmar|garantizar)|(?:necesita|requiere) (?:aprobacion|confirmacion)|(?:cannot|can't|can not) (?:approve|confirm|guarantee)|(?:requires?|needs?) (?:approval|confirmation))\b/;
 
 function financialSignalText(value: string): string {
-  let text = norm(value);
-  // An apartment entrance is architectural when describing its access/layout. Do not
-  // exempt the same words in payment questions such as "qual a entrada do apartamento?".
-  if (/\b(porta|acesso|sala|corredor|hall|portaria|fachada|porta[oã]|largura)\b/.test(text)
-    || /\bcomo (?:e|sera) (?:a )?entrada (?:do apartamento|do apto|da unidade|da casa|do imovel)\b/.test(text)) {
-    text = text.replace(/\b(?:porta de entrada|entrada (?:do apartamento|do apto|da unidade|da casa|do imovel|da sala|do quarto))\b/g, ' ');
-  }
-  return text.replace(/\b(?:hall de entrada|entrada (?:principal|do predio|do edificio|da garagem|de pedestres|do empreendimento|da torre)|entrance hall|main entrance)\b/g, ' ');
+  return norm(value).split(/(?<=[.!?;])\s+/).map((part) => {
+    let text = part;
+    // A physical description must not erase a payment request in the same clause.
+    if (financialNegotiationIntent(text)) return text;
+    // Scope room/access evidence to this clause: "sala? E qual a entrada?" must
+    // not turn the second question into an architectural one.
+    if (/\b(porta|acesso|sala|corredor|hall|portaria|fachada|porta[oã]|largura)\b/.test(text)
+      || /\bcomo (?:e|sera) (?:a )?entrada (?:do apartamento|do apto|da unidade|da casa|do imovel|da planta)\b/.test(text)) {
+      text = text.replace(/\b(?:porta de entrada|entrada (?:do apartamento|do apto|da unidade|da casa|do imovel|da planta|da sala|do quarto))\b/g, ' ');
+    }
+    return text.replace(/\b(?:hall de entrada|entrada (?:principal|do predio|do edificio|da garagem|de pedestres|do empreendimento|da torre)|entrance hall|main entrance)\b/g, ' ');
+  }).join(' ');
+}
+
+/** Use the same physical-entrance normalization before querying and quoting prices. */
+export function isNaraArchitecturalEntranceQuestion(message: string): boolean {
+  const value = norm(message);
+  const financialText = financialSignalText(value);
+  const physicalEntrance = /\bentrada\b/.test(value) && !/\bentrada\b/.test(financialText);
+  const physicalAccess = /\bacesso (?:a|ao|para) (?:sala|corredor|hall)\b/.test(value);
+  return (physicalEntrance || physicalAccess)
+    && !financialNegotiationIntent(value)
+    && !asksForQuote(value)
+    && !FINANCIAL_TERMS.test(financialText)
+    && !/%/.test(value)
+    && moneyMatches(value).length === 0;
 }
 
 /** A conservative trigger, not a claim that regex can prove all natural-language semantics. */
@@ -266,7 +284,7 @@ export function naraReplyNeedsCommercialProtection(reply: string, history: ChatM
   const numericOfferText = value.replace(/\bfica\s+em\s+(?:\d+(?:[.,]\d+)?\s*|(?:um|uma|dois|duas|tres|quatro|cinco|seis|sete|oito|nove|dez|vinte|trinta|quarenta|cinquenta|sessenta|setenta|oitenta|noventa|cem|cento|duzentos|trezentos|quatrocentos|quinhentos|seiscentos|setecentos|oitocentos|novecentos|mil)\s+)(?:pavimentos?|andar(?:es)?|metros?)\b/g, ' ');
   if (/\b(?:fecho|fechamos|faco|pode levar|consigo(?: fazer)?|sai|fica|aceito|aceitamos|deixo|deixamos)\s+(?:por|em)\s+(?:\d|um\b|uma\b|dois\b|duas\b|tres\b|quatro\b|cinco\b|seis\b|sete\b|oito\b|nove\b|dez\b|vinte\b|trinta\b|quarenta\b|cinquenta\b|sessenta\b|setenta\b|oitenta\b|noventa\b|cem\b|cento\b|duzentos\b|trezentos\b|quatrocentos\b|quinhentos\b|seiscentos\b|setecentos\b|oitocentos\b|novecentos\b|mil\b)/.test(numericOfferText)) return true;
   if (/\d+(?:[.,]\d+)?\s*%/.test(value)
-    && (FINANCIAL_TERMS.test(value) || /\b(consigo|conseguimos|ofereco|oferecemos|garanto|garantimos|faco|fecho|fechamos|pode levar|can offer|can do|ofrezco|ofrecemos)\b/.test(value))) return true;
+    && (FINANCIAL_TERMS.test(value) || /\b(consigo|conseguimos|ofereco|oferecemos|garanto|garantimos|faco|fecho|fechamos|aceito|aceitamos|pode levar|can offer|can do|accept|ofrezco|ofrecemos|acepto|aceptamos)\b/.test(value))) return true;
   if (/\b(?:milhao|milhoes|million|mil|reais|dolares|dollars|euros)\b/.test(value) && FINANCIAL_TERMS.test(value)) return true;
   const clauses = value.split(/(?<=[.!?;])\s+|;\s*|,(?!\d)\s*|\b(?:mas|porem|but|pero)\b|\b(?:e|and|y)\s+(?=(?:(?:o|a|os|as|the|el|la|los|las)\s+)?(?:precos?|valores?|pagamento|saldo|entradas?|parcelas?|juros|comercial|equipe|time|eu|nos|voce|consigo|conseguimos|ofereco|podemos|i|we|you)\b)/);
   return clauses.some((clause) => {
@@ -301,7 +319,13 @@ function hasOnlyAttributedBudget(reply: string, history: ChatMessage[]): boolean
   });
 }
 
+function asksUnitOrRangeClarification(text: string): boolean {
+  return /\b(?:esse|este)\s+(?:valor|preco)(?:\s+total)?\b[^.!?;]{0,60}\bunidade(?:\s+especifica)?\s+ou\s+(?:(?:e|so|apenas|uma)\s+){0,4}faixa\b/.test(norm(text))
+    && !financialNegotiationIntent(text);
+}
+
 function asksForQuote(text: string): boolean {
+  if (asksUnitOrRangeClarification(text)) return true;
   const value = financialSignalText(text);
   if (/\b(?:nao (?:quero|preciso)|sem falar de|no quiero|do not want|don't want)\b.{0,35}\b(?:preco|valor|tabela|pagamento|price|payment|precio)\b/.test(value)) return false;
   if (/\b(quanto custa|quanto fica|quanto sai|how much|cuanto cuesta|me (?:passa|passe|manda|mande|informe|envia|envie).{0,20}(?:preco|valor|tabela)|quero saber.{0,20}(?:preco|valor)|sem preco nao adianta)\b/.test(value)) return true;
@@ -310,7 +334,7 @@ function asksForQuote(text: string): boolean {
 }
 
 function asksPayment(text: string): boolean {
-  return /\b(pagamento|condic(?:ao|oes) de pagamento|plano de pagamento|entradas?|parcelas?|parcelamento|presta(?:cao|coes)|mensal|mensais|reforcos?|balao|juros|correcao|reajuste|cub|ipca|a vista|al contado|cuotas?|interes|payment|payment terms|installments?|down payment|interest)\b/.test(norm(text));
+  return /\b(pagamento|condic(?:ao|oes) de pagamento|plano de pagamento|entradas?|parcelas?|parcelamento|presta(?:cao|coes)|mensal|mensais|reforcos?|balao|juros|correcao|reajuste|cub|ipca|a vista|al contado|cuotas?|interes|payment|payment terms|installments?|down payment|interest)\b/.test(financialSignalText(text));
 }
 
 function customCondition(text: string): boolean {
@@ -417,6 +441,38 @@ function correctionIntroduction(validation: NaraCommercialValidation, history: C
       : linked ? 'Corrigindo a informação anterior, estes são os valores confirmados na consulta atual:' : 'Estes são os valores confirmados na consulta atual:';
 }
 
+/** History supplies only a reference; a fresh, validated offer supplies the price. */
+function unitOrRangeClarification(validation: NaraCommercialValidation, history: ChatMessage[], language: NaraLanguage): string | null {
+  const previous = [...history].reverse().find((message) => message.role === 'assistant')?.content;
+  if (!previous) return null;
+  const projects = projectNames(previous);
+  // A location such as "a 800 m do mar" is not an elliptical unit reference.
+  const referenceText = norm(previous).replace(/\b\d+(?:[.,]\d+)?\s*m(?:2|²)?(?=\s|[.,;:!?)]|$)/g, ' ');
+  const units = [...new Set([...multipleUnitCodes(previous), ...referenceText.split(/(?<=[.!?;])\s+|,(?!\d)\s*|\b(?:e|ou)\s+(?=(?:(?:a|o)\s+)?\d{3,4}[a-z]?\b)/)
+    .map(unitInText).filter((unit): unit is string => Boolean(unit))])];
+  const previousAmounts = moneyMatches(previous).map((match) => parseNaraMoneyToCents(match[0])).filter((value) => value !== null);
+  const anotherOption = /\b(?:outr[oa]\s+(?:opcao|unidade|apartamento)|alternativa)\s*(?::|(?:e|seria|esta|custa|fica|sai|tem)\b)/.test(norm(previous));
+  // Multiple amounts or an elliptical second option make "esse valor" ambiguous.
+  if (projects.length !== 1 || units.length !== 1 || previousAmounts.length !== 1 || anotherOption
+    || validation.requestedEnterprise !== projects[0]) return null;
+  const matching = validation.offers.filter((offer) => projectKey(offer.empreendimento) === projects[0] && norm(offer.unidade) === units[0]);
+  if (matching.length !== 1) return null;
+  const offer = matching[0];
+  // A historical amount is never rendered or used to authorize the offer. A
+  // single differing amount only prevents silently ratifying an old value.
+  const differs = previousAmounts[0] !== Math.round(offer.valor * 100);
+  const correction = differs
+    ? language === 'en' ? 'The earlier amount does not match the current lookup. '
+      : language === 'es' ? 'El importe anterior no coincide con la consulta actual. '
+        : 'O valor informado antes não corresponde à consulta atual. '
+    : '';
+  return correction + (language === 'en'
+    ? `It is a specific unit: ${offer.unidade} at ${offer.empreendimento}. Its total list price in the current lookup is ${brl(offer.valor)}, not a general price range.`
+    : language === 'es'
+      ? `Es una unidad específica: la ${offer.unidade} de ${offer.empreendimento}. Su precio total de tabla en la consulta actual es ${brl(offer.valor)}, no un rango general.`
+      : `É de uma unidade específica: a ${offer.unidade} do ${offer.empreendimento}. O preço total de tabela consultado agora é ${brl(offer.valor)}, não uma faixa geral.`);
+}
+
 function renderValidatedReply(validation: NaraCommercialValidation, history: ChatMessage[], original: string, language: NaraLanguage): string {
   const latest = lastUserText(history);
   // Quando o cliente pediu preço + localização, não deixe o modelo acrescentar
@@ -491,6 +547,15 @@ export function protectNaraCommercialReply(
   }
   const validation = validateNaraCommercialContext(commercial, history, options);
   const language = options.language ?? naraConversationLanguage(history);
+  if (asksUnitOrRangeClarification(latest)) {
+    const clarification = validation.valid ? unitOrRangeClarification(validation, history, language) : null;
+    const safeReply = clarification ?? unconfirmedReply(validation, language);
+    return {
+      reply: safeReply, changed: reply !== safeReply, commercial: true,
+      reasons: clarification ? ['commercial_reply_rendered_from_crm'] : [...validation.reasons, 'previous_unit_reference_not_confirmed'],
+      source: clarification ? 'crm' : 'unconfirmed',
+    };
+  }
   const safeReply = validation.valid ? renderValidatedReply(validation, history, reply, language) : unconfirmedReply(validation, language);
   return {
     reply: safeReply, changed: safeReply !== reply, commercial: true,

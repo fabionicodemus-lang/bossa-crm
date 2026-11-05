@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import {
+  isNaraArchitecturalEntranceQuestion,
   naraReplyNeedsCommercialProtection,
   parseNaraMoneyToCents,
   protectNaraCommercialReply,
@@ -77,6 +78,72 @@ test('Architectural entry is not a payment claim', () => {
   const reply = 'O hall de entrada tem iluminação e acesso à área comum.';
   assert.equal(naraReplyNeedsCommercialProtection(reply), false);
   assert.equal(naraReplyNeedsCommercialProtection(reply, [u('Como é o hall de entrada?')]), false);
+});
+
+test('The larger floor-plan entrance is architectural, even when CRM prices are present', () => {
+  const question = 'A entrada da planta maior dá para a sala ou para um corredor?';
+  const history = [u('Você é robô? E quais são as metragens do Alma?'), a('Sou a Nara, assistente digital da Bossa. Posso mostrar as plantas do Alma.'), u(question)];
+  const reply = 'A entrada da planta maior dá acesso à sala. Podemos observar a circulação na planta.';
+  assert.equal(isNaraArchitecturalEntranceQuestion(question), true);
+  assert.equal(naraReplyNeedsCommercialProtection(reply, history), false);
+  for (const commercial of [null, context()]) {
+    const result = guarded(reply, history, commercial);
+    assert.deepEqual(result, { reply, changed: false, commercial: false, reasons: [], source: 'model' });
+    assert.deepEqual(guarded(result.reply, history, commercial), result);
+  }
+});
+
+test('Existing physical entrance names remain architectural in both questions and answers', () => {
+  for (const question of [
+    'A entrada da unidade dá para a sala ou para um corredor?',
+    'A entrada do apto dá acesso à sala?',
+    'A entrada da casa dá acesso à sala?',
+    'A entrada do imóvel dá acesso ao hall?',
+    'A entrada do empreendimento é pela rua principal?',
+    'A entrada da torre dá acesso ao hall?',
+  ]) {
+    const reply = question.replace(/\?$/, '.');
+    assert.equal(isNaraArchitecturalEntranceQuestion(question), true, question);
+    assert.equal(naraReplyNeedsCommercialProtection(reply, [u(question)]), false, question);
+    assert.equal(guarded(reply, [u(question)], null).reply, reply, question);
+  }
+});
+
+test('Physical entrance plus total price remains a quote, not a request for payment terms', () => {
+  const question = 'A entrada da planta maior dá para a sala? Qual o preço total da unidade 1601 do Flow?';
+  assert.equal(isNaraArchitecturalEntranceQuestion(question), false);
+  const result = guarded('A entrada da planta maior dá para a sala. O preço total é R$ 900 mil.', [u(question)]);
+  assert.equal(result.source, 'crm');
+  assert.match(result.reply, /1\.000\.000,20/);
+  assert.doesNotMatch(result.reply, /900 mil|Entrada:|Parcelas mensais:|plano completo/);
+});
+
+test('An entrance discussion does not hide real down-payment questions or a later mixed request', () => {
+  for (const question of [
+    'E a entrada?',
+    'Qual a entrada do apartamento?',
+    'Qual é a entrada da planta maior?',
+    'Qual é o valor da entrada da planta maior?',
+    'Quanto preciso dar de entrada da planta maior?',
+    'A entrada da planta maior dá para a sala? E qual é o valor da entrada?',
+    'A entrada da planta maior dá para a sala? E qual a entrada do apartamento?',
+    'A entrada da planta maior dá para a sala e a entrada financeira é de 20%?',
+  ]) {
+    assert.equal(isNaraArchitecturalEntranceQuestion(question), false, question);
+    const history = [u('A entrada da planta maior dá para a sala ou para um corredor?'), a('Podemos conferir a circulação na planta.'), u(question)];
+    noOffer(guarded('A entrada está garantida em 20%.', history, null));
+  }
+  assert.equal(naraReplyNeedsCommercialProtection('A entrada da planta maior dá para a sala. O preço é fixo e não tem juros.'), true);
+});
+
+test('An architectural answer cannot smuggle an accepted percentage without a current quote', () => {
+  for (const acceptance of ['aceito', 'aceitamos', 'we accept', 'acepto', 'aceptamos']) {
+    const reply = `A entrada da planta maior tem hall, e ${acceptance} 20%.`;
+    assert.equal(naraReplyNeedsCommercialProtection(reply), true, reply);
+    const result = guarded(reply, [u('Como é a entrada da planta maior?')], null);
+    noOffer(result);
+    assert.doesNotMatch(result.reply, /20%|aceit|accept|acept/i);
+  }
 });
 
 test('Physical floors and distance preserve the complete institutional answer and invitation', () => {
@@ -457,6 +524,77 @@ test('A multi-unit lookup marked ambiguous does not repeat a project question al
   noOffer(result);
   assert.match(result.reply, /todas as unidades/);
   assert.doesNotMatch(result.reply, /qual empreendimento/);
+});
+
+const scopeQuestion = 'Esse valor total é de uma unidade específica ou é só uma faixa?';
+const scopeHistory = (previous = 'No Flow Aptos, o preço da unidade 1601 é R$ 1.000.000,20.', latest = scopeQuestion) => [u('Qual o preço do apartamento mais barato do Flow?'), a(previous), u(latest)];
+const threeOffers = (first = offer) => context({ calls: [{ name: 'buscar_apartamentos', arguments: { empreendimento: 'flow' }, result: [first,
+  { ...offer, unidade: '1602', unidade_id: 'flow-1602', valor: 1_100_000 },
+  { ...offer, unidade: '1603', unidade_id: 'flow-1603', valor: 1_200_000 },
+] }] });
+
+test('Unit versus range clarification uses only the referenced current unit, never the model offer', () => {
+  const history = scopeHistory();
+  assert.equal(naraReplyNeedsCommercialProtection('É uma unidade específica.', history), true);
+  const result = guarded('A 1603 está aprovada por R$ 777 mil com 20% de desconto.', history, threeOffers());
+  assert.equal(result.source, 'crm');
+  assert.match(result.reply, /unidade específica: a 1601 do Flow Aptos/);
+  assert.match(result.reply, /1\.000\.000,20/);
+  assert.doesNotMatch(result.reply, /1602|1603|777|20%|aprovad|Entrada:|plano completo/);
+  assert.equal((result.reply.match(/R\$/g) ?? []).length, 1);
+  assert.equal(guarded(result.reply, history, threeOffers()).reply, result.reply);
+});
+
+test('The live-conversation shape keeps location distance and map URL out of the unit identity', () => {
+  // Preserve the observed message shape, but never publish a live CRM quote as a fixture.
+  const previous = 'Oi! Aqui é a Nara, da Bossa 😊 No Flow Aptos, o valor de tabela vigente da unidade 1601 é R$ 1.000.000,20. O Flow fica em Balneário Perequê, Porto Belo, a 800 m do mar. Você pode conferir no mapa: https://www.google.com/maps/search/?api=1&query=Flow%20Aptos%20Porto%20Belo%20SC';
+  const history = [u('Onde fica o Flow e quanto custa o apartamento mais barato? Quero as duas informações.'), a(previous), u(scopeQuestion)];
+  const commercial = threeOffers();
+  const result = guarded('É uma unidade específica.', history, commercial);
+  assert.equal(result.source, 'crm');
+  assert.match(result.reply, /unidade específica: a 1601 do Flow Aptos/);
+  assert.match(result.reply, /1\.000\.000,20/);
+  assert.doesNotMatch(result.reply, /unidade 800|1602|1603/);
+  assert.equal((result.reply.match(/R\$/g) ?? []).length, 1);
+  assert.equal(guarded(result.reply, history, commercial).reply, result.reply);
+});
+
+test('A changed current price is quoted with a correction, never copied from history', () => {
+  const result = guarded('Sim, o mesmo valor de antes.', scopeHistory(), threeOffers({ ...offer, valor: 1_050_000.25 }));
+  assert.equal(result.source, 'crm');
+  assert.match(result.reply, /valor informado antes não corresponde à consulta atual/i);
+  assert.match(result.reply, /1\.050\.000,25/);
+  assert.doesNotMatch(result.reply, /1\.000\.000,20/);
+});
+
+test('A scope clarification cannot quote from missing, stale, expired, blocked or unrelated data', () => {
+  for (const commercial of [
+    null,
+    context({ consulted_at: '2026-11-04T17:54:59Z' }),
+    threeOffers({ ...offer, validade_tabela: '2026-11-03' }),
+    context({ status: 'blocked', blocked_reason: 'corretor' }),
+    context({ calls: [range] }),
+    context({ calls: [call({ ...offer, unidade: '1602' }, { empreendimento: 'flow', unidade: '1602' })] }),
+  ]) noOffer(guarded('É a unidade 1601 por R$ 1.000.000,20.', scopeHistory(), commercial));
+});
+
+test('A scope clarification never chooses among ambiguous units or inherits another project', () => {
+  for (const history of [
+    scopeHistory('No Flow, as unidades 1601 e 1602 custam R$ 1 milhão e R$ 1,1 milhão.'),
+    scopeHistory('No Flow, a unidade 1601 custa R$ 1 milhão. Já a 1602 custa R$ 1,1 milhão.'),
+    scopeHistory('No Flow, a unidade 1601 custa R$ 1 milhão. Outra opção é o 1602.'),
+    scopeHistory('No Flow, a unidade 1601 custa R$ 1 milhão e outra opção é 1602.'),
+    scopeHistory('No Flow, a unidade 1601 custa R$ 1 milhão. Alternativa: um duplex.'),
+    scopeHistory('No Flow, a unidade 1601 custa R$ 1 milhão, e a 1602 também está disponível.'),
+    scopeHistory('No Flow, a unidade 1601 custa R$ 1 milhão e a 1602 também está disponível.'),
+    scopeHistory('No Flow, você pode ver a unidade 1601 ou a 1602 por R$ 1 milhão.'),
+    scopeHistory('No Flow e no Alma, a unidade 1601 custa R$ 1 milhão.'),
+    scopeHistory('O Flow começa em R$ 1 milhão.'),
+    scopeHistory('No Alma, a unidade 1601 custa R$ 1 milhão.'),
+    scopeHistory(undefined, `Estou falando do Alma. ${scopeQuestion}`),
+  ]) noOffer(guarded('É uma unidade específica.', history, threeOffers()));
+  const currentAlma = context({ calls: [call({ ...offer, empreendimento: 'Alma Seahouses', empreendimento_id: 'alma-id', unidade_id: 'alma-1601' }, { empreendimento: 'alma', unidade: '1601' })] });
+  noOffer(guarded('É a mesma unidade 1601.', scopeHistory(undefined, `Estou falando do Alma. ${scopeQuestion}`), currentAlma));
 });
 
 console.log(`Nara commercial guard: ${passed} scenarios passed (synthetic data, no external calls).`);
