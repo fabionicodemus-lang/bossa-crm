@@ -11,7 +11,7 @@ import { asksProtectedCommercialDetail, isGeneralPriceRangeReply } from './nara-
 import type { NaraCommercialTurnContext } from './nara-unit-queries';
 import { adDevelopment, adOriginInstruction } from './nara-first-message';
 import type { Lead } from './types';
-import { declaredFirstName, declinedTopics, qualificationPaused } from './nara-conversation-signals';
+import { declaredFirstName, declinedTopics, enterpriseInFocus, purchaseIntent, refusesHandoff, qualificationPaused } from './nara-conversation-signals';
 
 export interface AiFileOption {
   id: string;
@@ -869,6 +869,46 @@ export async function enforceNaraReplyGuardrails(
   }
   const protectedReply = protectNaraCommercialReply(turn.reply, history, context.commercial, { enterprise: lead.enterprise });
   turn.reply = protectedReply.reply;
+  const lastQuestion = [...history].reverse().find((item) => item.role === 'user')?.content ?? '';
+  const normalizedQuestion = lastQuestion.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
+  const requestedPrice = /\b(?:preco|valor|quanto custa|quanto fica|tabela|mensal|parcelas?|entrada|juros|desconto|pagamento|financiamento)\b/.test(normalizedQuestion);
+  // Um trecho financeiro inseguro não pode transformar uma pergunta sobre
+  // entrega/lazer em "não consegui confirmar o preço". Recupere somente os
+  // fatos institucionais verificados, sem reaproveitar o valor descartado.
+  if (lead.kind === 'cliente' && protectedReply.source === 'unconfirmed' && !requestedPrice
+    && enterpriseInFocus(history) === 'flow') {
+    const asksDelivery = /\b(?:quando (?:fica pronto|entrega|sera entregue)|prazo de entrega|previsao de entrega|entrega prevista)\b/.test(normalizedQuestion);
+    const asksLeisure = /\b(?:lazer|areas comuns|rooftop)\b/.test(normalizedQuestion);
+    if (asksDelivery || asksLeisure) {
+      turn.reply = [
+        asksDelivery ? 'O Flow tem entrega prevista para novembro de 2027.' : '',
+        asksLeisure ? 'O projeto tem áreas de lazer em dois pavimentos e rooftop.' : '',
+      ].filter(Boolean).join(' ');
+    }
+  }
+  // Pedidos de reserva do Alma podem seguir para avaliação, porém nunca são
+  // promessa de unidade/preço bloqueados nem de registro em prazo estimado.
+  const asksAlmaReservationGuarantee = enterpriseInFocus(history) === 'alma'
+    && /\b(?:quero reservar|gostaria de reservar|pedido de reserva|fazer (?:uma )?reserva)\b/.test(normalizedQuestion)
+    && /\b(?:garant\w*|registro|incorporacao|prazo documental)\b/.test(normalizedQuestion);
+  if (lead.kind === 'cliente' && asksAlmaReservationGuarantee) {
+    turn.reply = 'Você pode solicitar uma reserva do Alma, mas não consigo garantir o preço de hoje, uma unidade reservada ou que o registro saia nas próximas semanas. A Taís do comercial precisa confirmar as condições e a situação documental atual antes de assumir qualquer compromisso. Vou chamá-la para avaliar seu pedido.';
+    turn.handoff = true;
+  }
+  // A blindagem comercial pode substituir uma resposta que incluía o próximo
+  // passo. Preserve o encaminhamento pedido por quem realmente quer fechar.
+  const alreadyAcknowledgedHandoff = /\b(?:chamando|chamar|acionando|acionar|encaminh\w*|direcion\w*|passando|conectar|contato com o comercial|contactando|llamando|connecting)\b/i.test(turn.reply);
+  if (lead.kind === 'cliente' && turn.handoff && purchaseIntent(lastQuestion)
+    && !refusesHandoff(lastQuestion) && !alreadyAcknowledgedHandoff) {
+    const language = naraConversationLanguage(history);
+    const focus = enterpriseInFocus(history);
+    const action = language === 'es'
+      ? `Voy a llamar a Taís, del equipo comercial, para confirmar la disponibilidad y avanzar contigo.${focus ? '' : ' ¿Cuál de los proyectos te interesa más?'}`
+      : language === 'en'
+        ? `I'll ask Taís from our sales team to confirm availability and help with the next steps.${focus ? '' : ' Which development interests you most?'}`
+        : `Vou chamar a Taís do comercial para confirmar a disponibilidade e avançar com você.${focus ? '' : ' Qual empreendimento te interessou mais?'}`;
+    turn.reply = `${turn.reply.trim()}\n\n${action}`;
+  }
   // Never fabricate a recent sale/reservation, even when the quoted price is valid.
   if (hasForbiddenScarcityClaim(turn.reply)) {
     const language = naraConversationLanguage(history);
