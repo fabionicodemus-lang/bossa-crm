@@ -1,6 +1,7 @@
 import type { AiTurn } from './ai';
 import { enterpriseInFocus, explicitHumanRequest, financialNegotiationIntent, normalizeSignalText, refusesHandoff } from './nara-conversation-signals';
 import { naraConversationLanguage } from './nara-language';
+import { naraApprovedLocationReply } from './nara-approved-locations';
 
 type ChatMessage = { role: 'user' | 'assistant'; content: string };
 
@@ -20,6 +21,7 @@ export function applyNaraFinancialHandoff(turn: AiTurn, history: ChatMessage[]):
   const proposal = /\b(?:proposta|propuesta|offer|proposal|contraproposta|negoci\w*|desconto|discount|permuta|troca)\b/.test(topic);
   const subject = proposal ? 'sua proposta' : 'a entrada e as condições de pagamento';
   const refused = refusesHandoff(latest) && !explicitHumanRequest(latest);
+  const locationReply = naraApprovedLocationReply(history);
 
   if (refused) {
     turn.handoff = false;
@@ -31,6 +33,7 @@ export function applyNaraFinancialHandoff(turn: AiTurn, history: ChatMessage[]):
       : language === 'en'
         ? 'Understood—we can keep chatting without transferring you. The down payment and payment terms need confirmation from our sales team; I cannot approve them here. I can still help with information about the development.'
         : 'Entendido, seguimos por mensagem sem te encaminhar. Entrada e condições de pagamento precisam de confirmação do comercial; não consigo aprová-las por aqui. Posso continuar te ajudando com as informações do empreendimento.';
+    if (locationReply) turn.reply = `${turn.reply}\n\n${locationReply}`;
     turn.next_action = 'Respeitar a recusa de atendimento humano; não negociar nem aprovar condições. Continuar apenas com informações gerais solicitadas.';
     return true;
   }
@@ -46,6 +49,9 @@ export function applyNaraFinancialHandoff(turn: AiTurn, history: ChatMessage[]):
     : language === 'en'
       ? `I'll ask our sales team to ${proposal ? 'review your proposal' : 'confirm the down payment and payment terms'}${project ? ` for ${project}` : ''}. The team can continue here with the context of our conversation, so you won't need to start over.`
       : `Vou chamar nossa equipe comercial para ${proposal ? 'avaliar' : 'confirmar'} ${subject}${project ? ` do ${project}` : ''} com você. O atendimento continua por aqui com o contexto da nossa conversa, sem você precisar começar do zero.`;
+  // Rebuild only from approved facts so repeated final guards cannot erase a
+  // mixed question or retain an unsafe approval from the model's earlier text.
+  if (locationReply) turn.reply = `${turn.reply}\n\n${locationReply}`;
   // Rebuild the briefing only from the client's messages. Never recycle a
   // model-generated summary or an older assistant offer as commercial evidence.
   // A bounded source-based rebuild is also idempotent across repeated gates.

@@ -78,10 +78,15 @@ export function optOutSignal(text: string) {
   const bare = value.replace(/[^\p{L}\p{N}\s]/gu, ' ').replace(/\s+/g, ' ').trim();
 
   if (['stop', 'nao quero receber', 'para de mandar', 'pare de mandar', 'para de me mandar', 'pare de me mandar'].includes(bare)) return true;
-  if (/\b(?:por favor\s+)?nao me mande mais(?:\s+(?:mensage(?:m|ns)|contato|nada|propaganda|whatsapp))?\b/.test(value)) return true;
-  if (/\bnao quero receber(?: mais)?\s+(?:mensage(?:m|ns)|contato|nada|propaganda|whatsapp)\b/.test(value)) return true;
+  if (/\b(?:por favor\s+)?nao me mande mais(?:\s+(?:mensage(?:m|ns)|contato|nada|propaganda|whatsapp)\b|\s*(?:[.!?,;]|$))/.test(value)) return true;
+  if (/\bnao quero(?: mais)? receber(?: mais)?\s+(?:mensage(?:m|ns)|contato|nada|propaganda|whatsapp)\b/.test(value)) return true;
   if (/\b(?:para|pare) de (?:me )?mandar(?: mais)?\s+(?:mensage(?:m|ns)|contato|nada|propaganda|whatsapp)\b/.test(value)) return true;
-  return /\b(me tira da lista|tira meu numero|remova meu numero|sair da lista|descadastr|cancele as mensagens)\b/.test(value);
+  // Only removal from communications (or a bare removal request) is an opt-out.
+  // Editing a phone/contact in a proposal is not. A negated removal is not consent
+  // withdrawal either; a later affirmative clause can still explicitly opt out.
+  const removals = /\b(?:me (?:tira|tire) da lista|(?:tira|tire|remova|retire|exclua) (?:o )?meu (?:numero|telefone|contato)(?=\s+(?:d[ao]s?|de)\s+(?:(?:proxim[oa]s?|futur[oa]s?)\s+)?(?:envios?|listas?|mensage(?:m|ns)|contatos?|campanhas?|transmissoes?|cadastro|whatsapp)\b|\s*(?:por favor\s*)?(?:[.!?,;]|$))|sair da lista|descadastr|cancele as mensagens)\b/g;
+  const negatedRemoval = /\b(?:nao|nem|nunca|jamais)\s+(?:(?:quero|queremos|queria|desejo|preciso|precisa|mais|e|para|que|voce|voces|me|por|favor|de)\s+){0,6}$/;
+  return [...value.matchAll(removals)].some((match) => !negatedRemoval.test(value.slice(0, match.index)));
 }
 function closedWonSignal(text: string) {
   return /\b(fechei com a bossa|fechamos (?:a|o|uma|um) unidade|negocio com a bossa fechado|contrato da bossa assinado|assinei o contrato da bossa|venda concluida pela bossa)\b/.test(normalize(text));

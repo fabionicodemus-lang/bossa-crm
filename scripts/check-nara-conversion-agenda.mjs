@@ -447,6 +447,23 @@ await check('Passagem financeira sobrevive à última reconsulta de preço antes
   assert.match(turn.reply, /Vou chamar nossa equipe comercial/);
   assert.doesNotMatch(turn.reply, /R\$|80\s*[x×]|200\.000|encaminhado|foi transferid/i);
   assert.deepEqual(buildNaraOfferAuditRecords(turn.reply, commercial), []);
+
+  // The same final boundary must retain the approved answer to a mixed
+  // location question, never the model's factual claim or payment approval.
+  const mixedHistory = [user('Qual é a entrada da unidade 1601 do Flow? E quantos metros fica do mar?')];
+  const mixed = { reply: 'Condição aprovada. O Flow fica a 50 m do mar.', handoff: false, stage: 'ia', classification: 'morno', score: 40 };
+  applyNaraFinancialHandoff(mixed, mixedHistory);
+  const refreshed = protectNaraCommercialReply(mixed.reply, mixedHistory, commercial);
+  mixed.reply = refreshed.reply;
+  applyNaraFinancialHandoff(mixed, mixedHistory);
+  assert.equal(mixed.handoff, true);
+  assert.match(mixed.reply, /Vou chamar nossa equipe comercial/);
+  assert.match(mixed.reply, /800 m do mar/);
+  assert.doesNotMatch(mixed.reply, /R\$|80\s*[x×]|200\.000|50 m|aprovad|encaminhado|foi transferid/i);
+  assert.deepEqual(buildNaraOfferAuditRecords(mixed.reply, commercial), []);
+  const once = structuredClone(mixed);
+  applyNaraFinancialHandoff(mixed, mixedHistory);
+  assert.deepEqual(mixed, once);
 });
 
 await check('Recusa de contato continua respeitada depois da reconsulta final', () => {
