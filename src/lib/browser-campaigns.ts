@@ -34,7 +34,10 @@ export function hasBrowserRecipientNameToken(value: string) {
 
 export function browserRecipientFirstName(name: string | null | undefined): string | null {
   const firstName = String(name ?? '').trim().split(/\s+/)[0]?.slice(0, 60) ?? '';
-  if (!firstName || /^(?:n[aã]o|sem|corretor(?:a)?|imobili[aá]ria|grupo|equipe|construtora|atendimento|contato|desconhecid[oa]|cliente)$/i.test(firstName))
+  // Identificadores de importação ("Lead #123", telefone como nome etc.) não são
+  // prenomes. Nunca enviá-los como se fossem uma saudação personalizada.
+  if (!/^[\p{L}][\p{L}\p{M}'’-]{1,59}$/u.test(firstName)
+    || /^(?:n[aã]o|sem|corretor(?:a)?|imobili[aá]ria|grupo|equipe|construtora|atendimento|contato|desconhecid[oa]|cliente|lead|cadastro|telefone|celular|n[uú]mero|whatsapp|usu[aá]rio|teste)$/i.test(firstName))
     return null;
   return firstName;
 }
