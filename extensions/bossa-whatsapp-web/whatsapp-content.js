@@ -13,6 +13,18 @@
     return rect.width > 0 && rect.height > 0 && style.visibility !== 'hidden' && style.display !== 'none';
   };
   const text = (node) => String(node?.innerText ?? node?.textContent ?? '').trim();
+  const normalizedMessage = (value) => String(value ?? '')
+    .normalize('NFC')
+    // O editor pode inserir marcas bidi e espaços não separáveis sem alterar
+    // o texto visível. Nunca remover ZWJ/variantes que fazem parte de emojis.
+    .replace(/[\u200e\u200f\u061c\u2066-\u2069\ufeff]/g, '')
+    .replace(/[\u00a0\u202f]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const editorMatches = (node, expected) => {
+    const approved = normalizedMessage(expected);
+    return [node?.innerText, node?.textContent].some((value) => normalizedMessage(value) === approved);
+  };
   const phoneTokens = (value) => (String(value).match(/\+?\d[\d\s().-]{6,}\d/g) ?? []).map(digits);
 
   const waitFor = async (predicate, timeout = 30000) => {
@@ -89,7 +101,7 @@
     // recebidas. Nunca registrar uma mensagem de terceiro como nosso envio.
     return bubbles.some((bubble) => !before.has(bubble) && visible(bubble)
       && (bubble.classList.contains('message-out') || Boolean(bubble.querySelector('[data-testid="tail-out"]')))
-      && text(bubble).includes(expectedText));
+      && normalizedMessage(text(bubble)).includes(normalizedMessage(expectedText)));
   }
 
   async function sendText(message) {
@@ -100,8 +112,13 @@
     input.focus();
     if (!document.execCommand('insertText', false, message))
       throw new Error('O WhatsApp não aceitou a digitação nesta versão.');
-    if (text(input).replace(/\s+/g, ' ') !== message.trim().replace(/\s+/g, ' '))
-      throw new Error('O texto inserido não corresponde à mensagem aprovada.');
+    // A composição de textos longos e multilinha pode re-renderizar o DOM
+    // alguns instantes depois do insertText. Só liberar o clique se a cópia
+    // integral e normalizada estiver presente; diferenças reais falham fechadas.
+    if (!(await waitFor(() => editorMatches(input, message), 8000))) {
+      const observed = normalizedMessage(input.innerText).length;
+      throw new Error(`O texto inserido não corresponde à mensagem aprovada (${observed}/${normalizedMessage(message).length} caracteres). Nenhum clique de envio foi realizado.`);
+    }
     const send = await waitFor(() => findSendButton(main()?.querySelector('footer') ?? document), 5000);
     if (!send) throw new Error('Botão Enviar indisponível.');
     send.click();
@@ -130,13 +147,21 @@
     if (!attachIcon) throw new Error('Botão Anexar indisponível nesta versão do WhatsApp Web.');
     (attachIcon.closest('button,[role="button"]') ?? attachIcon).click();
 
+    // No WhatsApp Web atual, "Anexar" abre um menu. Escolher explicitamente
+    // "Documento" é necessário antes de existir um seletor que aceite PDFs.
+    const documentItem = await waitFor(() => [...document.querySelectorAll('[role="menuitem"]')]
+      .find((node) => visible(node) && /^(?:Documento|Document)$/i.test(node.getAttribute('aria-label') ?? text(node))), 6000);
+    if (!documentItem) throw new Error('Opção Documento não encontrada no menu de anexos. Nenhum PDF foi enviado.');
+    documentItem.click();
+
     const fileInput = await waitFor(() => [...document.querySelectorAll('input[type="file"]')]
       .find((node) => {
         const accepts = node.getAttribute('accept') ?? '';
-        // image/* não é genérico: usar esse input com um PDF pode gerar
-        // uma prévia incorreta ou uma tentativa que pareça bem-sucedida.
-        return accepts.includes('application/pdf') || accepts === '' || accepts === '*/*';
-      }), 6000);
+        // O seletor de "Documento" apresenta accept="*" nesta versão.
+        // Nunca aceitar image/*; só procurar este input APÓS escolher Documento.
+        return accepts.includes('application/pdf') || accepts.includes('.pdf')
+          || accepts === '' || accepts === '*' || accepts === '*/*';
+      }), 8000);
     if (!fileInput) throw new Error('O seletor de documentos não está disponível nesta versão do WhatsApp Web. Anexe o PDF manualmente e confira o contato antes de prosseguir.');
     const transfer = new DataTransfer();
     transfer.items.add(file);
@@ -158,7 +183,10 @@
 
   let busy = false;
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-    if (message?.type === 'PING') { sendResponse({ ready: true }); return false; }
+    if (message?.type === 'PING') {
+      sendResponse({ ready: true, conversationReady: visible(header()) && visible(composer()) });
+      return false;
+    }
     if (message?.type !== 'SEND_ITEM') return false;
     if (busy) { sendResponse({ state: 'uncertain', detail: 'Outra etapa ainda está em execução nesta aba.' }); return false; }
     const payload = message.payload ?? {};

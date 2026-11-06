@@ -18,8 +18,10 @@ async function getWhatsAppTab() {
 async function waitContentScript(tabId) {
   for (let attempt = 0; attempt < 50; attempt++) {
     try {
+      const tab = await chrome.tabs.get(tabId);
+      if (tab?.status !== 'complete') { await sleep(1200); continue; }
       const result = await chrome.tabs.sendMessage(tabId, { type: 'PING' });
-      if (result?.ready) return;
+      if (result?.ready && result?.conversationReady) return;
     } catch { /* O WhatsApp ainda está carregando. */ }
     await sleep(1200);
   }
@@ -55,7 +57,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return false;
   }
   if (message.type === 'PING') {
-    sendResponse({ result: { state: 'observed', detail: 'Extensão instalada.' } });
+    sendResponse({ result: { state: 'observed', detail: 'Extensão instalada.', version: chrome.runtime.getManifest().version } });
     return false;
   }
   if (message.type !== 'SEND_ITEM') {
