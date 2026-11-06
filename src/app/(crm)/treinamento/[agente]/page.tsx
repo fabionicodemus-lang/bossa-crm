@@ -654,7 +654,7 @@ async function restorePromptVersion(version: PromptVersion) {
         <section className="card whatsapp-panel">
           <div className="wa-head">
             <div className="wa-icon">💬</div>
-            <div><strong>Conversa de treino</strong><div className="faint" style={{ fontSize: 10 }}>{isNara ? 'Testa o conteúdo atual do prompt, mesmo antes de salvar.' : 'Você interpreta o corretor e avalia a resposta.'}</div></div>
+            <div><strong>Conversa de treino</strong><div className="faint" style={{ fontSize: 10 }}>{isNara ? 'Testa o prompt, mesmo antes de salvar. Não envia WhatsApp nem registra agendamentos reais.' : 'Você interpreta o corretor e avalia a resposta.'}</div></div>
             <span className="connection-pill" title={isNara ? 'Comparação sem fallback. O modelo escolhido vale somente para o simulador.' : (ai?.configured ? 'Fallback: ' + (ai.fallback_model || 'não configurado') : undefined)}>{ai?.configured ? 'OPENAI · ' + (isNara ? simulationModel : ai.model) : 'SEM API'}</span>
           </div>
           <div className="messages">
