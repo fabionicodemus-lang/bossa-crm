@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { campaignRecipientSummary, type BrowserCampaignMedia, type BrowserRecipientStatus } from '@/lib/browser-campaigns';
+import { campaignRecipientSummary, hasBrowserRecipientNameToken, personalizeBrowserText, type BrowserCampaignMedia, type BrowserRecipientStatus } from '@/lib/browser-campaigns';
 import styles from './BrowserCampaignManager.module.css';
 
 type Contact = { id: string; name: string; phone: string; stage: string; company: string | null; enterprise: string | null };
@@ -30,6 +30,18 @@ const statusLabels: Record<string, string> = {
   completed: 'Concluída', cancelled: 'Cancelada',
   queued: 'Na fila', claimed: 'Reservado', sent: 'Observado na tela', uncertain: 'Conferir', skipped: 'Ignorado',
 };
+
+function renderWhatsAppFormatting(value: string) {
+  return value.split(/(\*[^*\n]+\*|_[^_\n]+_|~[^~\n]+~)/g).map((part, index) => {
+    if (part.length > 2 && part.startsWith('*') && part.endsWith('*'))
+      return <strong key={index}>{part.slice(1, -1)}</strong>;
+    if (part.length > 2 && part.startsWith('_') && part.endsWith('_'))
+      return <em key={index}>{part.slice(1, -1)}</em>;
+    if (part.length > 2 && part.startsWith('~') && part.endsWith('~'))
+      return <s key={index}>{part.slice(1, -1)}</s>;
+    return part;
+  });
+}
 
 async function jsonRequest<T>(url: string, options?: RequestInit): Promise<T> {
   const response = await fetch(url, options);
@@ -90,6 +102,8 @@ export function BrowserCampaignManager({ organizationId, canEdit }: { organizati
   const [notice, setNotice] = useState('');
   const [progress, setProgress] = useState('');
   const [batchLimit, setBatchLimit] = useState<1 | 5 | 25>(1);
+  const [previewVersion, setPreviewVersion] = useState(0);
+  const [previewContactId, setPreviewContactId] = useState('');
   const stopRef = useRef(false);
   const mountedRef = useRef(true);
   const runningRef = useRef(false);
@@ -124,6 +138,20 @@ export function BrowserCampaignManager({ organizationId, canEdit }: { organizati
       && (!term || [row.name, row.phone, row.company, row.enterprise].some((value) => String(value ?? '').toLocaleLowerCase('pt-BR').includes(term)));
   }), [contacts, filter, stage]);
   const summary = useMemo(() => campaignRecipientSummary(recipients), [recipients]);
+  const selectedContacts = useMemo(() => contacts.filter((contact) => selected.has(contact.id)), [contacts, selected]);
+  const previewContact = selectedContacts.find((contact) => contact.id === previewContactId)
+    ?? selectedContacts[0] ?? null;
+  const previewTemplate = previewVersion === 0 ? baseText : variants[previewVersion - 1] ?? baseText;
+  const missingNameToken = !hasBrowserRecipientNameToken(baseText)
+    || variants.some((value) => !hasBrowserRecipientNameToken(value));
+  const previewText = useMemo(() => {
+    if (!hasBrowserRecipientNameToken(previewTemplate)) return previewTemplate;
+    try {
+      return personalizeBrowserText(previewTemplate, previewContact ?? {
+        name: 'Marina', company: 'Imobiliária Exemplo', enterprise: 'Flow Aptos',
+      });
+    } catch { return previewTemplate; }
+  }, [previewTemplate, previewContact]);
 
   async function openCreate() {
     setMode('create'); setError(''); setNotice('');
@@ -201,6 +229,7 @@ export function BrowserCampaignManager({ organizationId, canEdit }: { organizati
     try {
       const result = await mutation<{ variants: string[] }>(`${API}/variacoes`, { baseText });
       setVariants(result.variants);
+      setPreviewVersion(1);
       setNotice('Quatro versões criadas. Leia todas antes de preparar a campanha.');
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'A IA não respondeu.'); }
     finally { setBusy(false); }
@@ -389,11 +418,57 @@ export function BrowserCampaignManager({ organizationId, canEdit }: { organizati
           <div className="field"><label>Nome interno da campanha</label><input value={name} maxLength={160} onChange={(e) => setName(e.target.value)} /></div>
           <div className="field"><label>Número do WhatsApp aberto no Chrome (com DDI)</label><input value={senderPhone} placeholder="5547999999999" inputMode="tel" onChange={(e) => setSenderPhone(e.target.value)} /></div>
         </div>
-        <div className="field"><label>Mensagem para os corretores</label><textarea rows={6} maxLength={4000} value={baseText} onChange={(e) => { setBaseText(e.target.value); setVariants([]); }} />
-          <small>Use {'{{nome}}'}, {'{{imobiliaria}}'} ou {'{{empreendimento}}'} para preencher com os dados do CRM.</small></div>
-        <div className={styles.actions}><button className="btn btn-secondary btn-sm" disabled={busy || !baseText.trim()} onClick={() => void generateVariations()}>{busy ? 'Aguarde...' : '✨ Gerar 4 variações com IA'}</button>
-          {variants.length > 0 && <button className="btn btn-ghost btn-sm" onClick={() => setVariants([])}>Remover variações</button>}</div>
-        {variants.map((value, index) => <div className="field" key={index}><label>Variação {index + 1} — revise e edite</label><textarea rows={4} maxLength={4000} value={value} onChange={(e) => setVariants((old) => old.map((text, position) => position === index ? e.target.value : text))} /></div>)}
+        <div className={styles.composeAndPreview}>
+          <div className={styles.composerFields}>
+            <div className="field"><label>Mensagem para os corretores</label>
+              <textarea rows={7} maxLength={4000} value={baseText} onFocus={() => setPreviewVersion(0)}
+                onChange={(e) => { setBaseText(e.target.value); setVariants([]); setPreviewVersion(0); }} />
+              <small><strong>{'{{nome}}'} é obrigatório.</strong> O CRM substitui pelo primeiro nome de cada corretor. Você também pode usar {'{{imobiliaria}}'} e {'{{empreendimento}}'}.</small>
+              {!hasBrowserRecipientNameToken(baseText) && <span className={styles.tokenAlert}>Inclua {'{{nome}}'} na mensagem para continuar.</span>}
+            </div>
+            <div className={styles.actions}><button className="btn btn-secondary btn-sm" disabled={busy || !baseText.trim() || !hasBrowserRecipientNameToken(baseText)} onClick={() => void generateVariations()}>{busy ? 'Aguarde...' : '✨ Gerar 4 variações com IA'}</button>
+              {variants.length > 0 && <button className="btn btn-ghost btn-sm" onClick={() => { setVariants([]); setPreviewVersion(0); }}>Remover variações</button>}</div>
+            {variants.map((value, index) => <div className="field" key={index}><label>Variação {index + 1} — revise e edite</label>
+              <textarea rows={4} maxLength={4000} value={value} onFocus={() => setPreviewVersion(index + 1)}
+                onChange={(e) => setVariants((old) => old.map((message, position) => position === index ? e.target.value : message))} />
+              {!hasBrowserRecipientNameToken(value) && <small className={styles.tokenAlert}>Esta variação também precisa conter {'{{nome}}'}.</small>}
+            </div>)}
+          </div>
+          <aside className={styles.whatsappPreview} aria-label="Prévia da mensagem no WhatsApp">
+            <div className={styles.previewHeader}>
+              <span className={styles.previewAvatar}>B</span>
+              <span><strong>{previewContact?.name || 'Marina — exemplo'}</strong><small>Prévia do WhatsApp · mensagem enviada</small></span>
+              <span className={styles.previewHeaderIcon} aria-hidden="true">⋮</span>
+            </div>
+            <div className={styles.previewOptions}>
+              <button type="button" aria-pressed={previewVersion === 0} className={previewVersion === 0 ? styles.previewOptionActive : ''} onClick={() => setPreviewVersion(0)}>Texto original</button>
+              {variants.map((_, index) => <button type="button" key={index} aria-pressed={previewVersion === index + 1}
+                className={previewVersion === index + 1 ? styles.previewOptionActive : ''}
+                onClick={() => setPreviewVersion(index + 1)}>Versão {index + 1}</button>)}
+            </div>
+            <div className={styles.previewChat}>
+              <span className={styles.previewDay}>Hoje</span>
+              <div className={styles.previewBubble}>
+                <div className={styles.previewMessageText}>{previewText ? renderWhatsAppFormatting(previewText) : 'Sua mensagem aparecerá aqui.'}</div>
+                <div className={styles.previewTime}>12:00 <span aria-hidden="true">✓✓</span></div>
+              </div>
+              {media.map((file) => <div className={styles.previewFileBubble} key={file.path}>
+                <span className={styles.previewFileIcon} aria-hidden="true">PDF</span>
+                <span className={styles.previewFileName}>{file.filename}<small>{(file.size / 1048576).toFixed(1)} MB · Documento</small></span>
+                <span className={styles.previewTime}>12:00 ✓✓</span>
+              </div>)}
+            </div>
+            <div className={styles.previewFooter}>
+              <div className={styles.previewFakeInput}><span aria-hidden="true">＋</span> Mensagem <span aria-hidden="true">➤</span></div>
+              {selectedContacts.length > 0 && <label>Ver como ficará para
+                <select aria-label="Contato da prévia" value={previewContact?.id ?? ''} onChange={(e) => setPreviewContactId(e.target.value)}>
+                  {selectedContacts.map((contact) => <option value={contact.id} key={contact.id}>{contact.name}</option>)}
+                </select>
+              </label>}
+              <small>{previewContact ? 'Prévia com o nome real selecionado.' : 'Selecione corretores abaixo para ver a personalização real.'} O horário e os indicadores são ilustrativos.</small>
+            </div>
+          </aside>
+        </div>
       </div></section>
       <section className="card"><div className="card-head"><h3>2. Tabelas e arquivos</h3></div><div className="card-body">
         <label className={styles.uploadButton}>📎 Selecionar PDFs <input type="file" accept="application/pdf,.pdf" multiple disabled={uploading || media.length >= 3} onChange={(e) => void uploadFile(e)} /></label>
@@ -402,7 +477,7 @@ export function BrowserCampaignManager({ organizationId, canEdit }: { organizati
         {uploading && <span>Enviando arquivos...</span>}
       </div></section>
       <section className="card"><div className="card-head"><h3>3. Corretores autorizados <span className={styles.pill}>{selected.size} selecionados</span></h3></div><div className="card-body">
-        <p className={styles.muted}>{contactsTotal} corretores elegíveis no CRM. Contatos sem telefone, com opt-out, pausados ou com identidade conflitante são excluídos.{contactsTruncated && ' A lista exibe os 2.500 primeiros; refine a segmentação da base para ver os demais.'}</p>
+        <p className={styles.muted}>{contactsTotal} corretores com celular válido e primeiro nome para personalização. A pausa da Nara não exclui o corretor desta lista; exclusão explícita e conflitos de identidade continuam sendo respeitados.{contactsTruncated && ' A lista exibe os 2.500 primeiros; refine a segmentação da base para ver os demais.'}</p>
         <div className={styles.filters}><input aria-label="Buscar corretor" placeholder="Buscar nome, telefone, imobiliária..." value={filter} onChange={(e) => setFilter(e.target.value)} />
           <select aria-label="Filtrar etapa" value={stage} onChange={(e) => setStage(e.target.value)}><option value="">Todas as etapas</option>{stages.map((item) => <option key={item} value={item}>{item}</option>)}</select>
           <button className="btn btn-secondary btn-sm" onClick={toggleVisible}>Selecionar/desmarcar filtro ({visible.length})</button></div>
@@ -411,7 +486,7 @@ export function BrowserCampaignManager({ organizationId, canEdit }: { organizati
           <span><strong>{lead.name}</strong><small>{lead.company || lead.enterprise || lead.stage} · +{lead.phone}</small></span>
         </label>)}</div>
         {visible.length > 250 && <p className={styles.muted}>Exibindo 250 de {visible.length} contatos filtrados. O botão “Selecionar filtro” inclui até 600.</p>}
-        <div className={styles.actions}><button className="btn btn-primary" disabled={busy || uploading || !selected.size || !senderPhone || !baseText.trim()} onClick={() => void createCampaign()}>{busy ? 'Preparando...' : `Criar rascunho com ${selected.size} corretores`}</button></div>
+        <div className={styles.actions}><button className="btn btn-primary" disabled={busy || uploading || !selected.size || !senderPhone || !baseText.trim() || missingNameToken} onClick={() => void createCampaign()}>{busy ? 'Preparando...' : `Criar rascunho com ${selected.size} corretores`}</button></div>
       </div></section>
     </>}
 

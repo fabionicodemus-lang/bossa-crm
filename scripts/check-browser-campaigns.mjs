@@ -3,7 +3,8 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import vm from 'node:vm';
 import {
-  campaignRecipientSummary, personalizeBrowserText, safeBrowserMedia, validBrowserPhone,
+  browserRecipientFirstName, campaignRecipientSummary, hasBrowserRecipientNameToken,
+  personalizeBrowserText, safeBrowserMedia, validBrowserMobilePhone, validBrowserPhone,
 } from '../src/lib/browser-campaigns.ts';
 
 const root = resolve(import.meta.dirname, '..');
@@ -17,9 +18,21 @@ assert.equal(validBrowserPhone('(47) 99933-3634'), '5547999333634');
 assert.equal(validBrowserPhone('+1 415 555 0135'), '14155550135');
 assert.equal(validBrowserPhone('555'), null);
 assert.equal(validBrowserPhone('0000000000'), null);
+assert.equal(validBrowserMobilePhone('(47) 99933-3634'), '5547999333634');
+assert.equal(validBrowserMobilePhone('554799333634'), '554799333634', 'wa_id brasileiro legado sem nono dígito');
+assert.equal(validBrowserMobilePhone('(47) 3333-4444'), null, 'telefone fixo não é celular');
+assert.equal(validBrowserMobilePhone('999333634'), null, 'número sem DDD não é destinatário válido');
+assert.equal(validBrowserMobilePhone('55 47 99933-3634 / 55 47 98888-1234'), null, 'não escolher entre dois telefones do mesmo campo');
+assert.equal(browserRecipientFirstName('Maria Silva'), 'Maria');
+assert.equal(browserRecipientFirstName('Não informada'), null, 'cadastro genérico precisa de nome válido');
+assert.equal(browserRecipientFirstName('Imobiliária do Vale'), null, 'empresa não é primeiro nome de uma pessoa');
+assert.equal(hasBrowserRecipientNameToken('Olá, {{Nome}}!'), true);
+assert.equal(hasBrowserRecipientNameToken('Olá, pessoal!'), false);
 assert.equal(personalizeBrowserText('Oi, {{nome}} da {{imobiliaria}}. Veja {{empreendimento}}!', {
   name: 'Maria Silva', company: 'Corretora Sul', enterprise: 'Bossa Mar',
 }), 'Oi, Maria da Corretora Sul. Veja Bossa Mar!');
+assert.throws(() => personalizeBrowserText('Olá!', { name: 'Maria' }), /Inclua \{\{nome\}\}/);
+assert.throws(() => personalizeBrowserText('Olá, {{nome}}!', { name: 'Não informada' }), /primeiro nome válido/);
 assert.deepEqual(campaignRecipientSummary([
   { status: 'queued' }, { status: 'sent' }, { status: 'uncertain' }, { status: 'sent' },
 ]), { queued: 1, claimed: 0, sent: 2, uncertain: 1, skipped: 0 });
@@ -41,6 +54,11 @@ assert.match(contentScript, /\[data-testid=\"tail-out\"\]/);
 const uncertainLockMigration = readFileSync(resolve(root,
   'supabase/migrations/20261106170335_browser_campaign_uncertain_lock.sql'), 'utf8');
 assert.match(uncertainLockMigration, /requires_review\s*=\s*true/);
+
+const brokerScopeMigration = readFileSync(resolve(root,
+  'supabase/migrations/20261106172904_browser_campaign_broker_scope.sql'), 'utf8');
+assert.match(brokerScopeMigration, /l\.opt_out = true/);
+assert.doesNotMatch(brokerScopeMigration, /automation_paused/, 'a pausa da Nara não pode bloquear a fila');
 
 // Executa o content script em um DOM deliberadamente incompleto. Uma mudança
 // na interface ou um número inválido deve falhar SEM clicar em envio.
