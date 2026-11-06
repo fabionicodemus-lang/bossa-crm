@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import {
   BroadcastsManager,
   type AudienceDiagnostics,
@@ -75,6 +76,7 @@ export function BroadcastsWorkspace({
     <div className="tabs tabs-page" role="tablist">
       <button type="button" role="tab" aria-selected={tab === 'campanhas'} className={`tab ${tab === 'campanhas' ? 'on' : ''}`} onClick={() => openTab('campanhas')}>📣 Campanhas</button>
       <button type="button" role="tab" aria-selected={tab === 'modelos'} className={`tab ${tab === 'modelos' ? 'on' : ''}`} onClick={() => openTab('modelos')}>🧩 Modelos da Meta</button>
+      <Link className="tab" href="/transmissoes/navegador" style={{ textDecoration: 'none' }}>💬 Pelo navegador</Link>
     </div>
     {tab === 'campanhas'
       ? <BroadcastsManager

@@ -241,3 +241,15 @@ Teste do modelo sem enviar mensagens reais:
 - templates aprovados para mensagens fora da janela.
 
 Nunca coloque tokens, PINs, senhas ou chaves reais dentro do código ou do GitHub.
+
+## 14. Transmissão assistida pelo Chrome (piloto separado)
+
+A rota `/transmissoes/navegador` usa uma extensão Chrome para operar o WhatsApp Web **aberto no computador do operador**. Esta modalidade possui fila e tabelas próprias, sem chamar a API oficial do WhatsApp.
+
+- Migração: `supabase/migrations/20261106150629_browser_campaigns.sql`.
+- Extensão e manual de instalação para a equipe: `extensions/bossa-whatsapp-web/README.md`.
+- Gerar o ZIP público: `npm run package:browser-extension`.
+- Testes sem mensagens reais: `npm run test:browser-campaigns`.
+- Cada execução tem limite de 25 destinatários, com confirmação da campanha, exclusão de opt-outs e revisão manual de resultados incertos.
+
+**Ainda exige homologação no WhatsApp Web com contatos próprios de teste antes de ser liberado para corretores reais.** A interface pode mudar, e não existe garantia de entrega, de ausência de bloqueios ou de estabilidade dessa integração.
