@@ -69,7 +69,16 @@ function stringRecord(value: unknown): KnowledgeRecord {
 }
 
 export function isNaraFinalPrompt(value: unknown): value is string {
-  return typeof value === 'string' && value.trim().startsWith(NARA_PROMPT_MARKER);
+  // O editor antigo salvava o documento com um título simples, sem o "#".
+  // Ele era tratado como uma pergunta de triagem e nunca chegava ao modelo.
+  // Aceite apenas o título exato da primeira linha, não trechos arbitrários.
+  return typeof value === 'string'
+    && /^(?:#{1,6}[ \t]+)?PROMPT FINAL DA NARA[ \t]*(?:\r?\n|$)/i.test(value.trim());
+}
+
+function canonicalNaraPromptHeader(prompt: string): string {
+  if (!isNaraFinalPrompt(prompt)) return prompt;
+  return prompt.replace(/^(?:#{1,6}[ \t]+)?PROMPT FINAL DA NARA(?=[ \t]*(?:\r?\n|$))/i, NARA_PROMPT_MARKER);
 }
 
 function replaceLegacyScoreSection(prompt: string): string {
@@ -95,7 +104,7 @@ function addPriceAlignment(prompt: string): string {
 }
 
 export function upgradeNaraPromptPhase9(value: string): string {
-  const prompt = value.trim();
+  const prompt = canonicalNaraPromptHeader(value.trim());
   if (!isNaraFinalPrompt(prompt)) return prompt;
   return addPriceAlignment(replaceLegacyScoreSection(prompt));
 }
@@ -116,9 +125,9 @@ export function naraPromptPhase9Issues(value: string): string[] {
 export function extractNaraPrompt(value: unknown): string {
   const knowledge = stringRecord(value);
   const current = knowledge[NARA_PROMPT_STORAGE_KEY]?.trim() ?? '';
-  if (current) return current;
+  if (current) return canonicalNaraPromptHeader(current);
   const legacy = knowledge[LEGACY_NARA_PROMPT_STORAGE_KEY]?.trim() ?? '';
-  return isNaraFinalPrompt(legacy) ? legacy : '';
+  return isNaraFinalPrompt(legacy) ? canonicalNaraPromptHeader(legacy) : '';
 }
 
 export function extractMarkedTriageQuestion(prompt: string): string {
