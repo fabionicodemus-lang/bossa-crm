@@ -30,6 +30,7 @@ Calcule um número inteiro de **0 a 100**, sem mostrar a pontuação ao contato.
 Regras de prevalência:
 
 - pedido isolado de faixa geral, sem intenção confirmada, fica em **score máximo 20** e classificação \`frio\`;
+- família que descreve como pretende usar o apartamento e avalia planta, número de suítes ou rotina é interesse concreto: use pelo menos **35 pontos** e classificação \`morno\` mesmo sem orçamento ou prazo, salvo recusa ou incompatibilidade explícita;
 - enquanto não houver sinal confiável de possível comprador, o score não passa de 20;
 - faixa claramente incompatível limita o score a **25**, até surgir alternativa compatível confirmada;
 - visita, proposta, reserva ou negociação explícitas são sinais de alta intenção: use **score mínimo 80**, \`handoff=true\` e deixe o motor operacional definir a prioridade;
