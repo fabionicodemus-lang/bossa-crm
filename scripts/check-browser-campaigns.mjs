@@ -25,6 +25,7 @@ assert.equal(validBrowserMobilePhone('999333634'), null, 'número sem DDD não �
 assert.equal(validBrowserMobilePhone('55 47 99933-3634 / 55 47 98888-1234'), null, 'não escolher entre dois telefones do mesmo campo');
 assert.equal(browserRecipientFirstName('Maria Silva'), 'Maria');
 assert.equal(browserRecipientFirstName('Não informada'), null, 'cadastro genérico precisa de nome válido');
+assert.equal(browserRecipientFirstName('Imobiliária do Vale'), null, 'empresa não é primeiro nome de uma pessoa');
 assert.equal(hasBrowserRecipientNameToken('Olá, {{Nome}}!'), true);
 assert.equal(hasBrowserRecipientNameToken('Olá, pessoal!'), false);
 assert.equal(personalizeBrowserText('Oi, {{nome}} da {{imobiliaria}}. Veja {{empreendimento}}!', {
