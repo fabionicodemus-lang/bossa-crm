@@ -92,6 +92,10 @@ create policy browser_recipients_read on public.browser_campaign_recipients
 create policy browser_events_read on public.browser_campaign_events
   for select to authenticated using (private.is_org_member(organization_id));
 -- Sem concessões de escrita: alterações passam por API autenticada ou RPC verificadas.
+-- Supabase pode conceder privilégios padrão no schema public a anon/authenticated.
+-- Removê-los explicitamente; RLS sozinho não substitui REVOKE.
+revoke all on public.browser_campaigns, public.browser_campaign_recipients,
+  public.browser_campaign_events, public.browser_sender_locks from public, anon, authenticated;
 grant select on public.browser_campaigns, public.browser_campaign_recipients,
   public.browser_campaign_events to authenticated;
 
@@ -294,9 +298,13 @@ end;
 $$;
 
 revoke all on function public.browser_campaign_claim(uuid,uuid) from public;
+revoke all on function public.browser_campaign_claim(uuid,uuid) from anon, authenticated;
 revoke all on function public.browser_campaign_release_sender(uuid) from public;
+revoke all on function public.browser_campaign_release_sender(uuid) from anon, authenticated;
 revoke all on function public.browser_campaign_heartbeat(uuid,uuid,uuid) from public;
+revoke all on function public.browser_campaign_heartbeat(uuid,uuid,uuid) from anon, authenticated;
 revoke all on function public.browser_campaign_ack(uuid,uuid,uuid,integer,text,text) from public;
+revoke all on function public.browser_campaign_ack(uuid,uuid,uuid,integer,text,text) from anon, authenticated;
 grant execute on function public.browser_campaign_claim(uuid,uuid),
   public.browser_campaign_release_sender(uuid),
   public.browser_campaign_heartbeat(uuid,uuid,uuid),

@@ -25,7 +25,7 @@ O estado **Observado na tela** significa somente que o conteúdo foi visto na co
 
 ## Implantação e testes obrigatórios
 
-1. Aplicar `supabase/migrations/20261106150629_browser_campaigns.sql` em **ambiente de homologação**. O CLI Supabase v3 exige `--remote` para a base hospedada. Não aplicar automaticamente no banco de produção a partir do desenvolvimento.
+1. Aplicar `supabase/migrations/20261106150629_browser_campaigns.sql` e `20261106152945_browser_campaign_privileges.sql` em **ambiente de homologação**. O CLI Supabase v3 exige `--remote` para a base hospedada. Não aplicar automaticamente no banco de produção a partir do desenvolvimento.
 2. Configurar `OPENAI_API_KEY` no servidor se desejar as quatro variações. Sem a chave, continua possível enviar o texto original. A chave nunca chega ao navegador.
 3. Verificar, no Chrome com WhatsApp de teste, identificação correta de chat salvo e não salvo, painel de dados do contato, editor de mensagem, prévia do PDF e bolhas de saída.
 4. Verificar cenários de ausência de login, destinatário inexistente, troca de chat, rede desconectada e falha após o clique: todos devem ficar em **Conferir** sem reenvio automático.
