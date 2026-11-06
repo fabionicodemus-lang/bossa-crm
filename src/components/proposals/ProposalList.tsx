@@ -2,11 +2,12 @@
 
 import { date, money, numberValue, statusLabels, workflowOf, type Proposal, type ProposalDevelopment, type WorkflowStatus } from './model';
 
-export function ProposalList({proposals,filteredProposals,developments,canEdit,search,setSearch,statusFilter,setStatusFilter,developmentFilter,setDevelopmentFilter,sentCount,activeValue,approvedValue,onNew,onExport,onEdit,onChangeStatus}:{
+export function ProposalList({proposals,filteredProposals,developments,canEdit,search,setSearch,statusFilter,setStatusFilter,developmentFilter,setDevelopmentFilter,sentCount,activeValue,approvedValue,onNew,onExport,onEdit,onChangeStatus,onRecordOutcome}:{
   proposals:Proposal[]; filteredProposals:Proposal[]; developments:ProposalDevelopment[]; canEdit:boolean;
   search:string; setSearch:(value:string)=>void; statusFilter:string; setStatusFilter:(value:string)=>void;
   developmentFilter:string; setDevelopmentFilter:(value:string)=>void; sentCount:number; activeValue:number; approvedValue:number;
   onNew:()=>void; onExport:()=>void; onEdit:(proposal:Proposal)=>void; onChangeStatus:(proposal:Proposal,status:WorkflowStatus)=>void;
+  onRecordOutcome:(proposal:Proposal,outcome:'proposta_enviada'|'proposta_apresentada')=>void;
 }){
   return <>
     <div className="page-head"><div><h2>Controle de propostas</h2><p>Cada proposta fica vinculada ao lead, possui cronograma por datas e PDF comercial.</p></div><div className="page-actions">{canEdit&&<button className="btn btn-primary" onClick={onNew}>+ Nova proposta</button>}<button className="btn btn-ghost" onClick={onExport}>⬇ Exportar Excel</button></div></div>
@@ -17,6 +18,7 @@ export function ProposalList({proposals,filteredProposals,developments,canEdit,s
       <div className="kpi"><div className="kpi-label">Aprovado</div><div className="kpi-value" style={{fontSize:21}}>{money.format(approvedValue)}</div></div>
     </div>
     <section className="card"><div className="card-head"><h3>Planilha geral de propostas</h3></div><div className="card-body">
+      <p className="faint" style={{marginBottom:16}}>Os botões de registro confirmam um envio ou uma apresentação que você já realizou. Eles não enviam mensagens nem alteram o status comercial. Gerar PDF, enviar e apresentar são ações diferentes.</p>
       <div className="grid grid-3" style={{marginBottom:16}}>
         <div className="field"><label>Buscar</label><input className="input" value={search} onChange={event=>setSearch(event.target.value)} placeholder="Cliente, corretor, unidade ou número"/></div>
         <div className="field"><label>Status</label><select className="select" value={statusFilter} onChange={event=>setStatusFilter(event.target.value)}><option value="">Todos</option>{Object.entries(statusLabels).map(([value,label])=><option value={value} key={value}>{label}</option>)}</select></div>
@@ -32,7 +34,7 @@ export function ProposalList({proposals,filteredProposals,developments,canEdit,s
           <td>{numberValue(proposal.snapshot?.paid_until_keys_percent).toFixed(2)}%<div className="faint">{money.format(numberValue(proposal.snapshot?.paid_until_keys_amount))}</div></td>
           <td>{canEdit?<select className="select" style={{minWidth:150}} value={workflowOf(proposal)} onChange={event=>onChangeStatus(proposal,event.target.value as WorkflowStatus)}>{Object.entries(statusLabels).map(([value,label])=><option value={value} key={value}>{label}</option>)}</select>:statusLabels[workflowOf(proposal)]}</td>
           <td>{date.format(new Date(proposal.updated_at))}</td>
-          <td><div className="page-actions" style={{justifyContent:'flex-end'}}><a className="btn btn-ghost btn-sm" href={`/api/propostas/${proposal.id}/pdf`} target="_blank" rel="noreferrer">PDF</a>{canEdit&&<button className="btn btn-ghost btn-sm" onClick={()=>onEdit(proposal)}>Editar</button>}</div></td>
+          <td><div className="page-actions" style={{justifyContent:'flex-end',flexWrap:'wrap'}}><a className="btn btn-ghost btn-sm" href={`/api/propostas/${proposal.id}/pdf`} target="_blank" rel="noreferrer">PDF</a>{canEdit&&<><button className="btn btn-ghost btn-sm" onClick={()=>onEdit(proposal)}>Editar</button><button className="btn btn-ghost btn-sm" disabled={!proposal.lead_id} onClick={()=>onRecordOutcome(proposal,'proposta_enviada')} aria-label={`Registrar envio já realizado da proposta ${proposal.proposal_number}`}>Registrar envio</button><button className="btn btn-ghost btn-sm" disabled={!proposal.lead_id} onClick={()=>onRecordOutcome(proposal,'proposta_apresentada')} aria-label={`Registrar apresentação já realizada da proposta ${proposal.proposal_number}`}>Registrar apresentação</button></>}</div></td>
         </tr>)}
       </tbody></table></div>
     </div></section>

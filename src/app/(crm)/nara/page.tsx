@@ -19,6 +19,11 @@ export default async function NaraPage() {
             desc: "Conversas de clientes e corretores em andamento.",
           },
           {
+            href: "/nara/funil",
+            label: "Funil explícito",
+            desc: "Solicitações, confirmações e resultados comprovados, separados das métricas legadas.",
+          },
+          {
             href: "/configuracoes/arquivos-ia",
             label: "Materiais",
             desc: "Fotos, vídeos, plantas e documentos dos empreendimentos.",

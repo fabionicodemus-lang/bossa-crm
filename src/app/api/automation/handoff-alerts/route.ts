@@ -96,6 +96,29 @@ function clean(value: unknown, fallback = 'Não informado') {
   return text || fallback;
 }
 
+/** Same approved template parameter: preserve the request even when no objection was identified. */
+function conversationFromBriefing(briefing: Record<string, unknown>) {
+  const read = (value: unknown) => typeof value === 'string' ? clean(value, '')
+    .replace(/\bBearer\s+[A-Za-z0-9._~+/-]+=*/gi, 'Bearer [credencial removida]')
+    .replace(/\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/g, '[credencial removida]')
+    .replace(/\bsk-(?:proj-)?[A-Za-z0-9_-]{16,}\b/g, '[credencial removida]')
+    .replace(/\b(access[_ -]?token|refresh[_ -]?token|api[_ -]?key|service[_ -]?role[_ -]?key|senha|password)\s*[:=]\s*["']?[^\s|,;"']+/gi, '$1=[credencial removida]')
+    : '';
+  const request = read(briefing.latest_client_request);
+  const objection = read(briefing.main_objection);
+  const summary = read(briefing.summary);
+  const parts: string[] = [];
+  // Keep the latest explicit request first, so a long legacy summary cannot hide it.
+  if (request) parts.push(`Pedido atual do cliente: ${request.slice(0, 420)}`);
+  if (objection && objection !== request) {
+    const objectionLimit = request ? 260 : summary && summary !== objection ? 420 : 900;
+    parts.push(`Objeção/contexto registrado: ${objection.slice(0, objectionLimit)}`);
+  }
+  if (summary && summary !== request && summary !== objection) parts.push(`Resumo registrado: ${summary}`);
+  if (!parts.length) return 'A Nara encaminhou o atendimento ao comercial.';
+  return `Valores declarados não representam condições aprovadas. ${parts.join(' | ')}`.slice(0, 900);
+}
+
 function detailsFromBriefing(briefing: Record<string, unknown>) {
   const parts = [
     `Telefone: ${clean(briefing.phone)}`,
@@ -299,7 +322,7 @@ async function sendRecipient(args: {
   const values = [
     clean(briefing.lead_name, 'Lead sem nome').slice(0, 200),
     detailsFromBriefing(briefing),
-    clean(briefing.main_objection, 'A Nara encaminhou o atendimento ao comercial.').slice(0, 900),
+    conversationFromBriefing(briefing),
     clean(briefing.next_best_action, 'Continuar o atendimento no Bossa CRM.').slice(0, 900),
   ];
   const { provider, accessToken, phoneNumberId } = channelAccess(args.channel);

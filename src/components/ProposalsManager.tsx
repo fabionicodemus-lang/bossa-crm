@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { ProposalEditor } from './proposals/ProposalEditor';
@@ -37,6 +37,12 @@ import {
 
 export type { Proposal, ProposalDevelopment, ProposalLead, ProposalUnit } from './proposals/model';
 
+type ProposalOutcome = 'proposta_enviada' | 'proposta_apresentada';
+type OutcomeForm = { proposal: Proposal; outcome: ProposalOutcome; occurredAt: string; confirmed: boolean };
+function localOutcomeDateTime(value: Date) {
+  return new Date(value.getTime() - value.getTimezoneOffset() * 60000).toISOString().slice(0, 19);
+}
+
 export function ProposalsManager({
   organizationId,
   currentUserId,
@@ -69,6 +75,50 @@ export function ProposalsManager({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const [outcomeForm, setOutcomeForm] = useState<OutcomeForm | null>(null);
+  const [outcomeSaving, setOutcomeSaving] = useState(false);
+  const [outcomeError, setOutcomeError] = useState('');
+  const outcomeDialog = useRef<HTMLDialogElement>(null);
+  const outcomeInFlight = useRef(false);
+  const outcomeIsOpen = outcomeForm !== null;
+
+  useEffect(() => {
+    const dialog = outcomeDialog.current;
+    if (!dialog) return;
+    if (outcomeIsOpen && !dialog.open) dialog.showModal();
+    else if (!outcomeIsOpen && dialog.open) dialog.close();
+  }, [outcomeIsOpen]);
+
+  function startOutcome(proposal: Proposal, outcome: ProposalOutcome) {
+    if (!canEdit || !proposal.lead_id || outcomeInFlight.current) return;
+    setOutcomeError('');
+    setOutcomeForm({ proposal, outcome, occurredAt: localOutcomeDateTime(new Date()), confirmed: false });
+  }
+
+  async function saveOutcome(event: FormEvent) {
+    event.preventDefault();
+    if (!canEdit || !outcomeForm?.confirmed || outcomeInFlight.current) return;
+    const selected = outcomeForm;
+    const occurredAt = new Date(selected.occurredAt);
+    if (!Number.isFinite(occurredAt.getTime())) { setOutcomeError('Informe uma data e hora válidas.'); return; }
+    outcomeInFlight.current = true;
+    setOutcomeSaving(true); setOutcomeError('');
+    try {
+      const response = await fetch('/api/nara/funnel/outcomes', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ proposal_id: selected.proposal.id, expected_version: selected.proposal.version,
+          outcome: selected.outcome, occurred_at: occurredAt.toISOString(), confirmed: true }),
+      });
+      const payload = await response.json().catch(() => ({})) as { error?: string; recorded?: boolean; already_recorded?: boolean };
+      if (!response.ok) throw new Error(payload.error || 'Não foi possível registrar o resultado.');
+      if (payload.recorded !== true && payload.already_recorded !== true) throw new Error('Não foi possível confirmar o registro.');
+      const action = selected.outcome === 'proposta_enviada' ? 'Envio' : 'Apresentação';
+      const recordedLabel = selected.outcome === 'proposta_enviada' ? 'registrado' : 'registrada';
+      setNotice(`${action} da proposta #${selected.proposal.proposal_number} (v${selected.proposal.version}) ${payload.already_recorded ? 'já constava' : recordedLabel} no histórico do contato. Nenhuma mensagem foi enviada e o status comercial foi preservado.`);
+      setOutcomeForm(null);
+    } catch (cause) { setOutcomeError(errorText(cause)); }
+    finally { outcomeInFlight.current = false; setOutcomeSaving(false); }
+  }
 
   const selectedLead = leads.find((lead) => lead.id === form.leadId) ?? null;
   const selectedDevelopment = developments.find((item) => item.id === form.developmentId) ?? null;
@@ -556,6 +606,7 @@ export function ProposalsManager({
           onExport={() => void exportXlsx()}
           onEdit={editProposal}
           onChangeStatus={(proposal, status) => void changeStatus(proposal, status)}
+          onRecordOutcome={startOutcome}
         />
       : <ProposalEditor
           form={form}
@@ -584,5 +635,25 @@ export function ProposalsManager({
           onCancel={() => setMode('list')}
           onSubmit={saveProposal}
         />}
+    <dialog ref={outcomeDialog} aria-labelledby="proposal-outcome-title"
+      onCancel={(event) => { if (outcomeSaving) event.preventDefault(); else setOutcomeForm(null); }}
+      style={{ width: 'min(540px, 94vw)', border: '1px solid var(--line)', borderRadius: 12, padding: 24 }}>
+      {outcomeForm && <form onSubmit={saveOutcome} className="grid" style={{ gap: 14 }}>
+        <h3 id="proposal-outcome-title">Registrar {outcomeForm.outcome === 'proposta_enviada' ? 'envio' : 'apresentação'} já realizado</h3>
+        <p>Proposta #{outcomeForm.proposal.proposal_number} · versão {outcomeForm.proposal.version}. Este registro é uma declaração sua sobre uma ação concluída, não uma solicitação de envio.</p>
+        <div className="info-box">Nenhuma mensagem ou arquivo será enviado. O PDF e o status comercial da proposta não serão alterados.</div>
+        <div className="field"><label htmlFor="proposal-outcome-time">Quando a ação ocorreu?</label><input id="proposal-outcome-time" className="input" type="datetime-local" step="1" required autoFocus
+          value={outcomeForm.occurredAt} max={localOutcomeDateTime(new Date())}
+          onChange={(event) => setOutcomeForm((current) => current ? { ...current, occurredAt: event.target.value } : null)} disabled={outcomeSaving} /></div>
+        <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}><input type="checkbox" required checked={outcomeForm.confirmed} disabled={outcomeSaving}
+          onChange={(event) => setOutcomeForm((current) => current ? { ...current, confirmed: event.target.checked } : null)} />
+          Confirmo que {outcomeForm.outcome === 'proposta_enviada' ? 'já enviei esta proposta individual ao contato' : 'já apresentei e expliquei esta proposta ao contato'}.</label>
+        {outcomeError && <div className="error-box" role="alert">{outcomeError}</div>}
+        <div className="page-actions" style={{ justifyContent: 'flex-end' }}>
+          <button className="btn btn-ghost" type="button" disabled={outcomeSaving} onClick={() => setOutcomeForm(null)}>Cancelar registro</button>
+          <button className="btn btn-primary" type="submit" disabled={outcomeSaving || !outcomeForm.confirmed}>{outcomeSaving ? 'Registrando…' : 'Confirmar registro'}</button>
+        </div>
+      </form>}
+    </dialog>
   </div>;
 }

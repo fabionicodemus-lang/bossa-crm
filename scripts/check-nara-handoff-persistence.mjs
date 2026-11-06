@@ -9,14 +9,18 @@ import { applyNaraFinancialHandoff } from '../src/lib/nara-sales-handoff.ts';
 import { isAssistedSaleSignal, isBrokerRoutingSignal, isPostSaleRoutingSignal } from '../src/lib/nara-contact-routing.ts';
 import { explicitHumanRequest, refusesHandoff } from '../src/lib/nara-conversation-signals.ts';
 import { whatsappCanStillReply } from '../src/lib/whatsapp/aiTurnSafety.ts';
+import { buildNaraHandoffBriefing, deliveredNaraMaterials, readNaraJourney, updateNaraJourney } from '../src/lib/nara-journey.ts';
+import { tryRecordNaraFunnelEvent } from '../src/lib/nara-funnel-events.ts';
 
 const source = await readFile(new URL('../src/lib/hybrid-server.ts', import.meta.url), 'utf8');
 const executable = stripTypeScriptTypes(source)
   .replace(/^import\s.*?;\s*$/gm, '')
   .replace(/export async function applyHybridDecision/, 'async function applyHybridDecision');
 const applyHybridDecision = new Function('deriveHybridDecision', 'isAssistedSaleSignal',
-  'isBrokerRoutingSignal', 'isPostSaleRoutingSignal', 'explicitHumanRequest', 'refusesHandoff', `${executable}\nreturn applyHybridDecision;`)(
+  'isBrokerRoutingSignal', 'isPostSaleRoutingSignal', 'explicitHumanRequest', 'refusesHandoff',
+  'buildNaraHandoffBriefing', 'deliveredNaraMaterials', 'readNaraJourney', 'updateNaraJourney', 'tryRecordNaraFunnelEvent', `${executable}\nreturn applyHybridDecision;`)(
   deriveHybridDecision, isAssistedSaleSignal, isBrokerRoutingSignal, isPostSaleRoutingSignal, explicitHumanRequest, refusesHandoff,
+  buildNaraHandoffBriefing, deliveredNaraMaterials, readNaraJourney, updateNaraJourney, tryRecordNaraFunnelEvent,
 );
 
 const baseLead = {
@@ -62,6 +66,8 @@ function createDb(options = {}) {
       },
       neq(key, value) { filters.push((row) => row[key] !== value); return query; },
       gt(key, value) { filters.push((row) => row[key] > value); return query; },
+      gte(key, value) { filters.push((row) => row[key] >= value); return query; },
+      order() { return query; },
       in(key, values) { filters.push((row) => values.includes(row[key])); return query; },
       limit(value) { cap = value; return query; },
       maybeSingle() { return Promise.resolve(execute('maybe')); },
@@ -127,10 +133,10 @@ function financialTurn(message) {
   assert.equal(applyNaraFinancialHandoff(result, [{ role: 'user', content: message }]), true);
   return result;
 }
-async function persist(db, result, message) {
+async function persist(db, result, message, sourceMessageId = sourceMessage.id) {
   const lead = structuredClone(db.tables.leads[0]);
   return applyHybridDecision({ admin: db, organizationId: lead.organization_id, lead,
-    turn: result, lastUserMessage: message, sourceMessageId: sourceMessage.id });
+    turn: result, lastUserMessage: message, sourceMessageId });
 }
 const replyIdentity = (db) => ({ admin: db, leadId: baseLead.id,
   conversationId: sourceMessage.whatsapp_conversation_id, sourceId: sourceMessage.id });
@@ -161,8 +167,9 @@ for (const message of [
   assert.equal(handoff.status, 'pending');
   assert.equal(handoff.offered_to, 'salesperson-qa');
   assert.equal(handoff.priority_class, 'A1');
-  assert.match(handoff.briefing.main_objection, /Pedido declarado, ainda não aprovado:/);
-  assert.ok(handoff.briefing.main_objection.includes(message));
+  assert.match(handoff.briefing.summary, /Pedido declarado, ainda não aprovado:/);
+  assert.ok(handoff.briefing.latest_client_request.includes(message));
+  assert.equal(handoff.briefing.declared_terms_are_approved, false);
   assert.equal(Object.hasOwn(handoff.briefing, 'approved_price'), false);
   assert.equal(Object.hasOwn(handoff.briefing, 'approved_payment_terms'), false);
   assert.equal(db.tables.lead_tasks.length, 1);
@@ -196,8 +203,152 @@ await check('Repetição atualiza passagem e tarefa sem duplicar fila pendente',
   assert.equal(db.tables.lead_tasks.length, 1);
   assert.equal(db.tables.client_handoff_alert_jobs.length, 1);
   assert.equal(db.tables.leads[0].handoff_requested_at, requestedAt);
-  assert.ok(db.tables.lead_handoffs[0].briefing.main_objection.includes(second));
+  assert.ok(db.tables.lead_handoffs[0].briefing.latest_client_request.includes(second));
+  assert.ok(db.tables.client_handoff_alert_jobs[0].briefing.latest_client_request.includes(second));
   assert.equal(db.tables.leads[0].metadata.hybrid_last_decision.handoff_reused_assignment, true);
+});
+
+await check('Briefing novo alcança só fila aguardando sem reenfileirar destinatário enviado/processando', async () => {
+  for (const [ownerStatus, managerStatus] of [
+    ['sent', 'queued'], ['queued', 'sent'], ['processing', 'queued'], ['queued', 'processing'],
+    ['sent', 'sent'], ['processing', 'processing'], ['skipped', 'cancelled'],
+  ]) {
+    const db = createDb(); const first = 'Tenho 200 mil de entrada.';
+    await persist(db, financialTurn(first), first);
+    const job = db.tables.client_handoff_alert_jobs[0];
+    Object.assign(job, { owner_status: ownerStatus, manager_status: managerStatus });
+    const oldBriefing = structuredClone(job.briefing);
+    const otherOrg = { ...structuredClone(job), id:'other-org-job', organization_id:'another-org' };
+    const otherLead = { ...structuredClone(job), id:'other-lead-job', lead_id:'another-lead' };
+    db.tables.client_handoff_alert_jobs.push(otherOrg, otherLead);
+    const second = 'Agora minha proposta é 210 mil de entrada.';
+    await persist(db, financialTurn(second), second, 'updated-request');
+    assert.equal(db.tables.client_handoff_alert_jobs.length, 3);
+    assert.equal(job.owner_status, ownerStatus); assert.equal(job.manager_status, managerStatus);
+    if ([ownerStatus, managerStatus].includes('queued')) assert.equal(job.briefing.latest_client_request, second);
+    else assert.deepEqual(job.briefing, oldBriefing);
+    assert.deepEqual(otherOrg.briefing, oldBriefing); assert.deepEqual(otherLead.briefing, oldBriefing);
+  }
+});
+
+await check('Briefing não muda se destinatários saírem da fila antes do update', async () => {
+  const options = {}; const db = createDb(options); const first = 'Tenho 200 mil de entrada.';
+  await persist(db, financialTurn(first), first);
+  const job = db.tables.client_handoff_alert_jobs[0]; const oldBriefing = structuredClone(job.briefing);
+  options.beforeExecute = ({ table, operation, payload }) => {
+    if (table === 'client_handoff_alert_jobs' && operation === 'update' && payload.briefing) {
+      job.owner_status = 'processing'; job.manager_status = 'sent'; options.beforeExecute = null;
+    }
+  };
+  const second = 'Agora quero 210 mil de entrada.';
+  await persist(db, financialTurn(second), second, 'updated-request');
+  assert.equal(job.owner_status, 'processing'); assert.equal(job.manager_status, 'sent');
+  assert.deepEqual(job.briefing, oldBriefing);
+});
+
+async function scheduleReturn(db) {
+  const future = new Date(Date.now() + 7 * 86_400_000);
+  const date = `${future.getUTCDate()}/${future.getUTCMonth() + 1}/${future.getUTCFullYear()}`;
+  await persist(db, turn(), `Me procure em ${date} às 15h`, 'callback-request');
+  assert.equal(db.tables.leads[0].stage, 'futuro');
+  assert.ok(db.tables.leads[0].reactivation_at);
+  return db.tables.lead_tasks.find((row) => row.dedupe_key === 'reactivation:agreed');
+}
+
+await check('Antecipação explícita sai de futuro e cancela só tarefas AI de retorno dessa organização/lead', async () => {
+  const db = createDb(); const agreedTask = await scheduleReturn(db);
+  const previousDue = db.tables.leads[0].reactivation_at;
+  const legacyTask = { ...structuredClone(agreedTask), id:'legacy-return', dedupe_key:'reactivation:future' };
+  const preserved = [
+    { ...structuredClone(agreedTask), id:'human-return', assigned_mode:'human' },
+    { ...structuredClone(agreedTask), id:'human-created', created_by_kind:'human' },
+    { ...structuredClone(agreedTask), id:'completed-return', status:'completed' },
+    { ...structuredClone(agreedTask), id:'another-org', organization_id:'another-org' },
+    { ...structuredClone(agreedTask), id:'another-lead', lead_id:'another-lead' },
+    { ...structuredClone(agreedTask), id:'general-task', dedupe_key:'general:followup' },
+  ];
+  const beforePreserved = structuredClone(preserved);
+  db.tables.lead_tasks.push(legacyTask, ...preserved);
+  const decision = await persist(db, turn(), 'Podemos falar agora', 'callback-resume');
+  const lead = db.tables.leads[0];
+  assert.equal(decision.stage, 'nutricao_ativa'); assert.equal(lead.stage, 'nutricao_ativa');
+  assert.equal(lead.reactivation_at, null); assert.equal(lead.next_action_type, 'qualificar_nutrir');
+  assert.notEqual(lead.next_action_due_at, previousDue);
+  assert.equal(lead.metadata.nara_journey.agreed_return, null);
+  assert.equal(lead.metadata.nara_journey.pending_reason, null);
+  assert.equal(agreedTask.status, 'cancelled'); assert.equal(legacyTask.status, 'cancelled');
+  assert.deepEqual(preserved, beforePreserved);
+  await persist(db, turn(), 'Podemos falar agora', 'callback-resume');
+  assert.equal(db.tables.lead_tasks.filter((row) => row.dedupe_key === 'ai:nutricao_ativa').length, 1);
+  assert.equal(db.tables.leads[0].reactivation_at, null);
+});
+
+await check('Novo pedido humano agora cancela retorno antigo sem substituir a prioridade do handoff', async () => {
+  const db = createDb(); const agreedTask = await scheduleReturn(db);
+  const decision = await persist(db, turn({ handoff:true }), 'Quero falar com um consultor agora', 'human-now');
+  const lead = db.tables.leads[0];
+  assert.equal(decision.handoffRequired, true); assert.equal(lead.stage, 'passagem_pendente');
+  assert.equal(lead.reactivation_at, null); assert.equal(agreedTask.status, 'cancelled');
+  assert.equal(lead.metadata.nara_journey.agreed_return, null);
+  assert.equal(lead.metadata.nara_journey.pending_reason.code, 'awaiting_human');
+  assert.equal(db.tables.lead_handoffs.length, 1);
+  assert.equal(db.tables.lead_tasks.find((row) => row.dedupe_key === 'handoff:pending').status, 'pending');
+});
+
+await check('Falha ao cancelar tarefa de retorno preserva acordo e retry termina a transição', async () => {
+  const options = {}; const db = createDb(options); const agreedTask = await scheduleReturn(db);
+  const originalAgreement = structuredClone(db.tables.leads[0].metadata.nara_journey.agreed_return);
+  options.fail = { table:'lead_tasks', operation:'update' };
+  await assert.rejects(persist(db, turn(), 'Podemos falar agora', 'callback-resume'), (error) => error.code === 'QA_DB_ERROR');
+  assert.equal(db.tables.leads[0].stage, 'futuro');
+  assert.deepEqual(db.tables.leads[0].metadata.nara_journey.agreed_return, originalAgreement);
+  assert.equal(agreedTask.status, 'pending');
+  options.fail = null;
+  await persist(db, turn(), 'Podemos falar agora', 'callback-resume');
+  assert.equal(db.tables.leads[0].stage, 'nutricao_ativa'); assert.equal(agreedTask.status, 'cancelled');
+});
+
+await check('Falha após limpeza de retorno permite retry sem recriar tarefa cancelada', async () => {
+  const options = {}; const db = createDb(options); const agreedTask = await scheduleReturn(db);
+  options.fail = { table:'leads', operation:'update' };
+  await assert.rejects(persist(db, turn(), 'Podemos falar agora', 'callback-resume'), (error) => error.code === 'QA_DB_ERROR');
+  assert.equal(db.tables.leads[0].stage, 'futuro');
+  assert.ok(db.tables.leads[0].metadata.nara_journey.agreed_return);
+  assert.equal(agreedTask.status, 'cancelled');
+  options.fail = null;
+  await persist(db, turn(), 'Podemos falar agora', 'callback-resume');
+  assert.equal(db.tables.leads[0].stage, 'nutricao_ativa');
+  assert.equal(db.tables.lead_tasks.filter((row) => row.dedupe_key === 'reactivation:agreed').length, 1);
+  assert.equal(agreedTask.status, 'cancelled');
+});
+
+await check('Antecipação de retorno não reativa AI se houver assunção humana concorrente', async () => {
+  const options = {}; const db = createDb(options); await scheduleReturn(db);
+  const humanTask = { id:'human-current',organization_id:baseLead.organization_id,lead_id:baseLead.id,
+    status:'pending',created_by_kind:'human',assigned_mode:'human',dedupe_key:'human:followup' };
+  db.tables.lead_tasks.push(humanTask);
+  options.beforeExecute = ({ table, operation, payload }) => {
+    if (table === 'leads' && operation === 'update' && payload.stage === 'nutricao_ativa') {
+      Object.assign(db.tables.leads[0], {stage:'humano_ativo',owner_mode:'human',ai_enabled:false,
+        handoff_accepted_at:new Date().toISOString()});
+      options.beforeExecute = null;
+    }
+  };
+  await assert.rejects(persist(db, turn(), 'Podemos falar agora', 'callback-resume'), /atendimento mudou/);
+  assert.equal(db.tables.leads[0].owner_mode, 'human'); assert.equal(db.tables.leads[0].ai_enabled, false);
+  assert.equal(db.tables.leads[0].stage, 'humano_ativo'); assert.equal(humanTask.status, 'pending');
+});
+
+await check('Lead futuro sem acordo cancelado mantém comportamento legado e tarefa existente', async () => {
+  const db = createDb();
+  const dueAt = new Date(Date.now() + 7 * 86_400_000).toISOString();
+  Object.assign(db.tables.leads[0], {stage:'futuro',reactivation_at:dueAt});
+  const originalTask = {id:'legacy-future',organization_id:baseLead.organization_id,lead_id:baseLead.id,
+    status:'pending',created_by_kind:'ai',assigned_mode:'ai',dedupe_key:'reactivation:future',due_at:dueAt};
+  db.tables.lead_tasks.push(originalTask);
+  await persist(db, turn(), 'Obrigado pela informação', 'legacy-thanks');
+  assert.equal(db.tables.leads[0].stage, 'futuro'); assert.equal(db.tables.leads[0].reactivation_at, dueAt);
+  assert.equal(originalTask.status, 'pending');
 });
 
 await check('Recusa de contato impede passagem/fila, mesmo perguntando entrada', async () => {

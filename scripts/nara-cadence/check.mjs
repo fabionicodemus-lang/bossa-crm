@@ -55,3 +55,4 @@ assert.equal(r.second_sent,1);
 assert.equal(sent.at(-1)?.to,'18563947763','Follow-up por template para o wa_id original');
 // Falha o teste se algum cenário não se comportar como esperado.
 console.log('Cadência da Nara validada: 1ª e 2ª retomadas, sem repetição, cancelamento por resposta e horário.');
+await import('./context-check.mjs');

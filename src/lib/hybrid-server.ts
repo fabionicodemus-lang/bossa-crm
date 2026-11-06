@@ -4,6 +4,8 @@ import { deriveHybridDecision, type HybridDecision } from './hybrid';
 import type { Lead } from './types';
 import { isAssistedSaleSignal, isBrokerRoutingSignal, isPostSaleRoutingSignal } from './nara-contact-routing';
 import { explicitHumanRequest, refusesHandoff } from './nara-conversation-signals';
+import { buildNaraHandoffBriefing, deliveredNaraMaterials, readNaraJourney, updateNaraJourney } from './nara-journey';
+import { tryRecordNaraFunnelEvent } from './nara-funnel-events';
 
 export type AdminClient = SupabaseClient;
 
@@ -195,6 +197,38 @@ export async function applyHybridDecision(args: {
       : baseDecision;
   const classification = routedToBroker ? 'cadastrado' : args.turn.classification;
   const now = new Date().toISOString();
+  const previousJourney = args.lead.kind === 'cliente' ? readNaraJourney(args.lead.metadata) : null;
+  const journey = args.lead.kind === 'cliente' ? updateNaraJourney({
+    metadata: args.lead.metadata, lastUserMessage: args.lastUserMessage,
+    sourceMessageId: args.sourceMessageId, handoffRequired: decision.handoffRequired,
+    agendaConfirmed: args.turn.agenda_confirmed, now: new Date(now),
+  }) : null;
+  const agreedReturnWithdrawn = Boolean(previousJourney
+    && (previousJourney.agreed_return || previousJourney.return_needs_clarification)
+    && journey && !journey.agreed_return && !journey.return_needs_clarification);
+  if (agreedReturnWithdrawn && args.lead.stage === 'futuro'
+    && decision.ownerMode === 'ai' && !decision.handoffRequired && !args.turn.agenda_confirmed) {
+    // The client explicitly resumed the conversation. A previous callback must
+    // not keep the lead in `futuro` through deriveHybridDecision's legacy rule.
+    Object.assign(decision, deriveHybridDecision({
+      lead: { ...args.lead, stage: 'nutricao_ativa', reactivation_at: null },
+      turn: args.turn, lastUserMessage: args.lastUserMessage, now: new Date(now),
+    }));
+  }
+  if (journey?.agreed_return && Date.parse(journey.agreed_return.not_before) > Date.parse(now)
+    && decision.ownerMode === 'ai' && !decision.handoffRequired && !args.turn.agenda_confirmed) {
+    // Customer agreement wins over a generic nurture clock. This schedules a
+    // task, not an unsolicited message or an appointment.
+    decision.stage = 'futuro';
+    decision.reactivationAt = journey.agreed_return.not_before;
+    decision.nextAction = 'Respeitar o retorno solicitado pelo cliente; retomar o contexto no prazo registrado.';
+    decision.nextActionType = 'retorno_combinado';
+    decision.nextActionDueAt = journey.agreed_return.not_before;
+    decision.taskTitle = 'Retomar no prazo solicitado pelo cliente';
+    decision.taskDescription = journey.agreed_return.client_text;
+    decision.taskDueAt = journey.agreed_return.not_before;
+    decision.taskDedupeKey = 'reactivation:agreed';
+  }
   const clientHandoffSettings = decision.handoffRequired
     && args.lead.kind === 'cliente'
     && args.lead.owner_mode !== 'human'
@@ -232,6 +266,7 @@ export async function applyHybridDecision(args: {
       sale_assisted_source_message: args.lastUserMessage,
     } : {}),
     ...(postSaleHandoff ? { post_sale_route: 'cintia_canal_2', post_sale_routed_at: now } : {}),
+    ...(journey ? { nara_journey: journey } : {}),
     ai_extracted: {
       ...((args.lead.metadata?.ai_extracted && typeof args.lead.metadata.ai_extracted === 'object')
         ? args.lead.metadata.ai_extracted as Record<string, unknown>
@@ -288,6 +323,18 @@ export async function applyHybridDecision(args: {
   }
   if (revokePendingHandoff) updatePayload.handoff_requested_at = null;
 
+  if (agreedReturnWithdrawn) {
+    // Clean up before persisting the cleared agreement. If this write fails,
+    // the old agreement remains available so a retry can finish the cleanup.
+    // Never touch human/general tasks, completed work or another organization.
+    const { error: returnTaskError } = await args.admin.from('lead_tasks')
+      .update({ status: 'cancelled', completed_at: now })
+      .eq('organization_id', args.organizationId).eq('lead_id', args.lead.id)
+      .eq('status', 'pending').eq('created_by_kind', 'ai').eq('assigned_mode', 'ai')
+      .in('dedupe_key', ['reactivation:agreed', 'reactivation:future']);
+    if (returnTaskError) throw returnTaskError;
+  }
+
   const updateLead = args.admin
     .from('leads')
     .update(updatePayload)
@@ -337,6 +384,14 @@ export async function applyHybridDecision(args: {
       .select('id').maybeSingle();
     if (completeError) throw completeError;
     if (!completed) throw new Error('O atendimento mudou durante a conclusão da revogação.');
+  } else if (agreedReturnWithdrawn) {
+    // Preserve a concurrent human takeover rather than resuming AI from the
+    // stale `futuro` snapshot. The cleanup above only targets obsolete AI tasks.
+    const { data: resumed, error: updateError } = await updateLead
+      .eq('stage', args.lead.stage).eq('owner_mode', args.lead.owner_mode || 'ai')
+      .select('id').maybeSingle();
+    if (updateError) throw updateError;
+    if (!resumed) throw new Error('O atendimento mudou durante a antecipação do retorno; reavalie o estado atual.');
   } else {
     const { error: updateError } = await updateLead;
     if (updateError) throw updateError;
@@ -449,37 +504,21 @@ export async function applyHybridDecision(args: {
 
   if (decision.handoffRequired && args.lead.owner_mode !== 'human') {
     const expiresAt = decision.nextActionDueAt;
-    const handoffBriefing = {
-      lead_name: args.lead.name,
-      phone: args.lead.phone,
-      source: args.lead.source,
-      enterprise: args.turn.extracted.enterprise || args.lead.enterprise,
-      purpose: args.turn.extracted.purpose,
-      typology: args.turn.extracted.typology,
-      budget: args.turn.extracted.budget,
-      deadline: args.turn.extracted.deadline,
-      decision_maker: args.turn.extracted.decision_maker,
-      location: args.turn.extracted.region
-        || (typeof args.lead.metadata?.contact_time_preference_city === 'string'
-          ? args.lead.metadata.contact_time_preference_city
-          : ''),
-      payment_method: typeof args.lead.metadata?.payment_method === 'string'
-        ? args.lead.metadata.payment_method
-        : '',
-      best_contact_time_original: typeof args.lead.metadata?.contact_time_preference_original === 'string'
-        ? args.lead.metadata.contact_time_preference_original
-        : '',
-      best_contact_time_brasilia: typeof args.lead.metadata?.contact_time_preference_brasilia === 'string'
-        ? args.lead.metadata.contact_time_preference_brasilia
-        : '',
-      contact_timezone: typeof args.lead.metadata?.contact_time_preference_timezone === 'string'
-        ? args.lead.metadata.contact_time_preference_timezone
-        : '',
-      main_objection: args.turn.summary,
-      next_best_action: resolvedNextAction,
-      priority_class: decision.priorityClass,
-      responsible_name: designatedOwnerName,
-    };
+    let materialQuery = args.admin.from('messages')
+      .select('id,direction,body,status,created_at,raw_payload')
+      .eq('organization_id', args.organizationId).eq('lead_id', args.lead.id)
+      .eq('direction', 'out').in('status', ['sent', 'delivered', 'read']);
+    const resetAt = args.lead.metadata?.nara_reset_at;
+    if (typeof resetAt === 'string') materialQuery = materialQuery.gte('created_at', resetAt);
+    const { data: sentMaterials, error: materialsError } = await materialQuery.order('created_at', { ascending: false }).limit(100);
+    if (materialsError) console.error('[nara briefing materials]', materialsError.code || 'unavailable');
+    const handoffBriefing = buildNaraHandoffBriefing({
+      lead: args.lead, turn: args.turn, metadata, lastUserMessage: args.lastUserMessage,
+      sourceMessageId: args.sourceMessageId, responsibleId: designatedOwnerId || null,
+      responsibleName: designatedOwnerName, nextAction: resolvedNextAction,
+      priority: decision.priorityClass, dueAt: expiresAt,
+      materials: deliveredNaraMaterials(sentMaterials || []),
+    });
     const handoff = {
       organization_id: args.organizationId,
       lead_id: args.lead.id,
@@ -495,6 +534,7 @@ export async function applyHybridDecision(args: {
     const { data: existing } = await args.admin
       .from('lead_handoffs')
       .select('id')
+      .eq('organization_id', args.organizationId)
       .eq('lead_id', args.lead.id)
       .eq('status', 'pending')
       .maybeSingle();
@@ -519,6 +559,14 @@ export async function applyHybridDecision(args: {
       handoffId = createdHandoff.id;
     }
 
+    if (handoffId && args.lead.kind === 'cliente') {
+      const common = { organizationId: args.organizationId, leadId: args.lead.id,
+        source: 'hybrid_handoff', evidence: { handoff_id: handoffId },
+        dimensions: { contact_kind: args.lead.kind, responsible_id: designatedOwnerId || undefined } };
+      await tryRecordNaraFunnelEvent(args.admin, { ...common, event: 'atendimento_humano_solicitado' });
+      if (designatedOwnerId) await tryRecordNaraFunnelEvent(args.admin, { ...common, event: 'encaminhado' });
+    }
+
     if (
       handoffId
       && args.lead.kind === 'cliente'
@@ -538,6 +586,20 @@ export async function applyHybridDecision(args: {
         }, { onConflict: 'handoff_id', ignoreDuplicates: true });
       if (queueError && queueError.code !== '42P01' && queueError.code !== 'PGRST205') {
         console.error('[handoff alert queue]', queueError.message);
+      }
+      if (!queueError && existing?.id) {
+        // A later customer reply updates the pending handoff. Refresh a queued
+        // recipient's briefing without resetting sent/processing/skipped state
+        // or producing a second job. The status filter is checked at write time.
+        for (const recipientStatus of ['owner_status', 'manager_status']) {
+          const { error: refreshError } = await args.admin.from('client_handoff_alert_jobs')
+            .update({ briefing: handoffBriefing, updated_at: now })
+            .eq('organization_id', args.organizationId).eq('lead_id', args.lead.id)
+            .eq('handoff_id', handoffId).eq(recipientStatus, 'queued');
+          if (refreshError && refreshError.code !== '42P01' && refreshError.code !== 'PGRST205') {
+            console.error('[handoff alert briefing]', refreshError.message);
+          }
+        }
       }
     }
   }

@@ -5,6 +5,7 @@ import { normalizeWaId } from '@/lib/whatsapp/utils';
 import { naraContactZone, naraSendHours } from '@/lib/nara-timezone';
 import { findChannelById } from '@/lib/whatsapp/channelService';
 import { processConversation } from '@/lib/whatsapp/webhookProcessor';
+import { buildNaraFollowupText, naraFollowupContactBlock, naraFollowupContactZone, type NaraFollowupLead } from '@/lib/nara-followup-context';
 
 type Admin = ReturnType<typeof createAdminClient>;
 const HOUR = 3_600_000;
@@ -123,9 +124,9 @@ export async function runDeferredNaraReplies(admin: Admin, now = new Date()) {
   return summary;
 }
 
-async function recordSend(admin: Admin, lead: { id: string; organization_id: string }, channel: WhatsAppChannelRecord, destination: string, body: string, result: WhatsAppSendResult, type: 'text' | 'template', step: string, sentAt: string) {
+async function recordSend(admin: Admin, lead: { id: string; organization_id: string }, channel: WhatsAppChannelRecord, destination: string, body: string, result: WhatsAppSendResult, type: 'text' | 'template', step: string, sentAt: string, context = 'template_v1') {
   const conversation = await ensureConversation({ admin, channel, contactWaId: destination, leadId: lead.id });
-  const payload = { provider: result.raw, automation: 'nara_no_reply', step };
+  const payload = { provider: result.raw, automation: 'nara_no_reply', step, followup_context: context };
   const transport = {
     organization_id: lead.organization_id, channel_id: channel.id, conversation_id: conversation.id,
     lead_id: lead.id, wamid: result.messageId, direction: 'out', sender_kind: 'ia',
@@ -145,7 +146,78 @@ async function recordSend(admin: Admin, lead: { id: string; organization_id: str
   return sentAt;
 }
 
+type FollowupSequence = {
+  id: string;
+  organization_id: string;
+  first_outbound_at: string;
+  anchor_inbound_at?: string | null;
+  timezone: string;
+};
+type FollowupGate = { lead: NaraFollowupLead | null; reason: string | null; cancel: boolean };
+
+/**
+ * Re-read immediately after claiming and before the provider call. A successful claim
+ * prevents duplicate steps, but is not consent and must not override a human/opt-out.
+ * Provider and database are separate systems: this narrows (does not transactionally eliminate) that race.
+ */
+async function revalidateClaimedFollowup(admin: Admin, original: NaraFollowupLead, sequence: FollowupSequence,
+  step: 'first' | 'second', currentTime: () => Date, requireOpenWindow: boolean): Promise<FollowupGate> {
+  const queriedAt = currentTime();
+  const [stored, inbound, human, recent] = await Promise.all([
+    admin.from('nara_followup_sequences').select('*').eq('id', sequence.id).eq('organization_id', original.organization_id).maybeSingle(),
+    admin.from('messages').select('id', { count: 'exact', head: true }).eq('lead_id', original.id)
+      .eq('direction', 'in').gt('created_at', sequence.first_outbound_at),
+    admin.from('messages').select('id', { count: 'exact', head: true }).eq('lead_id', original.id)
+      .eq('direction', 'out').neq('sender_kind', 'ia').gt('created_at', sequence.first_outbound_at),
+    admin.from('messages').select('id', { count: 'exact', head: true }).eq('lead_id', original.id)
+      .eq('direction', 'out').gte('created_at', new Date(queriedAt.getTime() - 14 * 24 * HOUR).toISOString())
+      .contains('raw_payload', { automation: 'nara_no_reply' }),
+  ]);
+  // Ownership/consent is the last database read, not an early parallel snapshot.
+  const current = await admin.from('leads').select('*').eq('id', original.id).eq('organization_id', original.organization_id).maybeSingle();
+  const now = currentTime();
+  const block = (reason: string, cancel = true): FollowupGate => ({ lead: null, reason, cancel });
+  if ([current, stored, inbound, human, recent].some((result) => result.error)
+    || [inbound, human, recent].some((result) => typeof result.count !== 'number' || !Number.isFinite(result.count))) return block('falha_na_revalidacao', false);
+  const lead = current.data;
+  if (!stored.data || stored.data.status !== 'active' || stored.data[`${step}_status`] !== 'sending') return block('sequencia_alterada', false);
+  if (!lead || lead.kind !== 'cliente' || lead.owner_mode !== 'ai' || !lead.ai_enabled
+    || lead.opt_out !== false || lead.automation_paused || lead.archived_at || !ACTIVE.includes(lead.stage)) return block('lead_nao_elegivel');
+  if (lead.phone !== original.phone) return block('telefone_alterado');
+  const originalMetadata = original.metadata && typeof original.metadata === 'object' ? original.metadata as Record<string, unknown> : {};
+  if (lead.metadata?.whatsapp_canonical_wa_id !== originalMetadata.whatsapp_canonical_wa_id) return block('telefone_alterado');
+  const anchor = new Date(sequence.first_outbound_at).getTime();
+  if (!Number.isFinite(anchor) || !Number.isFinite(now.getTime())) return block('data_da_sequencia_invalida');
+  if ((lead.metadata?.nara_reset_at && new Date(lead.metadata.nara_reset_at).getTime() > anchor)
+    || (lead.last_inbound_at && new Date(lead.last_inbound_at).getTime() > new Date(sequence.anchor_inbound_at || sequence.first_outbound_at).getTime())
+    || (lead.last_human_activity_at && new Date(lead.last_human_activity_at).getTime() > anchor)
+    || (inbound.count ?? 0) > 0 || (human.count ?? 0) > 0) return block('nova_resposta_humano_ou_reset');
+  if ((recent.count ?? 0) >= 2) return block('limite_2_em_14_dias');
+  if (anchor + 72 * HOUR <= now.getTime()) return block('passou_72h');
+  if (anchor + 8 * HOUR > now.getTime()) return block('aguardando_8h', false);
+  if (step === 'first' && anchor + 48 * HOUR <= now.getTime()) return block('primeira_etapa_expirada', false);
+  if (step === 'second' && (anchor + 48 * HOUR > now.getTime()
+    || (stored.data.first_sent_at && new Date(stored.data.first_sent_at).getTime() + 24 * HOUR > now.getTime()))) return block('aguardando_segunda_etapa', false);
+  const zone = naraFollowupContactZone(lead, sequence.timezone);
+  if (!insideFollowupHours(now, zone)) return block('fora_do_horario', false);
+  const contactBlock = naraFollowupContactBlock(lead, now, zone);
+  if (contactBlock) return block(contactBlock, contactBlock === 'aguardando_humano' || contactBlock === 'sem_interesse');
+  if (requireOpenWindow && (!lead.last_inbound_at || now.getTime() >= new Date(lead.last_inbound_at).getTime() + 24 * HOUR)) return block('janela_24h_fechada', false);
+  return { lead, reason: null, cancel: false };
+}
+
+async function stopClaimedFollowup(admin: Admin, sequence: FollowupSequence, step: 'first' | 'second', gate: FollowupGate, now: Date) {
+  return admin.from('nara_followup_sequences').update({
+    ...(gate.cancel ? { status: 'cancelled' } : {}),
+    [`${step}_status`]: gate.cancel ? 'skipped' : 'pending',
+    error: gate.reason,
+    updated_at: now.toISOString(),
+  }).eq('id', sequence.id).eq('status', 'active').eq(`${step}_status`, 'sending');
+}
+
 export async function runNaraFollowups(admin: Admin, now = new Date()) {
+  const startedAt = Date.now();
+  const liveNow = () => new Date(now.getTime() + Math.max(0, Date.now() - startedAt));
   const counts = { created: 0, first_sent: 0, second_sent: 0, cancelled: 0, waiting_template: 0, errors: 0,
     skipped: {} as Record<string, number> };
   const skip = (reason: string) => { counts.skipped[reason] = (counts.skipped[reason] ?? 0) + 1; };
@@ -180,15 +252,19 @@ export async function runNaraFollowups(admin: Admin, now = new Date()) {
     const { data: first, error: msgError } = await firstQuery.order('created_at', { ascending: true }).limit(1).maybeSingle();
     if (msgError || !first || new Date(first.created_at).getTime() > now.getTime()) { skip('sem_mensagem_da_nara_na_janela'); continue; }
     let sequence = existing?.anchor_message_id === first.id ? existing : null;
+    let inboundQuery = admin.from('messages').select('body').eq('lead_id', lead.id).eq('direction', 'in');
+    if (lead.last_inbound_at) inboundQuery = inboundQuery.gte('created_at', lead.last_inbound_at);
+    const { data: inbound, error: inboundError } = await inboundQuery.order('created_at').limit(1).maybeSingle();
+    if (inboundError) { skip('falha_ao_carregar_contexto'); counts.errors++; continue; }
+    const context = `${inbound?.body || ''} ${lead.metadata?.city || ''} ${lead.city || ''}`.trim();
+    // Recompute from the same anchor evidence even for an existing sequence: old rows
+    // may have classified "Porto Belo" as Lisbon. No historic row rewrite is needed.
+    const resolvedZone = naraFollowupContactZone(lead, context ? followupZone(context) : sequence?.timezone || 'America/Sao_Paulo');
     if (!sequence) {
-      let inboundQuery = admin.from('messages').select('body').eq('lead_id', lead.id).eq('direction', 'in');
-      if (lead.last_inbound_at) inboundQuery = inboundQuery.gte('created_at', lead.last_inbound_at);
-      const { data: inbound } = await inboundQuery.order('created_at').limit(1).maybeSingle();
-      const context = `${inbound?.body || ''} ${lead.metadata?.city || ''} ${lead.city || ''}`;
       const { data, error: createError } = await admin.from('nara_followup_sequences').upsert({
         organization_id: lead.organization_id, lead_id: lead.id, anchor_message_id: first.id,
         first_outbound_at: first.created_at, anchor_inbound_at: lead.last_inbound_at,
-        language: followupLanguage(inbound?.body || ''), timezone: followupZone(context),
+        language: followupLanguage(inbound?.body || ''), timezone: resolvedZone,
       }, { onConflict: 'anchor_message_id', ignoreDuplicates: true }).select('*').maybeSingle();
       if (createError) { console.error('[nara cadence create]', createError); counts.errors++; continue; }
       if (!data) {
@@ -202,10 +278,14 @@ export async function runNaraFollowups(admin: Admin, now = new Date()) {
       }
     }
     if (!sequence || sequence.status !== 'active') { skip(`sequencia_${sequence?.status ?? 'ausente'}`); continue; }
+    sequence = { ...sequence, timezone: resolvedZone };
     const firstAt = new Date(sequence.first_outbound_at).getTime();
     if (firstAt + 8 * HOUR > now.getTime()) { skip('aguardando_8h'); continue; }
     if (firstAt + 72 * HOUR <= now.getTime()) { skip('passou_72h'); continue; }
-    if (!insideFollowupHours(now, sequence.timezone)) { skip('fora_do_horario'); continue; }
+    const contactZone = naraFollowupContactZone(lead, sequence.timezone);
+    if (!insideFollowupHours(now, contactZone)) { skip('fora_do_horario'); continue; }
+    const contactBlock = naraFollowupContactBlock(lead, now, contactZone);
+    if (contactBlock) { skip(contactBlock); continue; }
     const { data: recent } = await admin.from('messages').select('id,direction,sender_kind,created_at')
       .eq('lead_id', lead.id).gt('created_at', sequence.first_outbound_at)
       .order('created_at', { ascending: true }).limit(30);
@@ -228,7 +308,7 @@ export async function runNaraFollowups(admin: Admin, now = new Date()) {
     const { provider, phoneNumberId, accessToken } = channelAccess(channel);
     const language = (sequence.language in copy ? sequence.language : 'pt_BR') as keyof typeof copy;
     const name = String(lead.name || '').trim().split(/\s+/)[0] || (language === 'es' ? 'amigo' : 'você');
-    const windowOpen = lead.last_inbound_at && now.getTime() < new Date(lead.last_inbound_at).getTime() + 24 * HOUR;
+    const windowOpen = Boolean(lead.last_inbound_at && now.getTime() < new Date(lead.last_inbound_at).getTime() + 24 * HOUR);
     if (sequence.first_status === 'pending' && firstAt + 48 * HOUR <= now.getTime()) {
       await admin.from('nara_followup_sequences').update({ first_status: 'skipped' }).eq('id', sequence.id);
     } else if (sequence.first_status === 'pending') {
@@ -239,15 +319,31 @@ export async function runNaraFollowups(admin: Admin, now = new Date()) {
         counts.waiting_template++;
         skip(`modelo_1_${String(firstListed?.status ?? 'nao_encontrado').toLowerCase()}`);
       } else {
+        // Reuse only a successful attachment activity; an AI plan/request is not a sent file.
+        const { data: material, error: materialError } = windowOpen ? await admin.from('activities').select('metadata')
+          .eq('lead_id', lead.id).eq('organization_id', lead.organization_id).eq('type', 'arquivo_ia_enviado')
+          .gte('created_at', lead.last_inbound_at || sequence.first_outbound_at)
+          .order('created_at', { ascending: false }).limit(1).maybeSingle() : { data: null, error: null };
         const { data: claimed } = await admin.rpc('claim_nara_followup_step', { p_id: sequence.id, p_step: 'first' });
         if (claimed) {
           try {
-            const body = copy[language].first.replace('{{1}}', name);
+            const gate = await revalidateClaimedFollowup(admin, lead, sequence, 'first', liveNow, windowOpen);
+            if (!gate.lead) {
+              await stopClaimedFollowup(admin, sequence, 'first', gate, liveNow());
+              skip(`revalidacao_${gate.reason}`);
+              if (gate.cancel) counts.cancelled++;
+              if (gate.reason === 'falha_na_revalidacao') counts.errors++;
+              continue;
+            }
+            const contextual = windowOpen ? buildNaraFollowupText({ lead: gate.lead, language,
+              confirmedMaterialSent: !materialError && typeof material?.metadata?.ai_file_id === 'string' && Boolean(material.metadata.ai_file_id),
+            }) : null;
+            const body = contextual?.body ?? copy[language].first.replace('{{1}}', name);
             const result = windowOpen
               ? await provider.sendText({ phoneNumberId, accessToken, to: destination, body })
               : await provider.sendTemplate({ phoneNumberId, accessToken, to: destination,
                 name: firstTemplate.name, language, bodyParameters: [name], headerType: 'NONE' });
-            const sentAt = await recordSend(admin, lead, channel, destination, body, result, windowOpen ? 'text' : 'template', 'first', now.toISOString());
+            const sentAt = await recordSend(admin, lead, channel, destination, body, result, windowOpen ? 'text' : 'template', 'first', liveNow().toISOString(), contextual?.context);
             await admin.from('nara_followup_sequences').update({ first_status: 'sent', first_sent_at: sentAt }).eq('id', sequence.id);
             counts.first_sent++;
           } catch (sendError) {
@@ -272,10 +368,18 @@ export async function runNaraFollowups(admin: Admin, now = new Date()) {
     const { data: claimed } = await admin.rpc('claim_nara_followup_step', { p_id: sequence.id, p_step: 'second' });
     if (!claimed) continue;
     try {
+      const gate = await revalidateClaimedFollowup(admin, lead, sequence, 'second', liveNow, false);
+      if (!gate.lead) {
+        await stopClaimedFollowup(admin, sequence, 'second', gate, liveNow());
+        skip(`revalidacao_${gate.reason}`);
+        if (gate.cancel) counts.cancelled++;
+        if (gate.reason === 'falha_na_revalidacao') counts.errors++;
+        continue;
+      }
       const body = spec.body.replace('{{1}}', name);
       const result = await provider.sendTemplate({ phoneNumberId, accessToken, to: destination,
         name: spec.name, language, bodyParameters: [name], headerType: 'NONE' });
-      const sentAt = await recordSend(admin, lead, channel, destination, body, result, 'template', 'second', now.toISOString());
+      const sentAt = await recordSend(admin, lead, channel, destination, body, result, 'template', 'second', liveNow().toISOString());
       await admin.from('nara_followup_sequences').update({ second_status: 'sent', second_sent_at: sentAt }).eq('id', sequence.id);
       counts.second_sent++;
     } catch (sendError) {

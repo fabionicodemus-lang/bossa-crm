@@ -4,6 +4,7 @@ import { protectNaraCommercialReply, naraReplyNeedsCommercialProtection } from '
 import { hasConcreteHousingInterest, priceObjectionValueBridge } from './nara-commercial-conversion';
 import { applyNaraFinancialHandoff } from './nara-sales-handoff';
 import { agendaActionFromText, shouldHandleAgendaTurn } from './nara-agenda-intent';
+import { guardNaraAgendaContext } from './nara-agenda-context';
 import { collapseRepeatedNaraIntroductions, hasNaraIntroduction, naraConversationLanguage, naraLanguageSwitchReply, removeRepeatedNaraIntroduction, requestedNaraLanguage } from './nara-language';
 import { aiModelRoutingSettings, pricingFor, selectAiModels, supportsExplicitCaching, type AiWorkload } from './openai-model-routing';
 import { isAssistedSaleSignal, isBrokerRoutingSignal, isPostSaleRoutingSignal, isSupplierRoutingSignal } from './nara-contact-routing';
@@ -971,23 +972,13 @@ export async function enforceNaraReplyGuardrails(
   );
   // The model can suggest an appointment, but only the agenda service can
   // confirm it. In the simulator no calendar write is performed at all.
-  const appointmentText = normalizeText(turn.reply);
-  const claimsAppointment = appointmentText.split(/[.!?\n]+/).some((sentence) =>
-    /\b(?:visitas?|videochamada|ligacao|reuniao|horarios?|appointments?|meetings?|video call|call|videollamada|citas?|reunion|llamada)\b/.test(sentence)
-    && /\b(?:agendad[oa]|marcad[oa]|confirmad[oa]|scheduled|booked|confirmed)\b/.test(sentence)
-    && !/\b(?:nao|not|no esta|no ha sido|no se ha|isn't|isn’t|hasn't|hasn’t|without|sin)\b.{0,60}\b(?:agendad[oa]|marcad[oa]|confirmad[oa]|scheduled|booked|confirmed)\b/.test(sentence),
-  );
+  const agendaGuard = guardNaraAgendaContext(turn.reply, history, { confirmed: turn.agenda_confirmed });
   if (lead.kind === 'cliente' && lead.stage !== 'agendado' && turn.agenda_confirmed !== true
-    && (turn.stage === 'agendado' || turn.classification === 'agendamento' || claimsAppointment)) {
+    && (turn.stage === 'agendado' || turn.classification === 'agendamento' || agendaGuard.changed)) {
     turn.stage = 'ia';
     if (turn.classification === 'agendamento') turn.classification = 'quente';
-    if (claimsAppointment) {
-      const language = naraConversationLanguage(history);
-      turn.reply = language === 'es' ? 'Voy a verificar la disponibilidad para el horario que elegiste. La cita todavía no está confirmada.'
-        : language === 'en' ? "I'll check availability for your preferred time. The appointment is not confirmed yet."
-          : 'Vou verificar a disponibilidade para o horário que você escolheu. O agendamento ainda não está confirmado.';
-    }
-    turn.next_action = 'Verificar a agenda para o formato, dia e horário pedidos; confirmar somente após gravação bem-sucedida.';
+    if (agendaGuard.changed) turn.reply = agendaGuard.reply;
+    turn.next_action = agendaGuard.nextAction;
   }
   if (lead.kind === 'cliente' && !routeOutsideBuyerProfile(history) && !asksAlmaReservationGuarantee) {
     const financialHandoff = applyNaraFinancialHandoff(turn, history);

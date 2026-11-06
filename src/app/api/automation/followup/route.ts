@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { runDeferredNaraReplies, runNaraFollowups } from '@/lib/nara-followup';
+import { naraFutureCommitment, readNaraJourney } from '@/lib/nara-journey';
 
 export const maxDuration = 60;
 
@@ -125,7 +126,11 @@ async function runFollowupWorker() {
     .not('stage', 'in', '(fechado_ganho,encerrado)').eq('opt_out', false).limit(2000);
 
   for (const lead of leads ?? []) {
-    if (lead.stage === 'futuro' && lead.reactivation_at && new Date(lead.reactivation_at).getTime() <= now) {
+    // A deliberate pause/agreed return is not abandonment. Do not override it
+    // with reactivation, 72h escalation or seven-day automatic recovery.
+    if (lead.automation_paused || naraFutureCommitment(lead.metadata, nowDate)) continue;
+    if (lead.stage === 'futuro' && lead.owner_mode !== 'human' && lead.ai_enabled !== false
+      && lead.reactivation_at && new Date(lead.reactivation_at).getTime() <= now) {
       await admin.from('leads').update({
         stage: 'qualificacao_ia',
         owner_mode: 'ai',
@@ -277,8 +282,7 @@ async function runFollowupWorker() {
           stage: 'humano_ativo',
           ai_enabled: false,
           handoff_requested_at: nowIso,
-          handoff_accepted_at: nowIso,
-          last_human_activity_at: nowIso,
+          handoff_accepted_at: null,
           next_action: 'Fazer contato humano após 3 dias sem resposta à IA.',
           next_action_type: 'resgate_sem_resposta_3d',
           next_action_due_at: nowIso,
@@ -289,7 +293,7 @@ async function runFollowupWorker() {
           lead_id: lead.id,
           requested_by: 'system',
           offered_to: escalationOwner.userId,
-          accepted_by: escalationOwner.userId,
+          accepted_by: null,
           priority_class: lead.priority_class,
           reason: 'Mais de 3 dias sob responsabilidade da IA sem resposta do cliente.',
           briefing: {
@@ -298,8 +302,8 @@ async function runFollowupWorker() {
             last_outbound_at: lead.last_outbound_at,
             last_inbound_at: lead.last_inbound_at,
           },
-          status: 'accepted',
-          accepted_at: nowIso,
+          status: 'pending',
+          accepted_at: null,
           expires_at: nowIso,
         });
 
@@ -394,7 +398,8 @@ async function runFollowupWorker() {
           await admin.from('lead_tasks').insert(payload);
         }
       }
-      const protectedByFutureCommitment = lead.stage === 'agendado' && lead.next_action_due_at && new Date(lead.next_action_due_at).getTime() > now;
+      const protectedByFutureCommitment = naraFutureCommitment(lead.metadata, nowDate)
+        || (lead.stage === 'agendado' && lead.next_action_due_at && new Date(lead.next_action_due_at).getTime() > now);
       if (!protectedByFutureCommitment && inactive >= 7 * DAY_MS) {
         await admin.from('leads').update({
           stage: 'nutricao_ativa',
@@ -404,6 +409,9 @@ async function runFollowupWorker() {
           next_action: 'Retomar com continuidade após sete dias sem atividade humana.',
           next_action_type: 'resgate_ia',
           next_action_due_at: nowIso,
+          metadata: { ...(lead.metadata || {}), nara_journey: {
+            ...readNaraJourney(lead.metadata), requested_next_step: null, pending_reason: null,
+          } },
         }).eq('id', lead.id);
         await admin.from('activities').insert({
           organization_id: lead.organization_id,
