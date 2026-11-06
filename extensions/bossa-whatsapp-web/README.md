@@ -8,7 +8,7 @@ Extensão Chrome Manifest V3 que **clica na interface visível do WhatsApp Web**
 2. Descompacte o arquivo em uma pasta permanente do computador.
 3. No Google Chrome, abra `chrome://extensions`, habilite o **Modo do desenvolvedor**, clique em **Carregar sem compactação** e selecione a pasta que contém `manifest.json`.
 4. Abra o CRM em `https://crm.bossaempreendimentos.com.br` e o WhatsApp Web em `https://web.whatsapp.com`. Entre com o WhatsApp que fará os envios.
-5. Atualize a página do CRM; deve aparecer **Extensão: conectada**.
+5. Atualize a página do CRM; deve aparecer **Extensão: conectada · v0.1.1**. Se aparecer "desatualizada", substitua a pasta anterior pela nova versão, clique em **Atualizar** em `chrome://extensions` e recarregue o CRM.
 
 Na homologação, use a [prévia específica do CRM](https://bossa-crm-homologacao-git-feat-browser-whatsapp-62bda2-elos-os.vercel.app/transmissoes/navegador) com acesso autorizado da equipe Vercel. A extensão aceita somente esse endereço de prévia, o domínio principal do CRM e `localhost:3000`.
 
@@ -20,8 +20,8 @@ Cada operador precisa instalar a extensão em seu próprio Chrome. A fila fica n
 2. Defina o número do **remetente com DDI**, a mensagem e até três PDFs de 8 MB. A IA pode propor quatro variantes; revise-as antes de criar o rascunho.
 3. Crie o rascunho e confira a lista de destinatários e o conteúdo. Um responsável deve atestar o consentimento para este tipo de comunicação e aprovar.
 4. Libere a fila e clique em **Executar neste Chrome**. Confirme que o WhatsApp aberto é o número indicado.
-5. Deixe as abas do CRM e WhatsApp abertas, com a sessão iniciada. A extensão abre o chat, tenta conferir o telefone nos detalhes, insere o texto ou PDF, clica e procura o conteúdo na conversa. Cada execução processa até **25 contatos**; revise os resultados antes de iniciar o próximo lote.
-6. Se houver erro ou perda de confirmação, o contato passa a **Conferir**. Abra o WhatsApp, veja o que aconteceu e use **Conferi: enviado** ou **Conferi: não enviado**. A fila não repete automaticamente o envio. Após uma queda de sessão, o remetente fica bloqueado até alguém confirmar que o Chrome anterior parou e clicar em **Liberar número após conferência**.
+5. Deixe as abas do CRM e WhatsApp abertas, com a sessão iniciada. A extensão abre o chat, tenta conferir o telefone nos detalhes, insere o texto ou PDF, clica e procura o conteúdo na conversa. Comece com **2 contatos de teste**; cada execução processa até **20 contatos** e requer confirmação e revisão do responsável.
+6. Se houver erro ou perda de confirmação, o contato passa a **Conferir**. Abra o WhatsApp, veja o que aconteceu e use **Conferi: enviado** ou **Conferi: não enviado**. A fila não repete automaticamente o envio. Após uma queda de sessão, o remetente fica bloqueado até alguém confirmar que o Chrome anterior parou e clicar em **Liberar número após conferência**. Não reexecute os dois destinatários incertos da campanha anterior antes dessa conferência.
 
 O estado **Observado na tela** significa somente que o conteúdo foi visto na conversa após um clique. O CRM não tem confirmação de entrega ou leitura nesta modalidade.
 

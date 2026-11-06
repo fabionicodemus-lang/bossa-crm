@@ -19,11 +19,13 @@ type Claim = {
   recipient_id: string; lead_name: string; phone: string; message_text: string;
   next_item_index: number; item_count: number; media: BrowserCampaignMedia[];
 };
-type BridgeOutcome = { state: 'observed' | 'uncertain' | 'skipped'; detail: string };
+type BridgeOutcome = { state: 'observed' | 'uncertain' | 'skipped'; detail: string; version?: string };
 
 const API = '/api/transmissoes/navegador';
 const MAX_RECIPIENTS = 600;
+const REQUIRED_EXTENSION_VERSION = '0.1.1';
 const MIN_REVIEW_DELAY_MS = 15000;
+type BatchLimit = 1 | 2 | 5 | 10 | 20;
 const dateTime = new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
 const statusLabels: Record<string, string> = {
   draft: 'Rascunho', ready: 'Aprovada', running: 'Em andamento', paused: 'Pausada',
@@ -97,11 +99,11 @@ export function BrowserCampaignManager({ organizationId, canEdit }: { organizati
   const [busy, setBusy] = useState(false);
   const [running, setRunning] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [extension, setExtension] = useState<'checking' | 'connected' | 'missing'>('checking');
+  const [extension, setExtension] = useState<'checking' | 'connected' | 'outdated' | 'missing'>('checking');
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [progress, setProgress] = useState('');
-  const [batchLimit, setBatchLimit] = useState<1 | 5 | 25>(1);
+  const [batchLimit, setBatchLimit] = useState<BatchLimit>(2);
   const [previewVersion, setPreviewVersion] = useState(0);
   const [previewContactId, setPreviewContactId] = useState('');
   const stopRef = useRef(false);
@@ -127,7 +129,9 @@ export function BrowserCampaignManager({ organizationId, canEdit }: { organizati
   useEffect(() => {
     mountedRef.current = true;
     void refreshList().catch((cause) => setError(String(cause)));
-    void bridgeCommand('PING').then(() => setExtension('connected')).catch(() => setExtension('missing'));
+    void bridgeCommand('PING')
+      .then((result) => setExtension(result.version === REQUIRED_EXTENSION_VERSION ? 'connected' : 'outdated'))
+      .catch(() => setExtension('missing'));
     return () => { mountedRef.current = false; stopRef.current = true; };
   }, [refreshList]);
 
@@ -270,8 +274,15 @@ export function BrowserCampaignManager({ organizationId, canEdit }: { organizati
     if (!window.confirm(`Você conferiu que este Chrome está conectado ao WhatsApp do remetente +${campaign.sender_phone}? Esta execução poderá enviar para até ${batchLimit} destinatário(s) aprovados e registrará cada etapa.`)) return;
     const id = campaign.id;
     setError(''); setNotice(''); setProgress('Verificando a extensão...');
-    try { await bridgeCommand('PING'); setExtension('connected'); }
-    catch { setExtension('missing'); setError('A extensão Bossa não está conectada. Instale-a no Chrome e recarregue a página.'); return; }
+    try {
+      const ping = await bridgeCommand('PING');
+      if (ping.version !== REQUIRED_EXTENSION_VERSION) {
+        setExtension('outdated');
+        setError(`Atualize a extensão Bossa no Chrome para a versão ${REQUIRED_EXTENSION_VERSION} antes de iniciar os envios.`);
+        return;
+      }
+      setExtension('connected');
+    } catch { setExtension('missing'); setError('A extensão Bossa não está conectada. Instale-a no Chrome e recarregue a página.'); return; }
     runningRef.current = true; stopRef.current = false; setRunning(true);
     const workerId = workerIdRef.current;
     try {
@@ -394,7 +405,7 @@ export function BrowserCampaignManager({ organizationId, canEdit }: { organizati
     <div className={styles.noticeBox}>
       <strong>Chrome aberto e WhatsApp Web conectado.</strong> Esta modalidade depende do computador do operador. A extensão usa a interface visível; mudanças no WhatsApp podem interromper a execução. Envie somente a corretores que concordaram em receber as tabelas.
       <a href="/downloads/bossa-whatsapp-web.zip" download>Baixar extensão para a equipe</a>
-      <span className={styles.extensionStatus}>Extensão: {extension === 'connected' ? '● conectada' : extension === 'checking' ? 'verificando...' : '○ não encontrada'}</span>
+      <span className={styles.extensionStatus}>Extensão: {extension === 'connected' ? `● conectada · v${REQUIRED_EXTENSION_VERSION}` : extension === 'checking' ? 'verificando...' : extension === 'outdated' ? `◌ desatualizada (precisa v${REQUIRED_EXTENSION_VERSION})` : '○ não encontrada'}</span>
     </div>
     {error && <div className="error-box" role="alert">{error}</div>}
     {notice && <div className="info-box" role="status">{notice}</div>}
@@ -510,19 +521,20 @@ export function BrowserCampaignManager({ organizationId, canEdit }: { organizati
         {canEdit && <div className={styles.actions}>
           {(['ready', 'paused'].includes(campaign.status)) && <button className="btn btn-primary" disabled={busy} onClick={() => void changeStatus('start')}>Liberar fila</button>}
           {campaign.status === 'running' && !running && <label className="field">Destinatários por execução
-            <select aria-label="Destinatários por execução" value={batchLimit} disabled={busy} onChange={(e) => setBatchLimit(Number(e.target.value) as 1 | 5 | 25)}>
-              <option value={1}>1 — teste inicial</option><option value={5}>5 — lote supervisionado</option><option value={25}>25 — limite máximo</option>
+            <select aria-label="Destinatários por execução" value={batchLimit} disabled={busy} onChange={(e) => setBatchLimit(Number(e.target.value) as BatchLimit)}>
+              <option value={1}>1 — verificação individual</option><option value={2}>2 — teste inicial</option><option value={5}>5 — lote supervisionado</option><option value={10}>10 — lote supervisionado</option><option value={20}>20 — limite por execução</option>
             </select>
           </label>}
-          {campaign.status === 'running' && !running && <button className="btn btn-primary" disabled={busy || senderBlocked} onClick={() => void executeInChrome()}>▶ Executar neste Chrome</button>}
+          {campaign.status === 'running' && !running && <button className="btn btn-primary" disabled={busy || senderBlocked || extension !== 'connected'} onClick={() => void executeInChrome()}>▶ Executar neste Chrome</button>}
           {campaign.status === 'running' && <button className="btn btn-secondary" disabled={busy} onClick={() => { stopRef.current = true; void changeStatus('pause'); }}>⏸ Pausar campanha</button>}
           {running && <span className={styles.pill}>⏳ {progress}</span>}
           {['draft','ready','paused'].includes(campaign.status) && <button className="btn btn-danger btn-sm" disabled={busy} onClick={() => { if (window.confirm('Cancelar esta campanha?')) void changeStatus('cancel'); }}>Cancelar</button>}
           <button className="btn btn-ghost btn-sm" onClick={() => void refreshDetail(campaign.id)}>Atualizar estados</button>
         </div>}
         {extension === 'missing' && <p className={styles.muted}>Para executar: instale a extensão em <code>extensions/bossa-whatsapp-web</code> pelo Chrome → Extensões → Modo do desenvolvedor → Carregar sem compactação, com a tela do CRM aberta.</p>}
+        {extension === 'outdated' && <p className={styles.muted}>Baixe novamente a extensão acima, substitua os arquivos da pasta instalada, clique em <strong>Atualizar</strong> no Chrome → Extensões e recarregue o CRM. A fila atual permanece bloqueada até conferir os envios incertos.</p>}
         <p className={styles.muted}>“Observado” significa que a interface exibiu o conteúdo após o clique. Não significa entregue ou lido. Erros incertos exigem conferência humana.</p>
-        <p className={styles.muted}>Cada execução processa até 25 corretores. Revise os resultados e execute o próximo lote quando estiver pronto.</p>
+        <p className={styles.muted}>Cada execução processa até 20 corretores. Revise os resultados e execute o próximo lote quando estiver pronto; lotes menores não garantem ausência de bloqueios pelo WhatsApp.</p>
       </div></section>
       <section className="card"><div className="card-head"><h3>Destinatários e registro</h3></div><div className="card-body"><div className={styles.recipientList}>{recipients.map((row) => <div className={styles.recipientRow} key={row.id}>
         <div><strong>{row.lead_name}</strong><small>+{row.phone} · {row.stage} · etapa {row.next_item_index + 1}</small><p className={styles.preview}>{row.message_text}</p>{row.detail && <p className={styles.muted}>{row.detail}</p>}</div>
