@@ -4,6 +4,7 @@ import { postProcessNaraTurn } from '../src/lib/ai-v120.ts';
 import { enforceNaraReplyGuardrails, enforceNaraTriage } from '../src/lib/ai.ts';
 import { deriveHybridDecision, aiCanReply } from '../src/lib/hybrid.ts';
 import { applyNaraFinancialHandoff } from '../src/lib/nara-sales-handoff.ts';
+import { naraApprovedLocationReply } from '../src/lib/nara-approved-locations.ts';
 
 const user = (content) => ({ role: 'user', content });
 const assistant = (content) => ({ role: 'assistant', content });
@@ -263,5 +264,121 @@ await check('Pedido real de emprego continua fora da pré-venda', async () => {
   assert.equal(result.handoff, true);
   assert.match(result.summary, /fora da esteira de compradores/);
   assert.doesNotMatch(result.reply, /entrada e as condições de pagamento|avaliar sua proposta/);
+});
+
+await check('Pergunta mista de entrada e distância mantém passagem e o fato aprovado', async () => {
+  const history = [user('Na unidade 1403 do Flow, aceitam R$ 200 mil de entrada e o restante em 60 vezes? E quantos metros fica do mar?')];
+  const { result, decision } = await run(history, turn('Sim, aceitamos! A entrada de R$ 200 mil está aprovada em 60 parcelas. O Flow fica a 50 m do mar.'));
+  assert.equal(result.handoff, true);
+  assert.equal(decision.stage, 'passagem_pendente');
+  assert.equal(decision.priorityClass, 'A1');
+  assert.match(result.reply, /Vou chamar nossa equipe comercial/);
+  assert.match(result.reply, /O Flow fica em Balneário Perequê, Porto Belo, a 800 m do mar/);
+  assert.doesNotMatch(result.reply, /aceitamos|aprovad|R\$|200 mil|60 (?:vezes|parcelas)|50 m|\?/);
+  assert.match(result.summary, /Pedido declarado, ainda não aprovado:.*200 mil/);
+  const again = await enforceNaraReplyGuardrails(structuredClone(result), lead, history, {});
+  assert.deepEqual(again, result);
+  const repeated = structuredClone(result);
+  applyNaraFinancialHandoff(repeated, history);
+  const once = structuredClone(repeated);
+  applyNaraFinancialHandoff(repeated, history);
+  applyNaraFinancialHandoff(repeated, history);
+  assert.deepEqual(repeated, once);
+  assert.equal((repeated.reply.match(/800 m/g) ?? []).length, 1);
+});
+
+for (const [message, expected, handoffLanguage] of [
+  ['Quero negociar a entrada do Flow. Onde fica?', /O Flow fica em Balneário Perequê, Porto Belo, a 800 m do mar/, /Vou chamar/],
+  ['Qual é a entrada do Alma? Qual é a localização?', /O Alma fica em Balneário Perequê, Porto Belo, a 300 m do mar; não é frente-mar/, /Vou chamar/],
+  ['Qual é a entrada do Soul? Qual a distância da praia?', /O Soul fica em Itapema, a 500 m do mar/, /Vou chamar/],
+  ['Qual é a entrada do Flow e quantos metros fica do mar?', /O Flow fica em Balneário Perequê, Porto Belo, a 800 m do mar/, /Vou chamar/],
+  ['Quisiera pagar la entrada del Alma en cuotas. ¿A cuántos metros del mar está?', /El Alma está en Balneário Perequê, Porto Belo, a 300 m del mar; no está frente al mar/, /Voy a llamar/],
+  ['Hola, quiero negociar el pago del Flow. ¿Dónde está?', /El Flow está en Balneário Perequê, Porto Belo, a 800 m del mar/, /Voy a llamar/],
+  ['Please, can I pay the down payment for Soul in instalments? How far is it from the beach?', /Soul is in Itapema, 500 m from the beach/, /I'll ask/],
+  ['Please, how much is the down payment for Alma? Where is it?', /Alma is in Balneário Perequê, Porto Belo, 300 m from the beach; it is not beachfront/, /I'll ask/],
+]) await check(`Fato e idioma aprovados na passagem mista: ${message}`, () => {
+  const result = turn('Condição aprovada. Localização inventada.');
+  assert.equal(applyNaraFinancialHandoff(result, [user(message)]), true);
+  assert.equal(result.handoff, true);
+  assert.match(result.reply, handoffLanguage);
+  assert.match(result.reply, expected);
+  assert.doesNotMatch(result.reply, /aprovad|inventada|R\$|350 m/);
+});
+
+await check('Recusa de passagem preserva a resposta factual, sem encaminhar', async () => {
+  const history = [user('Qual a entrada do Flow? E quantos metros fica do mar? Não me encaminhe agora.')];
+  const { result, decision } = await run(history, turn('Sua proposta foi aprovada. Vou chamar o comercial.', { handoff: true }));
+  assert.equal(result.handoff, false);
+  assert.equal(decision.handoffRequired, false);
+  assert.ok(result.score <= 59);
+  assert.match(result.reply, /sem te encaminhar/);
+  assert.match(result.reply, /800 m do mar/);
+  assert.doesNotMatch(result.reply, /Vou chamar|foi aprovada|R\$/);
+  const repeated = await enforceNaraReplyGuardrails(structuredClone(result), lead, history, {});
+  assert.deepEqual(repeated, result);
+});
+
+for (const message of [
+  'Qual é a entrada do Flow?',
+  'Tenho 200 mil de entrada para o Flow, que fica a 20 m do mar.',
+  'Qual é a entrada do Flow? Não pedi a distância da praia.',
+]) await check(`Sem complemento factual não solicitado: ${message}`, () => {
+  const history = [user(message)];
+  const result = turn('O Flow fica a 20 m do mar.');
+  assert.equal(applyNaraFinancialHandoff(result, history), true);
+  assert.equal(naraApprovedLocationReply(history), '');
+  assert.doesNotMatch(result.reply, /\b\d+ m\b|Balneário Perequê|map/);
+});
+
+for (const history of [
+  [user('Qual é a entrada? E quantos metros fica do mar?')],
+  [user('Qual é a entrada do Flow ou do Alma? E quantos metros fica do mar?')],
+  [user('Gostei do Flow.'), assistant('Posso mostrar o Flow e o Alma.'), user('Qual é a entrada? E quantos metros fica do mar?')],
+  [user('Gostei do Flow.'), user('Qual é a entrada? E qual é a distância do outro empreendimento até a praia?')],
+  [user('Gostei do Flow.'), user('Qual é a entrada? E quantos metros do mar fica o Atlantis?')],
+  [user('Qual é a entrada do Flow? E qual a distância do outro empreendimento até a praia?')],
+  [user('Gostei do Flow.'), user('Qual é a entrada? E quantos metros do mar fica o atlantis?')],
+  [user('Qual é a entrada do Flow? E onde fica o escritório?')],
+  [user('Qual é a entrada do Flow? E o escritório, onde fica?')],
+  [user('Qual é a entrada do Flow? E onde fica o atlantis?')],
+  [user('Qual é a entrada do Flow? E a que distância o atlantis fica da praia?')],
+  [user('Please, how much is the down payment for Flow? Where is the office?')],
+  [user('Please, how much is the down payment for Flow? The office, where is it?')],
+  [user('Hola, quiero negociar la entrada del Alma. ¿Dónde está la oficina?')],
+  [user('Gostei do Flow.'), user('Please, how much is the down payment? How far is atlantis from the beach?')],
+]) await check(`Referência ausente/ambígua não recebe distância de outro projeto: ${history.at(-1).content}`, () => {
+  assert.equal(naraApprovedLocationReply(history), '');
+  const result = turn('Fica a 800 m do mar.');
+  assert.equal(applyNaraFinancialHandoff(result, history), true);
+  assert.doesNotMatch(result.reply, /\b\d+ m\b|Balneário Perequê|Itapema/);
+});
+
+await check('Contexto anterior inequívoco mantém a distância e não o preço antigo', () => {
+  const history = [user('Gostei do Flow.'), assistant('O Flow tem a condição aprovada de R$ 750 mil.'), user('Qual é a entrada? E quantos metros fica do mar?')];
+  const result = turn();
+  assert.equal(applyNaraFinancialHandoff(result, history), true);
+  assert.match(result.reply, /800 m do mar/);
+  assert.doesNotMatch(result.reply, /750|aprovad|R\$/);
+});
+
+await check('Localização pura não passa a ser negociação', async () => {
+  const history = [user('Onde fica o Flow e quantos metros fica do mar?')];
+  const result = turn(naraApprovedLocationReply(history));
+  const original = structuredClone(result);
+  assert.equal(applyNaraFinancialHandoff(result, history), false);
+  assert.deepEqual(result, original);
+  assert.match(result.reply, /800 m do mar/);
+  const checked = await run(history, result);
+  assert.equal(checked.decision.handoffRequired, false);
+  assert.match(checked.result.reply, /Flow/);
+});
+
+await check('Opt-out não recebe localização ou reabre a passagem', async () => {
+  const history = [user('Qual é a entrada do Flow e a distância da praia?'), assistant('O comercial pode verificar a condição.'), user('Não quero mais mensagens, retire meu contato dos próximos envios.')];
+  assert.equal(naraApprovedLocationReply(history), '');
+  const { result, decision } = await run(history, turn('Entendido, não vou insistir.', { classification: 'sem_interesse', score: 0 }));
+  assert.equal(decision.stage, 'encerrado');
+  assert.equal(decision.handoffRequired, false);
+  assert.doesNotMatch(result.reply, /800 m|Vou chamar/);
 });
 console.log(`${passed} verificações de conversão e passagem aprovadas sem ações externas.`);

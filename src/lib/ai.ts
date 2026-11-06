@@ -3,6 +3,7 @@ import { buildNaraConversationInstructions, NARA_CONVERSATION_POLICY, NARA_COMME
 import { protectNaraCommercialReply, naraReplyNeedsCommercialProtection } from './nara-commercial-guard';
 import { hasConcreteHousingInterest, priceObjectionValueBridge } from './nara-commercial-conversion';
 import { applyNaraFinancialHandoff } from './nara-sales-handoff';
+import { naraApprovedLocationReply } from './nara-approved-locations';
 import { agendaActionFromText, shouldHandleAgendaTurn } from './nara-agenda-intent';
 import { guardNaraAgendaContext } from './nara-agenda-context';
 import { collapseRepeatedNaraIntroductions, hasNaraIntroduction, naraConversationLanguage, naraLanguageSwitchReply, removeRepeatedNaraIntroduction, requestedNaraLanguage } from './nara-language';
@@ -926,16 +927,9 @@ export async function enforceNaraReplyGuardrails(
   }
   // Em uma pergunta dupla ("onde fica e quanto custa?"), a substituição
   // financeira segura não deve apagar a localização solicitada.
-  const asksLocation = /\b(?:onde fica|localizacao|endereco|no mapa|donde queda|ubicacion|direccion|where is|location)\b/.test(normalizedQuestion);
-  const locationFocus = enterpriseInFocus(history);
-  if (lead.kind === 'cliente' && protectedReply.changed && asksLocation && locationFocus) {
-    const locations = {
-      flow: { intro: 'O Flow fica em Balneário Perequê, Porto Belo, a 800 m do mar.', map: 'Flow%20Aptos%20Porto%20Belo%20SC' },
-      alma: { intro: 'O Alma fica em Balneário Perequê, Porto Belo, a 300 m do mar; não é frente-mar.', map: 'Alma%20Seahouses%20Porto%20Belo%20SC' },
-      soul: { intro: 'O Soul fica em Itapema, a 500 m do mar.', map: 'Soul%20Residence%20Itapema%20SC' },
-    };
-    const location = locations[locationFocus];
-    turn.reply = `${turn.reply.trim()}\n\n${location.intro} Você pode conferir no mapa: https://www.google.com/maps/search/?api=1&query=${location.map}`;
+  if (lead.kind === 'cliente' && protectedReply.changed) {
+    const locationReply = naraApprovedLocationReply(history, { includeMap: true });
+    if (locationReply) turn.reply = `${turn.reply.trim()}\n\n${locationReply}`;
   }
   // A blindagem comercial pode substituir uma resposta que incluía o próximo
   // passo. Preserve o encaminhamento pedido por quem realmente quer fechar.

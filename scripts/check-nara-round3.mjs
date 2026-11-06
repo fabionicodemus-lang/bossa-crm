@@ -128,4 +128,5 @@ const completeAgenda = appendAgendaMessageToReply(longReply, 'Qual dia você pre
 assert.match(completeAgenda, /Esta segunda frase acrescenta/);
 assert.match(completeAgenda, /Qual dia você prefere para a visita\?/);
 assert.ok(naraReplyWordCount(completeAgenda) > 45, 'agenda não deve cortar a explicação');
+await import('./check-nara-optout.mjs');
 console.log('Nara rodada 3: opt-out, pós-venda, agenda, preços e explicação preservada validados.');
