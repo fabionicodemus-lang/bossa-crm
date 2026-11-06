@@ -23,7 +23,7 @@ type BridgeOutcome = { state: 'observed' | 'uncertain' | 'skipped'; detail: stri
 
 const API = '/api/transmissoes/navegador';
 const MAX_RECIPIENTS = 600;
-const SESSION_BATCH_LIMIT = 25;
+const MIN_REVIEW_DELAY_MS = 15000;
 const dateTime = new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
 const statusLabels: Record<string, string> = {
   draft: 'Rascunho', ready: 'Aprovada', running: 'Em andamento', paused: 'Pausada',
@@ -89,6 +89,7 @@ export function BrowserCampaignManager({ organizationId, canEdit }: { organizati
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [progress, setProgress] = useState('');
+  const [batchLimit, setBatchLimit] = useState<1 | 5 | 25>(1);
   const stopRef = useRef(false);
   const mountedRef = useRef(true);
   const runningRef = useRef(false);
@@ -237,7 +238,7 @@ export function BrowserCampaignManager({ organizationId, canEdit }: { organizati
 
   async function executeInChrome() {
     if (!campaign || runningRef.current) return;
-    if (!window.confirm(`Você conferiu que este Chrome está conectado ao WhatsApp do remetente +${campaign.sender_phone}? A campanha enviará somente a destinatários aprovados e registrará cada etapa.`)) return;
+    if (!window.confirm(`Você conferiu que este Chrome está conectado ao WhatsApp do remetente +${campaign.sender_phone}? Esta execução poderá enviar para até ${batchLimit} destinatário(s) aprovados e registrará cada etapa.`)) return;
     const id = campaign.id;
     setError(''); setNotice(''); setProgress('Verificando a extensão...');
     try { await bridgeCommand('PING'); setExtension('connected'); }
@@ -246,7 +247,7 @@ export function BrowserCampaignManager({ organizationId, canEdit }: { organizati
     const workerId = workerIdRef.current;
     try {
       let waiting = 0;
-      for (let count = 0; count < SESSION_BATCH_LIMIT && !stopRef.current; count++) {
+      for (let count = 0; count < batchLimit && !stopRef.current; count++) {
         const { recipient } = await workerRequest<{ recipient: Claim | null }>({ action: 'claim', campaignId: id, workerId });
         if (!recipient) {
           const current = await refreshDetail(id);
@@ -319,7 +320,13 @@ export function BrowserCampaignManager({ organizationId, canEdit }: { organizati
           }
         } finally { window.clearInterval(heartbeat); }
         if ((count + 1) % 5 === 0) await refreshDetail(id);
-        if (count + 1 === SESSION_BATCH_LIMIT) setNotice('Lote supervisionado de 25 destinatários concluído. Confira os estados antes de executar o próximo lote.');
+        if (count + 1 === batchLimit) setNotice(`Lote supervisionado de ${batchLimit} destinatário(s) concluído. Confira os estados antes de executar o próximo lote.`);
+        else if (!stopRef.current) {
+          // Intervalo de revisão operacional: dá tempo para o responsável
+          // perceber uma falha e pausar antes de abrir a próxima conversa.
+          setProgress('Intervalo de revisão antes do próximo destinatário...');
+          await new Promise((resolve) => window.setTimeout(resolve, MIN_REVIEW_DELAY_MS));
+        }
       }
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Sessão interrompida. Confira os envios incertos.');
@@ -390,7 +397,7 @@ export function BrowserCampaignManager({ organizationId, canEdit }: { organizati
       </div></section>
       <section className="card"><div className="card-head"><h3>2. Tabelas e arquivos</h3></div><div className="card-body">
         <label className={styles.uploadButton}>📎 Selecionar PDFs <input type="file" accept="application/pdf,.pdf" multiple disabled={uploading || media.length >= 3} onChange={(e) => void uploadFile(e)} /></label>
-        <p className={styles.muted}>Até 3 PDFs de 8 MB cada, máximo de 20 MB no total. O WhatsApp envia uma mensagem de texto e depois cada arquivo.</p>
+        <p className={styles.muted}>Até 3 PDFs de 8 MB cada, máximo de 20 MB no total. O WhatsApp tenta enviar o texto e depois cada arquivo. A seleção automática de PDF depende da versão do WhatsApp Web; quando não puder ser validada, a execução para para conferência manual.</p>
         {media.map((file) => <div className={styles.fileRow} key={file.path}><span>📄 {file.filename} · {(file.size / 1048576).toFixed(1)} MB</span><button className="btn btn-ghost btn-sm" onClick={() => setMedia((old) => old.filter((entry) => entry.path !== file.path))}>Remover</button></div>)}
         {uploading && <span>Enviando arquivos...</span>}
       </div></section>
@@ -427,6 +434,11 @@ export function BrowserCampaignManager({ organizationId, canEdit }: { organizati
         </div>}
         {canEdit && <div className={styles.actions}>
           {(['ready', 'paused'].includes(campaign.status)) && <button className="btn btn-primary" disabled={busy} onClick={() => void changeStatus('start')}>Liberar fila</button>}
+          {campaign.status === 'running' && !running && <label className="field">Destinatários por execução
+            <select aria-label="Destinatários por execução" value={batchLimit} disabled={busy} onChange={(e) => setBatchLimit(Number(e.target.value) as 1 | 5 | 25)}>
+              <option value={1}>1 — teste inicial</option><option value={5}>5 — lote supervisionado</option><option value={25}>25 — limite máximo</option>
+            </select>
+          </label>}
           {campaign.status === 'running' && !running && <button className="btn btn-primary" disabled={busy || senderBlocked} onClick={() => void executeInChrome()}>▶ Executar neste Chrome</button>}
           {campaign.status === 'running' && <button className="btn btn-secondary" disabled={busy} onClick={() => { stopRef.current = true; void changeStatus('pause'); }}>⏸ Pausar campanha</button>}
           {running && <span className={styles.pill}>⏳ {progress}</span>}

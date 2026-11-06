@@ -85,7 +85,11 @@
 
   function observedOutgoing(before, expectedText) {
     const bubbles = [...(main()?.querySelectorAll('.message-out, [data-testid="msg-container"]') ?? [])];
-    return bubbles.some((bubble) => !before.has(bubble) && visible(bubble) && text(bubble).includes(expectedText));
+    // Na interface atual o seletor msg-container inclui também mensagens
+    // recebidas. Nunca registrar uma mensagem de terceiro como nosso envio.
+    return bubbles.some((bubble) => !before.has(bubble) && visible(bubble)
+      && (bubble.classList.contains('message-out') || Boolean(bubble.querySelector('[data-testid="tail-out"]')))
+      && text(bubble).includes(expectedText));
   }
 
   async function sendText(message) {
@@ -121,16 +125,19 @@
     const input = composer();
     if (!input || text(input)) throw new Error('Há uma mensagem em edição nesta conversa.');
     const before = new Set(main()?.querySelectorAll('.message-out, [data-testid="msg-container"]') ?? []);
-    const attachIcon = [...document.querySelectorAll('[data-icon="plus"], [data-icon="clip"], [title="Anexar"], [title="Attach"]')]
+    const attachIcon = [...document.querySelectorAll('#main footer [aria-label="Anexar"], #main footer [aria-label="Attach"], [data-icon="plus"], [data-icon="clip"], [title="Anexar"], [title="Attach"]')]
       .find((node) => visible(node) && main()?.contains(node));
-    (attachIcon?.closest('button,[role="button"]') ?? attachIcon)?.click();
+    if (!attachIcon) throw new Error('Botão Anexar indisponível nesta versão do WhatsApp Web.');
+    (attachIcon.closest('button,[role="button"]') ?? attachIcon).click();
 
     const fileInput = await waitFor(() => [...document.querySelectorAll('input[type="file"]')]
       .find((node) => {
         const accepts = node.getAttribute('accept') ?? '';
-        return accepts.includes('application/pdf') || accepts.includes('*') || !accepts;
+        // image/* não é genérico: usar esse input com um PDF pode gerar
+        // uma prévia incorreta ou uma tentativa que pareça bem-sucedida.
+        return accepts.includes('application/pdf') || accepts === '' || accepts === '*/*';
       }), 6000);
-    if (!fileInput) throw new Error('O seletor de documentos não está disponível no WhatsApp Web.');
+    if (!fileInput) throw new Error('O seletor de documentos não está disponível nesta versão do WhatsApp Web. Anexe o PDF manualmente e confira o contato antes de prosseguir.');
     const transfer = new DataTransfer();
     transfer.items.add(file);
     fileInput.files = transfer.files;

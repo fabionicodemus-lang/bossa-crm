@@ -7,6 +7,7 @@ import {
 } from '../src/lib/browser-campaigns.ts';
 
 const root = resolve(import.meta.dirname, '..');
+const contentScript = readFileSync(resolve(root, 'extensions/bossa-whatsapp-web/whatsapp-content.js'), 'utf8');
 const media = (extras = {}) => ({
   bucket: 'broadcast-media', path: 'org-1/a.pdf', filename: 'Tabela.pdf',
   mime: 'application/pdf', size: 1024, sha256: 'a'.repeat(64), ...extras,
@@ -31,6 +32,16 @@ assert.equal(safeBrowserMedia('org-1', [media({ sha256: 'alterado' })]), null, '
 assert.equal(safeBrowserMedia('org-1', [media({ size: 9 * 1048576 })]), null, 'limite por PDF');
 assert.equal(safeBrowserMedia('org-1', Array.from({ length: 4 }, (_, n) => media({ path: `org-1/${n}.pdf` }))), null);
 
+// Um input image/* nunca pode ser tratado como opção válida para PDF, e
+// a observação só pode contar bolhas identificadas como saída do operador.
+assert.doesNotMatch(contentScript, /accepts\.includes\('\*'\)/);
+assert.match(contentScript, /\[aria-label=\"Anexar\"\]/);
+assert.match(contentScript, /\[data-testid=\"tail-out\"\]/);
+
+const uncertainLockMigration = readFileSync(resolve(root,
+  'supabase/migrations/20261106170335_browser_campaign_uncertain_lock.sql'), 'utf8');
+assert.match(uncertainLockMigration, /requires_review\s*=\s*true/);
+
 // Executa o content script em um DOM deliberadamente incompleto. Uma mudança
 // na interface ou um número inválido deve falhar SEM clicar em envio.
 let sendListener;
@@ -42,7 +53,7 @@ const document = {
   querySelectorAll() { return []; },
   dispatchEvent() { clickCount++; },
 };
-vm.runInNewContext(readFileSync(resolve(root, 'extensions/bossa-whatsapp-web/whatsapp-content.js'), 'utf8'), {
+vm.runInNewContext(contentScript, {
   chrome: { runtime: { onMessage: { addListener(fn) { sendListener = fn; } } } },
   document, Date: FakeDate, setTimeout(fn) { fn(); }, Element: class {},
   getComputedStyle() { return { visibility: 'visible', display: 'block' }; },
