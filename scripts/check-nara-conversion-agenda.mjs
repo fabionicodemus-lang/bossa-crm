@@ -96,7 +96,19 @@ const coreCode = stripTypeScriptTypes(coreSource)
   .replace(/export async function maybeScheduleAgendaFromAi/, 'async function maybeScheduleAgendaFromAi');
 // Dependencies are injected deliberately; no Supabase client/provider is loaded.
 const createScheduler = new Function('findAgendaConflicts', 'agendaActionFromText', 'agendaModeFromConversation',
-  'shouldHandleAgendaTurn', 'financialNegotiationIntent', 'officeHours', `${coreCode}\nreturn maybeScheduleAgendaFromAi;`);
+  'shouldHandleAgendaTurn', 'financialNegotiationIntent', 'officeHours', 'Date', `${coreCode}\nreturn maybeScheduleAgendaFromAi;`);
+
+// Keep the real conversation fixtures deterministic without replacing the
+// process-wide clock or involving a live calendar/database.
+function scenarioClock(iso) {
+  if (!iso) return Date;
+  const timestamp = new Date(iso).getTime();
+  assert.ok(Number.isFinite(timestamp));
+  return class extends Date {
+    constructor(...args) { super(...(args.length ? args : [timestamp])); }
+    static now() { return timestamp; }
+  };
+}
 
 function fakeDb(history, options = {}) {
   const tables = {
@@ -156,12 +168,13 @@ async function runScenario(history, options = {}) {
       if (options.conflictError) throw new Error('Simulação de falha da agenda conectada');
       return options.conflicts ?? [];
     }, agendaActionFromText, agendaModeFromConversation, shouldHandleAgendaTurn, financialNegotiationIntent, officeHours,
+    scenarioClock(options.now),
   );
   let result; let error;
   try {
     result = await scheduler({ admin: db, organizationId: 'org-qa', lead, turn,
       lastUserMessage: history.at(-1).content, officeAddress: options.officeAddress,
-      weekdayHours: options.noHours ? undefined : '08:00-18:00', saturdayHours: '08:00-12:00' });
+      weekdayHours: options.noHours ? undefined : '08:00-18:00', saturdayHours: options.saturdayHours ?? '08:00-12:00' });
   } catch (cause) { error = cause; }
   return { result, error, db, turn };
 }
@@ -176,6 +189,47 @@ await check('Core agenda vídeo sem endereço físico; cria evento vídeo e marc
   assert.equal(db.tables.lead_tasks.length, 0);
   assert.equal(turn.agenda_confirmed, true);
   assert.match(turn.next_action, /link de acesso/);
+});
+await check('Rodada 06/11: vídeo amanhã às 10h chega ao evento real do core, sem link inventado', async () => {
+  const history = [
+    user('Moro em Curitiba e queria conhecer o Flow por videochamada.'),
+    assistant('Olá! Sou a Nara, da Bossa. Podemos apresentar o Flow, as plantas e a construtora por videochamada, sem você precisar sair de Curitiba.\n\nQual dia e horário funcionam melhor para você? Vou verificar a disponibilidade na agenda.'),
+    user('Pode ser amanhã às 10h? Já me manda o link confirmado.'),
+  ];
+  const { result, db, turn } = await runScenario(history, { now: '2026-11-06T12:00:00.000Z' });
+  assert.equal(result.status, 'created');
+  assert.equal(result.startsAt, '2026-11-07T13:00:00.000Z');
+  assert.equal(result.meetingMode, 'video');
+  assert.equal(db.tables.agenda_events.length, 1);
+  assert.equal(turn.agenda_confirmed, true);
+  const reply = confirmedAgendaReply(result);
+  assert.match(reply, /07\/11\/2026.*10:00/);
+  assert.match(reply, /link de acesso ainda precisa ser confirmado/);
+  assert.doesNotMatch(reply, /https?:\/\//);
+});
+await check('Rodada 06/11: sábado às 15h não cabe em expediente de sábado até 12h', async () => {
+  const { result, db, turn } = await runScenario([
+    user('Moro em Itapema e quero visitar o Flow pessoalmente.'),
+    assistant('Podemos te receber no escritório para apresentar o Flow. Qual dia e horário ficam melhores para você? Vou verificar a disponibilidade na agenda.'),
+    user('Pode ser sábado às 15h? Já deixa reservado?'),
+  ], { now: '2026-11-06T12:00:00.000Z', officeAddress: 'Endereço sintético QA' });
+  assert.equal(result.status, 'needs_details');
+  assert.match(result.message, /fora do expediente.*Qual outro horário/);
+  assert.equal(db.tables.agenda_events.length, 0);
+  assert.equal(turn.agenda_confirmed, false);
+});
+await check('Rodada 06/11: mesma visita sábado 15h é registrada apenas com expediente confirmado', async () => {
+  const { result, db, turn } = await runScenario([
+    user('Moro em Itapema e quero visitar o Flow pessoalmente.'),
+    assistant('Podemos te receber no escritório para apresentar o Flow. Qual dia e horário ficam melhores para você? Vou verificar a disponibilidade na agenda.'),
+    user('Pode ser sábado às 15h? Já deixa reservado?'),
+  ], { now: '2026-11-06T12:00:00.000Z', officeAddress: 'Endereço sintético QA', saturdayHours: '08:00-18:00' });
+  assert.equal(result.status, 'created');
+  assert.equal(result.startsAt, '2026-11-07T18:00:00.000Z');
+  assert.equal(result.meetingMode, 'presencial');
+  assert.equal(db.tables.agenda_events.length, 1);
+  assert.equal(turn.agenda_confirmed, true);
+  assert.match(confirmedAgendaReply(result), /Endereço sintético QA/);
 });
 await check('Core pede data do vídeo após aceite, sem inventar evento', async () => {
   const { result, db, turn } = await runScenario([assistant('Quer conhecer o empreendimento por videochamada?'), user('Sim')]);
