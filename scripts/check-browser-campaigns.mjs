@@ -26,6 +26,9 @@ assert.equal(validBrowserMobilePhone('55 47 99933-3634 / 55 47 98888-1234'), nul
 assert.equal(browserRecipientFirstName('Maria Silva'), 'Maria');
 assert.equal(browserRecipientFirstName('Não informada'), null, 'cadastro genérico precisa de nome válido');
 assert.equal(browserRecipientFirstName('Imobiliária do Vale'), null, 'empresa não é primeiro nome de uma pessoa');
+assert.equal(browserRecipientFirstName('Lead #50624080'), null, 'ID de importação não é primeiro nome');
+assert.equal(browserRecipientFirstName('5547999999999'), null, 'número não é primeiro nome');
+assert.equal(browserRecipientFirstName('José Carlos'), 'José', 'aceitar nomes com acento');
 assert.equal(hasBrowserRecipientNameToken('Olá, {{Nome}}!'), true);
 assert.equal(hasBrowserRecipientNameToken('Olá, pessoal!'), false);
 assert.equal(personalizeBrowserText('Oi, {{nome}} da {{imobiliaria}}. Veja {{empreendimento}}!', {
