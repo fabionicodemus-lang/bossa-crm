@@ -19,6 +19,7 @@ type AgendaEvent = {
   starts_at: string;
   ends_at: string;
   status: 'scheduled' | 'completed' | 'cancelled';
+  metadata?: { nara_outcome?: string };
 };
 
 type FormState = {
@@ -82,6 +83,7 @@ export function AgendaCalendar({ members, currentUserId, canEdit }: { members: M
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [form, setForm] = useState<FormState | null>(null);
+  const [outcomeCheckAt, setOutcomeCheckAt] = useState(0);
 
   const memberMap = useMemo(() => new Map(members.map((m) => [m.user_id, m])), [members]);
   const range = useMemo(() => {
@@ -124,6 +126,13 @@ export function AgendaCalendar({ members, currentUserId, canEdit }: { members: M
     const timer = window.setTimeout(() => { void load(); }, 0);
     return () => window.clearTimeout(timer);
   }, [load]);
+
+  const editingEventId = form?.id;
+  useEffect(() => {
+    if (!editingEventId) return;
+    const timer = window.setTimeout(() => setOutcomeCheckAt(Date.now()), 0);
+    return () => window.clearTimeout(timer);
+  }, [editingEventId]);
 
   const visibleEvents = useMemo(() => events.filter((event) => event.status !== 'cancelled'), [events]);
 
@@ -181,6 +190,24 @@ export function AgendaCalendar({ members, currentUserId, canEdit }: { members: M
     finally { setSaving(false); }
   }
 
+  async function recordOutcome(outcome: 'completed' | 'no_show') {
+    const event = events.find((item) => item.id === form?.id);
+    if (!event || !canEdit || !window.confirm(outcome === 'completed'
+      ? 'Confirmar que este encontro realmente aconteceu? Isso registra o resultado; não envia mensagem ao cliente.'
+      : 'Confirmar que o participante não compareceu? Isso não conta como encontro realizado nem envia mensagem.')) return;
+    setSaving(true); setError('');
+    try {
+      const response = await fetch('/api/agenda', { method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: event.id, expected_starts_at: event.starts_at,
+          ...(outcome === 'completed' ? { status: 'completed' } : { outcome: 'no_show' }) }) });
+      const payload = await response.json() as { error?: string; warning?: string };
+      if (!response.ok) throw new Error(payload.error || 'Não foi possível registrar o resultado.');
+      setForm(null); await load();
+      if (payload.warning) setError(payload.warning);
+    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Não foi possível registrar o resultado.'); }
+    finally { setSaving(false); }
+  }
+
   function move(direction: number) {
     const next = new Date(cursor);
     if (view === 'month') next.setMonth(next.getMonth() + direction);
@@ -207,6 +234,7 @@ export function AgendaCalendar({ members, currentUserId, canEdit }: { members: M
       borderRadius: 8, padding: compact ? '5px 7px' : '8px 9px', cursor: canEdit ? 'pointer' : 'default', marginBottom: 5,
     }}>
       <div style={{ fontWeight: 800, fontSize: compact ? 11 : 12 }}>{hhmm(event.starts_at)} · {event.title}</div>
+      {(event.status === 'completed' || event.metadata?.nara_outcome === 'no_show') && <div style={{ fontSize: 10, marginTop: 3 }}>{event.status === 'completed' ? 'Realizado — registro humano' : 'Não compareceu — registro humano'}</div>}
       {!compact && <div className="faint" style={{ fontSize: 10, marginTop: 3 }}>{member?.full_name || 'Sem responsável'} · {modeLabels[event.meeting_mode]}{event.created_by_kind === 'ai' ? ` · ${event.agent === 'plantao' ? 'Plantão IA' : 'Nara'}` : ''}</div>}
     </button>;
   }
@@ -291,6 +319,14 @@ export function AgendaCalendar({ members, currentUserId, canEdit }: { members: M
           </div>
           <div className="field"><label>Descrição</label><textarea className="textarea" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Contexto, pauta ou observações" /></div>
           <div className="info-box"><strong>Conflitos:</strong> o CRM bloqueia automaticamente dois compromissos sobrepostos para o mesmo responsável. A mesma regra é usada pela Nara e pelo Plantão.</div>
+          {form.id && canEdit && events.some((event) => event.id === form.id && event.lead_id
+            && event.status === 'scheduled' && event.metadata?.nara_outcome !== 'no_show' && Date.parse(event.starts_at) <= outcomeCheckAt) && <div className="info-box">
+            <p>Depois do encontro, registre o que realmente ocorreu. Agendamento não conta como realização.</p>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <button type="button" className="btn btn-secondary" disabled={saving} onClick={() => void recordOutcome('completed')}>Registrar realizado</button>
+              <button type="button" className="btn btn-ghost" disabled={saving} onClick={() => void recordOutcome('no_show')}>Registrar não compareceu</button>
+            </div>
+          </div>}
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
             <div>{form.id && <button className="btn btn-ghost" onClick={() => void remove()} disabled={saving}>Excluir</button>}</div>
             <div style={{ display: 'flex', gap: 8 }}><button className="btn btn-ghost" onClick={() => setForm(null)}>Cancelar</button><button className="btn btn-primary" onClick={() => void save()} disabled={saving || !form.title.trim() || !form.assigned_to}>{saving ? 'Salvando...' : 'Salvar'}</button></div>

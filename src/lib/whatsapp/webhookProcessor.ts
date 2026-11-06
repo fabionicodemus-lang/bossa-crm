@@ -6,7 +6,10 @@ import { applyNaraFinancialHandoff } from '@/lib/nara-sales-handoff';
 import { isAssistedSaleSignal, isBrokerRoutingSignal, isPostSaleRoutingSignal, isSupplierRoutingSignal } from '@/lib/nara-contact-routing';
 import { loadAiContext } from '@/lib/ai-context';
 import { recordAiUsage } from '@/lib/ai-usage';
-import { loadNaraDynamicTurnContext } from '@/lib/nara-dynamic-context';
+import { loadNaraDynamicTurnContext, loadNaraRuntimeVariables } from '@/lib/nara-dynamic-context';
+import { naraInbound24hEnabled } from '@/lib/nara-runtime-variables';
+import { tryRecordNaraFunnelEvent } from '@/lib/nara-funnel-events';
+import { explicitNaraProposalRequest } from '@/lib/nara-journey';
 import { loadNaraForeignContext } from '@/lib/nara-exterior';
 import { loadNaraOperationalContext } from '@/lib/nara-operations';
 import { extractContactTimePreference, naraContactZone, naraSendHours } from '@/lib/nara-timezone';
@@ -15,8 +18,8 @@ import { markNaraOfferAuditFailed, markNaraOfferAuditSent, prepareNaraOfferAudit
 import { aiCanReply } from '@/lib/hybrid';
 import { optOutSignal } from '@/lib/hybrid';
 import { whatsappCanStillReply, whatsappClaimAiTurn, whatsappMarkAiTurnSent } from '@/lib/whatsapp/aiTurnSafety';
-import { maybeScheduleAgendaFromAi, type AgendaAiResult } from '@/lib/agenda-ai-core';
-import { appendAgendaMessageToReply, confirmedAgendaReply, hasNonAgendaQuestion, shouldHandleAgendaTurn } from '@/lib/nara-agenda-intent';
+import { maybeScheduleAgendaFromAi, type AgendaAiResult } from '@/lib/agenda-ai';
+import { agendaActionFromText, appendAgendaMessageToReply, confirmedAgendaReply, hasNonAgendaQuestion, shouldHandleAgendaTurn } from '@/lib/nara-agenda-intent';
 import { mergeMetaAdAttribution } from '@/lib/meta-ad-attribution';
 import { applyHybridDecision } from '@/lib/hybrid-server';
 import {
@@ -616,6 +619,9 @@ export async function processConversation(args: {
       automation_paused: true, owner_mode: 'none', stage: 'encerrado', updated_at: now })
       .eq('organization_id', args.channel.organization_id).in('phone', phoneMatchVariants(lead.phone));
     if (error) throw error;
+    await tryRecordNaraFunnelEvent(args.admin, { organizationId: args.channel.organization_id,
+      leadId: lead.id, event: 'opt_out', source: 'whatsapp_customer_request',
+      evidence: { source_message_id: args.sourceMessageId }, dimensions: { contact_kind: 'cliente' } });
     await Promise.all([
       args.admin.from('nara_followup_sequences').update({ status: 'cancelled', updated_at: now }).eq('lead_id', lead.id).eq('status', 'active'),
       args.admin.from('nara_deferred_replies').update({ status: 'cancelled', updated_at: now }).eq('lead_id', lead.id).eq('status', 'pending'),
@@ -729,7 +735,17 @@ export async function processConversation(args: {
     && (isAssistedSaleSignal(item.content) || isBrokerRoutingSignal(item.content)
       || isPostSaleRoutingSignal(item.content) || isSupplierRoutingSignal(item.content)));
   let agendaReply = '';
+  if (lead.kind === 'cliente' && !outsideBuyerProfile && explicitNaraProposalRequest(lastUserMessage)) {
+    await tryRecordNaraFunnelEvent(args.admin, { organizationId: args.channel.organization_id,
+      leadId: lead.id, event: 'proposta_solicitada', source: 'whatsapp_customer_request',
+      evidence: { source_message_id: args.sourceMessageId }, dimensions: { contact_kind: 'cliente' } });
+  }
   if (lead.kind === 'cliente' && !outsideBuyerProfile && !financialNegotiationIntent(lastUserMessage, history) && shouldHandleAgendaTurn(history, lastUserMessage)) {
+    if (!['cancel', 'reschedule'].includes(agendaActionFromText(lastUserMessage))) {
+      await tryRecordNaraFunnelEvent(args.admin, { organizationId: args.channel.organization_id,
+        leadId: lead.id, event: 'compromisso_solicitado', source: 'whatsapp_customer_request',
+        evidence: { source_message_id: args.sourceMessageId }, dimensions: { contact_kind: 'cliente' } });
+    }
     const officeAddress = context.dynamic?.values.office_address?.trim();
     let appointment: AgendaAiResult;
     try {
@@ -745,6 +761,11 @@ export async function processConversation(args: {
         message: 'Não consegui confirmar esse horário na agenda. Vou chamar a equipe para combinar com você, sem considerar o compromisso agendado ainda.' };
     }
     if (appointment.status === 'created') {
+      await tryRecordNaraFunnelEvent(args.admin, { organizationId: args.channel.organization_id,
+        leadId: lead.id, event: 'compromisso_confirmado', source: 'agenda_verified',
+        evidence: { agenda_event_id: appointment.eventId }, dimensions: {
+          contact_kind: 'cliente', responsible_id: appointment.assignedTo, meeting_mode: appointment.meetingMode,
+        } });
       turn.reply = confirmedAgendaReply(appointment);
       agendaReply = turn.reply;
       turn.stage = 'agendado'; turn.classification = 'agendamento'; turn.handoff = false;
@@ -957,7 +978,7 @@ export async function processConversation(args: {
   } catch (error) {
     console.error('[nara offer audit sent status]', error);
   }
-  await recordOutbound({
+  const sentReply = await recordOutbound({
     admin: args.admin,
     channel: args.channel,
     conversation: args.conversation,
@@ -975,6 +996,11 @@ export async function processConversation(args: {
       nara_offer_audit_ids: offerAuditIds,
     },
   });
+  if (lead.kind === 'cliente' && sentReply?.id) {
+    await tryRecordNaraFunnelEvent(args.admin, { organizationId: args.channel.organization_id,
+      leadId: lead.id, event: 'resposta_enviada', source: 'whatsapp_send_confirmed',
+      evidence: { outbound_message_id: sentReply.id }, dimensions: { contact_kind: 'cliente' } });
+  }
   try {
     await whatsappMarkAiTurnSent({
       admin: args.admin,
@@ -1070,6 +1096,7 @@ async function findOrCreateLead(args: {
       ...attribution.metadata,
       whatsapp_channel_id: args.channel.id,
       whatsapp_routing_mode: args.channel.routing_mode,
+      nara_entry_received_at: args.receivedAt,
       ...(kind === 'geral' ? {
         general_pipeline_reason: 'Contato novo em canal comercial; aguardando identificação antes de entrar em Corretores',
         plantao_triage_status: 'new',
@@ -1188,6 +1215,13 @@ async function persistInboundMessage(args: {
 
   const storedMessage = messageResult.data;
   if (!storedMessage) return null;
+  if (lead.kind === 'cliente' && lead.metadata?.nara_entry_received_at === createdAt) {
+    await tryRecordNaraFunnelEvent(args.admin, { organizationId: args.channel.organization_id,
+      leadId: lead.id, event: 'lead_recebido', source: 'whatsapp_new_lead', occurredAt: createdAt,
+      evidence: { source_message_id: storedMessage.id }, dimensions: {
+        contact_kind: 'cliente', origin: lead.source || 'WhatsApp',
+      } });
+  }
 
   const attribution = mergeMetaAdAttribution(lead.metadata, args.message.referral, createdAt);
   const selfDeclaredName = declaredName(body);
@@ -1372,13 +1406,15 @@ export async function processWebhookEvent(eventId: string, knownPhoneNumberId?: 
           if (resetAt) priorQuery = priorQuery.gte('created_at', resetAt);
           const { count: priorReplies } = await priorQuery;
           if (quietLead?.kind === 'cliente' && !priorReplies) {
+            const runtimeVariables = await loadNaraRuntimeVariables(admin, inbound.channel.organization_id);
             const { data: inboundBody } = await admin.from('messages').select('body').eq('id', inbound.storedMessageId).single();
             const { data: earlierDeferred } = await admin.from('nara_deferred_replies').select('timezone')
               .eq('lead_id', inbound.leadId).eq('status', 'pending')
               .order('created_at', { ascending: true }).limit(1).maybeSingle();
             const zone = naraContactZone(`${inboundBody?.body || ''} ${quietLead.metadata?.city || ''}`);
             const effectiveZone = zone === 'America/Sao_Paulo' ? earlierDeferred?.timezone || zone : zone;
-            if (!optOutSignal(inboundBody?.body || '') && !naraSendHours(new Date(), effectiveZone)) {
+            if (!naraInbound24hEnabled(runtimeVariables.values)
+              && !optOutSignal(inboundBody?.body || '') && !naraSendHours(new Date(), effectiveZone)) {
               await admin.from('nara_deferred_replies').upsert({
                 organization_id: inbound.channel.organization_id, lead_id: inbound.leadId,
                 channel_id: inbound.channel.id, conversation_id: inbound.conversation.id,

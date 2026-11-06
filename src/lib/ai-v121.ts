@@ -6,6 +6,8 @@ import { aiCanReply } from './hybrid';
 import { createAdminClient } from './supabase/admin';
 import type { Lead } from './types';
 import { understandInboundMedia } from './whatsapp/aiMediaUnderstanding';
+import { guardNaraAgendaContext } from './nara-agenda-context';
+import { confirmedAgendaReply } from './nara-agenda-intent';
 
 export * from './ai-v120';
 
@@ -58,7 +60,7 @@ function skip(lead: Lead): GuardedTurn {
 function guardedReply(turn: GuardedTurn, history: ChatMessage[]): GuardedTurn {
   const lastUser = [...history].reverse().find((entry) => entry.role === 'user')?.content.trim() || '';
   const previousReplies = history.filter((entry) => entry.role === 'assistant').map((entry) => entry.content).slice(-8);
-  const reply = turn.reply.trim();
+  let reply = turn.reply.trim();
   if (!reply) return turn;
 
   if (/^(?:obrigad[oa]|obg|valeu|ok|okay|blz|beleza|👍|🙏)[.!\s]*$/iu.test(lastUser)) {
@@ -70,14 +72,16 @@ function guardedReply(turn: GuardedTurn, history: ChatMessage[]): GuardedTurn {
     return turn;
   }
 
-  const appointmentClaim = /\b(?:agendei|agendamos|marquei|marcamos|convite (?:foi )?enviado|enviei (?:o )?convite|link (?:foi )?enviado|reuni[aã]o (?:est[aá] )?confirmada|chamada (?:est[aá] )?confirmada|confirmei (?:a )?(?:reuni[aã]o|videochamada)|acion(?:ei|amos) (?:o )?time)\b/iu.test(reply);
-  const materialClaim = /\b(?:enviei|enviamos|encaminhei|encaminhamos|arquivo enviado|material enviado|pdf enviado|documento enviado)\b/iu.test(reply);
-  if (appointmentClaim) {
-    turn.reply = 'Recebi os dados. Vou conferir a Agenda antes de confirmar esse horário.';
-    turn.next_action = 'Consultar a Agenda e somente confirmar o compromisso se o responsável estiver livre.';
-    turn.attachment_ids = [];
-    return turn;
+  const agendaGuard = guardNaraAgendaContext(reply, history, {
+    confirmed: turn.agenda_confirmed,
+    includeDeliveryClaims: true,
+  });
+  if (agendaGuard.changed) {
+    turn.reply = agendaGuard.reply;
+    turn.next_action = agendaGuard.nextAction;
+    reply = turn.reply.trim();
   }
+  const materialClaim = /\b(?:enviei|enviamos|encaminhei|encaminhamos|arquivo enviado|material enviado|pdf enviado|documento enviado)\b/iu.test(reply);
   if (materialClaim) {
     turn.reply = turn.attachment_ids.length
       ? 'Separei os materiais disponíveis para envio por aqui.'
@@ -183,6 +187,7 @@ async function applyAgendaScheduling(
   freshLead: Lead,
   guarded: GuardedTurn,
   recentHistory: ChatMessage[],
+  context: AiTrainingContext = {},
 ) {
   const lastUserMessage = [...recentHistory].reverse().find((entry) => entry.role === 'user')?.content || '';
   const result = await maybeScheduleAgendaFromAi({
@@ -191,6 +196,9 @@ async function applyAgendaScheduling(
     lead: freshLead,
     turn: guarded,
     lastUserMessage,
+    officeAddress: context.dynamic?.values.office_address,
+    weekdayHours: context.dynamic?.values.office_weekday_hours,
+    saturdayHours: context.dynamic?.values.office_saturday_hours,
   });
 
   if (result.status === 'none') return guarded;
@@ -198,10 +206,13 @@ async function applyAgendaScheduling(
   guarded.attachment_ids = [];
 
   if (result.status === 'created') {
-    guarded.reply = formatAgendaConfirmation(result.startsAt, result.endsAt);
+    guarded.reply = freshLead.kind === 'cliente'
+      ? confirmedAgendaReply(result)
+      : formatAgendaConfirmation(result.startsAt, result.endsAt);
+    guarded.agenda_confirmed = true;
     guarded.summary = `${guarded.summary || 'Compromisso solicitado pelo contato.'} Agenda consultada e compromisso criado sem conflito.`;
     guarded.next_action = 'Responsável deve realizar o compromisso no horário registrado na Agenda.';
-    guarded.handoff = true;
+    guarded.handoff = freshLead.kind !== 'cliente';
     if (freshLead.kind === 'cliente') {
       guarded.classification = 'agendamento';
       guarded.stage = 'agendado';
@@ -215,10 +226,16 @@ async function applyAgendaScheduling(
   }
 
   guarded.reply = result.message;
-  guarded.next_action = result.status === 'conflict'
+  guarded.agenda_confirmed = false;
+  const requiresHuman = result.status === 'needs_details' && result.requiresHuman === true;
+  guarded.next_action = requiresHuman
+    ? 'Encaminhar ao responsável para verificar a pendência operacional da agenda; não pedir novamente dados já informados nem confirmar o compromisso.'
+    : result.status === 'conflict'
     ? 'Aguardar o contato indicar outro horário; não confirmar o compromisso enquanto houver conflito na Agenda.'
+    : result.status === 'cancelled'
+      ? 'Respeitar o cancelamento; só iniciar novo agendamento se o contato pedir.'
     : 'Aguardar o contato informar data e horário exatos antes de criar o compromisso.';
-  guarded.handoff = false;
+  guarded.handoff = freshLead.kind === 'cliente' && requiresHuman;
   if (freshLead.kind === 'cliente') {
     if (guarded.classification === 'agendamento') guarded.classification = 'quente';
     if (guarded.stage === 'agendado') guarded.stage = 'ia';
@@ -296,7 +313,7 @@ export async function generateAiTurn(lead: Lead, history: ChatMessage[], context
   const turn = await generatePreviousTurn(memoryLead, recentHistory, contextual);
   if (!turn) return skip(freshLead);
   let guarded = guardedReply(turn as GuardedTurn, recentHistory);
-  guarded = await applyAgendaScheduling(admin, freshLead, guarded, recentHistory);
+  guarded = await applyAgendaScheduling(admin, freshLead, guarded, recentHistory, contextual);
   guarded.__bossaAiClaim = { conversationId, sourceId: latest.id };
   if (!guarded.__bossaAiSkipped) {
     const { error: saveError } = await admin.from('whatsapp_ai_conversation_memory').upsert({

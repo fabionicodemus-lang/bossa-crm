@@ -1,6 +1,7 @@
 // Loader do teste da cadência: resolve o alias "@/" e troca WhatsApp/Supabase por simulações.
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import path from 'node:path';
+import { resolve as resolveTypeScriptExtension } from '../ts-extension-loader.mjs';
 const here = path.dirname(fileURLToPath(import.meta.url));
 const SRC = path.resolve(here, '../../src') + '/';
 const STUBS = {
@@ -12,5 +13,5 @@ const STUBS = {
 export async function resolve(spec, ctx, next) {
   if (STUBS[spec]) return next(pathToFileURL(path.join(here, STUBS[spec])).href, ctx);
   if (spec.startsWith('@/')) return next(pathToFileURL(SRC + spec.slice(2) + '.ts').href, ctx);
-  return next(spec, ctx);
+  return resolveTypeScriptExtension(spec, ctx, next);
 }

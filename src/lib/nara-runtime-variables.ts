@@ -1,4 +1,5 @@
 export const NARA_RUNTIME_VARIABLE_FIELDS = [
+  { key: 'inbound_24h', label: 'Responder à primeira consulta espontânea fora do horário (sim/não)', group: 'atendimento', placeholder: 'não — ative com sim somente após aprovar a operação 24h' },
   { key: 'consultant_on_duty_name', label: 'Consultor de plantão agora', group: 'plantao', placeholder: 'Nome do consultor que assume os leads agora' },
   { key: 'partners_on_call_phone', label: 'Número do Plantão de parceiros', group: 'contatos', placeholder: '(47) 00000-0000' },
   { key: 'finance_phone', label: 'Contato do financeiro', group: 'contatos', placeholder: '(47) 00000-0000' },
@@ -24,6 +25,7 @@ export const NARA_RUNTIME_VARIABLE_FIELDS = [
 ] as const;
 
 export const NARA_RUNTIME_VARIABLE_GROUPS = [
+  { key: 'atendimento', label: 'Atendimento espontâneo', description: 'Opcional e desativado por padrão. Habilitar com sim libera somente a primeira resposta a quem escreveu espontaneamente. Não amplia a janela de mensagens proativas nem o horário do consultor.' },
   { key: 'plantao', label: 'Plantão atual', description: 'Como não existe uma escala automática no CRM, o nome abaixo representa manualmente quem está de plantão agora.' },
   { key: 'contatos', label: 'Contatos dos setores', description: 'Números oficiais que a Nara pode usar para direcionar cada tipo de atendimento.' },
   { key: 'visitas', label: 'Visitas ao escritório', description: 'No sábado, abrir somente para visitas previamente agendadas. Domingo sem atendimento.' },
@@ -52,8 +54,12 @@ export function normalizeNaraRuntimeVariables(value: unknown): NaraRuntimeVariab
 
 export function missingNaraRuntimeVariables(value: NaraRuntimeVariables): NaraRuntimeVariableKey[] {
   return NARA_RUNTIME_VARIABLE_FIELDS
-    .filter((field) => !value[field.key].trim())
+    .filter((field) => field.key !== 'inbound_24h' && !value[field.key].trim())
     .map((field) => field.key);
+}
+
+export function naraInbound24hEnabled(values: Partial<NaraRuntimeVariables>): boolean {
+  return values.inbound_24h?.trim().toLowerCase() === 'sim';
 }
 
 export function naraRuntimeVariableLabel(key: NaraRuntimeVariableKey): string {

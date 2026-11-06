@@ -14,6 +14,20 @@ function affirmativeAgendaText(text: string): string {
     .replace(/\b(?:videochamada|videollamada|video call|visita|presencial|ligacao)\s+nao\b/g, ' ');
 }
 
+function directNominalAgendaRequest(text: string): boolean {
+  const raw = normalize(text);
+  // These added forms must be actual requests, not an example, a conditional
+  // question or a request immediately withdrawn in the same message.
+  if (/\b(?:nao quero|nao gostaria|agora nao|nao agora|por enquanto nao|not now|not yet|do not (?:schedule|book)|don['’]t (?:schedule|book))\b/.test(raw)) return false;
+  return affirmativeAgendaText(text).split(/[.!?;]+/).some((part) => {
+    const value = part.trim().replace(/^(?:por favor|please)[,\s]+/, '');
+    if (/^(?:se|caso|talvez|if|perhaps|maybe|si)\b/.test(value)) return false;
+    return /^(?:eu\s+)?(?:quero|gostaria de|prefiro|pode ser)\s+(?:um[a]?\s+)?(?:visita|videochamada|reuniao|ligacao)\b/.test(value)
+      || /^(?:i would like|i['’]d like|i want|can i have|could i have)\s+(?:a[n]?\s+)?(?:visit|video call|meeting)\b/.test(value)
+      || /^(?:quiero|quisiera|prefiero)\s+(?:una?\s+)?(?:visita|videollamada|reunion)\b/.test(value);
+  });
+}
+
 export function agendaActionFromText(text: string): AgendaAction {
   const value = affirmativeAgendaText(text);
   if (/\b(?:quero|preciso|pode)\s+(?:cancelar|desmarcar)\b/.test(value)
@@ -26,7 +40,8 @@ export function agendaActionFromText(text: string): AgendaAction {
     || /\b(?:quero|gostaria|podemos|vamos|prefiro|pode ser)\b.{0,35}\b(?:videochamada|videoconferencia|chamada de video|reuniao online|apresentacao online|por video|presencialmente|visita presencial)\b/.test(value)
     || /\b(?:quiero|quisiera|podemos|prefiero)\b.{0,35}\b(?:videollamada|visita presencial)\b/.test(value)
     || /\b(?:schedule|book)\b.{0,35}\b(?:video call|visit|meeting)\b/.test(value)
-    || /\b(?:quero visitar|visitar o decorado|visita ao decorado)\b/.test(value)) return 'schedule';
+    || /\b(?:quero visitar|visitar o decorado|visita ao decorado)\b/.test(value)
+    || directNominalAgendaRequest(text)) return 'schedule';
   return 'none';
 }
 
@@ -40,7 +55,7 @@ function isAgendaOffer(text: string): boolean {
   const value = normalize(text);
   return text.includes('?')
     && /\b(?:quer|prefere|vamos|podemos|posso|gostaria|que tal|would you|quieres|prefieres)\b/.test(value)
-    && /\b(?:agendar|marcar|videochamada|chamada de video|visita|conhecer pessoalmente|apresentacao online|videollamada|video call)\b/.test(value);
+    && /\b(?:agendar|marcar|videochamada|chamada de video|por video|visita|conhecer pessoalmente|apresentacao online|videollamada|video call)\b/.test(value);
 }
 
 function affirmativeAgendaReply(text: string): boolean {

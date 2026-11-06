@@ -3,6 +3,7 @@ import { findAgendaConflicts } from '@/lib/agenda';
 import { deleteMicrosoftEvent, pushMicrosoftEvent } from '@/lib/microsoft-calendar';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { createClient } from '@/lib/supabase/server';
+import { tryRecordNaraFunnelEvent } from '@/lib/nara-funnel-events';
 
 export const runtime = 'nodejs';
 
@@ -10,19 +11,33 @@ type AgendaPayload = {
   id?: string; lead_id?: string | null; assigned_to?: string | null;
   title?: string; description?: string | null; event_type?: string; meeting_mode?: string;
   location?: string | null; video_url?: string | null; starts_at?: string; ends_at?: string; status?: string;
+  outcome?: 'no_show'; expected_starts_at?: string;
 };
 const eventTypes = new Set(['reuniao_cliente', 'apresentacao', 'visita', 'ligacao', 'tarefa', 'outro']);
 const meetingModes = new Set(['presencial', 'video', 'telefone']);
 const statuses = new Set(['scheduled', 'completed', 'cancelled']);
 const err = (message: string, status = 400) => Response.json({ error: message }, { status });
-function validDate(value: string | undefined) { return Boolean(value && Number.isFinite(new Date(value).getTime())); }
+function validDate(value: unknown): value is string {
+  if (typeof value !== 'string' || value.length > 80
+    || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,6})?)?(?:Z|[+-]\d{2}:\d{2})$/.test(value)
+    || !Number.isFinite(Date.parse(value))) return false;
+  const [year, month, day] = value.slice(0, 10).split('-').map(Number);
+  return month >= 1 && month <= 12 && day >= 1 && day <= new Date(Date.UTC(year, month, 0)).getUTCDate();
+}
 function validateTime(start?: string, end?: string) {
   return validDate(start) && validDate(end) && new Date(end!).getTime() > new Date(start!).getTime();
 }
 function referenceId(value: unknown): string | null | undefined {
   if (value == null) return null;
-  if (typeof value !== 'string') return undefined;
+  if (typeof value !== 'string' || value.length > 200) return undefined;
   return value.trim() || null;
+}
+function invalidTextField(body: AgendaPayload) {
+  const limits = { title: 500, description: 10000, location: 2000, video_url: 2048 };
+  return Object.entries(limits).some(([key, limit]) => {
+    const value = body[key as keyof typeof limits];
+    return value !== undefined && value !== null && (typeof value !== 'string' || value.length > limit);
+  }) || ('title' in body && (typeof body.title !== 'string' || !body.title.trim()));
 }
 async function verifyReferences(
   supabase: Awaited<ReturnType<typeof createClient>>,
@@ -76,6 +91,8 @@ export async function POST(request: Request) {
   if (!auth.context) return auth.response!;
   const body = await request.json().catch(() => ({})) as AgendaPayload;
   if (!body || typeof body !== 'object' || Array.isArray(body)) return err('Dados inválidos.');
+  if (invalidTextField(body)) return err('Texto inválido ou muito longo.');
+  if (body.outcome !== undefined || body.status === 'completed') return err('Crie o compromisso antes de registrar o resultado.');
   const assignedTo = referenceId(body.assigned_to);
   const leadId = referenceId(body.lead_id);
   if (typeof body.title !== 'string' || !body.title.trim() || !assignedTo) return err('Informe título e responsável.');
@@ -113,13 +130,64 @@ export async function PATCH(request: Request) {
   if (!auth.context) return auth.response!;
   const body = await request.json().catch(() => ({})) as AgendaPayload;
   if (!body || typeof body !== 'object' || Array.isArray(body)) return err('Dados inválidos.');
-  if (typeof body.id !== 'string' || !body.id.trim()) return err('Evento não informado.');
+  if (typeof body.id !== 'string' || !body.id.trim() || body.id.length > 200) return err('Evento não informado.');
+  if (invalidTextField(body)) return err('Texto inválido ou muito longo.');
+  if (body.expected_starts_at !== undefined && !validDate(body.expected_starts_at)) return err('Versão do compromisso inválida.');
+  if (body.outcome !== undefined && body.outcome !== 'no_show') return err('Resultado inválido.');
+  const noShow = body.outcome === 'no_show';
+  const completing = body.status === 'completed';
+  const recordingOutcome = noShow || completing;
+  if (recordingOutcome) {
+    const allowed = new Set(['id', 'expected_starts_at', noShow ? 'outcome' : 'status']);
+    if (Object.keys(body).some((key) => !allowed.has(key))) return err('Registre o resultado separadamente das alterações do compromisso.');
+    if (!validDate(body.expected_starts_at)) return err('Informe a versão do compromisso antes de registrar o resultado.');
+  }
   const supabase = await createClient();
   const { data: current, error: currentError } = await supabase.from('agenda_events').select('*').eq('id', body.id)
     .eq('organization_id', auth.context.organization.id).maybeSingle();
   if (currentError) return err('Não foi possível verificar o compromisso. Tente novamente.', 503);
   if (!current) return err('Evento não encontrado.', 404);
+  if (body.expected_starts_at && Date.parse(body.expected_starts_at) !== Date.parse(current.starts_at)) return err('O compromisso foi alterado. Atualize a agenda antes de registrar o resultado.', 409);
   if (current.microsoft_sync_status === 'imported') return err('Este bloqueio veio do Outlook. Edite-o diretamente no Outlook e sincronize novamente.', 403);
+  if (recordingOutcome) {
+    if (!validDate(current.starts_at) || current.status === 'cancelled' || Date.parse(current.starts_at) > Date.now()) return err('Registre o resultado apenas após o início de um compromisso não cancelado.', 409);
+    if ((noShow && current.status === 'completed') || (completing && current.metadata?.nara_outcome === 'no_show')) return err('Já existe outro resultado registrado para este compromisso. Revise o histórico antes de corrigir.', 409);
+    if ((noShow && current.metadata?.nara_outcome === 'no_show') || (completing && current.status === 'completed')) {
+      return Response.json({ event: current, idempotent: true });
+    }
+    const assignedTo = referenceId(current.assigned_to);
+    const leadId = referenceId(current.lead_id);
+    if (!assignedTo || leadId === undefined) return err('Responsável ou contato inválido.');
+    const referenceError = await verifyReferences(supabase, auth.context.organization.id, assignedTo, leadId);
+    if (referenceError) return referenceError;
+    const admin = createAdminClient();
+    const recordedAt = new Date().toISOString();
+    let outcomeQuery = admin.from('agenda_events').update({
+      ...(completing ? { status: 'completed' } : {}),
+      metadata: { ...(current.metadata || {}), nara_outcome: noShow ? 'no_show' : 'completed',
+        nara_outcome_recorded_by: auth.context.userId, nara_outcome_recorded_at: recordedAt },
+    }).eq('id', current.id).eq('organization_id', auth.context.organization.id)
+      .eq('starts_at', current.starts_at).eq('ends_at', current.ends_at).eq('status', current.status);
+    // Optimistic lock prevents a reschedule or competing result between read and write.
+    if (current.updated_at) outcomeQuery = outcomeQuery.eq('updated_at', current.updated_at);
+    const { data, error } = await outcomeQuery.select('*').maybeSingle();
+    if (error) return err('Não foi possível registrar o resultado. Tente novamente.', 503);
+    if (!data) return err('O compromisso foi alterado. Atualize a agenda antes de registrar o resultado.', 409);
+    let warning: string | undefined;
+    if (leadId) {
+      const { data: eventLead } = await supabase.from('leads').select('kind')
+        .eq('organization_id', auth.context.organization.id).eq('id', leadId).maybeSingle();
+      const funnelResult = await tryRecordNaraFunnelEvent(admin, { organizationId: auth.context.organization.id, leadId,
+        event: noShow ? 'nao_compareceu' : 'compromisso_realizado',
+        source: noShow ? 'agenda_human_no_show' : 'agenda_human_completed', actorId: auth.context.userId,
+        evidence: { agenda_event_id: data.id },
+        dimensions: { contact_kind: eventLead?.kind === 'cliente' || eventLead?.kind === 'corretor' ? eventLead.kind : undefined,
+          responsible_id: assignedTo, meeting_mode: data.meeting_mode } });
+      if ('error' in funnelResult) warning = 'Resultado salvo na agenda, mas o marco do funil ficou pendente. Confira o relatório; não é necessário repetir o resultado.';
+    }
+    // Attendance is not a calendar invitation or a customer message, with or without a lead.
+    return Response.json({ event: data, ...(warning ? { warning } : {}) });
+  }
   const assignedTo = referenceId(body.assigned_to ?? current.assigned_to);
   const leadId = referenceId('lead_id' in body ? body.lead_id : current.lead_id);
   const startsAt = body.starts_at ?? current.starts_at;
@@ -146,12 +214,30 @@ export async function PATCH(request: Request) {
     if (key in body) patch[key] = body[key] ?? null;
   }
   const admin = createAdminClient();
-  const { data, error } = await admin.from('agenda_events').update(patch).eq('id', body.id)
-    .eq('organization_id', auth.context.organization.id).select('*').single();
+  if (!Object.keys(patch).length) return err('Nenhuma alteração informada.');
+  let updateQuery = admin.from('agenda_events').update(patch).eq('id', body.id)
+    .eq('organization_id', auth.context.organization.id).eq('starts_at', current.starts_at).eq('status', current.status);
+  if (current.updated_at) updateQuery = updateQuery.eq('updated_at', current.updated_at);
+  const { data, error } = await updateQuery.select('*').maybeSingle();
   if (error) return err(error.code === '23P01' ? 'Conflito de horário; atualize a agenda.' : error.message, error.code === '23P01' ? 409 : 500);
+  if (!data) return err('O compromisso foi alterado. Atualize a agenda antes de salvar.', 409);
+  const { data: eventLead } = leadId ? await supabase.from('leads').select('kind')
+    .eq('organization_id', auth.context.organization.id).eq('id', leadId).maybeSingle() : { data: null };
+  const contactKind = eventLead?.kind === 'cliente' || eventLead?.kind === 'corretor' ? eventLead.kind : undefined;
   try {
     if (nextStatus === 'cancelled') await deleteMicrosoftEvent(data);
     else await pushMicrosoftEvent(data);
+    if (leadId && nextStatus === 'cancelled' && current.status !== 'cancelled') {
+      await tryRecordNaraFunnelEvent(admin, { organizationId: auth.context.organization.id, leadId,
+        event: 'cancelado', source: 'agenda_human_cancelled', actorId: auth.context.userId,
+        evidence: { agenda_event_id: data.id }, dimensions: { contact_kind: contactKind, responsible_id: assignedTo, meeting_mode: data.meeting_mode } });
+    }
+    if (leadId && nextStatus === 'scheduled' && (startsAt !== current.starts_at || endsAt !== current.ends_at)) {
+      await tryRecordNaraFunnelEvent(admin, { organizationId: auth.context.organization.id, leadId,
+        event: 'reagendado', source: 'agenda_human_rescheduled', actorId: auth.context.userId,
+        dedupeKey: `${data.id}:${startsAt}:${endsAt}`, evidence: { agenda_event_id: data.id },
+        dimensions: { contact_kind: contactKind, responsible_id: assignedTo, meeting_mode: data.meeting_mode } });
+    }
     const { data: refreshed } = await admin.from('agenda_events').select('*').eq('id', data.id).single();
     return Response.json({ event: refreshed || data });
   } catch (cause) {

@@ -359,7 +359,9 @@ await check('Confirmação presencial usa exclusivamente local confirmado', () =
 await check('Webhook usa resultado da agenda e preserva falha/handoff, sem confirmar pelo modelo', async () => {
   const webhook = await readFile(new URL('../src/lib/whatsapp/webhookProcessor.ts', import.meta.url), 'utf8');
   assert.match(webhook, /!financialNegotiationIntent\(lastUserMessage, history\).*shouldHandleAgendaTurn/);
-  assert.match(webhook, /appointment\.status === 'created'[\s\S]{0,100}confirmedAgendaReply\(appointment\)/);
+  const createdBlock = webhook.slice(webhook.indexOf("if (appointment.status === 'created')"), webhook.indexOf("} else if (appointment.status !== 'none')"));
+  assert.match(createdBlock, /confirmedAgendaReply\(appointment\)/);
+  assert.match(createdBlock, /event: 'compromisso_confirmado'/);
   assert.match(webhook, /turn\.agenda_confirmed = false/);
   assert.match(webhook, /turn\.handoff = appointment\.status === 'needs_details' && appointment\.requiresHuman === true/);
   assert.doesNotMatch(webhook, /turn\.reply = `Sua visita ficou marcada/);
@@ -377,10 +379,12 @@ await check('Agendamento realmente criado recebe score mínimo80 no webhook', as
   const webhook = await readFile(new URL('../src/lib/whatsapp/webhookProcessor.ts', import.meta.url), 'utf8');
   const block = webhook.match(/if \(appointment\.status === 'created'\) \{([\s\S]*?)\} else if/)?.[1];
   assert.ok(block, 'Created confirmation block must be present');
-  const applyCreated = new Function('turn', 'appointment', 'confirmedAgendaReply', `let agendaReply; ${block}; return turn;`);
+  const applyCreated = new (Object.getPrototypeOf(async function() {}).constructor)('turn', 'appointment', 'confirmedAgendaReply',
+    'tryRecordNaraFunnelEvent', 'args', 'lead', `let agendaReply; ${block}; return turn;`);
   for (const [score, expected] of [[20, 80], [95, 95], [150, 100], [NaN, 80]]) {
-    const result = applyCreated({score, stage:'ia', classification:'frio', handoff:true},
-      {status:'created', startsAt:future.toISOString(), meetingMode:'video', location:null}, confirmedAgendaReply);
+    const result = await applyCreated({score, stage:'ia', classification:'frio', handoff:true},
+      {status:'created', startsAt:future.toISOString(), meetingMode:'video', location:null}, confirmedAgendaReply,
+      async () => ({ recorded: true }), {admin:{},channel:{organization_id:'qa-only'}}, {id:'qa-only'});
     assert.equal(result.score, expected);
     assert.equal(result.stage, 'agendado');
     assert.equal(result.classification, 'agendamento');
