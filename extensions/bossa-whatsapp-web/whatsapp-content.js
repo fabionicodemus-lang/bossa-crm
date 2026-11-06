@@ -81,12 +81,21 @@
       });
     }, 5000);
 
-    const back = [...document.querySelectorAll('[data-icon="back"], [aria-label="Voltar"], [aria-label="Back"]')]
-      .find((node) => visible(node));
-    if (back) (back.closest('button,[role="button"]') ?? back).click();
-    else document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
-    if (confirmed) await waitFor(() => visible(composer()) && composer(), 4000);
-    return Boolean(confirmed);
+    // O WhatsApp Web atual fecha a ficha por um botão "Fechar" DENTRO do
+    // drawer-right. Um "Voltar" global pode mudar de conversa e um Escape
+    // sintético pode não ser reconhecido; nunca prosseguir com a ficha aberta.
+    const drawer = [...document.querySelectorAll('[data-testid="drawer-right"], '
+      + '[data-testid="contact-info-drawer"], [data-testid="conversation-info-drawer"], '
+      + '[data-testid="chat-info"]')].find((node) => visible(node) && !main()?.contains(node));
+    const close = drawer?.querySelector('button[aria-label="Fechar"], button[aria-label="Close"], '
+      + '[data-icon="x"], [data-icon="back"]');
+    if (!close || !visible(close)) return false;
+    (close.closest('button,[role="button"]') ?? close).click();
+    const restored = await waitFor(() => {
+      const input = composer();
+      return !visible(drawer) && visible(header()) && visible(input) && input;
+    }, 8000);
+    return Boolean(confirmed && restored);
   }
 
   function findSendButton(scope = document) {
@@ -105,8 +114,13 @@
   }
 
   async function sendText(message) {
-    const input = composer();
-    if (!input || !visible(input)) throw new Error('Campo de mensagem indisponível.');
+    // Após abrir /send?phone ou fechar os detalhes, o WhatsApp recria o
+    // compositor de forma assíncrona. Uma leitura imediata pode dar null.
+    const input = await waitFor(() => {
+      const node = composer();
+      return visible(header()) && visible(node) && node;
+    }, 12000);
+    if (!input) throw new Error('Campo de mensagem indisponível após aguardar 12 segundos. Nenhum clique de envio foi realizado.');
     if (text(input)) throw new Error('Há um rascunho no campo. Confira manualmente antes de prosseguir.');
     const before = new Set(main()?.querySelectorAll('.message-out, [data-testid="msg-container"]') ?? []);
     input.focus();
@@ -139,8 +153,12 @@
     const file = base64File(base64, filename);
     if (file.size !== expectedSize || file.size > 8 * 1024 * 1024)
       throw new Error('O PDF recebido não corresponde ao arquivo aprovado.');
-    const input = composer();
-    if (!input || text(input)) throw new Error('Há uma mensagem em edição nesta conversa.');
+    const input = await waitFor(() => {
+      const node = composer();
+      return visible(header()) && visible(node) && node;
+    }, 12000);
+    if (!input) throw new Error('Campo de anexos indisponível após aguardar 12 segundos. Nenhum PDF foi enviado.');
+    if (text(input)) throw new Error('Há uma mensagem em edição nesta conversa.');
     const before = new Set(main()?.querySelectorAll('.message-out, [data-testid="msg-container"]') ?? []);
     const attachIcon = [...document.querySelectorAll('#main footer [aria-label="Anexar"], #main footer [aria-label="Attach"], [data-icon="plus"], [data-icon="clip"], [title="Anexar"], [title="Attach"]')]
       .find((node) => visible(node) && main()?.contains(node));
