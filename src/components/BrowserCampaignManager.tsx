@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { campaignRecipientSummary, hasBrowserRecipientNameToken, personalizeBrowserText, type BrowserCampaignMedia, type BrowserRecipientStatus } from '@/lib/browser-campaigns';
+import { buildChatGPTCampaignPrompt, buildChatGPTDesktopLink, buildChatGPTRunnerUrl } from '@/lib/chatgpt-browser-campaign';
 import styles from './BrowserCampaignManager.module.css';
 
 type Contact = { id: string; name: string; phone: string; stage: string; company: string | null; enterprise: string | null };
@@ -103,6 +104,7 @@ export function BrowserCampaignManager({ organizationId, canEdit }: { organizati
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [progress, setProgress] = useState('');
+  const [chatGPTPrompt, setChatGPTPrompt] = useState('');
   const [batchLimit, setBatchLimit] = useState<BatchLimit>(2);
   const [previewVersion, setPreviewVersion] = useState(0);
   const [previewContactId, setPreviewContactId] = useState('');
@@ -134,6 +136,16 @@ export function BrowserCampaignManager({ organizationId, canEdit }: { organizati
       .catch(() => setExtension('missing'));
     return () => { mountedRef.current = false; stopRef.current = true; };
   }, [refreshList]);
+
+  // Um agente no outro aplicativo pode alterar os estados sem tocar nesta aba.
+  useEffect(() => {
+    if (mode !== 'detail' || !campaign?.id || running) return;
+    const id = campaign.id;
+    const timer = window.setInterval(() => {
+      void refreshDetail(id).catch(() => { /* botão de atualização permanece disponível */ });
+    }, 8000);
+    return () => window.clearInterval(timer);
+  }, [mode, campaign?.id, running, refreshDetail]);
 
   const stages = useMemo(() => [...new Set(contacts.map((row) => row.stage))].sort(), [contacts]);
   const visible = useMemo(() => contacts.filter((row) => {
@@ -169,7 +181,7 @@ export function BrowserCampaignManager({ organizationId, canEdit }: { organizati
   }
 
   async function openDetail(id: string) {
-    setError(''); setNotice(''); setConsent(false); setBusy(true);
+    setError(''); setNotice(''); setConsent(false); setChatGPTPrompt(''); setBusy(true);
     try { await refreshDetail(id); setMode('detail'); }
     catch (cause) { setError(cause instanceof Error ? cause.message : 'Falha ao abrir campanha.'); }
     finally { setBusy(false); }
@@ -258,15 +270,40 @@ export function BrowserCampaignManager({ organizationId, canEdit }: { organizati
     try {
       await mutation(API, { campaignId: campaign.id, action, consentConfirmed: consent }, 'PATCH');
       await Promise.all([refreshDetail(campaign.id), refreshList()]);
-      if (action === 'approve') setNotice('Campanha aprovada. A equipe pode iniciar pelo Chrome.');
+      if (action === 'approve') setNotice('Campanha aprovada. A equipe pode iniciar pelo ChatGPT ou pelo Chrome.');
       if (action === 'pause') { stopRef.current = true; setNotice('Pausa solicitada após a etapa atual.'); }
-      if (action === 'start') setNotice('Campanha liberada para o navegador. Clique em “Executar neste Chrome”.');
+      if (action === 'start') setNotice('Campanha liberada. Clique em “Executar com ChatGPT” para abrir a execução assistida.');
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Não foi possível atualizar o estado.'); }
     finally { setBusy(false); }
   }
 
   async function workerRequest<T>(payload: Record<string, unknown>) {
     return mutation<T>(`${API}/worker`, payload);
+  }
+
+  function prepareChatGPTPrompt() {
+    if (!campaign) throw new Error('Selecione uma campanha.');
+    const url = buildChatGPTRunnerUrl(window.location.origin, campaign.id, batchLimit, crypto.randomUUID());
+    const prompt = buildChatGPTCampaignPrompt(url, campaign.sender_phone, batchLimit);
+    setChatGPTPrompt(prompt);
+    return prompt;
+  }
+
+  function launchChatGPT() {
+    if (!campaign || senderBlocked || campaign.status !== 'running' || running) return;
+    try {
+      const prompt = prepareChatGPTPrompt();
+      setNotice('Abrindo o ChatGPT. Pressione Enviar no aplicativo para começar. Se ele não abrir, use “Copiar instrução”.');
+      window.location.href = buildChatGPTDesktopLink(prompt);
+    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Não foi possível abrir o ChatGPT.'); }
+  }
+
+  async function copyChatGPTPrompt() {
+    try {
+      const prompt = chatGPTPrompt || prepareChatGPTPrompt();
+      await navigator.clipboard.writeText(prompt);
+      setNotice('Instrução copiada. Cole em uma conversa do ChatGPT no computador, selecione @Chrome e pressione Enviar.');
+    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Falha ao copiar.'); }
   }
 
   async function executeInChrome() {
@@ -403,7 +440,7 @@ export function BrowserCampaignManager({ organizationId, canEdit }: { organizati
 
   return <div className="page-content">
     <div className={styles.noticeBox}>
-      <strong>Chrome aberto e WhatsApp Web conectado.</strong> Esta modalidade depende do computador do operador. A extensão usa a interface visível; mudanças no WhatsApp podem interromper a execução. Envie somente a corretores que concordaram em receber as tabelas.
+      <strong>Chrome aberto e WhatsApp Web conectado.</strong> Esta modalidade depende do computador do operador. Você pode executar com o ChatGPT e a extensão oficial dele ou com a extensão Bossa. Mudanças no WhatsApp podem interromper a execução. Envie somente a corretores que concordaram em receber as tabelas.
       <a href="/downloads/bossa-whatsapp-web.zip" download>Baixar extensão para a equipe</a>
       <span className={styles.extensionStatus}>Extensão: {extension === 'connected' ? `● conectada · v${REQUIRED_EXTENSION_VERSION}` : extension === 'checking' ? 'verificando...' : extension === 'outdated' ? `◌ desatualizada (precisa v${REQUIRED_EXTENSION_VERSION})` : '○ não encontrada'}</span>
     </div>
@@ -521,11 +558,13 @@ export function BrowserCampaignManager({ organizationId, canEdit }: { organizati
         {canEdit && <div className={styles.actions}>
           {(['ready', 'paused'].includes(campaign.status)) && <button className="btn btn-primary" disabled={busy} onClick={() => void changeStatus('start')}>Liberar fila</button>}
           {campaign.status === 'running' && !running && <label className="field">Destinatários por execução
-            <select aria-label="Destinatários por execução" value={batchLimit} disabled={busy} onChange={(e) => setBatchLimit(Number(e.target.value) as BatchLimit)}>
+            <select aria-label="Destinatários por execução" value={batchLimit} disabled={busy} onChange={(e) => { setBatchLimit(Number(e.target.value) as BatchLimit); setChatGPTPrompt(''); }}>
               <option value={1}>1 — verificação individual</option><option value={2}>2 — teste inicial</option><option value={5}>5 — lote supervisionado</option><option value={10}>10 — lote supervisionado</option><option value={20}>20 — limite por execução</option>
             </select>
           </label>}
-          {campaign.status === 'running' && !running && <button className="btn btn-primary" disabled={busy || senderBlocked || extension !== 'connected'} onClick={() => void executeInChrome()}>▶ Executar neste Chrome</button>}
+          {campaign.status === 'running' && !running && <button className="btn btn-primary" disabled={busy || senderBlocked} onClick={launchChatGPT}>✳ Executar com ChatGPT</button>}
+          {campaign.status === 'running' && !running && <button className="btn btn-ghost btn-sm" disabled={busy || senderBlocked} onClick={() => void copyChatGPTPrompt()}>Copiar instrução para ChatGPT</button>}
+          {campaign.status === 'running' && !running && <button className="btn btn-secondary" disabled={busy || senderBlocked || extension !== 'connected'} onClick={() => void executeInChrome()}>▶ Executar com extensão Bossa</button>}
           {campaign.status === 'running' && <button className="btn btn-secondary" disabled={busy} onClick={() => { stopRef.current = true; void changeStatus('pause'); }}>⏸ Pausar campanha</button>}
           {running && <span className={styles.pill}>⏳ {progress}</span>}
           {['draft','ready','paused'].includes(campaign.status) && <button className="btn btn-danger btn-sm" disabled={busy} onClick={() => { if (window.confirm('Cancelar esta campanha?')) void changeStatus('cancel'); }}>Cancelar</button>}
@@ -533,6 +572,7 @@ export function BrowserCampaignManager({ organizationId, canEdit }: { organizati
         </div>}
         {extension === 'missing' && <p className={styles.muted}>Para executar: instale a extensão em <code>extensions/bossa-whatsapp-web</code> pelo Chrome → Extensões → Modo do desenvolvedor → Carregar sem compactação, com a tela do CRM aberta.</p>}
         {extension === 'outdated' && <p className={styles.muted}>Baixe novamente a extensão acima, substitua os arquivos da pasta instalada, clique em <strong>Atualizar</strong> no Chrome → Extensões e recarregue o CRM. A fila atual permanece bloqueada até conferir os envios incertos.</p>}
+        <p className={styles.muted}><strong>Modo ChatGPT:</strong> abre uma nova conversa no aplicativo do computador com a instrução pronta. Selecione <strong>Work e @Chrome</strong> e clique em <strong>Enviar</strong> uma vez. O ChatGPT segue o roteiro pela tela do WhatsApp Web e registra as etapas no mesmo CRM, conforme as permissões concedidas. Para anexar PDFs, ative <strong>Permitir acesso a URLs de arquivo</strong> nos detalhes da extensão oficial do ChatGPT no Chrome. A extensão Bossa não é necessária nesse modo.</p>
         <p className={styles.muted}>“Observado” significa que a interface exibiu o conteúdo após o clique. Não significa entregue ou lido. Erros incertos exigem conferência humana.</p>
         <p className={styles.muted}>Cada execução processa até 20 corretores. Revise os resultados e execute o próximo lote quando estiver pronto; lotes menores não garantem ausência de bloqueios pelo WhatsApp.</p>
       </div></section>
