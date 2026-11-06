@@ -2,13 +2,13 @@ import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getCurrentContext } from '@/lib/auth';
 import { brokerBroadcastEligibility } from '@/lib/contact-identity';
-import { personalizeBrowserText, safeBrowserMedia, validBrowserPhone } from '@/lib/browser-campaigns';
+import { browserRecipientFirstName, hasBrowserRecipientNameToken, personalizeBrowserText, safeBrowserMedia, validBrowserMobilePhone, validBrowserPhone } from '@/lib/browser-campaigns';
 
 type Broker = {
   id: string; kind: 'cliente' | 'corretor' | 'geral'; name: string;
   phone: string | null; stage: string; creci: string | null;
   metadata: Record<string, unknown> | null; updated_at: string; archived_at: string | null;
-  opt_out: boolean; automation_paused: boolean;
+  opt_out: boolean;
   enterprise: string | null; company: string | null;
 };
 
@@ -25,7 +25,7 @@ async function brokerRows(organizationId: string) {
   const result: Broker[] = [];
   for (let offset = 0; ; offset += 500) {
     const { data, error } = await admin.from('leads')
-      .select('id,kind,name,phone,stage,creci,metadata,updated_at,archived_at,opt_out,automation_paused,enterprise,company')
+      .select('id,kind,name,phone,stage,creci,metadata,updated_at,archived_at,opt_out,enterprise,company')
       .eq('organization_id', organizationId).is('archived_at', null)
       .order('id', { ascending: true }).range(offset, offset + 499);
     if (error) throw error;
@@ -38,7 +38,7 @@ async function brokerRows(organizationId: string) {
 function eligibleBrokers(rows: Broker[]) {
   const byPhone = new Map<string, Broker[]>();
   for (const lead of rows) {
-    const phone = validBrowserPhone(lead.phone);
+    const phone = validBrowserMobilePhone(lead.phone);
     if (!phone) continue;
     const group = byPhone.get(phone) ?? [];
     group.push(lead);
@@ -47,10 +47,11 @@ function eligibleBrokers(rows: Broker[]) {
   const eligible = new Map<string, Broker & { normalizedPhone: string }>();
   for (const [phone, group] of byPhone) {
     if (!brokerBroadcastEligibility(group).eligible) continue;
-    const broker = group.filter((lead) => lead.kind === 'corretor' && !lead.opt_out && !lead.automation_paused)
+    const broker = group.filter((lead) => lead.kind === 'corretor' && !lead.opt_out)
       .sort((a, b) => b.updated_at.localeCompare(a.updated_at))[0];
-    // Opt-out ou pausa de qualquer ficha com o mesmo telefone prevalece.
-    if (!broker || group.some((lead) => lead.opt_out || lead.automation_paused)) continue;
+    // Pausa da Nara não significa exclusão de uma transmissão revisada pelo
+    // operador. Opt-out explícito continua bloqueando todo o telefone.
+    if (!broker || !browserRecipientFirstName(broker.name) || group.some((lead) => lead.opt_out)) continue;
     eligible.set(phone, { ...broker, normalizedPhone: phone });
   }
   return eligible;
@@ -109,6 +110,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: `Selecione de 1 a ${MAX_RECIPIENTS} corretores distintos.` }, { status: 400 });
   if (variants.length > 6 || variants.some((value) => !value || value.length > 4000))
     return NextResponse.json({ error: 'Revise as variações da mensagem.' }, { status: 400 });
+  if ([baseText, ...variants].some((value) => !hasBrowserRecipientNameToken(value)))
+    return NextResponse.json({ error: 'Inclua {{nome}} no texto e em todas as variações para chamar cada corretor pelo primeiro nome.' }, { status: 400 });
   if (!media) return NextResponse.json({ error: 'Anexos inválidos: até três PDFs de 8 MB, somando até 20 MB.' }, { status: 400 });
 
   const admin = createAdminClient();
@@ -121,7 +124,7 @@ export async function POST(request: Request) {
     const candidates = eligibleBrokers(await brokerRows(context.organization.id));
     const byId = new Map([...candidates.values()].map((lead) => [lead.id, lead]));
     if (ids.some((id) => !byId.has(id)))
-      return NextResponse.json({ error: 'A seleção contém contatos sem autorização, pausados, duplicados ou reclassificados. Atualize a lista.' }, { status: 409 });
+      return NextResponse.json({ error: 'A seleção contém contatos sem celular válido, com exclusão explícita, duplicados ou reclassificados. Atualize a lista.' }, { status: 409 });
     const selected = ids.map((id) => byId.get(id)!);
     if (new Set(selected.map((lead) => lead.normalizedPhone)).size !== selected.length)
       return NextResponse.json({ error: 'Há telefones repetidos entre os contatos escolhidos.' }, { status: 409 });
@@ -146,7 +149,7 @@ export async function POST(request: Request) {
           position: start + index,
         }));
         if (recipients.some((entry) => !entry.message_text || entry.message_text.length > 4000))
-          throw new Error('Uma mensagem personalizada ficou vazia ou longa demais.');
+          throw new Error('Uma mensagem ficou vazia ou longa demais após a preparação.');
         const { error } = await admin.from('browser_campaign_recipients').insert(recipients);
         if (error) throw error;
       }

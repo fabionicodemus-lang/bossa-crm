@@ -55,6 +55,39 @@
 .recipientRow { display: flex; justify-content: space-between; gap: 18px; border-bottom: 1px solid #eceae6; padding: 13px 0; }
 .recipientActions { display: flex; flex-wrap: wrap; gap: 6px; align-items: start; justify-content: flex-end; min-width: 170px; }
 .preview { font-size: 12px; line-height: 1.5; color: #5b5b56; white-space: pre-wrap; margin: 8px 0 0; max-width: 800px; }
+.composeAndPreview { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(325px, .9fr); gap: 22px; margin-top: 20px; align-items: start; }
+.composerFields { min-width: 0; display: grid; gap: 10px; }
+.tokenAlert { display: block; margin-top: 7px; font-size: 12px; color: #b84b37; font-weight: 700; }
+.whatsappPreview { overflow: hidden; border-radius: 13px; border: 1px solid #d0d5d7; background: #f0f2f5; box-shadow: 0 9px 24px rgba(28, 43, 44, .10); }
+.previewHeader { display: flex; align-items: center; gap: 10px; padding: 11px 13px; background: #f0f2f5; color: #1f2c33; border-bottom: 1px solid #dee2e4; }
+.previewAvatar { display: grid; place-items: center; width: 37px; height: 37px; flex: 0 0 37px; border-radius: 50%; background: #147c65; color: white; font-weight: 750; font-size: 15px; }
+.previewHeader strong { display: block; font-size: 13px; line-height: 1.25; }
+.previewHeader small { display: block; margin-top: 3px; color: #667781; font-size: 10px; }
+.previewHeaderIcon { margin-left: auto; color: #667781; font-size: 25px; }
+.previewOptions { padding: 9px 10px; display: flex; align-items: center; flex-wrap: wrap; gap: 6px; background: #f8f9fa; border-bottom: 1px solid #dde1e2; }
+.previewOptions button { border: 1px solid #d7ddde; background: white; border-radius: 18px; padding: 5px 9px; color: #53626b; font: inherit; font-size: 10px; font-weight: 650; cursor: pointer; }
+.previewOptions button.previewOptionActive { color: #075e4c; background: #d6f1e6; border-color: #9aceb8; }
+.previewChat { min-height: 280px; max-height: 470px; overflow: auto; display: flex; flex-direction: column; align-items: flex-end; gap: 10px; padding: 17px 14px 28px; background-color: #efeae2; background-image: radial-gradient(circle at 12% 20%, rgba(191, 168, 143, .11) 0 2px, transparent 3px), radial-gradient(circle at 70% 65%, rgba(191, 168, 143, .09) 0 2px, transparent 3px); background-size: 75px 75px, 100px 100px; }
+.previewDay { align-self: center; border-radius: 7px; background: rgba(255, 255, 255, .88); box-shadow: 0 1px 2px rgba(22, 34, 37, .05); padding: 5px 12px; color: #5a6b70; font-size: 10px; }
+.previewBubble { position: relative; max-width: 95%; min-width: 44%; border-radius: 8px 1px 8px 8px; background: #d9fdd3; padding: 10px 11px 6px; color: #111b21; box-shadow: 0 1px 2px rgba(0, 0, 0, .11); }
+.previewBubble::after { content: ''; position: absolute; top: 0; right: -7px; border-top: 9px solid #d9fdd3; border-right: 8px solid transparent; }
+.previewMessageText { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13px; line-height: 1.48; }
+.previewTime { display: flex; justify-content: flex-end; align-items: center; gap: 4px; color: #667781; margin-top: 5px; font-size: 9px; white-space: nowrap; }
+.previewTime span { color: #53a6be; letter-spacing: -3px; margin-right: 3px; font-weight: 900; }
+.previewFileBubble { max-width: 95%; min-width: 67%; display: flex; align-items: center; flex-wrap: wrap; gap: 9px; padding: 10px; border-radius: 8px; background: #d9fdd3; color: #111b21; box-shadow: 0 1px 2px rgba(0, 0, 0, .11); }
+.previewFileIcon { display: grid; place-items: center; background: #d34e52; color: white; font-weight: 750; font-size: 10px; height: 38px; width: 34px; border-radius: 5px; }
+.previewFileName { min-width: 0; overflow-wrap: anywhere; flex: 1; font-size: 11px; font-weight: 700; }
+.previewFileName small { display: block; margin-top: 4px; color: #667781; font-size: 10px; font-weight: 400; }
+.previewFileBubble .previewTime { margin-left: auto; }
+.previewFooter { padding: 10px 11px 12px; background: #f0f2f5; display: grid; gap: 9px; }
+.previewFakeInput { padding: 8px 12px; border-radius: 21px; background: white; display: flex; justify-content: space-between; color: #8a969e; font-size: 12px; }
+.previewFakeInput span { font-size: 17px; line-height: 1; color: #87959d; }
+.previewFooter label { display: grid; gap: 5px; color: #53626b; font-size: 10px; font-weight: 700; }
+.previewFooter label select { width: 100%; border: 1px solid #d7ddde; border-radius: 6px; padding: 7px; background: white; color: #1f2c33; font-size: 11px; }
+.previewFooter > small { font-size: 10px; color: #728087; line-height: 1.4; }
+@media(max-width: 1100px) {
+  .composeAndPreview { grid-template-columns: 1fr; }
+}
 @media(max-width: 900px) {
   .twoColumns { grid-template-columns: 1fr; }
   .filters { grid-template-columns: 1fr; }
