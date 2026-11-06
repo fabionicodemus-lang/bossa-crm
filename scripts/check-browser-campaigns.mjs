@@ -74,6 +74,8 @@ const command = { source: 'bossa-crm-bridge', type: 'SEND_ITEM', payload: { phon
 assert.equal((await backgroundResponse(command, 'https://unknown.example.com/')).error, 'Origem não autorizada.');
 assert.equal(navigationCount, 0);
 assert.equal((await backgroundResponse({ ...command, payload: { ...command.payload, phone: '555' } }, 'https://crm.bossaempreendimentos.com.br/transmissoes')).error, 'Telefone internacional inválido.');
+assert.equal((await backgroundResponse({ source: 'bossa-crm-bridge', type: 'PING' }, 'https://bossa-crm-homologacao-git-feat-browser-whatsapp-62bda2-elos-os.vercel.app/transmissoes')).result.state, 'observed');
+assert.equal((await backgroundResponse({ source: 'bossa-crm-bridge', type: 'PING' }, 'https://malicious-preview.vercel.app/')).error, 'Origem não autorizada.');
 assert.equal(navigationCount, 0);
 
 console.log('Browser campaigns: normalização, consentimento técnico, arquivos, proteção da extensão e falhas seguras OK.');

@@ -8,7 +8,7 @@
   "background": { "service_worker": "background.js" },
   "content_scripts": [
     {
-      "matches": ["https://crm.bossaempreendimentos.com.br/*", "http://localhost:3000/*"],
+      "matches": ["https://crm.bossaempreendimentos.com.br/*", "https://bossa-crm-homologacao-git-feat-browser-whatsapp-62bda2-elos-os.vercel.app/*", "http://localhost:3000/*"],
       "js": ["crm-bridge.js"],
       "run_at": "document_start"
     },

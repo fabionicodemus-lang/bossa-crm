@@ -1,6 +1,10 @@
 /* Somente a página de origem autorizada pode solicitar uma etapa. */
 (() => {
-  const allowedOrigins = new Set(['https://crm.bossaempreendimentos.com.br', 'http://localhost:3000']);
+  const allowedOrigins = new Set([
+    'https://crm.bossaempreendimentos.com.br',
+    'https://bossa-crm-homologacao-git-feat-browser-whatsapp-62bda2-elos-os.vercel.app',
+    'http://localhost:3000',
+  ]);
   if (!allowedOrigins.has(location.origin)) return;
   window.addEventListener('message', async (event) => {
     if (event.source !== window || event.origin !== location.origin) return;

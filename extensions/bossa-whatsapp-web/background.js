@@ -1,4 +1,8 @@
-const CRM_ORIGINS = new Set(['https://crm.bossaempreendimentos.com.br', 'http://localhost:3000']);
+const CRM_ORIGINS = new Set([
+  'https://crm.bossaempreendimentos.com.br',
+  'https://bossa-crm-homologacao-git-feat-browser-whatsapp-62bda2-elos-os.vercel.app',
+  'http://localhost:3000',
+]);
 const WA_ORIGIN = 'https://web.whatsapp.com';
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));

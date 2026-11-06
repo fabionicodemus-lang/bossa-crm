@@ -10,6 +10,8 @@ Extensão Chrome Manifest V3 que **clica na interface visível do WhatsApp Web**
 4. Abra o CRM em `https://crm.bossaempreendimentos.com.br` e o WhatsApp Web em `https://web.whatsapp.com`. Entre com o WhatsApp que fará os envios.
 5. Atualize a página do CRM; deve aparecer **Extensão: conectada**.
 
+Na homologação, use a [prévia específica do CRM](https://bossa-crm-homologacao-git-feat-browser-whatsapp-62bda2-elos-os.vercel.app/transmissoes/navegador) com acesso autorizado da equipe Vercel. A extensão aceita somente esse endereço de prévia, o domínio principal do CRM e `localhost:3000`.
+
 Cada operador precisa instalar a extensão em seu próprio Chrome. A fila fica no Supabase, vinculada à organização; não é armazenada na extensão. Se duas pessoas usarem o mesmo número, o banco reserva apenas um destinatário por vez para aquele número.
 
 ## Operação
@@ -35,7 +37,7 @@ O estado **Observado na tela** significa somente que o conteúdo foi visto na co
 ## Limitações técnicas
 
 - A interface DOM do WhatsApp Web muda sem aviso. O adaptador prefere **interromper** quando não consegue verificar o telefone ou o PDF; precisa de manutenção e nova homologação após alterações.
-- A extensão opera somente nas origens do CRM de produção, `localhost:3000` (desenvolvimento) e `web.whatsapp.com`.
+- A extensão opera somente nas origens do CRM de produção, prévia de homologação explicitamente autorizada, `localhost:3000` (desenvolvimento) e `web.whatsapp.com`.
 - O Chrome e as duas páginas devem permanecer abertos; atualizar ou fechar a página durante uma etapa pode deixar seu estado incerto. Após três minutos sem atividade, o registro é separado para revisão humana.
 - A extensão usa uma tentativa por etapa e não implementa alteração de impressão digital, atrasos aleatórios, simulação de digitação humana ou mecanismos para contornar restrições do WhatsApp. O uso em volume pode ser bloqueado pela plataforma mesmo com consentimento.
 - O arquivo de distribuição é gerado a partir desta pasta. Atualizações exigem que os operadores substituam a extensão instalada e recarreguem o CRM.
