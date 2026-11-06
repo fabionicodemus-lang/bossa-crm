@@ -1,6 +1,7 @@
 import { extractNaraPrompt } from './nara-prompt-config';
 import { buildNaraConversationInstructions, NARA_CONVERSATION_POLICY, NARA_COMMERCIAL_SAFETY_POLICY } from './nara-conversation-policy';
 import { protectNaraCommercialReply, naraReplyNeedsCommercialProtection } from './nara-commercial-guard';
+import { hasConcreteHousingInterest, priceObjectionValueBridge } from './nara-commercial-conversion';
 import { applyNaraFinancialHandoff } from './nara-sales-handoff';
 import { agendaActionFromText, shouldHandleAgendaTurn } from './nara-agenda-intent';
 import { collapseRepeatedNaraIntroductions, hasNaraIntroduction, naraConversationLanguage, naraLanguageSwitchReply, removeRepeatedNaraIntroduction, requestedNaraLanguage } from './nara-language';
@@ -883,6 +884,9 @@ export async function enforceNaraReplyGuardrails(
   }
   const protectedReply = protectNaraCommercialReply(turn.reply, history, context.commercial, { enterprise: lead.enterprise });
   turn.reply = protectedReply.reply;
+  if (lead.kind === 'cliente' && !turn.handoff && !lead.opt_out) {
+    turn.reply = priceObjectionValueBridge(turn.reply, history, protectedReply.source, lead.enterprise);
+  }
   const lastQuestion = [...history].reverse().find((item) => item.role === 'user')?.content ?? '';
   const normalizedQuestion = lastQuestion.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
   const requestedPrice = /\b(?:preco|valor|quanto custa|quanto fica|tabela|mensal|parcelas?|entrada|juros|desconto|pagamento|financiamento)\b/.test(normalizedQuestion);
@@ -998,6 +1002,14 @@ export async function enforceNaraReplyGuardrails(
   }
   if (!turn.reply.trim()) throw new NaraReplyGuardrailError(['resposta_vazia']);
   if (lead.kind === 'cliente') {
+    if (!lead.opt_out && turn.classification !== 'sem_interesse'
+      && !routeOutsideBuyerProfile(history) && hasConcreteHousingInterest(history)
+      && (turn.classification === 'frio' || turn.score < 21)) {
+      // Genuine fit questions from a family must not become "curious" solely
+      // because budget or purchase deadline was not supplied yet.
+      turn.classification = 'morno';
+      turn.score = Math.max(35, Number.isFinite(turn.score) ? turn.score : 0);
+    }
     // A classificação e o score precisam concordar para a fila comercial:
     // frio 0–20, morno 21–59, quente 60–100, agendamento 80–100.
     turn.score = Number.isFinite(turn.score) ? Math.max(0, Math.min(100, Math.round(turn.score))) : 0;
