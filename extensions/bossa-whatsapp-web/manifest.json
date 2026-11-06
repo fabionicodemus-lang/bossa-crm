@@ -1,0 +1,22 @@
+{
+  "manifest_version": 3,
+  "name": "Bossa CRM · WhatsApp pelo navegador",
+  "description": "Executa etapas aprovadas do Bossa CRM no WhatsApp Web aberto pelo operador.",
+  "version": "0.1.0",
+  "permissions": ["tabs"],
+  "host_permissions": ["https://web.whatsapp.com/*"],
+  "background": { "service_worker": "background.js" },
+  "content_scripts": [
+    {
+      "matches": ["https://crm.bossaempreendimentos.com.br/*", "https://bossa-crm-homologacao-git-feat-browser-whatsapp-62bda2-elos-os.vercel.app/*", "http://localhost:3000/*"],
+      "js": ["crm-bridge.js"],
+      "run_at": "document_start"
+    },
+    {
+      "matches": ["https://web.whatsapp.com/*"],
+      "js": ["whatsapp-content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": { "default_title": "Bossa CRM · Transmissões", "default_popup": "popup.html" }
+}
