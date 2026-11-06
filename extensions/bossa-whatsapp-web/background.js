@@ -4,6 +4,7 @@ const CRM_ORIGINS = new Set([
   'http://localhost:3000',
 ]);
 const WA_ORIGIN = 'https://web.whatsapp.com';
+let inFlight = false;
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -61,8 +62,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     sendResponse({ error: 'Comando não permitido.' });
     return false;
   }
+  if (inFlight) {
+    sendResponse({ error: 'Há uma etapa ainda ativa neste Chrome. Confira o WhatsApp antes de continuar.' });
+    return false;
+  }
+  inFlight = true;
   sendItem(message.payload ?? {})
     .then((result) => sendResponse({ result }))
-    .catch((cause) => sendResponse({ error: cause instanceof Error ? cause.message : 'Falha ao abrir WhatsApp Web.' }));
+    .catch((cause) => sendResponse({ error: cause instanceof Error ? cause.message : 'Falha ao abrir WhatsApp Web.' }))
+    .finally(() => { inFlight = false; });
   return true;
 });

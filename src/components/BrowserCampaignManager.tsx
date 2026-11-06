@@ -307,7 +307,12 @@ export function BrowserCampaignManager({ organizationId, canEdit }: { organizati
               itemIndex: index, result: outcome.state, detail: outcome.detail,
             });
             if (status !== 'claimed') {
-              if (status === 'uncertain') setNotice(`Conferir manualmente: ${recipient.lead_name}. ${outcome.detail}`);
+              if (status === 'uncertain') {
+                // Não iniciar outra conversa enquanto há um clique cujo
+                // resultado pode ter chegado depois do timeout do navegador.
+                stopRef.current = true;
+                setNotice(`Execução interrompida. Conferir manualmente: ${recipient.lead_name}. ${outcome.detail}`);
+              }
               break;
             }
             index++;
