@@ -8,7 +8,7 @@ Extensão Chrome Manifest V3 que **clica na interface visível do WhatsApp Web**
 2. Descompacte o arquivo em uma pasta permanente do computador.
 3. No Google Chrome, abra `chrome://extensions`, habilite o **Modo do desenvolvedor**, clique em **Carregar sem compactação** e selecione a pasta que contém `manifest.json`.
 4. Abra o CRM em `https://crm.bossaempreendimentos.com.br` e o WhatsApp Web em `https://web.whatsapp.com`. Entre com o WhatsApp que fará os envios.
-5. Atualize a página do CRM; deve aparecer **Extensão: conectada · v0.1.1**. Se aparecer "desatualizada", substitua a pasta anterior pela nova versão, clique em **Atualizar** em `chrome://extensions` e recarregue o CRM.
+5. Atualize a página do CRM; deve aparecer **Extensão: conectada · v0.1.2**. Se aparecer "desatualizada", substitua a pasta anterior pela nova versão, clique em **Atualizar** em `chrome://extensions` e recarregue o CRM.
 
 Na homologação, use a [prévia específica do CRM](https://bossa-crm-homologacao-git-feat-browser-whatsapp-62bda2-elos-os.vercel.app/transmissoes/navegador) com acesso autorizado da equipe Vercel. A extensão aceita somente esse endereço de prévia, o domínio principal do CRM e `localhost:3000`.
 

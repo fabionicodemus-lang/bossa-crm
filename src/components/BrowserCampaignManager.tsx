@@ -23,7 +23,7 @@ type BridgeOutcome = { state: 'observed' | 'uncertain' | 'skipped'; detail: stri
 
 const API = '/api/transmissoes/navegador';
 const MAX_RECIPIENTS = 600;
-const REQUIRED_EXTENSION_VERSION = '0.1.1';
+const REQUIRED_EXTENSION_VERSION = '0.1.2';
 const MIN_REVIEW_DELAY_MS = 15000;
 type BatchLimit = 1 | 2 | 5 | 10 | 20;
 const dateTime = new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' });

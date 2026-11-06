@@ -91,9 +91,12 @@ assert.equal(clickCount, 0, 'falhas não devem clicar');
 // Simulação isolada da interface observada no Chrome: mensagem com várias
 // linhas, caracteres invisíveis do editor e menu Anexar → Documento (accept="*").
 // Nenhum navegador, contato ou envio real é envolvido nesses testes.
-function mockWhatsAppContent({ insertedText = null } = {}) {
+function mockWhatsAppContent({ insertedText = null, composerMissingAfterInitialReads = 0, requiresDrawer = false } = {}) {
   let listener;
   let clickedSend = 0;
+  let clickedDrawerClose = 0;
+  let drawerOpen = false;
+  let composerReads = 0;
   let documentSelected = false;
   let documentInputReady = false;
   let previewReady = false;
@@ -120,7 +123,15 @@ function mockWhatsAppContent({ insertedText = null } = {}) {
     focus() { /* contenteditable visível */ }
   }
 
-  const header = new MockElement({ content: phone });
+  const header = new MockElement({ content: requiresDrawer ? 'Corretor cadastrado' : phone });
+  const headerControl = new MockElement();
+  headerControl.click = () => { drawerOpen = true; };
+  if (requiresDrawer) header.querySelector = (selector) => selector.includes('conversation-info-header') ? headerControl : null;
+  const drawer = new MockElement({ content: `Contato: +55 47 99933-3634` });
+  drawer.getBoundingClientRect = () => ({ width: drawerOpen ? 100 : 0, height: 40 });
+  const closeDrawer = new MockElement({ label: 'Fechar' });
+  closeDrawer.click = () => { drawerOpen = false; clickedDrawerClose++; };
+  drawer.querySelector = (selector) => selector.includes('aria-label="Fechar"') ? closeDrawer : null;
   const input = new MockElement();
   const sendButton = new MockElement({ icon: 'send' });
   sendButton.click = () => {
@@ -132,11 +143,14 @@ function mockWhatsAppContent({ insertedText = null } = {}) {
     querySelector(selector) {
       if (selector === 'header') return header;
       if (selector === 'footer') return footer;
-      if (selector.startsWith('footer [contenteditable=')) return input;
+      if (selector.startsWith('footer [contenteditable=')) {
+        composerReads++;
+        return composerReads > 2 && composerReads <= 2 + composerMissingAfterInitialReads ? null : input;
+      }
       return null;
     },
     querySelectorAll() { return bubbles; },
-    contains() { return true; },
+    contains(node) { return node !== drawer; },
   };
   const attach = new MockElement({ label: 'Anexar' });
   attach.click = () => {};
@@ -152,6 +166,7 @@ function mockWhatsAppContent({ insertedText = null } = {}) {
   const mockDoc = {
     querySelector: (selector) => selector === '#main' ? main : null,
     querySelectorAll(selector) {
+      if (selector.includes('[data-testid="drawer-right"]')) return drawerOpen ? [drawer] : [];
       if (selector.startsWith('#main footer')) return [attach];
       if (selector === '[role="menuitem"]') return [documentMenuItem];
       if (selector === 'input[type="file"]') return documentInputReady ? [imageInput, pdfInput] : [imageInput];
@@ -184,6 +199,7 @@ function mockWhatsAppContent({ insertedText = null } = {}) {
   return {
     send: (payload) => new Promise((resolve) => listener({ type: 'SEND_ITEM', payload: { phone, ...payload } }, {}, resolve)),
     sendClicks: () => clickedSend,
+    drawerCloseClicks: () => clickedDrawerClose,
     documentSelected: () => documentSelected,
     draftText: () => input.innerText,
   };
@@ -200,8 +216,34 @@ const changedEditor = mockWhatsAppContent({ insertedText: 'Texto alterado que n�
 assert.equal((await changedEditor.send({ kind: 'text', text: approvedText })).state, 'uncertain');
 assert.equal(changedEditor.sendClicks(), 0, 'texto divergente nunca pode ser enviado');
 
-const docEditor = mockWhatsAppContent();
+// Depois da verificação do telefone, o editor pode sumir durante o re-render.
+// Aguardar seu retorno; sem retorno, falhar sem clicar e sem tentar outro chat.
+const returningEditor = mockWhatsAppContent({ composerMissingAfterInitialReads: 6 });
+assert.equal((await returningEditor.send({ kind: 'text', text: approvedText })).state, 'observed');
+assert.equal(returningEditor.sendClicks(), 1);
+
+const missingEditor = mockWhatsAppContent({ composerMissingAfterInitialReads: Infinity });
+const missingResult = await missingEditor.send({ kind: 'text', text: approvedText });
+assert.equal(missingResult.state, 'uncertain');
+assert.match(missingResult.detail, /Campo de mensagem indisponível/);
+assert.equal(missingEditor.sendClicks(), 0, 'nunca clicar quando o editor não volta');
+
+// Contatos salvos exigem painel de detalhes. Fechar APENAS pelo botão do
+// drawer e confirmar que ele sumiu antes de enviar.
+const savedContact = mockWhatsAppContent({ requiresDrawer: true });
+assert.equal((await savedContact.send({ kind: 'text', text: approvedText })).state, 'observed');
+assert.equal(savedContact.drawerCloseClicks(), 1);
+assert.equal(savedContact.sendClicks(), 1);
+
+const missingPdfEditor = mockWhatsAppContent({ composerMissingAfterInitialReads: Infinity });
 const pdfBytes = Buffer.from('%PDF-1.4\nBossa', 'utf8');
+const missingPdf = await missingPdfEditor.send({ kind: 'file', base64: pdfBytes.toString('base64'),
+  filename: 'Tabela.pdf', size: pdfBytes.length });
+assert.equal(missingPdf.state, 'uncertain');
+assert.match(missingPdf.detail, /Campo de anexos indisponível/);
+assert.equal(missingPdfEditor.sendClicks(), 0, 'não anexar sem editor visível');
+
+const docEditor = mockWhatsAppContent();
 assert.equal((await docEditor.send({ kind: 'file', base64: pdfBytes.toString('base64'),
   filename: 'Tabela.pdf', size: pdfBytes.length })).state, 'observed');
 assert.equal(docEditor.documentSelected(), true, 'deve clicar Documento antes do seletor genérico');
@@ -213,7 +255,7 @@ let backgroundListener;
 let navigationCount = 0;
 vm.runInNewContext(readFileSync(resolve(root, 'extensions/bossa-whatsapp-web/background.js'), 'utf8'), {
   chrome: {
-    runtime: { getManifest: () => ({ version: '0.1.1' }), onMessage: { addListener(fn) { backgroundListener = fn; } } },
+    runtime: { getManifest: () => ({ version: '0.1.2' }), onMessage: { addListener(fn) { backgroundListener = fn; } } },
     tabs: { query: async () => { navigationCount++; return []; }, update: async () => ({}) },
   },
   URL, setTimeout,
@@ -226,7 +268,7 @@ assert.equal((await backgroundResponse(command, 'https://unknown.example.com/'))
 assert.equal(navigationCount, 0);
 assert.equal((await backgroundResponse({ ...command, payload: { ...command.payload, phone: '555' } }, 'https://crm.bossaempreendimentos.com.br/transmissoes')).error, 'Telefone internacional inválido.');
 assert.equal((await backgroundResponse({ source: 'bossa-crm-bridge', type: 'PING' }, 'https://bossa-crm-homologacao-git-feat-browser-whatsapp-62bda2-elos-os.vercel.app/transmissoes')).result.state, 'observed');
-assert.equal((await backgroundResponse({ source: 'bossa-crm-bridge', type: 'PING' }, 'https://crm.bossaempreendimentos.com.br/transmissoes')).result.version, '0.1.1');
+assert.equal((await backgroundResponse({ source: 'bossa-crm-bridge', type: 'PING' }, 'https://crm.bossaempreendimentos.com.br/transmissoes')).result.version, '0.1.2');
 assert.equal((await backgroundResponse({ source: 'bossa-crm-bridge', type: 'PING' }, 'https://malicious-preview.vercel.app/')).error, 'Origem não autorizada.');
 assert.equal(navigationCount, 0);
 
@@ -238,7 +280,7 @@ let sendItemCalls = 0;
 let prematureMessageCalls = 0;
 vm.runInNewContext(readFileSync(resolve(root, 'extensions/bossa-whatsapp-web/background.js'), 'utf8'), {
   chrome: {
-    runtime: { getManifest: () => ({ version: '0.1.1' }), onMessage: { addListener(fn) { safeBackgroundListener = fn; } } },
+    runtime: { getManifest: () => ({ version: '0.1.2' }), onMessage: { addListener(fn) { safeBackgroundListener = fn; } } },
     tabs: {
       query: async () => [{ id: 1, active: true }],
       update: async () => ({ id: 1 }),
