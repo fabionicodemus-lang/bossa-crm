@@ -2,7 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Lead } from './types';
 import { isAssistedSaleSignal, isBrokerRoutingSignal, isCurrentCustomerSignal } from './nara-contact-routing';
 import { adDevelopment } from './nara-first-message';
-import { isNaraAlternativePaymentProposal, isNaraArchitecturalEntranceQuestion } from './nara-commercial-guard';
+import { isNaraAlternativePaymentProposal, isNaraArchitecturalEntranceQuestion, isNaraMarketInformationQuestion } from './nara-commercial-guard';
 
 type ChatMessage = { role: 'user' | 'assistant'; content: string };
 type JsonRecord = Record<string, unknown>;
@@ -746,7 +746,8 @@ export async function loadNaraCommercialTurnContext(
   const consultedAt = new Date().toISOString();
   const blockedReason = blockedCommercialProfile(lead, history);
   if (blockedReason) return blockedCommercialContext(blockedReason, consultedAt);
-  if (isNaraArchitecturalEntranceQuestion(latest) || isNaraAlternativePaymentProposal(latest)) return null;
+  if (isNaraArchitecturalEntranceQuestion(latest) || isNaraAlternativePaymentProposal(latest)
+    || isNaraMarketInformationQuestion(latest)) return null;
   const latestUnits = unitCodesFromMessage(latest);
   const hasCurrentRequest = hasCommercialSignal(latest) || latestUnits.length > 0;
   // O histórico indica o assunto a consultar novamente, nunca os valores autorizados.

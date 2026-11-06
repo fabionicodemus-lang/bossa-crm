@@ -1,5 +1,5 @@
 import type { NaraCommercialTurnContext, NaraDevelopmentRange, NaraUnitOffer } from './nara-unit-queries';
-import { enterpriseInFocus, financialNegotiationIntent } from './nara-conversation-signals';
+import { enterpriseInFocus, financialNegotiationIntent, withoutPhysicalEntranceTerms } from './nara-conversation-signals';
 import { naraConversationLanguage, type NaraLanguage } from './nara-language';
 
 type ChatMessage = { role: 'user' | 'assistant'; content: string };
@@ -249,14 +249,47 @@ function financialSignalText(value: string): string {
     let text = part;
     // A physical description must not erase a payment request in the same clause.
     if (financialNegotiationIntent(text)) return text;
+    text = withoutPhysicalEntranceTerms(text);
     // Scope room/access evidence to this clause: "sala? E qual a entrada?" must
     // not turn the second question into an architectural one.
     if (/\b(porta|acesso|sala|corredor|hall|portaria|fachada|porta[oã]|largura)\b/.test(text)
       || /\bcomo (?:e|sera) (?:a )?entrada (?:do apartamento|do apto|da unidade|da casa|do imovel|da planta)\b/.test(text)) {
-      text = text.replace(/\b(?:porta de entrada|entrada (?:do apartamento|do apto|da unidade|da casa|do imovel|da planta|da sala|do quarto))\b/g, ' ');
+      text = text.replace(/\b(?:porta de entrada|entrada (?:do apartamento|do apto|do duplex|da unidade|da casa|do imovel|da planta|da sala|do quarto))\b/g, ' ');
     }
     return text.replace(/\b(?:hall de entrada|entrada (?:principal|do predio|do edificio|da garagem|de pedestres|do empreendimento|da torre)|entrance hall|main entrance)\b/g, ' ');
   }).join(' ');
+}
+
+const MARKET_INFORMATION = /\b(?:liquidez|revenda|revender|valorizacao|valorizar|rentabilidade|retorno (?:financeiro|do investimento|sobre (?:o )?investimento)|reventa|plusvalia|rentabilidad|resale|resell|appreciation|liquidity|investment return)\b/;
+const MARKET_FACTOR_RELATION = /\b(?:depende|dependem|depender|varia|variam|variar|influencia|influenciam|influenciar|afeta|afetam|afetar|impacta|impactam|influences?|depends?|affects?|dependen|influye)\b/;
+
+/**
+ * A question about resale demand or appreciation is not a current-price query.
+ * Keep explicit list-price, availability and payment questions protected, even
+ * when the customer also mentions investing or resale in the same message.
+ */
+export function isNaraMarketInformationQuestion(message: string): boolean {
+  const value = norm(message);
+  if (!MARKET_INFORMATION.test(value) || financialNegotiationIntent(value)) return false;
+  if (moneyMatches(value).length > 0) return false;
+  if (/\b(?:quanto custa|quanto fica|quanto sai|qual\s+(?:(?:e|eh|seria|o|a)\s+){0,3}(?:preco|valor)|quanto (?:e|esta|ta) (?:o |a )?(?:preco|valor)|how much (?:is|does|for)|cuanto cuesta|cuanto sale|tabela|faixa de (?:preco|valor)|a partir de|mais barat[oa]|menor (?:preco|valor)|(?:preco|valor) (?:atual|vigente|total|hoje)|disponibilidade|disponive(?:l|is))\b/.test(value)) return false;
+  const financialText = financialSignalText(value);
+  if (!FINANCIAL_TERMS.test(financialText)) return true;
+  // "O preço pedido influencia na liquidez?" asks about a market factor,
+  // whereas "A liquidez depende da procura. E o preço do duplex?" still asks
+  // for an actual quote. Keep the causal explanation scoped to its own clause.
+  if (FINANCIAL_TERMS.test(financialText.replace(/\b(?:precos?|valores?|prices?|precios?)\b/g, ' '))) return false;
+  return financialText.split(/[.!?;]+|,(?!\d)|\b(?:mas|porem|but|pero)\b/)
+    .filter((clause) => FINANCIAL_TERMS.test(clause))
+    .every((clause) => MARKET_FACTOR_RELATION.test(clause));
+}
+
+function isGeneralMarketFactorClause(clause: string, context: string): boolean {
+  if (!MARKET_INFORMATION.test(context) || !MARKET_FACTOR_RELATION.test(clause)) return false;
+  // Only price/value as a generic causal factor is exempt. Amounts/percentages
+  // are checked before this helper, and all payment/discount terms still count.
+  if (FINANCIAL_TERMS.test(clause.replace(/\b(?:precos?|valores?|prices?|precios?)\b/g, ' '))) return false;
+  return !/\b(?:fix[oa]s?|garantid[oa]s?|aprovad[oa]s?|aceit\w*|oferec\w*|conseguimos|consigo|mais barat[oa]|melhor preco|lowest price|approved|guaranteed|fixed)\b/.test(clause);
 }
 
 /** Use the same physical-entrance normalization before querying and quoting prices. */
@@ -287,6 +320,7 @@ export function naraReplyNeedsCommercialProtection(reply: string, history: ChatM
     && (FINANCIAL_TERMS.test(value) || /\b(consigo|conseguimos|ofereco|oferecemos|garanto|garantimos|faco|fecho|fechamos|aceito|aceitamos|pode levar|can offer|can do|accept|ofrezco|ofrecemos|acepto|aceptamos)\b/.test(value))) return true;
   if (/\b(?:milhao|milhoes|million|mil|reais|dolares|dollars|euros)\b/.test(value) && FINANCIAL_TERMS.test(value)) return true;
   const clauses = value.split(/(?<=[.!?;])\s+|;\s*|,(?!\d)\s*|\b(?:mas|porem|but|pero)\b|\b(?:e|and|y)\s+(?=(?:(?:o|a|os|as|the|el|la|los|las)\s+)?(?:precos?|valores?|pagamento|saldo|entradas?|parcelas?|juros|comercial|equipe|time|eu|nos|voce|consigo|conseguimos|ofereco|podemos|i|we|you)\b)/);
+  const marketContext = `${value} ${norm(lastUserText(history))}`;
   return clauses.some((clause) => {
     if (!FINANCIAL_TERMS.test(clause)) return false;
     // A proposal phrased as a question still quotes a commercial condition.
@@ -297,6 +331,7 @@ export function naraReplyNeedsCommercialProtection(reply: string, history: ChatM
     // Absence of charges is itself a commercial promise, even though it contains a negation.
     if (/\b(sem (?:juros|correcao|reajuste|reforcos?|balao|entrada)|nao (?:tem|ha|existe|cobramos) (?:juros|correcao|reforcos?|balao)|juros zero|zero interest|interest.free|no interest|sin (?:intereses|ajuste)|preco (?:fixo|garantido)|price (?:fixed|guaranteed)|entrada (?:facilitada|reduzida)|cabe no seu orcamento)\b/.test(clause)) return true;
     if (/\b(?:precos?|valores?|parcelas?|entradas?|saldo|pagamento|prices?|installments?|precios?|cuotas?)\b.{0,45}\b(?:fix[oa]s?|garantid[oa]s?|aprovad[oa]s?|fixed|guaranteed|approved|fij[oa]s?|garantizad[oa]s?)\b/.test(clause)) return true;
+    if (isGeneralMarketFactorClause(clause, marketContext)) return false;
     const safe = SAFE_FINANCIAL_REFUSAL.exec(clause);
     if (safe && !FINANCIAL_TERMS.test(clause.slice(0, safe.index))) return false;
     if (/\?\s*$/.test(clause)) return false;
@@ -326,6 +361,7 @@ function asksUnitOrRangeClarification(text: string): boolean {
 
 function asksForQuote(text: string): boolean {
   if (asksUnitOrRangeClarification(text)) return true;
+  if (isNaraMarketInformationQuestion(text)) return false;
   const value = financialSignalText(text);
   if (/\b(?:nao (?:quero|preciso)|sem falar de|no quiero|do not want|don't want)\b.{0,35}\b(?:preco|valor|tabela|pagamento|price|payment|precio)\b/.test(value)) return false;
   if (/\b(quanto custa|quanto fica|quanto sai|how much|cuanto cuesta|me (?:passa|passe|manda|mande|informe|envia|envie).{0,20}(?:preco|valor|tabela)|quero saber.{0,20}(?:preco|valor)|sem preco nao adianta)\b/.test(value)) return true;
@@ -542,8 +578,20 @@ export function protectNaraCommercialReply(
         : 'Não posso garantir nem aprovar a condição alternativa que você sugeriu. O comercial da Bossa precisa analisar essa proposta antes de confirmar entrada, parcelas, juros ou correção.';
     return { reply: safeReply, changed: reply !== safeReply, commercial: true, reasons: ['unapproved_customer_proposal'], source: 'unconfirmed' };
   }
-  if ((!naraReplyNeedsCommercialProtection(reply) || hasOnlyAttributedBudget(reply, history)) && !quoteRequested) {
+  if ((!naraReplyNeedsCommercialProtection(reply, history) || hasOnlyAttributedBudget(reply, history)) && !quoteRequested) {
     return { reply, changed: false, commercial: false, reasons: [], source: 'model' };
+  }
+  // An unsolicited or unverified quote must not replace an answer about market
+  // behaviour with "price unavailable". Drop it and keep an honest topical
+  // answer, rather than leaking terms or pretending a resale result is known.
+  if (!quoteRequested && isNaraMarketInformationQuestion(latest)) {
+    const language = options.language ?? naraConversationLanguage(history);
+    const safeReply = language === 'en'
+      ? 'There is no guaranteed appreciation or resale timeframe. Liquidity depends on buyer demand and market conditions. We can compare the floor plans and features to see whether the property fits your goals.'
+      : language === 'es'
+        ? 'No hay valorización ni plazo de reventa garantizados. La liquidez depende de la demanda y del mercado. Podemos comparar las plantas y los diferenciales para evaluar si el inmueble encaja con tu objetivo.'
+        : 'Não dá para prometer valorização ou prazo de revenda. A liquidez depende da procura pelo imóvel e das condições do mercado. Podemos comparar as plantas e os diferenciais para você avaliar se fazem sentido para o seu objetivo.';
+    return { reply: safeReply, changed: reply !== safeReply, commercial: false, reasons: ['unverified_quote_removed_from_market_answer'], source: 'unconfirmed' };
   }
   const validation = validateNaraCommercialContext(commercial, history, options);
   const language = options.language ?? naraConversationLanguage(history);
