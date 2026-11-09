@@ -3,8 +3,7 @@ import { getCurrentContext } from '@/lib/auth';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { createClient } from '@/lib/supabase/server';
 import { phoneMatchVariants } from '@/lib/whatsapp/utils';
-
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+import { validChatGPTCampaignId } from '@/lib/chatgpt-browser-campaign';
 
 /** Congela uma lista única para o ChatGPT, com exclusão mútua por remetente. */
 export async function POST(request: Request) {
@@ -14,12 +13,12 @@ export async function POST(request: Request) {
   const body = await request.json().catch(() => ({})) as Record<string, unknown>;
   const queryId = new URL(request.url).searchParams.get('campaign')?.trim() ?? '';
   const bodyId = typeof body.campaignId === 'string' ? body.campaignId.trim() : '';
-  // A URL identifica a campanha mesmo quando uma extensão do navegador remove
-  // inadvertidamente o corpo JSON. Nunca aceitar IDs divergentes.
+  // Accept the same canonical UUID as the UI for both supported input forms.
+  // Reject conflicting IDs rather than selecting a different campaign.
   if (queryId && bodyId && queryId !== bodyId)
     return NextResponse.json({ error: 'O identificador da campanha mudou durante a solicitação. Atualize a página.' }, { status: 409 });
   const campaignId = queryId || bodyId;
-  if (!UUID.test(campaignId))
+  if (!validChatGPTCampaignId(campaignId))
     return NextResponse.json({ error: 'Identificador da campanha ausente ou inválido. Atualize a tela e tente baixar novamente.', code: 'INVALID_CAMPAIGN_ID' }, { status: 400 });
 
   const admin = createAdminClient();
@@ -74,7 +73,7 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: 'Acesso de operador necessário.' }, { status: 403 });
   const body = await request.json().catch(() => ({})) as Record<string, unknown>;
   const campaignId = String(body.campaignId ?? '');
-  if (!UUID.test(campaignId) || body.confirmedChatGPTStopped !== true)
+  if (!validChatGPTCampaignId(campaignId) || body.confirmedChatGPTStopped !== true)
     return NextResponse.json({ error: 'Confirme que interrompeu o ChatGPT.' }, { status: 400 });
   const supabase = await createClient();
   const { data, error } = await supabase.rpc('browser_campaign_stop_standalone', {
