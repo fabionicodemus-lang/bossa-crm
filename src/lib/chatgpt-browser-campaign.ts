@@ -123,11 +123,11 @@ export function buildChatGPTStandalonePrompt(origin: string, run: StandaloneCamp
 
   const browserIntro = browser === 'chrome'
     ? 'Use a extensão OFICIAL do ChatGPT para Chrome (@Chrome)'
-    : 'Use a extensão OFICIAL do ChatGPT conectada ao Microsoft Edge';
+    : 'Use a extensão OFICIAL do ChatGPT conectada ao Microsoft Edge (@Edge)';
   return `${browserIntro} para realizar a transmissão autorizada da Bossa pelo WhatsApp Web. ` +
     `O trabalho já está aprovado no Bossa CRM, e o pacote abaixo contém TODOS os ${sorted.length} destinatários da execução. Não peça nova confirmação do remetente.\n\n` +
     `NAVEGADOR ESCOLHIDO: ${browserLabel}. Use as abas e a sessão do WhatsApp Web abertas nesse navegador. Não troque de navegador nem use uma sessão diferente. ` +
-    `Selecione a conexão de navegador disponível no ChatGPT que tenha acesso a essas abas. Se não houver acesso ao navegador escolhido, pare antes do primeiro envio e informe a conexão necessária; não finja ter acesso.\n\n` +
+    `Selecione ${browser === 'edge' ? '@Edge' : '@Chrome'} no ChatGPT, usando o perfil conectado a essas abas. Respeite as solicitações de permissão de sites e arquivos. Se não houver acesso ao navegador escolhido, pare antes do primeiro envio e informe a conexão necessária; não finja ter acesso.\n\n` +
     `REGRAS DA EXECUÇÃO ÚNICA (${run.runId}):\n` +
     `1. Antes de enviar qualquer mensagem, abra os links de anexos abaixo e BAIXE cada PDF exatamente UMA vez. Verifique os nomes. Reutilize os mesmos arquivos locais em todas as conversas. Se não conseguir acessar algum PDF, pare antes do primeiro envio.\n` +
     `2. Depois dos downloads, trabalhe SOMENTE no WhatsApp Web. Não acesse novamente o Bossa CRM, não reserve contatos, não atualize painel, não registre envios e não peça cliques humanos por contato. O CRM acompanha os ecos de mensagens independentemente.\n` +
