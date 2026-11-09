@@ -27,6 +27,8 @@ assert.throws(() => buildChatGPTRunnerUrl('http://example.com', id, 2, runId), /
 const prompt = buildChatGPTCampaignPrompt(runner, '5547999999999', 2);
 assert.match(prompt, /extensão OFICIAL do ChatGPT/);
 assert.match(prompt, /EXATAMENTE ao telefone/);
+assert.match(prompt, /Não peça conferência nem nova confirmação do remetente/);
+assert.doesNotMatch(prompt, /confirme.*que o remetente é|confirmação humana do remetente/i);
 assert.match(prompt, /NÃO passe ao próximo contato com pendência/i);
 assert.match(prompt, /Não ultrapasse o limite da campanha/);
 assert.match(prompt, /Registrar contato concluído/);
@@ -40,6 +42,7 @@ assert.equal(decodeURIComponent(deepLink.slice('codex://new?prompt='.length)), p
 
 const root = resolve(import.meta.dirname, '..');
 const runnerSource = readFileSync(resolve(root, 'src/components/ChatGPTCampaignRunner.tsx'), 'utf8');
+assert.doesNotMatch(runnerSource, /confirmar a conversa individual e o remetente autorizado|Confira antes de enviar:<\/strong> remetente/);
 assert.match(runnerSource, /action: 'claim'/);
 assert.match(runnerSource, /action: 'heartbeat'/);
 assert.match(runnerSource, /action: 'ack'/);

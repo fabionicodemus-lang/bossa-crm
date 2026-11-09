@@ -238,7 +238,7 @@ export function ChatGPTCampaignRunner({ canEdit }: { canEdit: boolean }) {
       {campaignFinished || limitReached ? <p>Todos os contatos previstos foram processados nesta execução ou a fila está concluída. O ChatGPT deve parar e informar o resultado, sem iniciar outra campanha.</p>
         : stopped ? <p>Esta execução está parada para conferência. Não reabra a conversa nem repita o envio automaticamente.</p>
           : awaitingReview ? <p>Intervalo de revisão operacional: aguarde ao menos 15 segundos entre os contatos, confira os estados e clique em “Reservar próximo corretor”.</p>
-            : <p>O ChatGPT pode clicar abaixo e continuar sozinho. Antes de enviar, ele deve confirmar a conversa individual e o remetente autorizado.</p>}
+            : <p>O ChatGPT pode clicar abaixo e continuar sozinho. Antes de enviar, basta conferir a conversa individual e o telefone do destinatário. O remetente já foi definido na campanha.</p>}
       <button className="btn btn-primary" disabled={!canClaim} onClick={() => void claimNext()}>{busy ? 'Verificando a fila...' : 'Reservar próximo corretor'}</button>
     </div></section>}
 
@@ -247,7 +247,7 @@ export function ChatGPTCampaignRunner({ canEdit }: { canEdit: boolean }) {
         <div><span>Contato autorizado</span><h2>{current.lead_name}</h2><strong>+{current.phone}</strong></div>
         {whatsappUrl && <a className="btn btn-secondary" href={whatsappUrl} target="_blank" rel="noopener noreferrer">Abrir conversa no WhatsApp Web ↗</a>}
       </div>
-      <div className={styles.warning}><strong>Confira antes de enviar:</strong> remetente +{campaign?.sender_phone}, conversa individual do telefone +{current.phone}, nenhum grupo, nenhum texto duplicado. Se não conseguir confirmar, pare.</div>
+      <div className={styles.warning}><strong>Confira o destinatário:</strong> conversa individual do telefone +{current.phone}, nenhum grupo, nenhum texto duplicado. Não é necessária uma nova conferência do remetente. Se não conseguir identificar o destinatário, pare.</div>
       <div className={styles.stage}>
         <h3>1. Mensagem de texto aprovada</h3>
         {itemIndex > 0 ? <p><strong>Texto já registrado nesta conversa. NÃO envie novamente.</strong></p>
