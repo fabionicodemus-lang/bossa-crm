@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } f
 import { createClient } from '@/lib/supabase/client';
 import { campaignRecipientSummary, hasBrowserRecipientNameToken, personalizeBrowserText, type BrowserCampaignMedia, type BrowserRecipientStatus } from '@/lib/browser-campaigns';
 import { BROWSER_CAMPAIGN_MONITOR_POLL_MS, type BrowserCampaignMonitor } from '@/lib/browser-campaign-monitor';
-import { buildChatGPTCampaignMarkdown, chatGPTCampaignMarkdownFilename, buildChatGPTDesktopLink, buildChatGPTStandalonePrompt, type StandaloneCampaignRun } from '@/lib/chatgpt-browser-campaign';
+import { buildChatGPTCampaignMarkdown, chatGPTCampaignMarkdownFilename, buildChatGPTDesktopLink, buildChatGPTStandalonePrompt, validChatGPTCampaignId, type StandaloneCampaignRun } from '@/lib/chatgpt-browser-campaign';
 import styles from './BrowserCampaignManager.module.css';
 
 type Contact = { id: string; name: string; phone: string; stage: string; company: string | null; enterprise: string | null };
@@ -289,7 +289,13 @@ export function BrowserCampaignManager({ organizationId, canEdit }: { organizati
 
   async function prepareChatGPTPrompt() {
     if (!campaign) throw new Error('Selecione uma campanha.');
-    const run = await mutation<StandaloneCampaignRun>(`${API}/pacote`, { campaignId: campaign.id });
+    const campaignId = String(campaign.id ?? '').trim();
+    if (!validChatGPTCampaignId(campaignId))
+      throw new Error('O CRM não conseguiu identificar esta campanha. Atualize a página e abra a campanha novamente.');
+    // Enviar o identificador também na URL evita o erro "Campanha inválida"
+    // caso uma extensão/intermediário esvazie o corpo da requisição.
+    const run = await mutation<StandaloneCampaignRun>(`${API}/pacote?campaign=${encodeURIComponent(campaignId)}`,
+      { campaignId });
     const prompt = buildChatGPTStandalonePrompt(window.location.origin, run);
     setChatGPTPrompt(prompt);
     setStandaloneRun({ id: run.runId, status: run.status, created_at: run.createdAt, last_observed_at: null });
