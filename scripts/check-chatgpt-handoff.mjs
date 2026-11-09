@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import {
-  buildChatGPTCampaignPrompt, buildChatGPTDesktopLink, buildChatGPTRunnerUrl,
+  buildChatGPTCampaignPrompt, buildChatGPTDesktopLink, buildChatGPTRunnerUrl, buildChatGPTStandalonePrompt,
   chatGPTBatchLimit, validChatGPTCampaignId,
 } from '../src/lib/chatgpt-browser-campaign.ts';
 
@@ -39,6 +39,65 @@ assert.throws(() => buildChatGPTCampaignPrompt(runner, 'remetente-invalido', 2))
 const deepLink = buildChatGPTDesktopLink(prompt);
 assert.equal(deepLink.startsWith('codex://new?prompt='), true);
 assert.equal(decodeURIComponent(deepLink.slice('codex://new?prompt='.length)), prompt);
+
+const standaloneRun = {
+  runId,
+  createdAt: '2026-11-09T12:00:00.000Z',
+  status: 'active',
+  manifest: {
+    campaignId: id, senderPhone: '5547999999999',
+    recipients: [
+      { name: 'Ana Silva', phone: '5547999990001', position: 0,
+        text: 'Olá, Ana! Aqui estão o Flow e o Alma. 📄\nConte comigo!' },
+      { name: 'Bruno Souza', phone: '5547999990002', position: 1,
+        text: 'Oi, Bruno! Novidades do *Flow Aptos* e do Alma.' },
+    ],
+    media: [
+      { filename: 'Tabela Flow.pdf', sha256: 'a'.repeat(64) },
+      { filename: 'Tabela Alma.pdf', sha256: 'b'.repeat(64) },
+    ],
+  },
+};
+const standalone = buildChatGPTStandalonePrompt('https://crm.bossaempreendimentos.com.br', standaloneRun);
+assert.match(standalone, /extensão OFICIAL do ChatGPT/);
+assert.match(standalone, /TODOS os 2 destinatários/);
+assert.match(standalone, /BAIXE cada PDF exatamente UMA vez/);
+assert.match(standalone, /SOMENTE no WhatsApp Web/);
+assert.match(standalone, /Não acesse novamente o Bossa CRM/);
+assert.match(standalone, /Não peça nova confirmação do remetente/);
+assert.match(standalone, /Olá, Ana! Aqui estão o Flow e o Alma/);
+assert.match(standalone, /Oi, Bruno! Novidades do \*Flow Aptos\*/);
+assert.match(standalone, /5547999990001/);
+assert.match(standalone, /5547999990002/);
+assert.equal((standalone.match(/\/api\/transmissoes\/navegador\/arquivo\?/g) ?? []).length, 2);
+assert.doesNotMatch(standalone, /Registrar contato concluído|Reservar próximo corretor|action: 'ack'|heartbeat/i);
+assert.doesNotMatch(standalone, /Bearer |service_role|senha|\{\{nome\}\}/i);
+assert.throws(() => buildChatGPTStandalonePrompt('http://website.com', standaloneRun), /HTTPS/);
+assert.throws(() => buildChatGPTStandalonePrompt('https://crm.bossaempreendimentos.com.br', {
+  ...standaloneRun, status: 'completed',
+}), /não está disponível/);
+assert.throws(() => buildChatGPTStandalonePrompt('https://crm.bossaempreendimentos.com.br', {
+  ...standaloneRun, manifest: { ...standaloneRun.manifest, recipients: [
+    ...standaloneRun.manifest.recipients, standaloneRun.manifest.recipients[0],
+  ] },
+}), /inválida/);
+assert.throws(() => buildChatGPTStandalonePrompt('https://crm.bossaempreendimentos.com.br', {
+  ...standaloneRun, manifest: { ...standaloneRun.manifest, recipients: [{
+    name: 'Ana', phone: '5547999990001', text: 'Olá, {{nome}}!', position: 0,
+  }] },
+}), /inválida/);
+const manyRecipients = Array.from({ length: 600 }, (_, index) => ({
+  name: `Corretor ${index + 1}`, phone: `5547${String(900000000 + index)}`,
+  text: `Olá, pessoa ${index + 1}!`, position: index,
+}));
+const largePrompt = buildChatGPTStandalonePrompt('https://crm.bossaempreendimentos.com.br', {
+  ...standaloneRun, manifest: { ...standaloneRun.manifest, recipients: manyRecipients },
+});
+assert.match(largePrompt, /TODOS os 600 destinatários/);
+assert.match(largePrompt, /pessoa 600!/);
+assert.throws(() => buildChatGPTStandalonePrompt('https://crm.bossaempreendimentos.com.br', {
+  ...standaloneRun, manifest: { ...standaloneRun.manifest, recipients: [...manyRecipients, manyRecipients[0]] },
+}), /não está disponível/);
 
 const root = resolve(import.meta.dirname, '..');
 const runnerSource = readFileSync(resolve(root, 'src/components/ChatGPTCampaignRunner.tsx'), 'utf8');

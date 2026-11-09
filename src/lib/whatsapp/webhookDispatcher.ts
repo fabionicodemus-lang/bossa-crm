@@ -251,6 +251,20 @@ async function processEcho(args: {
     .select('id')
     .maybeSingle();
   if (transportError) throw transportError;
+  // Mesmo em replay do webhook, recuperar a mensagem para concluir uma
+  // confirmação que poderia ter falhado depois da gravação inicial.
+  const messageId = stored?.id ?? (await args.admin.from('whatsapp_messages')
+    .select('id').eq('wamid', wamid).maybeSingle()).data?.id;
+  let campaignEcho = false;
+  if (messageId) {
+    const { data, error } = await args.admin.rpc('browser_campaign_record_echo', {
+      p_message_id: messageId,
+    });
+    // O deploy da função é aditivo: preservar o processamento básico do
+    // webhook caso o banco ainda esteja na versão anterior da aplicação.
+    if (error && error.code !== 'PGRST202' && error.code !== '42883') throw error;
+    campaignEcho = data === true;
+  }
   if (!stored) return;
 
   const { error: messageError } = await args.admin.from('messages').upsert({
@@ -268,6 +282,10 @@ async function processEcho(args: {
     created_at: sentAt,
   }, { onConflict: 'whatsapp_message_id', ignoreDuplicates: true });
   if (messageError) throw messageError;
+
+  // Uma transmissão aprovada é marketing enviado em lote, não uma tomada de
+  // atendimento humano: não desativar a Nara de centenas de corretores.
+  if (campaignEcho) return;
 
   const metadata = {
     ...(lead.metadata || {}),
