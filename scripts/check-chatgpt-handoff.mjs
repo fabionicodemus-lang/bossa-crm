@@ -128,7 +128,6 @@ assert.match(routeSource, /MAX_RECIPIENTS = 1500/);
 assert.match(routeSource, /\.range\(offset, offset \+ Math\.min\(499/);
 
 const packageSource = readFileSync(resolve(root, 'src/app/api/transmissoes/navegador/pacote/route.ts'), 'utf8');
-const managerSource = readFileSync(resolve(root, 'src/components/BrowserCampaignManager.tsx'), 'utf8');
 assert.match(packageSource, /searchParams\.get\('campaign'\)/);
 assert.match(packageSource, /if \(queryId && bodyId && queryId !== bodyId\)/);
 assert.match(packageSource, /const campaignId = queryId \|\| bodyId/);
