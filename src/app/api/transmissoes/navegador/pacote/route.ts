@@ -12,9 +12,15 @@ export async function POST(request: Request) {
   if (!context || context.role === 'viewer')
     return NextResponse.json({ error: 'Acesso de operador necessário.' }, { status: 403 });
   const body = await request.json().catch(() => ({})) as Record<string, unknown>;
-  const campaignId = String(body.campaignId ?? '');
+  const queryId = new URL(request.url).searchParams.get('campaign')?.trim() ?? '';
+  const bodyId = typeof body.campaignId === 'string' ? body.campaignId.trim() : '';
+  // A URL identifica a campanha mesmo quando uma extensão do navegador remove
+  // inadvertidamente o corpo JSON. Nunca aceitar IDs divergentes.
+  if (queryId && bodyId && queryId !== bodyId)
+    return NextResponse.json({ error: 'O identificador da campanha mudou durante a solicitação. Atualize a página.' }, { status: 409 });
+  const campaignId = queryId || bodyId;
   if (!UUID.test(campaignId))
-    return NextResponse.json({ error: 'Campanha inválida.' }, { status: 400 });
+    return NextResponse.json({ error: 'Identificador da campanha ausente ou inválido. Atualize a tela e tente baixar novamente.', code: 'INVALID_CAMPAIGN_ID' }, { status: 400 });
 
   const admin = createAdminClient();
   const { data: campaign, error: campaignError } = await admin.from('browser_campaigns')
