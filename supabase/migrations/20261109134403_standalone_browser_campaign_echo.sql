@@ -167,8 +167,10 @@ returns trigger language plpgsql set search_path = '' as $$
 begin
   if new.status='claimed' and old.status<>'claimed' and exists(
     select 1 from public.browser_campaign_standalone_runs r
-    where r.campaign_id=new.campaign_id and r.status='active'
-  ) then raise exception 'Campanha já está sob execução única do ChatGPT'; end if;
+    join public.browser_campaigns c on c.id = new.campaign_id
+    where r.organization_id = c.organization_id and r.status='active'
+      and r.sender_phone=c.sender_phone
+  ) then raise exception 'O remetente já está sob execução única do ChatGPT'; end if;
   return new;
 end;
 $$;
@@ -195,7 +197,7 @@ declare
 begin
   select * into v_msg from public.whatsapp_messages where id=p_message_id;
   if not found or v_msg.direction<>'out' or v_msg.payload->>'source'<>'whatsapp_business_app'
-    or v_msg.type not in ('text','document') then return false; end if;
+    or v_msg.type not in ('text','document') or coalesce(v_msg.wamid,'')='' or v_msg.sent_at is null then return false; end if;
   select * into v_run from public.browser_campaign_standalone_runs r
     where r.organization_id=v_msg.organization_id and r.channel_id=v_msg.channel_id
       and r.status='active' and r.created_at<=v_msg.sent_at
@@ -225,7 +227,7 @@ begin
     if v_text is distinct from v_recipient.message_text then return false; end if;
     v_item:=0;
   else
-    select 1+ord::integer into v_item
+    select ord::integer into v_item
       from jsonb_array_elements(v_run.manifest->'media') with ordinality as files(file,ord)
       where file->>'sha256'=v_hash
         and not exists(select 1 from public.browser_campaign_echo_receipts e
