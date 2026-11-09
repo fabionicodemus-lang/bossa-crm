@@ -123,6 +123,8 @@ export function ChatGPTCampaignRunner({ canEdit }: { canEdit: boolean }) {
   const campaign = view?.campaign;
   const senderBlocked = view?.senderBlocked ?? false;
   const limitReached = claimedCount >= limit;
+  const campaignFinished = !!campaign && (campaign.status === 'completed'
+    || (view?.recipients.length === campaign.recipient_count && !summary.queued && !summary.claimed && !summary.uncertain));
   const awaitingReview = reviewPending;
   const canClaim = canEdit && ready && !busy && !stopped && !senderBlocked && !!campaign
     && campaign.status === 'running' && !current && !limitReached && !awaitingReview;
@@ -140,10 +142,21 @@ export function ChatGPTCampaignRunner({ canEdit }: { canEdit: boolean }) {
         action: 'claim', campaignId: campaign.id, workerId: sessionRef.current.workerId,
       });
       if (!result.recipient) {
-        setNotice('Nenhum corretor disponível: fila encerrada ou o remetente está em uso. Confira os estados da campanha.');
+        const latest = await refresh(campaign.id);
+        const remaining = campaignRecipientSummary(latest.recipients);
+        setStopped(true);
+        if (latest.campaign.status === 'completed' || (!remaining.queued && !remaining.claimed && !remaining.uncertain))
+          setNotice('Campanha concluída. Não há novos corretores para enviar; pare a operação.');
+        else if (remaining.uncertain || latest.senderBlocked)
+          setError('Há destinatários para conferir ou remetente bloqueado. Pare; não tente repetir mensagens.');
+        else setError('Nenhum corretor disponível. O remetente pode estar sendo utilizado por outra sessão. Pare e confira o CRM.');
         return;
       }
       const next = result.recipient;
+      if (!Number.isInteger(next.item_count) || next.item_count !== 1 + next.media.length
+        || !Number.isInteger(next.next_item_index) || next.next_item_index < 0
+        || next.next_item_index >= next.item_count)
+        throw new Error('Etapas aprovadas inconsistentes. Interrompa e confira a campanha antes de enviar.');
       // Guardar a reserva antes de exibir o conteúdo: recarregar nunca deve repetir um envio incerto.
       persistSession({ activeRecipientId: next.recipient_id, claimedCount: sessionRef.current.claimedCount + 1 });
       setCurrent(next); setItemIndex(next.next_item_index); setClaimedCount(sessionRef.current.claimedCount);
@@ -157,31 +170,36 @@ export function ChatGPTCampaignRunner({ canEdit }: { canEdit: boolean }) {
     if (!current || !campaign || busy || stopped || requestInFlight.current) return;
     requestInFlight.current = true;
     setBusy(true); setError(''); setNotice('');
-    const step = itemIndex === 0 ? 'texto' : `PDF ${itemIndex}`;
     try {
-      const answer = await request<{ status: string }>(`${API}/worker`, {
-        action: 'ack', campaignId: campaign.id, workerId: sessionRef.current.workerId,
-        recipientId: current.recipient_id, itemIndex,
-        result, detail: result === 'observed'
-          ? `${step} de ${current.lead_name} observado na conversa correspondente via ChatGPT Chrome.`
-          : `Execução ChatGPT interrompida em ${step}; conferir a conversa antes de liberar o remetente.`,
-      });
-      if (result === 'uncertain' || answer.status === 'uncertain') {
+      if (result === 'uncertain') {
+        const answer = await request<{ status: string }>(`${API}/worker`, {
+          action: 'ack', campaignId: campaign.id, workerId: sessionRef.current.workerId,
+          recipientId: current.recipient_id, itemIndex, result: 'uncertain',
+          detail: `Execução ChatGPT interrompida na etapa ${itemIndex + 1}; conferir todos os envios antes de liberar o remetente.`,
+        });
+        if (answer.status !== 'uncertain') throw new Error('O servidor não confirmou a pendência de revisão.');
         persistSession({ activeRecipientId: null });
         setCurrent(null); setStopped(true);
         setError('Envio marcado como “Conferir”. A execução foi interrompida. Resolva na campanha principal antes de qualquer novo contato.');
-      } else if (answer.status === 'claimed' && itemIndex + 1 < current.item_count) {
-        setItemIndex(itemIndex + 1);
-        setNotice(`Etapa ${itemIndex + 1}/${current.item_count} registrada. Prossiga com a próxima etapa para o MESMO corretor.`);
-      } else if (answer.status === 'sent') {
+      } else {
+        // O ChatGPT confirmou TODOS os itens na conversa. Registrar as etapas
+        // na transação existente, sem criar um novo caminho privilegiado de escrita.
+        for (let index = itemIndex; index < current.item_count; index++) {
+          const answer = await request<{ status: string }>(`${API}/worker`, {
+            action: 'ack', campaignId: campaign.id, workerId: sessionRef.current.workerId,
+            recipientId: current.recipient_id, itemIndex: index, result: 'observed',
+            detail: `${index === 0 ? 'Texto' : `PDF ${index}`} de ${current.lead_name} observado na conversa correta via ChatGPT Chrome.`,
+          });
+          if (answer.status !== (index === current.item_count - 1 ? 'sent' : 'claimed'))
+            throw new Error('Estado inesperado ao registrar a etapa. Pare para conferir a conversa.');
+          setItemIndex(index + 1);
+        }
         persistSession({ activeRecipientId: null });
         setCurrent(null); setItemIndex(0);
         setReviewPending(true);
         if (reviewTimerRef.current !== null) window.clearTimeout(reviewTimerRef.current);
         reviewTimerRef.current = window.setTimeout(() => setReviewPending(false), MIN_REVIEW_DELAY_MS);
-        setNotice(`Etapas de ${current.lead_name} observadas. ${sessionRef.current.claimedCount} de ${limit} contato(s) neste lote. Revise antes de continuar.`);
-      } else {
-        throw new Error('Estado inesperado na fila. O resultado precisa ser conferido antes de prosseguir.');
+        setNotice(`${current.lead_name}: texto e ${current.media.length} anexo(s) registrados como observados. Aguarde a próxima reserva; ${sessionRef.current.claimedCount} de ${limit} contato(s) desta campanha.`);
       }
       await refresh(campaign.id);
     } catch (cause) {
@@ -191,16 +209,14 @@ export function ChatGPTCampaignRunner({ canEdit }: { canEdit: boolean }) {
     } finally { setBusy(false); requestInFlight.current = false; }
   }
 
-  const currentFile = current && itemIndex > 0 ? current.media[itemIndex - 1] : null;
-  const fileUrl = `${API}/arquivo?campaign=${encodeURIComponent(campaignId)}&index=${itemIndex - 1}`;
   const whatsappUrl = current && /^\d{8,15}$/.test(current.phone)
     ? `https://web.whatsapp.com/send?phone=${current.phone}` : null;
 
   return <div className="page-content">
     <section className={`card ${styles.mainCard}`}>
-      <div className="card-head"><h3>Execução acompanhada pelo ChatGPT</h3><span className={styles.pill}>Lote: {claimedCount}/{limit}</span></div>
+      <div className="card-head"><h3>Operação do ChatGPT no WhatsApp Web</h3><span className={styles.pill}>Processados nesta sessão: {claimedCount}/{limit}</span></div>
       <div className="card-body">
-        <p className={styles.explainer}>Esta tela fornece ao ChatGPT um corretor por vez, sem revelar toda a lista. O ChatGPT usa a extensão oficial no Chrome para operar o WhatsApp Web e volta aqui para registrar o que <strong>observou na tela</strong>. Isso não comprova entrega ou leitura.</p>
+        <p className={styles.explainer}>Esta é a área de trabalho do ChatGPT, não uma etapa manual para a equipe. A IA reserva um corretor, envia o texto e todos os PDFs no WhatsApp Web, confere a conversa e registra o contato concluído em <strong>um único comando</strong>. O painel da transmissão acompanha os registros a cada dois minutos.</p>
         <div className={styles.campaignInfo}>
           <div><span>Campanha</span><strong>{campaign?.name ?? 'Carregando...'}</strong></div>
           <div><span>Remetente autorizado</span><strong>+{campaign?.sender_phone ?? '—'}</strong></div>
@@ -218,39 +234,41 @@ export function ChatGPTCampaignRunner({ canEdit }: { canEdit: boolean }) {
       </div>
     </section>
 
-    {!current && <section className="card"><div className="card-head"><h3>{limitReached ? 'Lote encerrado' : 'Próximo corretor'}</h3></div><div className="card-body">
-      {limitReached ? <p>Você chegou ao limite de {limit} destinatário(s) nesta execução. Confira os registros e só abra outro lote mediante nova autorização.</p>
+    {!current && <section className="card"><div className="card-head"><h3>{campaignFinished || limitReached ? 'Campanha concluída' : 'Próximo corretor'}</h3></div><div className="card-body">
+      {campaignFinished || limitReached ? <p>Todos os contatos previstos foram processados nesta execução ou a fila está concluída. O ChatGPT deve parar e informar o resultado, sem iniciar outra campanha.</p>
         : stopped ? <p>Esta execução está parada para conferência. Não reabra a conversa nem repita o envio automaticamente.</p>
           : awaitingReview ? <p>Intervalo de revisão operacional: aguarde ao menos 15 segundos entre os contatos, confira os estados e clique em “Reservar próximo corretor”.</p>
-            : <p>Reserve somente um corretor. Antes do primeiro clique de envio, confirme que o número conectado no WhatsApp é o remetente autorizado.</p>}
+            : <p>O ChatGPT pode clicar abaixo e continuar sozinho. Antes de enviar, ele deve confirmar a conversa individual e o remetente autorizado.</p>}
       <button className="btn btn-primary" disabled={!canClaim} onClick={() => void claimNext()}>{busy ? 'Verificando a fila...' : 'Reservar próximo corretor'}</button>
     </div></section>}
 
-    {current && <section className="card"><div className="card-head"><h3>Corretor {claimedCount} de {limit}</h3><span className={styles.pill}>Etapa {itemIndex + 1} de {current.item_count}</span></div><div className="card-body">
+    {current && <section className="card"><div className="card-head"><h3>Corretor {claimedCount} de {limit}</h3><span className={styles.pill}>Texto + {current.media.length} PDF(s)</span></div><div className="card-body">
       <div className={styles.recipientHeader}>
         <div><span>Contato autorizado</span><h2>{current.lead_name}</h2><strong>+{current.phone}</strong></div>
         {whatsappUrl && <a className="btn btn-secondary" href={whatsappUrl} target="_blank" rel="noopener noreferrer">Abrir conversa no WhatsApp Web ↗</a>}
       </div>
       <div className={styles.warning}><strong>Confira antes de enviar:</strong> remetente +{campaign?.sender_phone}, conversa individual do telefone +{current.phone}, nenhum grupo, nenhum texto duplicado. Se não conseguir confirmar, pare.</div>
-      {itemIndex === 0 ? <div className={styles.stage}>
+      <div className={styles.stage}>
         <h3>1. Mensagem de texto aprovada</h3>
-        <p>Copie ou transcreva exatamente este texto, incluindo o primeiro nome já personalizado:</p>
+        {itemIndex > 0 ? <p><strong>Texto já registrado nesta conversa. NÃO envie novamente.</strong></p>
+          : <p>Envie exatamente este texto uma única vez, incluindo o primeiro nome já personalizado:</p>}
         <pre className={styles.message}>{current.message_text}</pre>
-        <button className="btn btn-secondary btn-sm" disabled={stopped} onClick={() => void navigator.clipboard.writeText(current.message_text).then(() => setNotice('Texto copiado.')).catch(() => setError('Copie o texto diretamente da caixa.'))}>Copiar mensagem aprovada</button>
-      </div> : <div className={styles.stage}>
-        <h3>{itemIndex + 1}. Documento PDF aprovado</h3>
-        {currentFile ? <><div className={styles.file}><strong>📄 {currentFile.filename}</strong><span>{(currentFile.size / 1048576).toFixed(2)} MB · anexe como Documento</span></div>
-          <a className="btn btn-secondary btn-sm" href={fileUrl} download={currentFile.filename}>Baixar PDF verificado para anexar</a>
-          <p>O arquivo vem do armazenamento privado da campanha. No WhatsApp Web, anexe como <strong>Documento</strong>, envie uma única vez e confirme o nome na mensagem de saída. Se o Chrome impedir o anexo, verifique a opção <strong>Permitir acesso a URLs de arquivo</strong> nos detalhes da extensão oficial do ChatGPT; não tente repetir um envio incerto.</p></>
-          : <div className="error-box">Anexo não encontrado. Pare para conferência.</div>}
-      </div>}
+        {itemIndex === 0 && <button className="btn btn-secondary btn-sm" disabled={stopped} onClick={() => void navigator.clipboard.writeText(current.message_text).then(() => setNotice('Texto copiado.')).catch(() => setError('Copie o texto diretamente da caixa.'))}>Copiar mensagem aprovada</button>}
+      </div>
+      {current.media.map((file, index) => <div className={styles.stage} key={file.path}>
+        <h3>{index + 2}. PDF aprovado</h3>
+        <div className={styles.file}><strong>📄 {file.filename}</strong><span>{(file.size / 1048576).toFixed(2)} MB · Documento</span></div>
+        {index + 1 < itemIndex ? <p><strong>PDF já registrado na conversa. NÃO envie novamente.</strong></p>
+          : <><a className="btn btn-secondary btn-sm" href={`${API}/arquivo?campaign=${encodeURIComponent(campaignId)}&index=${index}`} download={file.filename}>Baixar PDF para anexar</a>
+            <p>Anexe no WhatsApp como <strong>Documento</strong> e confira a nova mensagem de saída antes de confirmar. A extensão oficial do ChatGPT pode precisar da permissão de acesso a URLs de arquivo.</p></>}
+      </div>)}
       <div className={styles.actions}>
-        <button className="btn btn-primary" disabled={busy || stopped || (itemIndex > 0 && !currentFile)} onClick={() => void ack('observed')}>
-          {busy ? 'Registrando...' : itemIndex === 0 ? 'Confirmar texto observado' : 'Confirmar PDF observado'}
+        <button className="btn btn-primary" disabled={busy || stopped || !whatsappUrl || current.media.length + 1 !== current.item_count} onClick={() => void ack('observed')}>
+          {busy ? 'Registrando resultado...' : 'Registrar contato concluído'}
         </button>
         <button className="btn btn-danger" disabled={busy || stopped} onClick={() => void ack('uncertain')}>Parar e marcar para conferir</button>
       </div>
-      <p className={styles.confirmHint}>Confirme apenas se a mensagem NOVA estiver visível como enviada na conversa correta. Caso tenha ficado dúvida ou o WhatsApp tenha travado, clique em “Parar e marcar para conferir”.</p>
+      <p className={styles.confirmHint}>O ChatGPT deve clicar em “Registrar contato concluído” somente quando o texto e TODOS os PDFs pendentes estiverem visíveis como novas mensagens de saída na conversa correta. Isso registra observações, não confirma entrega ou leitura. Se houver dúvida, interrompa sem reenviar.</p>
     </div></section>}
   </div>;
 }

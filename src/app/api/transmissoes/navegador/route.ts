@@ -3,6 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { getCurrentContext } from '@/lib/auth';
 import { brokerBroadcastEligibility } from '@/lib/contact-identity';
 import { browserRecipientFirstName, hasBrowserRecipientNameToken, personalizeBrowserText, safeBrowserMedia, validBrowserMobilePhone, validBrowserPhone } from '@/lib/browser-campaigns';
+import { browserCampaignMonitor } from '@/lib/browser-campaign-monitor';
 
 type Broker = {
   id: string; kind: 'cliente' | 'corretor' | 'geral'; name: string;
@@ -81,9 +82,21 @@ export async function GET(request: Request) {
         .eq('campaign_id', campaignId).eq('organization_id', context.organization.id)
         .order('position').limit(MAX_RECIPIENTS);
       if (rowsError) throw rowsError;
+      const { data: lastObserved, error: observedError } = await admin.from('browser_campaign_events')
+        .select('created_at').eq('organization_id', context.organization.id)
+        .eq('campaign_id', campaignId).eq('result', 'observed')
+        .order('created_at', { ascending: false }).limit(1).maybeSingle();
+      if (observedError) throw observedError;
       const { data: senderLock } = await admin.from('browser_sender_locks').select('requires_review')
         .eq('organization_id', context.organization.id).eq('sender_phone', campaign.sender_phone).maybeSingle();
-      return NextResponse.json({ campaign, recipients, senderBlocked: senderLock?.requires_review === true });
+      const monitor = browserCampaignMonitor({
+        campaignStatus: campaign.status, startedAt: campaign.started_at,
+        lastObservedAt: lastObserved?.created_at ?? null,
+        recipientStatuses: (recipients ?? []).map((recipient) => recipient.status),
+        expectedRecipients: campaign.recipient_count,
+        nowMs: Date.now(),
+      });
+      return NextResponse.json({ campaign, recipients, senderBlocked: senderLock?.requires_review === true, monitor });
     }
     const { data, error } = await admin.from('browser_campaigns').select('*')
       .eq('organization_id', context.organization.id).order('created_at', { ascending: false }).limit(60);

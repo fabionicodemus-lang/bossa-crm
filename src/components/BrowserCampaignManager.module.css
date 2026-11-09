@@ -19,6 +19,17 @@
   font-weight: 700;
   color: #886538;
 }
+.monitorBox {
+  display: grid; gap: 8px; margin: 12px 0 20px; padding: 18px 20px;
+  background: #edf5ee; border: 1px solid #cfe2d2; border-radius: 12px;
+  color: #2c513b;
+}
+.monitorBox > div { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px 16px; }
+.monitorBox strong { font-size: 14px; }
+.monitorState { font-size: 12px; font-weight: 700; }
+.monitorBox p { margin: 0; color: #536457; font-size: 12px; line-height: 1.55; }
+.advancedOptions { margin: 16px 0; border: 1px solid #e9e9e4; border-radius: 9px; padding: 11px 14px; }
+.advancedOptions summary { cursor: pointer; color: #747b71; font-size: 12px; }
 .titleRow { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin: 24px 0 14px; }
 .titleRow h2 { margin: 0; font-size: 22px; }
 .muted { font-size: 12px; line-height: 1.55; color: #7b7c78; margin: 7px 0 12px; }

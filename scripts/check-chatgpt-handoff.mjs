@@ -11,7 +11,8 @@ const runId = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
 assert.equal(validChatGPTCampaignId(id), true);
 assert.equal(validChatGPTCampaignId('../outro-tenant'), false);
 assert.equal(chatGPTBatchLimit('20'), 20);
-assert.equal(chatGPTBatchLimit('600'), 2, 'não aceitar lote de 600 sem revisão');
+assert.equal(chatGPTBatchLimit('600'), 600, 'uma instrução pode cobrir todos os corretores aprovados da campanha');
+assert.equal(chatGPTBatchLimit('601'), 2, 'não aceitar mais que 600 destinatários');
 assert.equal(chatGPTBatchLimit(null), 2);
 
 const runner = buildChatGPTRunnerUrl('https://crm.bossaempreendimentos.com.br', id, 2, runId);
@@ -26,8 +27,10 @@ assert.throws(() => buildChatGPTRunnerUrl('http://example.com', id, 2, runId), /
 const prompt = buildChatGPTCampaignPrompt(runner, '5547999999999', 2);
 assert.match(prompt, /extensão OFICIAL do ChatGPT/);
 assert.match(prompt, /EXATAMENTE ao telefone/);
-assert.match(prompt, /Não passe ao próximo contato com pendência/);
-assert.match(prompt, /não ultrapasse o limite do lote/);
+assert.match(prompt, /NÃO passe ao próximo contato com pendência/i);
+assert.match(prompt, /Não ultrapasse o limite da campanha/);
+assert.match(prompt, /Registrar contato concluído/);
+assert.match(prompt, /15 minutos sem novo registro/);
 assert.doesNotMatch(prompt, /{{nome}}|Bearer |service_role|senha/i, 'instrução não contém segredo ou dados da fila');
 assert.throws(() => buildChatGPTCampaignPrompt(runner, 'remetente-invalido', 2));
 
