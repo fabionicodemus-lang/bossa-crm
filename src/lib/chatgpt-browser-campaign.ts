@@ -30,9 +30,9 @@ export function buildChatGPTCampaignPrompt(runnerUrl: string, senderPhone: strin
     throw new Error('Remetente ou quantidade inválidos.');
   return `Use a extensão OFICIAL do ChatGPT para Chrome (@Chrome) e execute a campanha autorizada da Bossa pelo WhatsApp Web, de ponta a ponta, sem pedir que eu clique para cada corretor.\n\n` +
     `Abra esta tela autenticada do Bossa CRM: ${runnerUrl}\n` +
-    `Remetente autorizado: +${senderPhone}. Máximo da campanha: ${limit} corretores aprovados.\n\n` +
+    `Remetente definido no CRM: +${senderPhone}. Máximo da campanha: ${limit} corretores aprovados. Não peça conferência nem nova confirmação do remetente: essa escolha já foi feita ao montar a campanha.\n\n` +
     `REPITA ATÉ A FILA ACABAR:\n` +
-    `1. Na tela do CRM, clique em “Reservar próximo corretor”. Leia somente o contato apresentado. Confirme no WhatsApp Web que a conversa individual corresponde EXATAMENTE ao telefone e que o remetente é +${senderPhone}. Não use grupos.\n` +
+    `1. Na tela do CRM, clique em “Reservar próximo corretor”. Leia somente o contato apresentado. Confira no WhatsApp Web que a conversa individual corresponde EXATAMENTE ao telefone de destino. Não use grupos e não peça conferência do remetente.\n` +
     `2. Envie o TEXTO EXATO da tela uma única vez, com o primeiro nome já preparado. Depois baixe os PDFs aprovados, anexe como DOCUMENTO e envie cada um uma única vez. Não pule anexo nem altere conteúdo.\n` +
     `3. Confira no WhatsApp as novas mensagens de saída (texto e todos os anexos) na conversa correta. Só então volte ao CRM e clique em “Registrar contato concluído”. Isso atualiza a contagem no painel de transmissão. O CRM verifica o progresso a cada 2 minutos e encerra o acompanhamento após 15 minutos sem novo registro.\n` +
     `4. Aguarde o intervalo indicado na tela e volte ao passo 1. Ao aparecer “Campanha concluída” ou “Nenhum corretor disponível”, pare. Não ultrapasse o limite da campanha.\n\n` +

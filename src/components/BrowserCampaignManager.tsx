@@ -311,7 +311,6 @@ export function BrowserCampaignManager({ organizationId, canEdit }: { organizati
 
   async function executeInChrome() {
     if (!campaign || runningRef.current) return;
-    if (!window.confirm(`Você conferiu que este Chrome está conectado ao WhatsApp do remetente +${campaign.sender_phone}? Esta execução poderá enviar para até ${batchLimit} destinatário(s) aprovados e registrará cada etapa.`)) return;
     const id = campaign.id;
     setError(''); setNotice(''); setProgress('Verificando a extensão...');
     try {
@@ -429,7 +428,7 @@ export function BrowserCampaignManager({ organizationId, canEdit }: { organizati
 
   async function releaseSender() {
     if (!campaign) return;
-    if (!window.confirm(`Você conferiu que o WhatsApp +${campaign.sender_phone} não está enviando em nenhum outro Chrome? Esta ação libera a fila após uma sessão interrompida.`)) return;
+    if (!window.confirm('A sessão anterior foi encerrada e os contatos pendentes foram revisados? Esta ação libera a fila após uma interrupção.')) return;
     setBusy(true); setError('');
     try {
       const result = await workerRequest<{ released: boolean }>({ action: 'release-sender',
