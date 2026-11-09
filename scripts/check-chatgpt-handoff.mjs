@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import {
   buildChatGPTCampaignPrompt, buildChatGPTDesktopLink, buildChatGPTRunnerUrl, buildChatGPTStandalonePrompt,
+  buildChatGPTCampaignMarkdown, chatGPTCampaignMarkdownFilename,
   chatGPTBatchLimit, validChatGPTCampaignId,
 } from '../src/lib/chatgpt-browser-campaign.ts';
 
@@ -11,8 +12,9 @@ const runId = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
 assert.equal(validChatGPTCampaignId(id), true);
 assert.equal(validChatGPTCampaignId('../outro-tenant'), false);
 assert.equal(chatGPTBatchLimit('20'), 20);
-assert.equal(chatGPTBatchLimit('600'), 600, 'uma instrução pode cobrir todos os corretores aprovados da campanha');
-assert.equal(chatGPTBatchLimit('601'), 2, 'não aceitar mais que 600 destinatários');
+assert.equal(chatGPTBatchLimit('1150'), 1150, 'incluir a base inteira autorizada');
+assert.equal(chatGPTBatchLimit('1500'), 1500, 'limite técnico ampliado');
+assert.equal(chatGPTBatchLimit('1501'), 2, 'não aceitar mais de 1.500 destinatários');
 assert.equal(chatGPTBatchLimit(null), 2);
 
 const runner = buildChatGPTRunnerUrl('https://crm.bossaempreendimentos.com.br', id, 2, runId);
@@ -86,20 +88,45 @@ assert.throws(() => buildChatGPTStandalonePrompt('https://crm.bossaempreendiment
     name: 'Ana', phone: '5547999990001', text: 'Olá, {{nome}}!', position: 0,
   }] },
 }), /inválida/);
-const manyRecipients = Array.from({ length: 600 }, (_, index) => ({
+const manyRecipients = Array.from({ length: 1150 }, (_, index) => ({
   name: `Corretor ${index + 1}`, phone: `5547${String(900000000 + index)}`,
   text: `Olá, pessoa ${index + 1}!`, position: index,
 }));
 const largePrompt = buildChatGPTStandalonePrompt('https://crm.bossaempreendimentos.com.br', {
   ...standaloneRun, manifest: { ...standaloneRun.manifest, recipients: manyRecipients },
 });
-assert.match(largePrompt, /TODOS os 600 destinatários/);
-assert.match(largePrompt, /pessoa 600!/);
+assert.match(largePrompt, /TODOS os 1150 destinatários/);
+assert.match(largePrompt, /pessoa 1150!/);
 assert.throws(() => buildChatGPTStandalonePrompt('https://crm.bossaempreendimentos.com.br', {
   ...standaloneRun, manifest: { ...standaloneRun.manifest, recipients: [...manyRecipients, manyRecipients[0]] },
+}), /inválida/, 'telefone duplicado deve falhar');
+const overflow = Array.from({ length: 1501 }, (_, index) => ({
+  name: `Pessoa ${index}`, phone: `5547${String(900000000 + index)}`,
+  text: `Mensagem ${index}`, position: index,
+}));
+assert.throws(() => buildChatGPTStandalonePrompt('https://crm.bossaempreendimentos.com.br', {
+  ...standaloneRun, manifest: { ...standaloneRun.manifest, recipients: overflow },
 }), /não está disponível/);
 
+const markdown = buildChatGPTCampaignMarkdown(standalone, 'Tabelas Flow e Alma', 2);
+assert.match(markdown, /^# Bossa Empreendimentos — Tabelas Flow e Alma/);
+assert.match(markdown, /\*\*Destinatários:\*\* 2/);
+assert.ok(markdown.includes(standalone), 'arquivo .md deve conter toda a instrução exata');
+assert.match(markdown, /\/api\/transmissoes\/navegador\/arquivo/);
+assert.equal(chatGPTCampaignMarkdownFilename(id), `bossa-transmissao-${id}.md`);
+assert.throws(() => chatGPTCampaignMarkdownFilename('../campanha'));
+assert.throws(() => buildChatGPTCampaignMarkdown('', 'Teste', 2));
+
 const root = resolve(import.meta.dirname, '..');
+const managerSource = readFileSync(resolve(root, 'src/components/BrowserCampaignManager.tsx'), 'utf8');
+assert.match(managerSource, /MAX_RECIPIENTS = 1500/);
+assert.match(managerSource, /Baixar instrução \.md/);
+assert.match(managerSource, /new Blob\(\[markdown\]/);
+assert.match(managerSource, /URL\.createObjectURL\(blob\)/);
+const routeSource = readFileSync(resolve(root, 'src/app/api/transmissoes/navegador/route.ts'), 'utf8');
+assert.match(routeSource, /MAX_RECIPIENTS = 1500/);
+assert.match(routeSource, /\.range\(offset, offset \+ Math\.min\(499/);
+
 const runnerSource = readFileSync(resolve(root, 'src/components/ChatGPTCampaignRunner.tsx'), 'utf8');
 assert.doesNotMatch(runnerSource, /confirmar a conversa individual e o remetente autorizado|Confira antes de enviar:<\/strong> remetente/);
 assert.match(runnerSource, /action: 'claim'/);
