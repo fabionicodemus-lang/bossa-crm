@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict';
-import { writeFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { buildPremiumSalesPrintHtml } from '../src/lib/premium-sales-table-print.ts';
+
+const proxySource = await readFile(new URL('../src/proxy.ts', import.meta.url), 'utf8');
+for (const extension of ['ttf', 'otf', 'woff', 'woff2']) {
+  assert.ok(proxySource.includes(`|${extension}`), `Fonte .${extension} não pode ser interceptada pelo login do CRM.`);
+}
 
 const typologies = [
   { id: 'tipo-01', code: '01', name: 'Tipo 01', private_area_m2: 114, suites: 3 },
