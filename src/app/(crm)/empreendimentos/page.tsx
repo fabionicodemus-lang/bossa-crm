@@ -55,8 +55,8 @@ export default async function DevelopmentsPage() {
           />
           <div className="page-content" style={{ paddingBottom: 0 }}>
             <SalesTablePrintPanel
+              organizationId={organizationId}
               developments={developmentRows as SalesTablePrintDevelopment[]}
-              typologies={typologyRows}
               units={unitRows}
             />
           </div>
