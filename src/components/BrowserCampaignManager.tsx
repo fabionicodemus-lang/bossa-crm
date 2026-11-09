@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } f
 import { createClient } from '@/lib/supabase/client';
 import { campaignRecipientSummary, hasBrowserRecipientNameToken, personalizeBrowserText, type BrowserCampaignMedia, type BrowserRecipientStatus } from '@/lib/browser-campaigns';
 import { BROWSER_CAMPAIGN_MONITOR_POLL_MS, type BrowserCampaignMonitor } from '@/lib/browser-campaign-monitor';
-import { buildChatGPTDesktopLink, buildChatGPTStandalonePrompt, type StandaloneCampaignRun } from '@/lib/chatgpt-browser-campaign';
+import { buildChatGPTCampaignMarkdown, chatGPTCampaignMarkdownFilename, buildChatGPTDesktopLink, buildChatGPTStandalonePrompt, type StandaloneCampaignRun } from '@/lib/chatgpt-browser-campaign';
 import styles from './BrowserCampaignManager.module.css';
 
 type Contact = { id: string; name: string; phone: string; stage: string; company: string | null; enterprise: string | null };
@@ -25,7 +25,7 @@ type Claim = {
 type BridgeOutcome = { state: 'observed' | 'uncertain' | 'skipped'; detail: string; version?: string };
 
 const API = '/api/transmissoes/navegador';
-const MAX_RECIPIENTS = 600;
+const MAX_RECIPIENTS = 1500;
 const REQUIRED_EXTENSION_VERSION = '0.1.2';
 const MIN_REVIEW_DELAY_MS = 15000;
 type BatchLimit = 1 | 2 | 5 | 10 | 20;
@@ -278,7 +278,7 @@ export function BrowserCampaignManager({ organizationId, canEdit }: { organizati
       await Promise.all([refreshDetail(campaign.id), refreshList()]);
       if (action === 'approve') setNotice('Campanha aprovada. Libere a campanha para iniciar o acompanhamento automático.');
       if (action === 'pause') { stopRef.current = true; setNotice('Pausa solicitada após a etapa atual.'); }
-      if (action === 'start') { setChatGPTPrompt(''); setNotice('Campanha liberada. O CRM começou o acompanhamento a cada 2 minutos. Copie a instrução e cole no ChatGPT.'); }
+      if (action === 'start') { setChatGPTPrompt(''); setNotice('Campanha liberada. O CRM começou o acompanhamento a cada 2 minutos. Baixe a instrução .md e anexe no ChatGPT.'); }
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Não foi possível atualizar o estado.'); }
     finally { setBusy(false); }
   }
@@ -302,8 +302,8 @@ export function BrowserCampaignManager({ organizationId, canEdit }: { organizati
       setBusy(true);
       const prompt = chatGPTPrompt || await prepareChatGPTPrompt();
       if (prompt.length > 7000)
-        throw new Error('A instrução é longa para abrir por link. Use “Copiar instrução” e cole no ChatGPT.');
-      setNotice('Abrindo o ChatGPT. Pressione Enviar no aplicativo para começar. Se ele não abrir, use “Copiar instrução”.');
+        throw new Error('A instrução é longa para abrir por link. Use “Baixar instrução .md” e anexe o arquivo no ChatGPT.');
+      setNotice('Abrindo o ChatGPT. Pressione Enviar para começar. Se não abrir, baixe o arquivo .md.');
       window.location.href = buildChatGPTDesktopLink(prompt);
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Não foi possível abrir o ChatGPT.'); }
     finally { setBusy(false); }
@@ -316,8 +316,34 @@ export function BrowserCampaignManager({ organizationId, canEdit }: { organizati
       await navigator.clipboard.writeText(prompt);
       setNotice('Instrução única copiada, com todos os contatos e mensagens. Cole no ChatGPT em Work e @Chrome. A IA fará os envios sem retornar ao CRM; os ecos do WhatsApp atualizarão o painel.');
       if (campaign) void refreshDetail(campaign.id).catch(() => {});
-    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Falha ao copiar.'); }
+    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Não foi possível copiar. Use o botão “Baixar instrução .md”.'); }
     finally { setBusy(false); }
+  }
+
+  async function downloadChatGPTPrompt() {
+    if (!campaign || senderBlocked || campaign.status !== 'running' || running) return;
+    setBusy(true); setError(''); setNotice('');
+    try {
+      const prompt = chatGPTPrompt || await prepareChatGPTPrompt();
+      // A geração ocorre no navegador, sem depender do limite do clipboard.
+      // O arquivo é privado e contém a lista aprovada de destinatários.
+      const markdown = buildChatGPTCampaignMarkdown(prompt, campaign.name, campaign.recipient_count);
+      const blob = new Blob([markdown], { type: 'text/markdown;charset=utf-8' });
+      const href = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = href;
+      anchor.download = chatGPTCampaignMarkdownFilename(campaign.id);
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      window.setTimeout(() => URL.revokeObjectURL(href), 30000);
+      setNotice('Arquivo .md gerado. Anexe-o no ChatGPT com Work / @Chrome e envie a instrução uma única vez. O CRM fará o acompanhamento.');
+      void refreshDetail(campaign.id).catch(() => {});
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Não foi possível baixar a instrução .md.');
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function stopStandaloneRun() {
@@ -465,7 +491,7 @@ export function BrowserCampaignManager({ organizationId, canEdit }: { organizati
 
   return <div className="page-content">
     <div className={styles.noticeBox}>
-      <strong>Transmissão com ChatGPT.</strong> Monte a campanha, libere a fila, copie a instrução e cole no ChatGPT com @Chrome. Deixe o computador e o WhatsApp Web abertos. O CRM acompanha os registros; envie somente para corretores autorizados.
+      <strong>Transmissão com ChatGPT.</strong> Monte a campanha, libere a fila e baixe a instrução .md (ou copie). Anexe o arquivo no ChatGPT com @Chrome. Deixe o computador e o WhatsApp Web abertos. O CRM acompanha os registros; envie somente para corretores autorizados.
     </div>
     {error && <div className="error-box" role="alert">{error}</div>}
     {notice && <div className="info-box" role="status">{notice}</div>}
@@ -556,7 +582,7 @@ export function BrowserCampaignManager({ organizationId, canEdit }: { organizati
           <input type="checkbox" checked={selected.has(lead.id)} onChange={() => toggleContact(lead.id)} />
           <span><strong>{lead.name}</strong><small>{lead.company || lead.enterprise || lead.stage} · +{lead.phone}</small></span>
         </label>)}</div>
-        {visible.length > 250 && <p className={styles.muted}>Exibindo 250 de {visible.length} contatos filtrados. O botão “Selecionar filtro” inclui até 600.</p>}
+        {visible.length > 250 && <p className={styles.muted}>Exibindo 250 de {visible.length} contatos filtrados. O botão “Selecionar filtro” inclui até 1.500.</p>}
         <div className={styles.actions}><button className="btn btn-primary" disabled={busy || uploading || !selected.size || !senderPhone || !baseText.trim() || missingNameToken} onClick={() => void createCampaign()}>{busy ? 'Preparando...' : `Criar rascunho com ${selected.size} corretores`}</button></div>
       </div></section>
     </>}
@@ -596,13 +622,16 @@ export function BrowserCampaignManager({ organizationId, canEdit }: { organizati
         </div>}
         {canEdit && <div className={styles.actions}>
           {(['ready', 'paused'].includes(campaign.status)) && <button className="btn btn-primary" disabled={busy} onClick={() => void changeStatus('start')}>1. Liberar campanha e iniciar acompanhamento</button>}
-          {campaign.status === 'running' && !running && <button className="btn btn-primary" disabled={busy || senderBlocked} onClick={() => void copyChatGPTPrompt()}>📋 2. Copiar instrução para o ChatGPT ({campaign.recipient_count} contatos)</button>}
+          {campaign.status === 'running' && !running && <>
+            <button className="btn btn-primary" disabled={busy || senderBlocked} onClick={() => void downloadChatGPTPrompt()}>📥 2. Baixar instrução .md ({campaign.recipient_count} contatos)</button>
+            <button className="btn btn-secondary" disabled={busy || senderBlocked} onClick={() => void copyChatGPTPrompt()}>📋 Copiar instrução</button>
+          </>}
           {campaign.status === 'running' && <button className="btn btn-secondary" disabled={busy || standaloneRun?.status === 'active'} onClick={() => { stopRef.current = true; void changeStatus('pause'); }}>⏸ Pausar campanha</button>}
           {running && <span className={styles.pill}>⏳ {progress}</span>}
           {['draft','ready','paused'].includes(campaign.status) && <button className="btn btn-danger btn-sm" disabled={busy} onClick={() => { if (window.confirm('Cancelar esta campanha?')) void changeStatus('cancel'); }}>Cancelar</button>}
           <button className="btn btn-ghost btn-sm" onClick={() => void refreshDetail(campaign.id)}>Atualizar estados</button>
         </div>}
-        {campaign.status === 'running' && <p className={styles.muted}>Após copiar, cole a instrução única no ChatGPT do computador usando <strong>Work e @Chrome</strong>. Os destinatários e textos já estarão incluídos; ele baixará os PDFs uma vez e não precisará voltar ao CRM. O CRM acompanha separadamente os envios observados na integração. Para anexar PDFs, ative <strong>Permitir acesso a URLs de arquivo</strong> na extensão oficial do ChatGPT.{standaloneRun?.status === 'active' ? ' Para interromper, pare o ChatGPT diretamente; pausar o painel não interrompe o WhatsApp.' : ''}</p>}
+        {campaign.status === 'running' && <p className={styles.muted}>Após baixar, anexe o arquivo .md no ChatGPT do computador usando <strong>Work e @Chrome</strong>. Os destinatários e textos já estarão incluídos; ele baixará os PDFs uma vez e não precisará voltar ao CRM. O CRM acompanha separadamente os envios observados na integração. Para anexar PDFs, ative <strong>Permitir acesso a URLs de arquivo</strong> na extensão oficial do ChatGPT.{standaloneRun?.status === 'active' ? ' Para interromper, pare o ChatGPT diretamente; pausar o painel não interrompe o WhatsApp.' : ''}</p>}
         {standaloneRun?.status === 'active' && <div className={styles.actions}>
           <button className="btn btn-ghost btn-sm" disabled={busy} onClick={() => void stopStandaloneRun()}>Encerrar execução depois de parar o ChatGPT</button>
         </div>}
