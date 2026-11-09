@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } f
 import { createClient } from '@/lib/supabase/client';
 import { campaignRecipientSummary, hasBrowserRecipientNameToken, personalizeBrowserText, type BrowserCampaignMedia, type BrowserRecipientStatus } from '@/lib/browser-campaigns';
 import { BROWSER_CAMPAIGN_MONITOR_POLL_MS, type BrowserCampaignMonitor } from '@/lib/browser-campaign-monitor';
-import { buildChatGPTCampaignPrompt, buildChatGPTDesktopLink, buildChatGPTRunnerUrl } from '@/lib/chatgpt-browser-campaign';
+import { buildChatGPTDesktopLink, buildChatGPTStandalonePrompt, type StandaloneCampaignRun } from '@/lib/chatgpt-browser-campaign';
 import styles from './BrowserCampaignManager.module.css';
 
 type Contact = { id: string; name: string; phone: string; stage: string; company: string | null; enterprise: string | null };
@@ -17,6 +17,7 @@ type Recipient = {
   id: string; lead_name: string; phone: string; stage: string; message_text: string;
   status: BrowserRecipientStatus; next_item_index: number; detail: string | null; position: number;
 };
+type StandaloneRunState = { id: string; status: string; created_at: string; last_observed_at: string | null };
 type Claim = {
   recipient_id: string; lead_name: string; phone: string; message_text: string;
   next_item_index: number; item_count: number; media: BrowserCampaignMedia[];
@@ -88,6 +89,7 @@ export function BrowserCampaignManager({ organizationId, canEdit }: { organizati
   const [contactsTruncated, setContactsTruncated] = useState(false);
   const [campaign, setCampaign] = useState<Campaign | null>(null);
   const [monitor, setMonitor] = useState<BrowserCampaignMonitor | null>(null);
+  const [standaloneRun, setStandaloneRun] = useState<StandaloneRunState | null>(null);
   const [recipients, setRecipients] = useState<Recipient[]>([]);
   const [senderBlocked, setSenderBlocked] = useState(false);
   const [name, setName] = useState('Tabela de empreendimentos');
@@ -121,12 +123,13 @@ export function BrowserCampaignManager({ organizationId, canEdit }: { organizati
   }, []);
 
   const refreshDetail = useCallback(async (id: string) => {
-    const result = await jsonRequest<{ campaign: Campaign; recipients: Recipient[]; senderBlocked: boolean; monitor: BrowserCampaignMonitor }>(`${API}?campaign=${id}`);
+    const result = await jsonRequest<{ campaign: Campaign; recipients: Recipient[]; senderBlocked: boolean; monitor: BrowserCampaignMonitor; standaloneRun: StandaloneRunState | null }>(`${API}?campaign=${id}`);
     if (mountedRef.current) {
       setCampaign(result.campaign);
       setRecipients(result.recipients);
       setSenderBlocked(result.senderBlocked);
       setMonitor(result.monitor);
+      setStandaloneRun(result.standaloneRun);
     }
     return result;
   }, []);
@@ -284,29 +287,49 @@ export function BrowserCampaignManager({ organizationId, canEdit }: { organizati
     return mutation<T>(`${API}/worker`, payload);
   }
 
-  function prepareChatGPTPrompt() {
+  async function prepareChatGPTPrompt() {
     if (!campaign) throw new Error('Selecione uma campanha.');
-    const url = buildChatGPTRunnerUrl(window.location.origin, campaign.id, campaign.recipient_count, crypto.randomUUID());
-    const prompt = buildChatGPTCampaignPrompt(url, campaign.sender_phone, campaign.recipient_count);
+    const run = await mutation<StandaloneCampaignRun>(`${API}/pacote`, { campaignId: campaign.id });
+    const prompt = buildChatGPTStandalonePrompt(window.location.origin, run);
     setChatGPTPrompt(prompt);
+    setStandaloneRun({ id: run.runId, status: run.status, created_at: run.createdAt, last_observed_at: null });
     return prompt;
   }
 
-  function launchChatGPT() {
+  async function launchChatGPT() {
     if (!campaign || senderBlocked || campaign.status !== 'running' || running) return;
     try {
-      const prompt = prepareChatGPTPrompt();
+      setBusy(true);
+      const prompt = chatGPTPrompt || await prepareChatGPTPrompt();
+      if (prompt.length > 7000)
+        throw new Error('A instrução é longa para abrir por link. Use “Copiar instrução” e cole no ChatGPT.');
       setNotice('Abrindo o ChatGPT. Pressione Enviar no aplicativo para começar. Se ele não abrir, use “Copiar instrução”.');
       window.location.href = buildChatGPTDesktopLink(prompt);
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Não foi possível abrir o ChatGPT.'); }
+    finally { setBusy(false); }
   }
 
   async function copyChatGPTPrompt() {
     try {
-      const prompt = chatGPTPrompt || prepareChatGPTPrompt();
+      setBusy(true);
+      const prompt = chatGPTPrompt || await prepareChatGPTPrompt();
       await navigator.clipboard.writeText(prompt);
-      setNotice('Instrução copiada. Cole no ChatGPT do computador, selecione Work e @Chrome e pressione Enviar. A IA fará o restante; o CRM acompanhará a fila.');
+      setNotice('Instrução única copiada, com todos os contatos e mensagens. Cole no ChatGPT em Work e @Chrome. A IA fará os envios sem retornar ao CRM; os ecos do WhatsApp atualizarão o painel.');
+      if (campaign) void refreshDetail(campaign.id).catch(() => {});
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Falha ao copiar.'); }
+    finally { setBusy(false); }
+  }
+
+  async function stopStandaloneRun() {
+    if (!campaign || standaloneRun?.status !== 'active') return;
+    if (!window.confirm('Você já interrompeu a execução no ChatGPT? O CRM não consegue pará-lo à distância. Os contatos ainda não confirmados ficarão pendentes de revisão, sem reenvio automático.')) return;
+    setBusy(true); setError('');
+    try {
+      await mutation(`${API}/pacote`, { campaignId: campaign.id, confirmedChatGPTStopped: true }, 'PATCH');
+      await Promise.all([refreshDetail(campaign.id), refreshList()]);
+      setNotice('Execução encerrada. Revise os contatos pendentes antes de liberar o número para outra campanha.');
+    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Não foi possível encerrar a execução.'); }
+    finally { setBusy(false); }
   }
 
   async function executeInChrome() {
@@ -541,7 +564,7 @@ export function BrowserCampaignManager({ organizationId, canEdit }: { organizati
     {mode === 'detail' && campaign && <>
       <div className={styles.titleRow}><div><h2>{campaign.name}</h2><p className={styles.muted}>Remetente +{campaign.sender_phone} · {campaign.recipient_count} corretores · {statusLabels[campaign.status]}</p></div><button className="btn btn-ghost btn-sm" onClick={() => { setMode('list'); void refreshList(); }}>Voltar às campanhas</button></div>
       <div className={styles.stats}>{([
-        ['Na fila', summary.queued], ['Em uso', summary.claimed], ['Observados', summary.sent],
+        ['Na fila', summary.queued], ['Em uso', summary.claimed], [standaloneRun ? 'Confirmados no WhatsApp' : 'Observados', summary.sent],
         ['Conferir', summary.uncertain], ['Ignorados', summary.skipped],
       ] as const).map(([label, count]) => <div className={styles.stat} key={label}><strong>{count}</strong><span>{label}</span></div>)}</div>
       {monitor && <section className={styles.monitorBox} aria-live="polite">
@@ -556,11 +579,12 @@ export function BrowserCampaignManager({ organizationId, canEdit }: { organizati
         <p>{monitor.state === 'active' ? `${summary.sent} de ${campaign.recipient_count} contatos observados. ` : ''}
           {monitor.lastObservedAt ? `Último registro de envio: ${dateTime.format(new Date(monitor.lastObservedAt))}.`
             : 'Nenhuma mensagem observada ainda.'}
-          {' '}As contagens vêm dos registros feitos pelo ChatGPT no CRM, não de uma leitura independente do WhatsApp.
+          {' '}{standaloneRun ? 'As confirmações vêm dos ecos de saída da integração WhatsApp Business; não indicam leitura ou entrega.'
+            : 'No modo antigo, as contagens dependem dos registros feitos pelo ChatGPT no CRM.'}
         </p>
       </section>}
       <section className="card"><div className="card-head"><h3>Revisar e controlar</h3></div><div className="card-body">
-        {senderBlocked && <div className="error-box">A sessão anterior desse número perdeu conexão. Confira se o outro Chrome parou e revise o contato marcado como “Conferir”.
+        {senderBlocked && <div className="error-box">Esse número tem uma transmissão interrompida ou uma pendência de revisão. Confira se o ChatGPT parou e revise os contatos marcados como “Conferir”.
           {canEdit && <button className="btn btn-secondary btn-sm" disabled={busy} onClick={() => void releaseSender()}>Liberar número após conferência</button>}
         </div>}
         <p><strong>Texto base:</strong> {campaign.base_text}</p>
@@ -573,12 +597,15 @@ export function BrowserCampaignManager({ organizationId, canEdit }: { organizati
         {canEdit && <div className={styles.actions}>
           {(['ready', 'paused'].includes(campaign.status)) && <button className="btn btn-primary" disabled={busy} onClick={() => void changeStatus('start')}>1. Liberar campanha e iniciar acompanhamento</button>}
           {campaign.status === 'running' && !running && <button className="btn btn-primary" disabled={busy || senderBlocked} onClick={() => void copyChatGPTPrompt()}>📋 2. Copiar instrução para o ChatGPT ({campaign.recipient_count} contatos)</button>}
-          {campaign.status === 'running' && <button className="btn btn-secondary" disabled={busy} onClick={() => { stopRef.current = true; void changeStatus('pause'); }}>⏸ Pausar campanha</button>}
+          {campaign.status === 'running' && <button className="btn btn-secondary" disabled={busy || standaloneRun?.status === 'active'} onClick={() => { stopRef.current = true; void changeStatus('pause'); }}>⏸ Pausar campanha</button>}
           {running && <span className={styles.pill}>⏳ {progress}</span>}
           {['draft','ready','paused'].includes(campaign.status) && <button className="btn btn-danger btn-sm" disabled={busy} onClick={() => { if (window.confirm('Cancelar esta campanha?')) void changeStatus('cancel'); }}>Cancelar</button>}
           <button className="btn btn-ghost btn-sm" onClick={() => void refreshDetail(campaign.id)}>Atualizar estados</button>
         </div>}
-        {campaign.status === 'running' && <p className={styles.muted}>Após copiar, cole a instrução no ChatGPT do computador usando <strong>Work e @Chrome</strong>, e pressione Enviar. O ChatGPT controla o WhatsApp Web e registra os contatos na mesma campanha. Para anexar PDFs, ative <strong>Permitir acesso a URLs de arquivo</strong> na extensão oficial do ChatGPT.</p>}
+        {campaign.status === 'running' && <p className={styles.muted}>Após copiar, cole a instrução única no ChatGPT do computador usando <strong>Work e @Chrome</strong>. Os destinatários e textos já estarão incluídos; ele baixará os PDFs uma vez e não precisará voltar ao CRM. O CRM acompanha separadamente os envios observados na integração. Para anexar PDFs, ative <strong>Permitir acesso a URLs de arquivo</strong> na extensão oficial do ChatGPT.{standaloneRun?.status === 'active' ? ' Para interromper, pare o ChatGPT diretamente; pausar o painel não interrompe o WhatsApp.' : ''}</p>}
+        {standaloneRun?.status === 'active' && <div className={styles.actions}>
+          <button className="btn btn-ghost btn-sm" disabled={busy} onClick={() => void stopStandaloneRun()}>Encerrar execução depois de parar o ChatGPT</button>
+        </div>}
         <details className={styles.advancedOptions}><summary>Opções avançadas / extensão Bossa antiga</summary>
           <div className={styles.actions}>
             <a href="/downloads/bossa-whatsapp-web.zip" download>Baixar extensão Bossa</a>

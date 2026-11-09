@@ -89,14 +89,19 @@ export async function GET(request: Request) {
       if (observedError) throw observedError;
       const { data: senderLock } = await admin.from('browser_sender_locks').select('requires_review')
         .eq('organization_id', context.organization.id).eq('sender_phone', campaign.sender_phone).maybeSingle();
+      const { data: standaloneRun, error: runError } = await admin.from('browser_campaign_standalone_runs')
+        .select('id,status,created_at,last_observed_at')
+        .eq('organization_id', context.organization.id).eq('campaign_id', campaignId).maybeSingle();
+      if (runError && runError.code !== '42P01' && runError.code !== 'PGRST205') throw runError;
       const monitor = browserCampaignMonitor({
-        campaignStatus: campaign.status, startedAt: campaign.started_at,
+        campaignStatus: campaign.status, startedAt: standaloneRun?.created_at ?? campaign.started_at,
         lastObservedAt: lastObserved?.created_at ?? null,
         recipientStatuses: (recipients ?? []).map((recipient) => recipient.status),
         expectedRecipients: campaign.recipient_count,
         nowMs: Date.now(),
       });
-      return NextResponse.json({ campaign, recipients, senderBlocked: senderLock?.requires_review === true, monitor });
+      return NextResponse.json({ campaign, recipients, senderBlocked: senderLock?.requires_review === true, monitor,
+        standaloneRun: standaloneRun ?? null });
     }
     const { data, error } = await admin.from('browser_campaigns').select('*')
       .eq('organization_id', context.organization.id).order('created_at', { ascending: false }).limit(60);
