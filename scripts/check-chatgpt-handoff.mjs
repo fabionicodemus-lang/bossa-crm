@@ -127,6 +127,14 @@ const routeSource = readFileSync(resolve(root, 'src/app/api/transmissoes/navegad
 assert.match(routeSource, /MAX_RECIPIENTS = 1500/);
 assert.match(routeSource, /\.range\(offset, offset \+ Math\.min\(499/);
 
+const packageSource = readFileSync(resolve(root, 'src/app/api/transmissoes/navegador/pacote/route.ts'), 'utf8');
+assert.match(packageSource, /searchParams\.get\('campaign'\)/);
+assert.match(packageSource, /if \(queryId && bodyId && queryId !== bodyId\)/);
+assert.match(packageSource, /const campaignId = queryId \|\| bodyId/);
+assert.match(managerSource, /validChatGPTCampaignId\(campaignId\)/);
+assert.match(managerSource, /pacote\?campaign=\$\{encodeURIComponent\(campaignId\)\}/);
+assert.equal(validChatGPTCampaignId('8cc0bb9b-88b3-49eb-9ed1-d386e5884f69'), true);
+assert.equal(validChatGPTCampaignId(''), false);
 const runnerSource = readFileSync(resolve(root, 'src/components/ChatGPTCampaignRunner.tsx'), 'utf8');
 assert.doesNotMatch(runnerSource, /confirmar a conversa individual e o remetente autorizado|Confira antes de enviar:<\/strong> remetente/);
 assert.match(runnerSource, /action: 'claim'/);
