@@ -14,7 +14,7 @@ type Broker = {
 };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const MAX_RECIPIENTS = 600;
+const MAX_RECIPIENTS = 1500;
 
 async function editor() {
   const context = await getCurrentContext({ redirectIfMissing: false });
@@ -77,11 +77,18 @@ export async function GET(request: Request) {
         .eq('id', campaignId).eq('organization_id', context.organization.id).maybeSingle();
       if (error) throw error;
       if (!campaign) return NextResponse.json({ error: 'Campanha não encontrada.' }, { status: 404 });
-      const { data: recipients, error: rowsError } = await admin.from('browser_campaign_recipients')
-        .select('id,lead_name,phone,stage,message_text,position,status,next_item_index,detail,claimed_at,finished_at')
-        .eq('campaign_id', campaignId).eq('organization_id', context.organization.id)
-        .order('position').limit(MAX_RECIPIENTS);
-      if (rowsError) throw rowsError;
+      // Supabase aplica limite de 1.000 linhas por resposta em muitos projetos.
+      // Paginar garante que o CRM mostre e contabilize todos os 1.500 contatos.
+      const recipients: Array<{ status: string; [key: string]: unknown }> = [];
+      for (let offset = 0; offset < MAX_RECIPIENTS; offset += 500) {
+        const { data: page, error: rowsError } = await admin.from('browser_campaign_recipients')
+          .select('id,lead_name,phone,stage,message_text,position,status,next_item_index,detail,claimed_at,finished_at')
+          .eq('campaign_id', campaignId).eq('organization_id', context.organization.id)
+          .order('position').range(offset, offset + Math.min(499, MAX_RECIPIENTS - offset - 1));
+        if (rowsError) throw rowsError;
+        recipients.push(...(page ?? []));
+        if (!page || page.length < 500) break;
+      }
       const { data: lastObserved, error: observedError } = await admin.from('browser_campaign_events')
         .select('created_at').eq('organization_id', context.organization.id)
         .eq('campaign_id', campaignId).eq('result', 'observed')
