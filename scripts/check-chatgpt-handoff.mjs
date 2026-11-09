@@ -147,4 +147,5 @@ assert.match(runnerSource, /Parar e marcar para conferir/);
 // Exercise the real endpoint as well: the previous duplicated server regex
 // rejected UUIDs accepted by the helper above and was invisible to text checks.
 await import('./check-browser-campaign-package.mjs');
+await import('./check-browser-campaign-browser-choice.mjs');
 console.log('Handoff ChatGPT: deep link, origem autenticada, limites e trilha de confirmação OK; sem envios reais.');
