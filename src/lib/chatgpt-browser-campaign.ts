@@ -1,5 +1,5 @@
 export const CHATGPT_BATCH_LIMITS = [1, 2, 5, 10, 20] as const;
-export const CHATGPT_MAX_CAMPAIGN_RECIPIENTS = 600;
+export const CHATGPT_MAX_CAMPAIGN_RECIPIENTS = 1500;
 export type ChatGPTBatchLimit = number;
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -131,4 +131,17 @@ export function buildChatGPTDesktopLink(prompt: string): string {
   // Deep link oficial: abre o compositor local com o texto pronto; o usuário
   // ainda precisa pressionar Enviar no aplicativo ChatGPT/Codex.
   return `codex://new?prompt=${encodeURIComponent(prompt)}`;
+}
+
+/** Arquivo de texto completo para anexar no ChatGPT quando o clipboard falhar. */
+export function buildChatGPTCampaignMarkdown(prompt: string, campaignName: string, count: number): string {
+  if (!prompt.trim() || !Number.isInteger(count) || count < 1 || count > CHATGPT_MAX_CAMPAIGN_RECIPIENTS)
+    throw new Error('Instrução da campanha inválida.');
+  const name = campaignName.replace(/[\r\n\t#*\[\]`]/g, ' ').trim().slice(0, 160) || 'Transmissão';
+  return `# Bossa Empreendimentos — ${name}\n\n**Destinatários:** ${count}\n\n---\n\n${prompt}\n`;
+}
+
+export function chatGPTCampaignMarkdownFilename(campaignId: string): string {
+  if (!validChatGPTCampaignId(campaignId)) throw new Error('Campanha inválida.');
+  return `bossa-transmissao-${campaignId}.md`;
 }
