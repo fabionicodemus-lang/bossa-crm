@@ -112,6 +112,7 @@ const context = {
   require(name) {
     if (name === 'react') return react;
     if (name === 'react/jsx-runtime') return { jsx, jsxs: jsx, Fragment: 'fragment' };
+    if (name === 'next/navigation') return { useRouter: () => ({ push() {} }) };
     if (name === '@/lib/supabase/client') return { createClient: () => ({}) };
     if (name === '@/lib/browser-campaigns') return campaignData;
     if (name === '@/lib/browser-campaign-monitor') return { BROWSER_CAMPAIGN_MONITOR_POLL_MS: 120000 };

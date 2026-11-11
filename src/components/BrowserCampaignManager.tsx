@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
+import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { campaignRecipientSummary, hasBrowserRecipientNameToken, personalizeBrowserText, type BrowserCampaignMedia, type BrowserRecipientStatus } from '@/lib/browser-campaigns';
 import { BROWSER_CAMPAIGN_MONITOR_POLL_MS, type BrowserCampaignMonitor } from '@/lib/browser-campaign-monitor';
@@ -81,6 +82,7 @@ function bridgeCommand(type: 'PING' | 'SEND_ITEM', payload: Record<string, unkno
 }
 
 export function BrowserCampaignManager({ organizationId, canEdit }: { organizationId: string; canEdit: boolean }) {
+  const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
   const [mode, setMode] = useState<'list' | 'create' | 'detail'>('list');
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
@@ -618,6 +620,14 @@ export function BrowserCampaignManager({ organizationId, canEdit }: { organizati
         </p>
       </section>}
       <section className="card"><div className="card-head"><h3>Revisar e controlar</h3></div><div className="card-body">
+        {canEdit && summary.queued > 0 && ['running','paused','ready'].includes(campaign.status) && <div className="info-box" style={{ marginBottom: 12 }}>
+          <strong>Continuar pela API oficial da Meta</strong>
+          <p>Há {summary.queued} contatos na fila. O CRM conferirá possíveis envios parciais e exclusões antes de preparar uma transmissão nova. Nada será disparado automaticamente.</p>
+          <button type="button" className="btn btn-primary" disabled={busy}
+            onClick={() => router.push(`/transmissoes?origem=${encodeURIComponent(campaign.id)}`)}>
+            ↪ Transferir pendentes para API oficial
+          </button>
+        </div>}
         {senderBlocked && <div className="error-box">Esse número tem uma transmissão interrompida ou uma pendência de revisão. Confira se o ChatGPT parou e revise os contatos marcados como “Conferir”.
           {canEdit && <button className="btn btn-secondary btn-sm" disabled={busy} onClick={() => void releaseSender()}>Liberar número após conferência</button>}
         </div>}
