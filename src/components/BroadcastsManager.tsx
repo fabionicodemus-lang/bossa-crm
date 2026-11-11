@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { stagesFor } from '@/lib/stages';
@@ -32,6 +32,20 @@ export type AudienceDiagnostics = {
   total: number; withoutPhone: number; optOut: number; paused: number; duplicates: number; notBroker: number; eligible: number;
 };
 export type StageAudienceCount = AudienceDiagnostics;
+type BrowserTransferPreview = {
+  campaign: { id: string; name: string; status: string; senderPhone: string };
+  counts: { total: number; queued: number; sent: number; claimed: number; uncertain: number; skipped: number; partialOrObserved: number; duplicateOrInvalidPhone: number };
+  eligible: number;
+  excluded: { changedOrMissing: number; optOut: number; notBroker: number };
+  files: Array<{ path: string; filename: string }>;
+  estimatedMarketingCostBrl: number;
+  rateBrl: number;
+  priceReferenceDate: string;
+  hasActiveRun: boolean;
+  consentConfirmed: boolean;
+  senderMatches: boolean;
+  existingBroadcast: { id: string; status: string } | null;
+};
 
 const statusLabels: Record<string, string> = {
   draft: 'Rascunho', ready: 'Pronta para enviar', running: 'Em envio', paused: 'Pausada',
@@ -71,13 +85,14 @@ function previewText(template: BroadcastTemplate, mappings: VariableMapping[]) {
 
 export function BroadcastsManager({
   organizationId, canEdit, initialBroadcasts, initialTemplates, connections,
-  stageCounts, audienceDiagnostics, onOpenTemplates,
+  stageCounts, audienceDiagnostics, onOpenTemplates, sourceBrowserCampaignId,
 }: {
   organizationId: string; canEdit: boolean; initialBroadcasts: Broadcast[];
   initialTemplates: BroadcastTemplate[]; connections: BroadcastConnection[];
   stageCounts: Record<string, StageAudienceCount>;
   audienceDiagnostics: Record<'cliente' | 'corretor', AudienceDiagnostics>;
   onOpenTemplates?: () => void;
+  sourceBrowserCampaignId?: string;
 }) {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
@@ -87,10 +102,10 @@ export function BroadcastsManager({
   const templateIdRef = useRef('');
   const [broadcasts, setBroadcasts] = useState(initialBroadcasts);
   const [templates, setTemplates] = useState(initialTemplates);
-  const [mode, setMode] = useState<'list' | 'new'>('list');
-  const [channel, setChannel] = useState<Channel>('clientes');
+  const [mode, setMode] = useState<'list' | 'new'>(sourceBrowserCampaignId ? 'new' : 'list');
+  const [channel, setChannel] = useState<Channel>(sourceBrowserCampaignId ? 'corretores' : 'clientes');
   const [name, setName] = useState('');
-  const [selectedStages, setSelectedStages] = useState<string[]>(['futuro']);
+  const [selectedStages, setSelectedStages] = useState<string[]>(sourceBrowserCampaignId ? [] : ['futuro']);
   const [templateId, setTemplateId] = useState('');
   const [mappings, setMappings] = useState<VariableMapping[]>([]);
   const [mediaPath, setMediaPath] = useState('');
@@ -104,13 +119,39 @@ export function BroadcastsManager({
   const [runningId, setRunningId] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const [transferPreview, setTransferPreview] = useState<BrowserTransferPreview | null>(null);
+  const [transferLoading, setTransferLoading] = useState(false);
+  const [freezing, setFreezing] = useState(false);
+
+  const refreshTransfer = useCallback(async () => {
+    if (!sourceBrowserCampaignId) return;
+    setTransferLoading(true);
+    setError('');
+    try {
+      const response = await fetch(`/api/transmissoes/navegador/transferencia?campaign=${encodeURIComponent(sourceBrowserCampaignId)}`);
+      const data = await response.json() as BrowserTransferPreview & { error?: string };
+      if (!response.ok) throw new Error(data.error || 'Falha ao verificar a fila.');
+      setTransferPreview(data);
+      setName(`${data.campaign.name} · pendentes API`.slice(0, 160));
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Não foi possível consultar os pendentes.');
+    } finally { setTransferLoading(false); }
+  }, [sourceBrowserCampaignId]);
+
+  useEffect(() => {
+    if (!sourceBrowserCampaignId) return;
+    const timer = window.setTimeout(() => void refreshTransfer(), 0);
+    return () => window.clearTimeout(timer);
+  }, [sourceBrowserCampaignId, refreshTransfer]);
 
   useEffect(() => () => { if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current); }, []);
   const kind: LeadKind = channel === 'clientes' ? 'cliente' : 'corretor';
   const stages = stagesFor(kind);
   const connection = connections.find((item) => item.channel === channel && item.status === 'connected') ?? null;
   const channelTemplates = templates.filter((item) => item.whatsapp_connection_id === connection?.id);
-  const approvedTemplates = channelTemplates.filter((item) => item.status.toUpperCase() === 'APPROVED' && item.category.toUpperCase() === 'MARKETING');
+  const approvedTemplates = channelTemplates.filter((item) => item.status.toUpperCase() === 'APPROVED'
+    && item.category.toUpperCase() === 'MARKETING'
+    && (!sourceBrowserCampaignId || item.header_format.toUpperCase() === 'DOCUMENT'));
   const selectedTemplate = approvedTemplates.find((item) => item.id === templateId) ?? null;
   const mediaType = selectedTemplate?.header_format.toUpperCase() || 'NONE';
   const mediaRequired = ['IMAGE', 'VIDEO', 'DOCUMENT'].includes(mediaType);
@@ -123,6 +164,11 @@ export function BroadcastsManager({
     return acc;
   }, emptyAudience());
   const baseDiagnostics = audienceDiagnostics[kind] ?? emptyAudience();
+  const transferBlocked = Boolean(sourceBrowserCampaignId && (transferLoading || !transferPreview
+    || transferPreview.hasActiveRun || !transferPreview.consentConfirmed || !transferPreview.senderMatches
+    || transferPreview.existingBroadcast || transferPreview.eligible === 0
+    || !['running', 'ready', 'paused'].includes(transferPreview.campaign.status)));
+  const eligibleForSubmission = sourceBrowserCampaignId ? transferPreview?.eligible ?? 0 : selectedDiagnostics.eligible;
   const allRecipients = broadcasts.reduce((sum, item) => sum + Number(item.recipient_count || 0), 0);
   const allSent = broadcasts.reduce((sum, item) => sum + Number(item.sent_count || 0) + Number(item.delivered_count || 0) + Number(item.read_count || 0), 0);
   const allRead = broadcasts.reduce((sum, item) => sum + Number(item.read_count || 0), 0);
@@ -188,19 +234,45 @@ export function BroadcastsManager({
     finally { setUploading(false); }
   }
 
+  async function freezeForTransfer() {
+    if (!canEdit || !sourceBrowserCampaignId || !transferPreview?.hasActiveRun || freezing) return;
+    if (!window.confirm('CONFIRMAÇÃO IMPORTANTE: você já interrompeu por completo a execução do ChatGPT que enviava pelo WhatsApp Web? O CRM não consegue pará-la. Continuar congelará a fila original, preservando apenas contatos sem indícios de envio. Não envia mensagens.')) return;
+    setFreezing(true); setError(''); setNotice('');
+    try {
+      const response = await fetch('/api/transmissoes/navegador/transferencia/congelar', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ campaignId: sourceBrowserCampaignId, confirmedChatGPTStopped: true }),
+      });
+      const payload = await response.json().catch(() => ({})) as { error?: string };
+      if (!response.ok) throw new Error(payload.error || 'Não foi possível congelar a fila.');
+      await refreshTransfer();
+      setNotice('Execução anterior congelada com confirmação. Revise a nova quantidade elegível antes de preparar a transmissão.');
+    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Falha ao congelar a execução.'); }
+    finally { setFreezing(false); }
+  }
+
   async function createBroadcast() {
     if (!canEdit) return;
     setError(''); setNotice('');
     if (!connection) { setError('O número deste público não está conectado.'); return; }
-    if (!name.trim() || !selectedTemplate || !selectedStages.length) { setError('Informe o nome, selecione etapas e escolha um modelo aprovado.'); return; }
+    if (!name.trim() || !selectedTemplate || (!sourceBrowserCampaignId && !selectedStages.length)) { setError('Informe o nome, selecione o público e escolha um modelo aprovado.'); return; }
+    if (sourceBrowserCampaignId && (transferBlocked || !transferPreview)) {
+      setError('Há uma pendência de segurança na campanha de origem. Atualize a conferência antes de preparar.');
+      return;
+    }
     if (mediaRequired && !mediaPath) { setError('Clique em 📎 Anexar arquivo e escolha o arquivo do cabeçalho antes de preparar.'); return; }
     if (mappings.some((mapping) => mapping.source === 'fixed' && !mapping.value?.trim())) { setError('Preencha os textos fixos das variáveis.'); return; }
-    if (!window.confirm(`Preparar a transmissão “${name.trim()}” para ${selectedDiagnostics.eligible} contatos elegíveis? O envio ainda não começará.`)) return;
+    if (!window.confirm(sourceBrowserCampaignId
+      ? `Transferir somente ${eligibleForSubmission} contatos pendentes e elegíveis de “${transferPreview?.campaign.name}” para uma nova transmissão pela API oficial? A campanha antiga será pausada. Nenhuma mensagem será enviada agora.`
+      : `Preparar a transmissão “${name.trim()}” para ${eligibleForSubmission} contatos elegíveis? O envio ainda não começará.`)) return;
     setSaving(true);
     try {
-      const response = await fetch('/api/transmissoes', {
+      const response = await fetch(sourceBrowserCampaignId ? '/api/transmissoes/navegador/transferencia' : '/api/transmissoes', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+        body: JSON.stringify(sourceBrowserCampaignId ? {
+          campaignId: sourceBrowserCampaignId, name: name.trim(), templateId: selectedTemplate.id,
+          variableMappings: mappings, mediaPath,
+        } : {
           name: name.trim(), channel, stages: selectedStages, templateId: selectedTemplate.id, variableMappings: mappings,
           mediaBucket: mediaRequired && mediaPath ? 'broadcast-media' : null,
           mediaPath: mediaRequired ? mediaPath || null : null,
@@ -211,8 +283,10 @@ export function BroadcastsManager({
       const payload = await response.json().catch(() => ({})) as { broadcast?: Broadcast; eligible?: number; skipped?: number; skippedNotBroker?: number; error?: string };
       if (!response.ok) throw new Error(payload.error || 'Não foi possível criar a transmissão.');
       setBroadcasts((current) => [payload.broadcast as Broadcast, ...current]);
-      setNotice(`Transmissão preparada para ${payload.eligible} contatos. ${payload.skipped ? `${payload.skipped} excluídos${payload.skippedNotBroker ? ` (${payload.skippedNotBroker} por não serem corretores confirmados/sem conflito)` : ''}.` : ''}`);
-      setMode('list'); resetForm(channel); router.refresh();
+      setNotice(`Transmissão preparada para ${payload.eligible} contatos. Nenhuma mensagem enviada. ${payload.skipped ? `${payload.skipped} não incluídos na nova fila.` : ''}`);
+      setMode('list'); resetForm(channel);
+      if (sourceBrowserCampaignId) router.replace('/transmissoes');
+      router.refresh();
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Não foi possível criar a transmissão.'); }
     finally { setSaving(false); }
   }
@@ -314,15 +388,30 @@ export function BroadcastsManager({
         })}
       </tbody></table></div></section>
     </> : <>
-      <div className="page-head"><div><h2>Nova transmissão</h2><p>Prepare primeiro. O envio exige uma segunda confirmação.</p></div><button className="btn btn-ghost" onClick={() => setMode('list')}>← Voltar</button></div>
+      <div className="page-head"><div><h2>{sourceBrowserCampaignId ? 'Transferir pendentes para a API oficial' : 'Nova transmissão'}</h2><p>{sourceBrowserCampaignId ? 'Somente a fila não atendida da campanha original. Preparar não envia mensagens.' : 'Prepare primeiro. O envio exige uma segunda confirmação.'}</p></div><button className="btn btn-ghost" onClick={() => { setMode('list'); if (sourceBrowserCampaignId) router.replace('/transmissoes'); }}>← Voltar</button></div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 380px), 1fr))', gap: 16, alignItems: 'start' }}>
         <div style={{ display: 'grid', gap: 16, minWidth: 0 }}>
           <section className="card"><div className="card-head"><h3>1. Público e segmentação</h3></div><div className="card-body">
-            <div className="grid grid-2"><div className="field"><label>Nome da transmissão</label><input className="input" value={name} onChange={(event) => setName(event.target.value)} placeholder="Ex.: Tabela atualizada · Flow" /></div><div className="field"><label>Público / número remetente</label><select className="select" value={channel} onChange={(event) => resetForm(event.target.value as Channel)}><option value="clientes">Clientes finais · WhatsApp Clientes</option><option value="corretores">Corretores · WhatsApp Corretores</option></select></div></div>
-            <div className="field"><div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 9, marginBottom: 7 }}><label style={{ marginBottom: 0 }}>Etapas que receberão</label><button type="button" className="btn btn-ghost btn-sm" onClick={() => setSelectedStages(allStagesSelected ? [] : stages.map((item) => item.id))}>{allStagesSelected ? 'Limpar seleção' : 'Selecionar todas'}</button></div><div className="grid grid-3">{stages.map((stage) => { const count = stageCounts[`${kind}:${stage.id}`] ?? emptyAudience(); return <label key={stage.id} className="card" style={{ padding: 10, cursor: 'pointer', borderColor: selectedStages.includes(stage.id) ? 'var(--orange)' : undefined }}><input type="checkbox" checked={selectedStages.includes(stage.id)} onChange={() => setSelectedStages((current) => current.includes(stage.id) ? current.filter((item) => item !== stage.id) : [...current, stage.id])} /> <strong>{stage.label}</strong><br /><small className="faint">{count.eligible} elegíveis de {count.total}</small></label>; })}</div></div>
-            {channel === 'corretores' && <div className="info-box" style={{ marginBottom: 10 }}><strong>⚠️ Número do Plantão:</strong> este canal é exclusivo para o pipeline de corretores. Para reativar clientes finais, use “Clientes finais · WhatsApp Clientes”.</div>}
-            <div className="info-box"><strong>{selectedDiagnostics.eligible} elegíveis</strong> em {selectedDiagnostics.total} registros · {selectedDiagnostics.withoutPhone} sem telefone · {selectedDiagnostics.optOut} opt-out · {selectedDiagnostics.paused} pausados · {selectedDiagnostics.duplicates} duplicados{channel === 'corretores' ? ` · ${selectedDiagnostics.notBroker} excluídos por conflito de identidade/não-corretor` : ''}.</div>
-            <div className="info-box" style={{ marginTop: 10 }}><strong>Base completa:</strong> {baseDiagnostics.total} registros, {baseDiagnostics.eligible} elegíveis{channel === 'corretores' ? `, ${baseDiagnostics.notBroker} bloqueados por não serem corretores confirmados/sem conflito` : ''}. Arquivados não participam. A campanha revalida o telefone antes de cada envio.</div>
+            <div className="grid grid-2"><div className="field"><label>Nome da transmissão</label><input className="input" value={name} onChange={(event) => setName(event.target.value)} placeholder="Ex.: Tabela atualizada · Flow" /></div><div className="field"><label>Público / número remetente</label><select className="select" value={channel} disabled={Boolean(sourceBrowserCampaignId)} onChange={(event) => resetForm(event.target.value as Channel)}><option value="clientes">Clientes finais · WhatsApp Clientes</option><option value="corretores">Corretores · WhatsApp Corretores</option></select></div></div>
+            {sourceBrowserCampaignId ? <div style={{ display: 'grid', gap: 10 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}><strong>Conferência da campanha original</strong><button className="btn btn-ghost btn-sm" disabled={transferLoading || saving} onClick={() => void refreshTransfer()}>{transferLoading ? 'Conferindo…' : '↻ Atualizar conferência'}</button></div>
+              {transferPreview && <>
+                <div className="info-box"><strong>{transferPreview.campaign.name}</strong><br />{transferPreview.counts.total} destinatários no histórico · {transferPreview.counts.sent} enviados · {transferPreview.counts.queued} ainda na fila.</div>
+                <div className="success-box"><strong>{transferPreview.eligible} pendentes elegíveis para a API</strong><br />Os {transferPreview.counts.sent} já enviados não entrarão na nova transmissão. {transferPreview.counts.partialOrObserved + transferPreview.counts.uncertain + transferPreview.counts.claimed} contato(s) em execução, com indício parcial ou exigindo conferência também ficam de fora.</div>
+                {(transferPreview.counts.duplicateOrInvalidPhone > 0 || Object.values(transferPreview.excluded).some(Boolean)) && <div className="info-box">Exclusões adicionais: {transferPreview.counts.duplicateOrInvalidPhone} telefone(s) repetidos/inválidos · {transferPreview.excluded.changedOrMissing} cadastro(s) alterados/ausentes · {transferPreview.excluded.optOut} descadastro(s) · {transferPreview.excluded.notBroker} não-corretor(es)/conflito(s). A pausa de atendimento da Nara não é tratada como descadastro comercial.</div>}
+                {transferPreview.hasActiveRun && <div className="error-box"><strong>Execução antiga ainda registrada como ativa.</strong><p>Primeiro interrompa a tarefa no próprio ChatGPT que estava controlando o WhatsApp Web. Depois confirme aqui para congelar a campanha e preservar a fila sem registros de envio. Esta ação não envia mensagens nem controla o ChatGPT.</p><button className="btn btn-primary btn-sm" disabled={freezing || transferLoading} onClick={() => void freezeForTransfer()}>{freezing ? 'Congelando…' : 'Já parei o ChatGPT — congelar pendentes'}</button><p className="faint">Por segurança, o sistema exige uma hora sem novos envios observados. Não use o encerramento antigo, que classifica toda a fila como incerta. Sem registro não é garantia absoluta de que uma mensagem não tenha sido enviada: revise o histórico antes de iniciar a nova transmissão.</p></div>}
+                {!transferPreview.senderMatches && <div className="error-box">O número remetente original não corresponde ao WhatsApp de corretores conectado à API oficial. É preciso resolver isso antes de transferir.</div>}
+                {!transferPreview.consentConfirmed && <div className="error-box">A campanha original não tem confirmação de consentimento; transferência bloqueada.</div>}
+                {transferPreview.existingBroadcast && <div className="info-box">Esta fila já foi transferida para uma transmissão pela API oficial (status: {transferPreview.existingBroadcast.status}). Consulte o histórico para evitar duplicação.</div>}
+                {transferPreview.eligible > 0 && <div className="info-box">Custo estimado para um modelo Marketing: <strong>{transferPreview.estimatedMarketingCostBrl.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</strong> ({transferPreview.rateBrl.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 4 })} por mensagem). Referência {transferPreview.priceReferenceDate}; cobrança real depende das entregas, da moeda e das tarifas da conta Meta.</div>}
+              </>}
+              {transferLoading && !transferPreview && <div className="info-box">Conferindo fila, comprovantes de envio e autorizações…</div>}
+            </div> : <>
+              <div className="field"><div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 9, marginBottom: 7 }}><label style={{ marginBottom: 0 }}>Etapas que receberão</label><button type="button" className="btn btn-ghost btn-sm" onClick={() => setSelectedStages(allStagesSelected ? [] : stages.map((item) => item.id))}>{allStagesSelected ? 'Limpar seleção' : 'Selecionar todas'}</button></div><div className="grid grid-3">{stages.map((stage) => { const count = stageCounts[`${kind}:${stage.id}`] ?? emptyAudience(); return <label key={stage.id} className="card" style={{ padding: 10, cursor: 'pointer', borderColor: selectedStages.includes(stage.id) ? 'var(--orange)' : undefined }}><input type="checkbox" checked={selectedStages.includes(stage.id)} onChange={() => setSelectedStages((current) => current.includes(stage.id) ? current.filter((item) => item !== stage.id) : [...current, stage.id])} /> <strong>{stage.label}</strong><br /><small className="faint">{count.eligible} elegíveis de {count.total}</small></label>; })}</div></div>
+              {channel === 'corretores' && <div className="info-box" style={{ marginBottom: 10 }}><strong>⚠️ Número do Plantão:</strong> este canal é exclusivo para o pipeline de corretores. Para reativar clientes finais, use “Clientes finais · WhatsApp Clientes”.</div>}
+              <div className="info-box"><strong>{selectedDiagnostics.eligible} elegíveis</strong> em {selectedDiagnostics.total} registros · {selectedDiagnostics.withoutPhone} sem telefone · {selectedDiagnostics.optOut} opt-out · {selectedDiagnostics.paused} pausados · {selectedDiagnostics.duplicates} duplicados{channel === 'corretores' ? ` · ${selectedDiagnostics.notBroker} excluídos por conflito de identidade/não-corretor` : ''}.</div>
+              <div className="info-box" style={{ marginTop: 10 }}><strong>Base completa:</strong> {baseDiagnostics.total} registros, {baseDiagnostics.eligible} elegíveis{channel === 'corretores' ? `, ${baseDiagnostics.notBroker} bloqueados por não serem corretores confirmados/sem conflito` : ''}. Arquivados não participam. A campanha revalida o telefone antes de cada envio.</div>
+            </>}
           </div></section>
 
           <section className="card"><div className="card-head"><h3>2. Modelo aprovado pela Meta</h3><button className="btn btn-ghost btn-sm" disabled={syncing || !connection} onClick={() => void syncTemplates()}>{syncing ? 'Sincronizando…' : '↻ Sincronizar Meta'}</button></div><div className="card-body" style={{ display: 'grid', gap: 13 }}>
@@ -334,7 +423,7 @@ export function BroadcastsManager({
           </div></section>
 
           <section className="card"><div className="card-head"><h3>3. 📎 Anexar PDF ou imagem</h3><span className="chip">{mediaRequired ? `Cabeçalho ${mediaType}` : 'Modelos Meta'}</span></div><div className="card-body" style={{ display: 'grid', gap: 12 }}>
-            {!selectedTemplate && <div className="info-box">Escolha primeiro um modelo aprovado. Depois, clique em 📎 para selecionar a imagem ou PDF.</div>}
+            {!selectedTemplate && <div className="info-box">{sourceBrowserCampaignId ? 'Escolha primeiro um modelo Marketing DOCUMENT aprovado para enviar um dos PDFs já anexados à campanha original.' : 'Escolha primeiro um modelo aprovado. Depois, clique em 📎 para selecionar a imagem ou PDF.'}</div>}
             {selectedTemplate && !mediaRequired && <>
               <div className="info-box">Este modelo foi aprovado <strong>sem imagem ou documento</strong>. A Meta não permite anexar um PDF ou imagem avulsa a esse modelo em uma transmissão fora da janela de 24 horas. Escolha um modelo aprovado com cabeçalho de imagem ou documento.</div>
               <button type="button" className="btn btn-primary" onClick={() => setShowMediaChoices((value) => !value)}>📎 Escolher modelo com anexo</button>
@@ -342,9 +431,18 @@ export function BroadcastsManager({
             </>}
             {selectedTemplate && mediaRequired && <>
               <div className="info-box">O modelo <strong>{selectedTemplate.name}</strong> exige um arquivo do tipo <strong>{mediaType === 'IMAGE' ? 'imagem' : mediaType === 'DOCUMENT' ? 'documento' : 'vídeo'}</strong>. Escolha o arquivo que cada destinatário receberá; pode ser diferente da amostra usada na aprovação, mas deve manter o mesmo formato.</div>
-              <button className="btn btn-primary" type="button" disabled={uploading} onClick={() => uploadInputRef.current?.click()}>{uploading ? 'Enviando anexo…' : mediaPath ? '📎 Trocar arquivo anexado' : '📎 Anexar arquivo agora'}</button>
-              <input ref={uploadInputRef} type="file" accept={mediaRule(mediaType).accept} style={{ display: 'none' }} disabled={uploading} onChange={(event) => void uploadMedia(event)} aria-label="Selecionar arquivo para transmissão" />
-              <small className="faint">{mediaRule(mediaType).label}. O formato precisa corresponder ao cabeçalho aprovado.</small>
+              {sourceBrowserCampaignId ? <>
+                <div className="field"><label>PDF desta primeira mensagem</label><select className="select" value={mediaPath} onChange={(event) => {
+                  const file = transferPreview?.files.find((item) => item.path === event.target.value);
+                  setMediaPath(file?.path ?? ''); setMediaMimeType(file ? 'application/pdf' : '');
+                  setMediaFilename(file?.filename ?? ''); setMediaPreviewUrl(null);
+                }}><option value="">Selecione um dos PDFs originais</option>{transferPreview?.files.map((file) => <option key={file.path} value={file.path}>{file.filename}</option>)}</select></div>
+                <div className="info-box"><strong>Importante sobre os dois PDFs:</strong> esta preparação envia apenas um PDF por modelo Marketing. Para o segundo, você precisará de outro modelo aprovado e uma segunda transmissão, ou aguardar uma resposta do corretor para usar a janela de atendimento de 24 horas. O envio do segundo PDF não é automático.</div>
+              </> : <>
+                <button className="btn btn-primary" type="button" disabled={uploading} onClick={() => uploadInputRef.current?.click()}>{uploading ? 'Enviando anexo…' : mediaPath ? '📎 Trocar arquivo anexado' : '📎 Anexar arquivo agora'}</button>
+                <input ref={uploadInputRef} type="file" accept={mediaRule(mediaType).accept} style={{ display: 'none' }} disabled={uploading} onChange={(event) => void uploadMedia(event)} aria-label="Selecionar arquivo para transmissão" />
+                <small className="faint">{mediaRule(mediaType).label}. O formato precisa corresponder ao cabeçalho aprovado.</small>
+              </>}
               {mediaPath && <div className="success-box" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}><span>✓ Anexo pronto: <strong>{mediaFilename}</strong></span><button className="btn btn-ghost btn-sm" type="button" onClick={clearMedia}>Remover</button></div>}
             </>}
           </div></section>
@@ -353,12 +451,12 @@ export function BroadcastsManager({
           {selectedTemplate && <section className="card"><div className="card-head"><h3>Prévia — tela do WhatsApp</h3></div><div className="card-body"><WhatsAppTemplatePreview key={`${selectedTemplate.id}-${mediaPreviewUrl || ''}`} template={selectedTemplate} bodyOverride={previewText(selectedTemplate, mappings)} mediaPreviewUrl={mediaPreviewUrl} filename={mediaFilename || null} /><small className="faint" style={{ display: 'block', marginTop: 8 }}>{mediaRequired && !mediaPath ? 'Anexe o arquivo acima para ver a mídia que será enviada.' : 'Prévia ilustrativa; as variáveis mudam para cada destinatário.'}</small></div></section>}
           <section className="card"><div className="card-head"><h3>Resumo</h3></div><div className="card-body info-list">
             <div className="info-row"><span>Público</span><strong>{channel === 'clientes' ? 'Clientes finais' : 'Corretores'}</strong></div>
-            <div className="info-row"><span>Etapas</span><strong>{selectedStages.length}</strong></div>
-            <div className="info-row"><span>Elegíveis</span><strong>{selectedDiagnostics.eligible}</strong></div>
+            <div className="info-row"><span>{sourceBrowserCampaignId ? 'Origem' : 'Etapas'}</span><strong>{sourceBrowserCampaignId ? 'Somente fila pendente' : selectedStages.length}</strong></div>
+            <div className="info-row"><span>Elegíveis</span><strong>{eligibleForSubmission}</strong></div>
             <div className="info-row"><span>Modelo</span><strong>{selectedTemplate?.name || '—'}</strong></div>
             <div className="info-row"><span>Anexo</span><strong>{mediaRequired ? mediaFilename || 'Obrigatório — clique em 📎' : 'Modelo sem anexo'}</strong></div>
           </div></section>
-          <section className="card"><div className="card-body"><div className="info-box"><strong>Proteções ativas</strong><br />Somente modelos Marketing aprovados; exclusão de opt-outs; arquivo compatível; dupla confirmação de envio.</div><button className="btn btn-primary btn-block" disabled={saving || uploading || !selectedDiagnostics.eligible || !selectedTemplate || (mediaRequired && !mediaPath)} onClick={() => void createBroadcast()}>{saving ? 'Preparando…' : mediaRequired && !mediaPath ? '📎 Anexe o arquivo para continuar' : 'Preparar transmissão'}</button></div></section>
+          <section className="card"><div className="card-body"><div className="info-box"><strong>Proteções ativas</strong><br />{sourceBrowserCampaignId ? 'Histórico e envios parciais preservados; execução antiga encerrada; opt-outs excluídos; remetente e modelo conferidos. Nenhum envio automático.' : 'Somente modelos Marketing aprovados; exclusão de opt-outs; arquivo compatível; dupla confirmação de envio.'}</div><button className="btn btn-primary btn-block" disabled={saving || uploading || !eligibleForSubmission || transferBlocked || !selectedTemplate || (mediaRequired && !mediaPath)} onClick={() => void createBroadcast()}>{saving ? 'Preparando…' : transferBlocked ? 'Resolva as pendências da origem' : mediaRequired && !mediaPath ? '📎 Anexe o arquivo para continuar' : sourceBrowserCampaignId ? `Preparar ${eligibleForSubmission} pendentes na API` : 'Preparar transmissão'}</button></div></section>
           <section className="card"><div className="card-head"><h3>Arquivos aceitos</h3></div><div className="card-body muted" style={{ fontSize: 12, lineHeight: 1.7 }}><strong>Imagem:</strong> JPG/PNG até 5 MB.<br /><strong>Vídeo:</strong> MP4/3GP até 16 MB.<br /><strong>Documento:</strong> PDF, Word, Excel, PowerPoint, TXT ou CSV até 100 MB.<br />O tipo depende do cabeçalho já aprovado pela Meta.</div></section>
         </aside>
       </div>

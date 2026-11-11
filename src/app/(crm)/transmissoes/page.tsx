@@ -55,9 +55,9 @@ async function fetchAllLeadRows(supabase: SupabaseClient, organizationId: string
 export default async function BroadcastsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ aba?: string }>;
+  searchParams: Promise<{ aba?: string; origem?: string }>;
 }) {
-  const { aba } = await searchParams;
+  const { aba, origem } = await searchParams;
   const context = await getCurrentContext();
   const supabase = await createClient();
   const organizationId = context!.organization.id;
@@ -176,6 +176,7 @@ export default async function BroadcastsPage({
           connections={(connectionsResult.data ?? []) as BroadcastConnection[]}
           stageCounts={stageCounts}
           audienceDiagnostics={audienceDiagnostics}
+          sourceBrowserCampaignId={/^[0-9a-f-]{36}$/i.test(origem ?? '') ? origem : undefined}
         />}
   </>;
 }

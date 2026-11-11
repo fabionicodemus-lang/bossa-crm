@@ -17,7 +17,7 @@ export type BroadcastsTab = 'campanhas' | 'modelos';
 
 export function BroadcastsWorkspace({
   organizationId, canEdit, initialTab, initialBroadcasts, initialTemplates,
-  connections, stageCounts, audienceDiagnostics,
+  connections, stageCounts, audienceDiagnostics, sourceBrowserCampaignId,
 }: {
   organizationId: string;
   canEdit: boolean;
@@ -27,6 +27,7 @@ export function BroadcastsWorkspace({
   connections: BroadcastConnection[];
   stageCounts: Record<string, StageAudienceCount>;
   audienceDiagnostics: Record<'cliente' | 'corretor', AudienceDiagnostics>;
+  sourceBrowserCampaignId?: string;
 }) {
   const router = useRouter();
   const [tab, setTab] = useState<BroadcastsTab>(initialTab);
@@ -80,9 +81,11 @@ export function BroadcastsWorkspace({
     </div>
     {tab === 'campanhas'
       ? <BroadcastsManager
+          key={sourceBrowserCampaignId ?? 'normal'}
           organizationId={organizationId} canEdit={canEdit} initialBroadcasts={initialBroadcasts}
           initialTemplates={templates} connections={connections} stageCounts={stageCounts}
           audienceDiagnostics={audienceDiagnostics} onOpenTemplates={() => openTab('modelos')}
+          sourceBrowserCampaignId={sourceBrowserCampaignId}
         />
       : !templatesReady
         ? <div className="page-content"><div className="info-box">Sincronizando modelos com a Meta…</div></div>

@@ -28,6 +28,7 @@ type Recipient = {
   phone: string | null;
   stage: string | null;
   lead_snapshot: Record<string, unknown>;
+  source_browser_recipient_id: string | null;
 };
 
 function mappingValue(mapping: VariableMapping, snapshot: Record<string, unknown>, kind: LeadKind) {
@@ -82,15 +83,35 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: 'Transmissão pausada.', paused: true }, { status: 409 });
   }
 
+  let browserSourcePhone: string | null = null;
+  if (broadcast.source_browser_campaign_id) {
+    const [{ data: origin, error: originError }, { data: oldRun, error: runError }] = await Promise.all([
+      admin.from('browser_campaigns').select('status,sender_phone').eq('organization_id', membership.organization_id)
+        .eq('id', broadcast.source_browser_campaign_id).maybeSingle(),
+      admin.from('browser_campaign_standalone_runs').select('status')
+        .eq('organization_id', membership.organization_id)
+        .eq('campaign_id', broadcast.source_browser_campaign_id).maybeSingle(),
+    ]);
+    if (originError || runError || origin?.status !== 'paused' || oldRun?.status === 'active') {
+      return NextResponse.json({
+        error: 'Envio bloqueado: a campanha original deve continuar pausada e sem execução ativa pelo navegador.',
+      }, { status: 409 });
+    }
+    browserSourcePhone = origin.sender_phone;
+  }
+
   const channelId = String(broadcast.whatsapp_channel_id ?? broadcast.whatsapp_connection_id ?? '');
   const channel = await findChannelById(admin, membership.organization_id, channelId);
   const { data: template } = await admin.from('whatsapp_templates')
     .select('*').eq('id', broadcast.template_id).eq('organization_id', membership.organization_id).maybeSingle();
   if (!channel || channel.status !== 'connected') return NextResponse.json({ error: 'O canal do WhatsApp não está conectado.' }, { status: 409 });
   if (!template || String(template.status).toUpperCase() !== 'APPROVED') return NextResponse.json({ error: 'O modelo deixou de estar aprovado na Meta.' }, { status: 409 });
+  if (browserSourcePhone && normalizeWaId(channel.display_phone_number || '') !== normalizeWaId(browserSourcePhone)) {
+    return NextResponse.json({ error: 'O número oficial deixou de corresponder ao remetente da campanha original.' }, { status: 409 });
+  }
 
   const { data: queuedRows, error: queueError } = await admin.from('broadcast_recipients')
-    .select('id,lead_id,lead_name,phone,stage,lead_snapshot')
+    .select('id,lead_id,lead_name,phone,stage,lead_snapshot,source_browser_recipient_id')
     .eq('broadcast_id', id).eq('status', 'queued').order('created_at').limit(QUEUE_FETCH_LIMIT);
   if (queueError) return NextResponse.json({ error: queueError.message }, { status: 400 });
 
@@ -145,6 +166,27 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       const destination = normalizeWaId(recipient.phone ?? '');
       if (!destination) throw new Error('Telefone inválido.');
 
+      if (broadcast.source_browser_campaign_id) {
+        const sourceRecipientId = recipient.source_browser_recipient_id;
+        if (!sourceRecipientId) throw new Error('Destinatário não associado à fila de origem.');
+        const [{ data: source, error: sourceError }, { data: receipt, error: receiptError }] = await Promise.all([
+          admin.from('browser_campaign_recipients').select('status,next_item_index,phone,lead_id')
+            .eq('id', sourceRecipientId).eq('organization_id', membership.organization_id)
+            .eq('campaign_id', broadcast.source_browser_campaign_id).maybeSingle(),
+          admin.from('browser_campaign_echo_receipts').select('id')
+            .eq('recipient_id', sourceRecipientId).eq('campaign_id', broadcast.source_browser_campaign_id)
+            .eq('organization_id', membership.organization_id).limit(1).maybeSingle(),
+        ]);
+        if (sourceError || receiptError) throw sourceError ?? receiptError;
+        if (!source || source.status !== 'queued' || Number(source.next_item_index ?? 0) !== 0
+          || receipt || normalizeWaId(source.phone ?? '') !== destination || source.lead_id !== recipient.lead_id) {
+          await admin.from('broadcast_recipients').update({
+            status: 'skipped', error_message: 'A origem deixou de estar inteiramente pendente; duplicação evitada.',
+          }).eq('id', recipient.id);
+          continue;
+        }
+      }
+
       const { data: identityRows, error: identityError } = await admin.from('leads')
         .select('id,kind,phone,creci,metadata,updated_at,archived_at,opt_out,automation_paused')
         .eq('organization_id', membership.organization_id)
@@ -156,7 +198,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       if (broadcast.channel === 'corretores') {
         const eligibility = brokerBroadcastEligibility((identityRows ?? []) as IdentityLead[]);
         const recipientLead = (identityRows ?? []).find((lead) => lead.id === recipient.lead_id);
-        if (!eligibility.eligible || (recipientLead && recipientLead.kind !== 'corretor')) {
+        if (!eligibility.eligible || (recipientLead && recipientLead.kind !== 'corretor')
+          || (broadcast.source_browser_campaign_id && !recipientLead)) {
           await admin.from('broadcast_recipients').update({
             status: 'skipped',
             error_message: eligibility.eligible
@@ -169,7 +212,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
       const optedOut = (identityRows ?? []).some((lead) => Boolean(lead.opt_out));
       const paused = (identityRows ?? []).some((lead) => Boolean(lead.automation_paused) && lead.id === recipient.lead_id);
-      if (optedOut || paused) {
+      // Na transferencia, "automation_paused" significa Nara pausada, nao
+      // revogacao do consentimento da campanha comercial original.
+      if (optedOut || (paused && !broadcast.source_browser_campaign_id)) {
         await admin.from('broadcast_recipients').update({
           status: 'skipped',
           error_message: optedOut ? 'Número descadastrado.' : 'Automação pausada para este contato.',

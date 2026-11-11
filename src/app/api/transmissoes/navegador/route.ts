@@ -206,6 +206,15 @@ export async function PATCH(request: Request) {
   if (action === 'approve' && body.consentConfirmed !== true)
     return NextResponse.json({ error: 'Confirme a autorização dos contatos para receber esta comunicação.' }, { status: 400 });
   const admin = createAdminClient();
+  if (action === 'start') {
+    const { data: transferred, error: transferError } = await admin.from('broadcasts')
+      .select('id').eq('organization_id', context.organization.id)
+      .eq('source_browser_campaign_id', id).limit(1).maybeSingle();
+    if (transferError) return NextResponse.json({ error: transferError.message }, { status: 400 });
+    if (transferred) return NextResponse.json({
+      error: 'A fila desta campanha foi transferida para a API oficial. Para evitar duplicação, não é possível retomá-la no navegador.',
+    }, { status: 409 });
+  }
   const changes: Record<string, unknown> = { status: transition.to };
   if (action === 'approve') {
     changes.consent_confirmed_by = context.userId;
