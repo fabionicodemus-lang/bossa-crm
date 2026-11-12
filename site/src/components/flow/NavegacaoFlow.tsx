@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 const itens = [
   ["opcoes-flow", "Plantas"],
   ["the-roof", "Lazer"],
+  ["passeio-virtual-flow", "Passeio 3D"],
   ["vistas", "Alturas"],
   ["engenharia", "Engenharia"],
   ["construcao", "Ver a obra"],

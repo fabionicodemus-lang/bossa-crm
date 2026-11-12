@@ -25,6 +25,7 @@ import { VistaAndares } from "./VistaAndares";
 import { VideoAbertura } from "./Clientes";
 import { NavegacaoFlow } from "./NavegacaoFlow";
 import { GaleriaMove } from "./GaleriaMove";
+import { PasseioVirtualFlow } from "./PasseioVirtualFlow";
 import { VideoFlowModal } from "./VideoFlowModal";
 import { AlvenariaFlow } from "./AlvenariaFlow";
 import { MantaAcusticaFlow } from "./MantaAcusticaFlow";
@@ -431,6 +432,7 @@ export function FlowPagina({
               legenda="Áreas comuns do Flow Move. Amplie para consultar a distribuição."
             />
           </details>
+          <PasseioVirtualFlow />
           <p className="fl-nota">
             Os espaços de conveniência não representam promessa de serviços ou
             horários de operação.
