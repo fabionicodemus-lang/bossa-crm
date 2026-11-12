@@ -26,6 +26,7 @@ import { LinkWhatsApp } from "../LinkWhatsApp";
 import { LinkRastreado } from "../LinkRastreado";
 import { VideoAbertura, VideoVertical, VistaAlma } from "./Clientes";
 import { EspacoMidia, Exposicao, FotoAlma, PlantasAlma } from "./Experiencia";
+import { PasseioVirtualAlma } from "./PasseioVirtualAlma";
 
 const grupos = [
   {
@@ -88,6 +89,7 @@ const nav = [
   ["apartamentos", "Apartamentos"],
   ["plantas", "Plantas"],
   ["lazer", "Lazer"],
+  ["passeio-virtual-alma", "Passeio 3D"],
   ["localizacao", "Localização"],
   ["engenharia", "Engenharia"],
   ["obra", "Obra"],
@@ -586,6 +588,7 @@ export function AlmaPagina({
                 : "Salão de festas, Jantar Jardim, Pub View, Wine Bar, Fire Place, brinquedoteca Floresta Encantada e Lounge das Pedras."}
             </p>
           </details>
+          <PasseioVirtualAlma />
         </div>
       </section>
 
