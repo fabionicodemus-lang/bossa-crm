@@ -1068,8 +1068,8 @@ details[open] > summary .al-expandido {
 .al-vr .al-bt:hover { background: transparent; color: var(--cla); }
 .al-vr .al-vr-no-celular { display: none; }
 .al-vr-link-direto { color: var(--cla); font: 400 14px/1.5 var(--sans); text-underline-offset: 4px; }
-.al-vr-conteudo > .al-vr-instrucao { font-size: 14px; color: var(--txt-esc-2); }
-.al-vr-conteudo > .al-vr-aviso {
+.al-vr-conteudo > p.al-vr-instrucao { font-size: 14px; color: var(--txt-esc-2); }
+.al-vr-conteudo > p.al-vr-aviso {
   font-size: 12px;
   color: var(--txt-esc-2);
   border-top: 1px solid rgba(243, 240, 235, .25);
