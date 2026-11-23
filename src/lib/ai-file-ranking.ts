@@ -36,6 +36,32 @@ export function isCurrentBrokerPriceTable(file: AiFileOption, now = Date.now()):
   return from <= now && now <= until;
 }
 
+// Only take over a request consisting entirely of a named price list.
+// Additional questions, negotiations, negations and ambiguous editions stay with the model.
+export function requestedBrokerPriceTables(files: AiFileOption[], question: string, now = Date.now()): AiFileOption[] {
+  const text = normalize(question);
+  if (!/\btabelas?\b/.test(text)) return [];
+  const projects = ['flow', 'alma', 'soul'].filter((name) => text.split(' ').includes(name));
+  if (!projects.length) return [];
+  const editions = text.match(/\b(?:janeiro|fevereiro|marco|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro|20\d{2})\b/g) ?? [];
+  const otherWords = text
+    .replace(/\b(?:oi|ola|bom|boa|dia|tarde|noite|tudo|bem|sou|corretor[a]?|eu|por|favor|pfv|obrigad[oa]|teste|plantao)\b/g, ' ')
+    .replace(/\b(?:pode[m]?|poderia[m]?|tem|teria|quero|preciso|gostaria|mand[ae]m?|mandar|envi[ae]m?|enviar|compartilhar|receber|passar|me|para|mim)\b/g, ' ')
+    .replace(/\b(?:tabelas?|precos?|vendas?|valores|comercial|comerciais|vigentes?|atual|atualizada[s]?|pdf|flow|aptos|alma|seahouses|soul|residence|do|dos|da|das|de|em|a|as|o|os|um|uma|e)\b/g, ' ')
+    .split(' ').filter((word) => word && !editions.includes(word));
+  if (otherWords.length) return [];
+
+  const selected: AiFileOption[] = [];
+  for (const name of projects) {
+    const matches = files.filter((file) => isCurrentBrokerPriceTable(file, now)
+      && normalize(file.title).split(' ').includes(name)
+      && editions.every((part) => normalize(file.version_label ?? '').split(' ').includes(part)));
+    if (matches.length !== 1) return [];
+    selected.push(matches[0]);
+  }
+  return selected;
+}
+
 function fileTimestamp(file: RankedAiFile) {
   return new Date(file.updated_at || file.created_at || 0).getTime() || 0;
 }

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { handleMixedPlantaoConversation } from '../src/lib/whatsapp/plantaoMixedRouting.ts';
-import { isCurrentBrokerPriceTable } from '../src/lib/ai-file-ranking.ts';
+import { isCurrentBrokerPriceTable, requestedBrokerPriceTables } from '../src/lib/ai-file-ranking.ts';
 import { makeDb } from './nara-cadence/fakedb.mjs';
 import { sent } from './nara-cadence/stubs/cs.mjs';
 
@@ -67,6 +67,20 @@ for (const fields of [{ valid_until: null }, { version_label: ' ' }, { valid_fro
   { valid_from: '2026-12-01T03:00:00Z' }, { valid_until: '2026-11-01T03:00:00Z' }]) {
   assert.equal(isCurrentBrokerPriceTable({ ...november, ...fields }, testDate), false);
 }
+
+const catalog = ['Flow Aptos', 'Alma Seahouses'].map((name) => ({
+  ...november, id: name, title: 'Tabela de vendas · ' + name, version_label: 'Novembro 2026',
+}));
+const selectTables = (text, files = catalog) => requestedBrokerPriceTables(files, text, testDate).map((file) => file.id);
+assert.deepEqual(selectTables('Teste do plantão: sou corretor e gostaria da tabela do Flow'), ['Flow Aptos']);
+assert.deepEqual(selectTables('Sou corretor. Pode me enviar as tabelas em PDF de novembro do Flow Aptos e do Alma Seahouses?'),
+  ['Flow Aptos', 'Alma Seahouses']);
+for (const text of ['Não quero a tabela do Flow', 'Tabela do Flow e planta do duplex', 'Tabela de outubro do Flow',
+  'Me passa a tabela?', 'A tabela do Alma tem a unidade 2101?', 'Quanto custa a tabela do Flow?']) {
+  assert.deepEqual(selectTables(text), []);
+}
+assert.deepEqual(selectTables('Tabelas Flow e Alma', [catalog[0]]), []);
+assert.deepEqual(selectTables('Tabela Flow', [catalog[0], catalog[0]]), []);
 
 const manual = fixture('mixed_plantao', 'Estou apresentando para um cliente', {
   metadata: { contact_kind_manually_confirmed: 'geral' },
