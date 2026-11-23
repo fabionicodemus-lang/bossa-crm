@@ -5,6 +5,7 @@ import { financialNegotiationIntent } from '@/lib/nara-conversation-signals';
 import { applyNaraFinancialHandoff } from '@/lib/nara-sales-handoff';
 import { isAssistedSaleSignal, isBrokerRoutingSignal, isPostSaleRoutingSignal, isSupplierRoutingSignal } from '@/lib/nara-contact-routing';
 import { loadAiContext } from '@/lib/ai-context';
+import { rankAiFilesForConversation } from '@/lib/ai-file-ranking';
 import { recordAiUsage } from '@/lib/ai-usage';
 import { loadNaraDynamicTurnContext, loadNaraRuntimeVariables } from '@/lib/nara-dynamic-context';
 import { naraInbound24hEnabled } from '@/lib/nara-runtime-variables';
@@ -18,6 +19,7 @@ import { markNaraOfferAuditFailed, markNaraOfferAuditSent, prepareNaraOfferAudit
 import { aiCanReply } from '@/lib/hybrid';
 import { optOutSignal } from '@/lib/hybrid';
 import { whatsappCanStillReply, whatsappClaimAiTurn, whatsappMarkAiTurnSent } from '@/lib/whatsapp/aiTurnSafety';
+import { understandInboundMedia } from '@/lib/whatsapp/aiMediaUnderstanding';
 import { maybeScheduleAgendaFromAi, type AgendaAiResult } from '@/lib/agenda-ai';
 import { agendaActionFromText, appendAgendaMessageToReply, confirmedAgendaReply, hasNonAgendaQuestion, shouldHandleAgendaTurn } from '@/lib/nara-agenda-intent';
 import { mergeMetaAdAttribution } from '@/lib/meta-ad-attribution';
@@ -479,7 +481,7 @@ export async function processConversation(args: {
 
   const { data: source, error: sourceError } = await args.admin
     .from('messages')
-    .select('id,created_at,body')
+    .select('id,created_at,body,whatsapp_channel_id,raw_payload')
     .eq('id', args.sourceMessageId)
     .maybeSingle();
   if (sourceError || !source) {
@@ -577,16 +579,23 @@ export async function processConversation(args: {
     .select('id,direction,sender_kind,body,created_at')
     .eq('lead_id', lead.id)
     .neq('direction', 'system');
+  const brokerConversation = args.channel.role === 'corretor' && lead.kind === 'corretor';
+  if (brokerConversation) {
+    historyQuery = historyQuery.eq('whatsapp_conversation_id', args.conversation.id);
+  }
   const resetAt = typeof lead.metadata?.nara_reset_at === 'string'
     ? String(lead.metadata.nara_reset_at)
     : '';
   if (resetAt) historyQuery = historyQuery.gte('created_at', resetAt);
-  const { data: historyRows } = await historyQuery
-    .order('created_at', { ascending: true })
+  const { data: historyRows, error: historyError } = await historyQuery
+    .order('created_at', { ascending: !brokerConversation })
+    .order('id', { ascending: !brokerConversation })
     .limit(100);
+  if (historyError) throw historyError;
   if (resetAt && source.created_at < resetAt) return;
 
   const mergedHistoryRows = [...(historyRows ?? [])];
+  if (brokerConversation) mergedHistoryRows.reverse();
   if (recentBroadcast && !mergedHistoryRows.some((row) => String(row.id) === recentBroadcast.id)) {
     mergedHistoryRows.push({
       id: recentBroadcast.id,
@@ -660,6 +669,14 @@ export async function processConversation(args: {
   });
   if (!claimed) return;
 
+  if (brokerConversation && source.raw_payload?.type === 'audio') {
+    const sourceIndex = mergedHistoryRows.findIndex((row) => row.id === source.id);
+    if (sourceIndex >= 0) {
+      const transcript = await understandInboundMedia({ admin: args.admin, organizationId: args.channel.organization_id, row: source });
+      if (transcript) history[sourceIndex].content = transcript.replace(/^Áudio transcrito:\s*/, '');
+    }
+  }
+
   if (lead.kind === 'cliente') {
     const [commercial, dynamic] = await Promise.all([
       loadNaraCommercialTurnContext(
@@ -689,6 +706,11 @@ export async function processConversation(args: {
     context.dynamic = dynamic;
     context.foreign = foreign;
     context.operational = operational;
+  } else if (brokerConversation) {
+    context.commercial = await loadNaraCommercialTurnContext(
+      args.admin, args.channel.organization_id, lead, history,
+    );
+    context.files = rankAiFilesForConversation(context.files, history, lead, 60);
   }
 
   let turn;
@@ -882,6 +904,11 @@ export async function processConversation(args: {
 
   // Re-read prices immediately before sending. Never authorize an offer using the
   // draft, prior messages, supervisor examples or the earlier lookup alone.
+  if (brokerConversation && naraReplyNeedsCommercialProtection(reply)
+    && (context.commercial || /R\$\s*\d/i.test(reply))) {
+    context.commercial = await loadNaraCommercialTurnContext(args.admin, args.channel.organization_id, lead, history);
+    reply = protectNaraCommercialReply(reply, history, context.commercial, { enterprise: lead.enterprise }).reply;
+  }
   if (lead.kind === 'cliente' && naraReplyNeedsCommercialProtection(reply, history)) {
     context.commercial = await loadNaraCommercialTurnContext(
       args.admin, args.channel.organization_id, lead, history,
@@ -1071,7 +1098,8 @@ async function findOrCreateLead(args: {
   receivedAt: string;
   referral?: MetaWebhookMessage['referral'];
 }) {
-  const expectedKind: LeadKind = args.channel.role === 'cliente' ? 'cliente' : 'geral';
+  const expectedKind: LeadKind = args.channel.role === 'cliente' ? 'cliente'
+    : args.channel.routing_mode === 'direct_role' ? 'corretor' : 'geral';
 
   const { data: matches, error: readError } = await args.admin
     .from('leads')
@@ -1109,7 +1137,7 @@ async function findOrCreateLead(args: {
       phone: args.waId,
       stage: 'novo_triagem',
       source: attribution.sourceLabel || 'WhatsApp',
-      company: null,
+      company: kind === 'corretor' ? 'Não informada' : null,
       temperature: 0,
       ai_enabled: kind !== 'geral',
       automation_paused: kind === 'geral',
@@ -1433,7 +1461,9 @@ export async function processWebhookEvent(eventId: string, knownPhoneNumberId?: 
         });
       } catch (aiError) {
         console.error('[whatsapp ai turn]', event.id, inbound.leadId, aiError);
-        aiErrors.push(aiError instanceof Error ? aiError.message : 'Falha desconhecida na resposta da IA.');
+        aiErrors.push(aiError && typeof aiError === 'object' && 'message' in aiError
+          ? String(aiError.message)
+          : 'Falha desconhecida na resposta da IA.');
       }
     }
 

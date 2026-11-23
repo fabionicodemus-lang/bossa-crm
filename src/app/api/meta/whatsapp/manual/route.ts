@@ -42,6 +42,7 @@ function publicChannel(channel: WhatsAppChannelRecord) {
     role: channel.role,
     routing_mode: channel.routing_mode,
     provider: channel.provider,
+    connection_mode: channel.connection_mode,
     business_id: channel.business_id,
     waba_id: channel.waba_id,
     phone_number_id: channel.phone_number_id,

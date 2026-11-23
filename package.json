@@ -45,7 +45,7 @@
     "test:whatsapp-recipient-send": "node --experimental-strip-types --experimental-loader ./scripts/ts-extension-loader.mjs scripts/check-whatsapp-recipient-send.mjs",
     "test:nara-broadcast": "node --experimental-strip-types --experimental-loader ./scripts/ts-extension-loader.mjs scripts/check-nara-broadcast-response.mjs",
     "test:lead-supervision": "node --experimental-strip-types --experimental-loader ./scripts/ts-extension-loader.mjs scripts/check-lead-supervision.mjs",
-    "test:client-broker-transfer": "node --experimental-strip-types --experimental-loader ./scripts/ts-extension-loader.mjs scripts/check-client-broker-transfer.mjs",
+    "test:client-broker-transfer": "node --experimental-strip-types --experimental-loader ./scripts/ts-extension-loader.mjs scripts/check-client-broker-transfer.mjs && node --experimental-strip-types --experimental-loader ./scripts/nara-cadence/loader.mjs scripts/check-plantao-channels.mjs",
     "test:nara-round3": "node --experimental-strip-types --experimental-loader ./scripts/ts-extension-loader.mjs scripts/check-nara-round3.mjs",
     "test:nara-round4": "node --experimental-strip-types --experimental-loader ./scripts/ts-extension-loader.mjs scripts/check-nara-round4.mjs",
     "test:hoje-ui": "node --experimental-strip-types scripts/ui/check-hoje-model.mjs",
