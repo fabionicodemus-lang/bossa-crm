@@ -1,4 +1,5 @@
 "use client";
+import { MapaPereque } from "@/components/MapaPereque";
 import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useRef, useState, type ReactNode } from "react";
@@ -603,6 +604,7 @@ export function AlmaPagina({
             evento="view_location"
             detalhe={{ empreendimento: e.slug }}
           >
+            <MapaPereque />
             <div className="al-local-trajeto">
               <div className="al-pilha">
                 <p className="al-p">

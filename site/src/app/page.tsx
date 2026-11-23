@@ -1,3 +1,4 @@
+import { MapaPereque } from "@/components/MapaPereque";
 import Image from "next/image";
 import Link from "next/link";
 import { alma, flow, soul, jazz } from "@/content/empreendimentos";
@@ -220,6 +221,7 @@ export default function Home() {
             <ul className="lista-dados">{distanciasHome.map(([a, b]) => <li key={a}><span>{a}</span><span>{b}</span></li>)}</ul>
           </div>
         </div>
+        <div className="wrap"><MapaPereque /></div>
       </AoVer>
 
       {/* Fechamento */}

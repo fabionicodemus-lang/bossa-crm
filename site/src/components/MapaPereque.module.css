@@ -1,0 +1,25 @@
+.mapa {
+  width: 100%;
+  min-width: 0;
+  margin: clamp(24px, 4vw, 48px) 0;
+  scroll-margin-top: 80px;
+}
+.cabecalho {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 24px;
+  align-items: end;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+.cabecalho h3 { margin: 0 0 6px; font-size: clamp(24px, 3vw, 36px); line-height: 1.15; }
+.cabecalho p { margin: 0; max-width: 62ch; }
+.cabecalho a { color: inherit; padding: 8px 0; text-decoration: underline; text-underline-offset: 4px; }
+.mapa iframe {
+  display: block;
+  width: 100%;
+  height: clamp(550px, 80svh, 850px);
+  border: 1px solid #c7d5cf;
+  border-radius: 14px;
+  background: #9ccbc8;
+}
