@@ -43,7 +43,7 @@ export function requestedBrokerPriceTables(files: AiFileOption[], question: stri
   if (!/\btabelas?\b/.test(text)) return [];
   const projects = ['flow', 'alma', 'soul'].filter((name) => text.split(' ').includes(name));
   if (!projects.length) return [];
-  const editions = text.match(/\b(?:janeiro|fevereiro|marco|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro|20\d{2})\b/g) ?? [];
+  const editions: string[] = text.match(/\b(?:janeiro|fevereiro|marco|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro|20\d{2})\b/g) ?? [];
   const otherWords = text
     .replace(/\b(?:oi|ola|bom|boa|dia|tarde|noite|tudo|bem|sou|corretor[a]?|eu|por|favor|pfv|obrigad[oa]|teste|plantao)\b/g, ' ')
     .replace(/\b(?:pode[m]?|poderia[m]?|tem|teria|quero|preciso|gostaria|mand[ae]m?|mandar|envi[ae]m?|enviar|compartilhar|receber|passar|me|para|mim)\b/g, ' ')
