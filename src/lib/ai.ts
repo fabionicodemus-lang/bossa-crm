@@ -1,4 +1,4 @@
-import { isCurrentBrokerPriceTable } from './ai-file-ranking';
+import { isCurrentBrokerPriceTable, requestedBrokerPriceTables } from './ai-file-ranking';
 import { extractNaraPrompt } from './nara-prompt-config';
 import { buildNaraConversationInstructions, NARA_CONVERSATION_POLICY, NARA_COMMERCIAL_SAFETY_POLICY } from './nara-conversation-policy';
 import { protectNaraCommercialReply, naraReplyNeedsCommercialProtection } from './nara-commercial-guard';
@@ -1389,6 +1389,19 @@ export async function generateAiTurn(
     const finalTurn = lead.kind === 'cliente' && !context.supervisor_instruction?.trim()
       ? enforceNaraTriage(parsed, lead, effectiveHistory, context)
       : parsed;
+    if (lead.kind === 'corretor' && !lead.opt_out && !finalTurn.handoff && !context.supervisor_instruction?.trim()) {
+      const question = history.at(-1);
+      const tables = question?.role === 'user'
+        ? requestedBrokerPriceTables(context.files ?? [], question.content)
+        : [];
+      if (tables.length) {
+        finalTurn.attachment_ids = tables.map((file) => file.id);
+        const greeting = history.some((message) => message.role === 'assistant') ? '' : 'Olá! Aqui é o Plantão da Bossa. ';
+        finalTurn.reply = greeting + (tables.length === 1
+          ? 'Segue a tabela solicitada em PDF.'
+          : 'Seguem as tabelas solicitadas em PDF.');
+      }
+    }
     finalTurn.usage_records = usageRecords;
     finalTurn.model_used = result.usage.model;
     finalTurn.compacted = compacted;
