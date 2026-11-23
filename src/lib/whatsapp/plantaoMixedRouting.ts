@@ -110,6 +110,15 @@ async function sendRoutingText(args: {
   }).eq('id', args.lead.id);
 }
 
+async function recentRoutingReply(admin: AdminClient, conversationId: string, reasons: string[]) {
+  const { data, error } = await admin.from('whatsapp_messages').select('id')
+    .eq('conversation_id', conversationId).eq('direction', 'out').eq('sender_kind', 'ia')
+    .in('payload->>routing_reason', reasons).in('status', ['sent', 'delivered', 'read'])
+    .gte('sent_at', new Date(Date.now() - 24 * 60 * 60_000).toISOString()).limit(1).maybeSingle();
+  if (error) throw error;
+  return Boolean(data);
+}
+
 async function ensureHumanTask(args: {
   admin: AdminClient;
   lead: Lead;
@@ -268,35 +277,26 @@ async function handleGeneral(args: {
     return { handled: false, promotedToBroker: true };
   }
 
-  if (operationalReason || isBrokerNo(text, awaiting)) {
-    const { error } = await args.admin.from('leads').update({
-      stage: 'humano_ativo',
-      ai_enabled: false,
-      automation_paused: true,
-      owner_mode: 'human',
-      priority_class: null,
-      metadata: {
-        ...metadata,
-        plantao_triage_status: operationalReason ? 'operational_non_broker' : 'not_broker',
-        plantao_triage_answer: text,
-        plantao_triage_reason: operationalReason || null,
-        plantao_triage_classified_at: now,
-        plantao_non_broker_ack_at: isRecent(metadata.plantao_non_broker_ack_at, 24)
-          ? metadata.plantao_non_broker_ack_at
-          : now,
-      },
-      updated_at: now,
-    }).eq('id', args.lead.id);
-    if (error) throw error;
-    if (!isRecent(metadata.plantao_non_broker_ack_at, 24)) {
-      await sendRoutingText({
-        admin: args.admin,
-        channel: args.channel,
-        conversation: args.conversation,
-        lead: args.lead,
-        text: NON_BROKER_REPLY,
-        reason: 'general_not_broker',
-      });
+  const previousNonBroker = metadata.plantao_triage_status === 'not_broker'
+    || metadata.plantao_triage_status === 'operational_non_broker';
+  if (previousNonBroker || operationalReason || isBrokerNo(text, awaiting)) {
+    if (!previousNonBroker) {
+      const { error } = await args.admin.from('leads').update({
+        stage: 'humano_ativo',
+        ai_enabled: false,
+        automation_paused: true,
+        owner_mode: 'human',
+        priority_class: null,
+        metadata: {
+          ...metadata,
+          plantao_triage_status: operationalReason ? 'operational_non_broker' : 'not_broker',
+          plantao_triage_answer: text,
+          plantao_triage_reason: operationalReason || null,
+          plantao_triage_classified_at: now,
+        },
+        updated_at: now,
+      }).eq('id', args.lead.id).eq('kind', 'geral');
+      if (error) throw error;
     }
     await ensureHumanTask({
       admin: args.admin,
@@ -307,18 +307,25 @@ async function handleGeneral(args: {
         : 'O contato informou que não é corretor. Verificar se é cliente, fornecedor, prestador ou outro contato e classificar manualmente se necessário.',
       dedupeKey: 'plantao:geral:retorno',
     });
+    if (!await recentRoutingReply(args.admin, args.conversation.id, ['general_not_broker'])) {
+      const turn = { admin: args.admin, leadId: args.lead.id, conversationId: args.conversation.id, sourceId: args.sourceMessageId };
+      if (!await whatsappClaimAiTurn(turn)) return { handled: true };
+      await sendRoutingText({
+        admin: args.admin,
+        channel: args.channel,
+        conversation: args.conversation,
+        lead: args.lead,
+        text: NON_BROKER_REPLY,
+        reason: 'general_not_broker',
+      });
+      await whatsappMarkAiTurnSent(turn);
+    }
     return { handled: true };
   }
 
   if (awaiting && isRecent(metadata.plantao_broker_question_sent_at, 24)) {
     // Versões anteriores marcavam a pergunta antes do envio, inclusive quando a Meta o recusava.
-    const { data: sent, error } = await args.admin.from('whatsapp_messages').select('id')
-      .eq('conversation_id', args.conversation.id).eq('direction', 'out').eq('sender_kind', 'ia')
-      .in('payload->>routing_reason', ['broker_question_first', 'broker_question_repeat'])
-      .in('status', ['sent', 'delivered', 'read'])
-      .gte('sent_at', new Date(Date.now() - 24 * 60 * 60_000).toISOString()).limit(1).maybeSingle();
-    if (error) throw error;
-    if (sent) {
+    if (await recentRoutingReply(args.admin, args.conversation.id, ['broker_question_first', 'broker_question_repeat'])) {
       await ensureHumanTask({
         admin: args.admin, lead: args.lead,
         title: 'Conferir pedido recebido no Plantão',

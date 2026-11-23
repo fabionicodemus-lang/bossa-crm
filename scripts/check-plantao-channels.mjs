@@ -28,6 +28,15 @@ function fixture(mode, body, { kind = 'geral', active = true, metadata = {} } = 
 for (const mode of ['mixed_plantao', 'direct_role']) {
   const known = fixture(mode, 'Me envia a tabela do Flow?', { kind: 'corretor' });
   assert.equal((await known.run()).handled, false);
+  const general = fixture(mode, 'Não sou!', { metadata: { plantao_triage_status: 'awaiting_broker_answer' } });
+  await general.run();
+  assert.equal(general.tables.leads[0].metadata.plantao_triage_status, 'not_broker');
+  general.tables.whatsapp_messages[0]['payload->>routing_reason'] = 'general_not_broker';
+  general.tables.messages[0].body = 'Minha ideia seria uma permuta de um imóvel.';
+  await general.run();
+  assert.equal(sent.length, 1);
+  assert.equal(general.tables.lead_tasks.length, 1);
+  assert.equal(general.tables.leads[0].metadata.plantao_triage_answer, 'Não sou!');
   const off = fixture(mode, 'Quero a planta do duplex', { kind: 'corretor', active: false });
   assert.equal((await off.run()).handled, true);
   assert.equal(sent.length, 0);
