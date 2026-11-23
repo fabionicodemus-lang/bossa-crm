@@ -192,7 +192,7 @@ async function loadFiles(supabase: Awaited<ReturnType<typeof createClient>>, org
   const now = new Date().toISOString();
   const { data, error } = await supabase
     .from('ai_files')
-    .select('id,category,title,description,trigger_keywords,storage_bucket,storage_path,original_name,mime_type,valid_from,valid_until,content_group,created_at,updated_at')
+    .select('id,category,title,description,trigger_keywords,storage_bucket,storage_path,original_name,mime_type,valid_from,valid_until,version_label,content_group,created_at,updated_at')
     .eq('organization_id', organizationId)
     .eq('active', true)
     .in('agent', [agent, 'both'])
