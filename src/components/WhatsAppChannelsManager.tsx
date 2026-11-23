@@ -235,6 +235,10 @@ export function WhatsAppChannelsManager({
   const currentMonth = monthlyCounts[0]?.month
     ? new Date(monthlyCounts[0].month).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
     : null;
+  const slots = (['cliente', 'corretor'] as const).flatMap((role) => {
+    const matches = channels.filter((item) => item.role === role);
+    return (matches.length ? matches : [null]).map((channel) => ({ role, channel }));
+  });
 
   return <>
     {migrationPending && <div className="error-box" style={{ marginBottom: 14 }}>
@@ -242,13 +246,13 @@ export function WhatsAppChannelsManager({
     </div>}
 
     <div className="info-box" style={{ marginBottom: 14 }}>
-      <strong>Desenvolvedor Direto · Cloud API.</strong> Os dois números são próprios da Bossa, usam uma WABA, um aplicativo Meta e token de Usuário do Sistema. O atendimento ocorre pelo CRM; não há Cadastro Incorporado, BSP ou Coexistência nesta fase.
+      Teste a credencial de cada número diretamente na Meta.
     </div>
 
     <div className="grid grid-2">
-      {(['cliente', 'corretor'] as const).map((role) => {
-        const channel = channels.find((item) => item.role === role);
-        return <section className="card" key={role}>
+      {slots.map(({ role, channel }) => {
+        const manualConfiguration = channel?.connection_mode !== 'coexistence' || Boolean(channel.legacy_connection_id);
+        return <section className="card" key={channel?.id ?? role}>
           <div className="card-head">
             <div>
               <h3>{roleTitle(role)}</h3>
@@ -273,8 +277,8 @@ export function WhatsAppChannelsManager({
                 <button className="btn btn-ghost btn-sm" disabled={Boolean(loading) || migrationPending} onClick={() => void testSaved(channel)}>
                   {loading === `test-${channel.id}` ? 'Testando…' : 'Testar conexão'}
                 </button>
-                <button className="btn btn-ghost btn-sm" disabled={Boolean(loading) || migrationPending} onClick={() => openForm(role, channel)}>Editar credenciais</button>
-                {channel.status !== 'connected' && <button className="btn btn-primary btn-sm" disabled={Boolean(loading) || migrationPending} onClick={() => { setRegisterChannelId(channel.id); setPin(''); setError(''); setSuccess(''); }}>
+                {manualConfiguration && <button className="btn btn-ghost btn-sm" disabled={Boolean(loading) || migrationPending} onClick={() => openForm(role, channel)}>Editar credenciais</button>}
+                {manualConfiguration && channel.status !== 'connected' && <button className="btn btn-primary btn-sm" disabled={Boolean(loading) || migrationPending} onClick={() => { setRegisterChannelId(channel.id); setPin(''); setError(''); setSuccess(''); }}>
                   Registrar número
                 </button>}
               </div>
@@ -285,7 +289,7 @@ export function WhatsAppChannelsManager({
     </div>
 
     <div className="info-box" style={{ marginTop: 14 }}>
-      <strong>Limite compartilhado.</strong> O campo <span className="mono">whatsapp_business_manager_messaging_limit</span> é calculado no nível do portfólio da Meta. Os dois números consomem o mesmo limite; um número pode utilizar a capacidade disponível para ambos.
+      O limite de envio é informado pela Meta para o portfólio empresarial.
     </div>
 
     {formOpen && <section className="card" style={{ marginTop: 14 }}>

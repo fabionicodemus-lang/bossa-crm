@@ -6,6 +6,7 @@ import { loadNaraForeignContext } from '@/lib/nara-exterior';
 import { loadNaraOperationalContext } from '@/lib/nara-operations';
 import { deriveHybridDecision } from '@/lib/hybrid';
 import { loadNaraCommercialTurnContext } from '@/lib/nara-unit-queries';
+import { rankAiFilesForConversation } from '@/lib/ai-file-ranking';
 import { countReplyWords, naraCommercialDiagnostics } from '@/lib/nara-simulator-diagnostics';
 import { archiveNaraPromptVersion, getNaraPromptVersion, loadNaraPromptVersions } from '@/lib/nara-prompt-versions';
 import {
@@ -188,14 +189,17 @@ async function loadExamples(supabase: Awaited<ReturnType<typeof createClient>>, 
 }
 
 async function loadFiles(supabase: Awaited<ReturnType<typeof createClient>>, organizationId: string, agent: Agent) {
+  const now = new Date().toISOString();
   const { data, error } = await supabase
     .from('ai_files')
-    .select('id,category,title,description,trigger_keywords,storage_bucket,storage_path,original_name,mime_type')
+    .select('id,category,title,description,trigger_keywords,storage_bucket,storage_path,original_name,mime_type,valid_from,valid_until,content_group,created_at,updated_at')
     .eq('organization_id', organizationId)
     .eq('active', true)
     .in('agent', [agent, 'both'])
-    .order('created_at', { ascending: false })
-    .limit(80);
+    .or(`valid_from.is.null,valid_from.lte.${now}`)
+    .or(`valid_until.is.null,valid_until.gte.${now}`)
+    .order('updated_at', { ascending: false })
+    .limit(200);
   if (error) throw error;
   return (data ?? []) as AiFileOption[];
 }
@@ -501,6 +505,11 @@ export async function POST(request: Request) {
       aiContext.dynamic = dynamic;
       aiContext.foreign = foreign;
       aiContext.operational = operational;
+    } else {
+      aiContext.commercial = await loadNaraCommercialTurnContext(
+        context.supabase, context.organizationId, lead, messages,
+      );
+      aiContext.files = rankAiFilesForConversation(aiContext.files, messages, lead, 60);
     }
     const turn = await generateAiTurn(lead, messages, aiContext);
     if (!turn) {

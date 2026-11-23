@@ -4,6 +4,8 @@ import { isBrokerRoutingSignal, normalizeNaraRoutingText } from '@/lib/nara-cont
 import { channelAccess, type WhatsAppChannelRecord, type WhatsAppConversationRecord } from '@/lib/whatsapp/channelService';
 import { clearlyOperationalNonBrokerReason } from '@/lib/whatsapp/contactKindAutoRouting';
 import { plantaoCanReplyNow } from '@/lib/whatsapp/plantaoSchedule';
+import { whatsappClaimAiTurn, whatsappMarkAiTurnSent } from '@/lib/whatsapp/aiTurnSafety';
+import { understandInboundMedia } from '@/lib/whatsapp/aiMediaUnderstanding';
 import { normalizeWaId } from '@/lib/whatsapp/utils';
 
 type AdminClient = SupabaseClient;
@@ -27,9 +29,11 @@ function isRecent(value: unknown, hours: number) {
 }
 
 function isBrokerYes(value: string, awaitingAnswer: boolean) {
-  if (isBrokerRoutingSignal(value)) return true;
-  if (!awaitingAnswer) return false;
   const text = normalizeNaraRoutingText(value);
+  if (isBrokerNo(text, awaitingAnswer)) return false;
+  if (isBrokerRoutingSignal(value)) return true;
+  if (/\b(?:apresentando|mostrando|oferecendo)\s+(?:(?:o|a|esse|essa|este|esta|um|uma)\s+(?:imovel|apartamento|duplex|empreendimento|unidade)\s+)?(?:pra|para|a)\s+(?:(?:um|uma|meu|minha)\s+)?cliente\b/.test(text)) return true;
+  if (!awaitingAnswer) return false;
   return /^(?:sim|s|sou|corretor|corretora|sim sou|sou sim|sou corretor|sou corretora|isso|isso mesmo|positivo|yes)\b/.test(text);
 }
 
@@ -86,7 +90,7 @@ async function sendRoutingText(args: {
   const { error: messageError } = await args.admin.from('messages').insert({
     organization_id: args.channel.organization_id,
     lead_id: args.lead.id,
-    whatsapp_connection_id: args.channel.legacy_connection_id ?? args.channel.id,
+    whatsapp_connection_id: args.channel.legacy_connection_id,
     whatsapp_channel_id: args.channel.id,
     whatsapp_conversation_id: args.conversation.id,
     direction: 'out',
@@ -195,11 +199,12 @@ async function handleGeneral(args: {
   lead: Lead;
   sourceMessageId: string;
 }): Promise<RoutingResult> {
-  const { data: sourceMessage } = await args.admin.from('messages')
-    .select('body')
+  const { data: sourceMessage, error: sourceError } = await args.admin.from('messages')
+    .select('id,body,whatsapp_channel_id,raw_payload')
     .eq('id', args.sourceMessageId)
     .maybeSingle();
-  const text = String(sourceMessage?.body || '').trim();
+  if (sourceError) throw sourceError;
+  let text = String(sourceMessage?.body || '').trim();
   const metadata = metadataOf(args.lead);
   const awaiting = metadata.plantao_triage_status === 'awaiting_broker_answer';
   const now = new Date().toISOString();
@@ -225,6 +230,11 @@ async function handleGeneral(args: {
     ? String(cleanup.reason || 'Contato já classificado como Geral')
     : '';
   const operationalReason = autoOperationalReason || cleanupReason || clearlyOperationalNonBrokerReason(text) || '';
+
+  if (sourceMessage?.raw_payload?.type === 'audio' && !operationalReason) {
+    const transcript = await understandInboundMedia({ admin: args.admin, organizationId: args.channel.organization_id, row: sourceMessage });
+    if (transcript) text = transcript.replace(/^Áudio transcrito:\s*/, '');
+  }
 
   if (isBrokerYes(text, awaiting)) {
     const { error } = await args.admin.from('leads').update({
@@ -300,7 +310,36 @@ async function handleGeneral(args: {
     return { handled: true };
   }
 
-  await args.admin.from('leads').update({
+  if (awaiting && isRecent(metadata.plantao_broker_question_sent_at, 24)) {
+    // Versões anteriores marcavam a pergunta antes do envio, inclusive quando a Meta o recusava.
+    const { data: sent, error } = await args.admin.from('whatsapp_messages').select('id')
+      .eq('conversation_id', args.conversation.id).eq('direction', 'out').eq('sender_kind', 'ia')
+      .in('payload->>routing_reason', ['broker_question_first', 'broker_question_repeat'])
+      .in('status', ['sent', 'delivered', 'read'])
+      .gte('sent_at', new Date(Date.now() - 24 * 60 * 60_000).toISOString()).limit(1).maybeSingle();
+    if (error) throw error;
+    if (sent) {
+      await ensureHumanTask({
+        admin: args.admin, lead: args.lead,
+        title: 'Conferir pedido recebido no Plantão',
+        description: 'O contato escreveu de novo sem confirmar o perfil. Consulte a conversa para responder ao pedido.',
+        dedupeKey: 'plantao:geral:triagem',
+      });
+      return { handled: true };
+    }
+  }
+  const turn = { admin: args.admin, leadId: args.lead.id, conversationId: args.conversation.id, sourceId: args.sourceMessageId };
+  if (!await whatsappClaimAiTurn(turn)) return { handled: true };
+  await sendRoutingText({
+    admin: args.admin,
+    channel: args.channel,
+    conversation: args.conversation,
+    lead: args.lead,
+    text: BROKER_QUESTION,
+    reason: awaiting ? 'broker_question_repeat' : 'broker_question_first',
+  });
+  await whatsappMarkAiTurnSent(turn);
+  const { error: triageError } = await args.admin.from('leads').update({
     ai_enabled: false,
     automation_paused: true,
     owner_mode: 'human',
@@ -310,15 +349,8 @@ async function handleGeneral(args: {
       plantao_broker_question_sent_at: now,
     },
     updated_at: now,
-  }).eq('id', args.lead.id);
-  await sendRoutingText({
-    admin: args.admin,
-    channel: args.channel,
-    conversation: args.conversation,
-    lead: args.lead,
-    text: BROKER_QUESTION,
-    reason: awaiting ? 'broker_question_repeat' : 'broker_question_first',
-  });
+  }).eq('id', args.lead.id).eq('kind', 'geral');
+  if (triageError) throw triageError;
   return { handled: true };
 }
 
@@ -339,11 +371,9 @@ export async function handleMixedPlantaoConversation(args: {
   if (args.channel.role !== 'corretor') {
     return { handled: false };
   }
-  if (args.channel.routing_mode === 'direct_role' && args.lead.kind !== 'geral') {
-    return { handled: false };
-  }
   const activeNow = await plantaoCanReplyNow(args.admin, args.channel.organization_id);
   if (!activeNow) return { handled: true };
+  if (args.channel.routing_mode === 'direct_role' && args.lead.kind !== 'geral') return { handled: false };
   if (args.lead.kind === 'cliente') return handleKnownCustomer(args);
   if (args.lead.kind === 'geral') return handleGeneral(args);
   return { handled: false };
