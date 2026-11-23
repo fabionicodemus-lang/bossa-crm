@@ -1,3 +1,4 @@
+import { MapaPereque } from "@/components/MapaPereque";
 import Image from "next/image";
 import Link from "next/link";
 import { meta } from "@/lib/seo";
@@ -20,6 +21,7 @@ export default function PortoBelo() {
           <p className="rotulo">A região</p>
           <h1 className="h1" style={{ maxWidth: 1100 }}>Porto Belo e Itapema. Duas cidades, uma ponte, a mesma avenida.</h1>
           <p className="lead">O Balneário Perequê, em Porto Belo, fica do outro lado do Rio Perequê em relação à Meia Praia, em Itapema. Os dois entregues da Bossa ficam em Itapema; as duas obras de hoje, no Perequê, a cerca de 5 km pela mesma avenida.</p>
+          <MapaPereque />
         </div>
       </section>
       <div className="abertura-foto" style={{ height: "min(60vh, 560px)" }}><Image src="/img/flow-rooftop.jpg" alt="Vista do Balneário Perequê a partir do rooftop do Flow Aptos (render)" fill sizes="100vw" /></div>

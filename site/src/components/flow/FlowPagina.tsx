@@ -1,4 +1,5 @@
 "use client";
+import { MapaPereque } from "@/components/MapaPereque";
 import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
@@ -618,6 +619,7 @@ export function FlowPagina({
               Conheça o endereço, os ambientes do edifício e a posição do
               apartamento para decidir o que faz mais sentido para a sua rotina.
             </p>
+            <MapaPereque />
             <FotoFlow
               src={`${I}/localizacao-aereo.jpg`}
               alt="Imagem aérea do entorno do Flow Aptos no Balneário Perequê"
