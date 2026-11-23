@@ -5,7 +5,7 @@ import { financialNegotiationIntent } from '@/lib/nara-conversation-signals';
 import { applyNaraFinancialHandoff } from '@/lib/nara-sales-handoff';
 import { isAssistedSaleSignal, isBrokerRoutingSignal, isPostSaleRoutingSignal, isSupplierRoutingSignal } from '@/lib/nara-contact-routing';
 import { loadAiContext } from '@/lib/ai-context';
-import { rankAiFilesForConversation } from '@/lib/ai-file-ranking';
+import { isCurrentBrokerPriceTable, rankAiFilesForConversation } from '@/lib/ai-file-ranking';
 import { recordAiUsage } from '@/lib/ai-usage';
 import { loadNaraDynamicTurnContext, loadNaraRuntimeVariables } from '@/lib/nara-dynamic-context';
 import { naraInbound24hEnabled } from '@/lib/nara-runtime-variables';
@@ -307,6 +307,9 @@ async function sendSelectedFiles(args: {
 
   for (const file of selected) {
     try {
+      if (args.lead.kind === 'corretor' && file.category === 'tabela' && !isCurrentBrokerPriceTable(file)) {
+        throw new Error('A edição da tabela deixou de estar vigente antes do envio.');
+      }
       const { data: signed, error: signedError } = await args.admin.storage
         .from(file.storage_bucket)
         .createSignedUrl(file.storage_path, 3600);

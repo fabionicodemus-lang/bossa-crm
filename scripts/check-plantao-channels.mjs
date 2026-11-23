@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { handleMixedPlantaoConversation } from '../src/lib/whatsapp/plantaoMixedRouting.ts';
+import { isCurrentBrokerPriceTable } from '../src/lib/ai-file-ranking.ts';
 import { makeDb } from './nara-cadence/fakedb.mjs';
 import { sent } from './nara-cadence/stubs/cs.mjs';
 
@@ -48,6 +49,14 @@ for (const mode of ['mixed_plantao', 'direct_role']) {
   assert.equal(result.promotedToBroker, true);
   assert.equal(triage.tables.leads[0].kind, 'corretor');
   assert.equal(sent.length, 1);
+}
+
+const november = { category: 'tabela', version_label: 'Novembro', valid_from: '2026-11-01T03:00:00Z', valid_until: '2026-12-01T02:59:59Z' };
+const testDate = Date.parse('2026-11-23T22:00:00Z');
+assert.equal(isCurrentBrokerPriceTable(november, testDate), true);
+for (const fields of [{ valid_until: null }, { version_label: ' ' }, { valid_from: 'invalid' },
+  { valid_from: '2026-12-01T03:00:00Z' }, { valid_until: '2026-11-01T03:00:00Z' }]) {
+  assert.equal(isCurrentBrokerPriceTable({ ...november, ...fields }, testDate), false);
 }
 
 const manual = fixture('mixed_plantao', 'Estou apresentando para um cliente', {

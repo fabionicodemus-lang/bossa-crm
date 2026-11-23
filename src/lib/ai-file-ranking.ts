@@ -28,6 +28,14 @@ function isCurrentlyValid(file: RankedAiFile, now = Date.now()) {
   return true;
 }
 
+/** The broker catalog identifies the current commercial edition by version and validity. */
+export function isCurrentBrokerPriceTable(file: AiFileOption, now = Date.now()): boolean {
+  if (file.category !== 'tabela' || !file.version_label?.trim() || !file.valid_until) return false;
+  const until = Date.parse(file.valid_until);
+  const from = file.valid_from ? Date.parse(file.valid_from) : Number.NEGATIVE_INFINITY;
+  return from <= now && now <= until;
+}
+
 function fileTimestamp(file: RankedAiFile) {
   return new Date(file.updated_at || file.created_at || 0).getTime() || 0;
 }
@@ -41,7 +49,7 @@ function groupKey(file: RankedAiFile) {
 function categoryIntentScore(category: string, corpus: string) {
   const value = normalize(corpus);
   const rules: Array<[RegExp, string[], number]> = [
-    [/\b(?:tabela|preco|precos|valor|valores|espelho|disponibilidade)\b/, ['tabela', 'condicoes'], 10],
+    [/\b(?:tabelas?|precos?|valor(?:es)?|espelho|disponibilidade)\b/, ['tabela', 'condicoes'], 10],
     [/\b(?:book|material|apresentacao|pdf|folder)\b/, ['book', 'institucional'], 9],
     [/\b(?:planta|layout|tipologia|quartos|suites)\b/, ['planta'], 10],
     [/\b(?:foto|imagem|render|fachada|vista)\b/, ['imagem'], 9],
