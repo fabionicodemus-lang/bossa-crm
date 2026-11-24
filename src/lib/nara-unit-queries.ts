@@ -827,7 +827,7 @@ export async function loadNaraCommercialTurnContext(
       }
     }
     const enterprise = named.length > 1 ? '' : inferredEnterprise(lead, history);
-    const referencesUnit = (/\b(essa|esse|dessa|desse|dela|dele|entrada|parcelas?|reforcos?|chaves|juros|correcao|pagamento|total|desconto|condicao|preco|valor|quanto|custa|cuesta|price|how much)\b/.test(normalizeText(latest)) || (continuesPriceConversation && (named.length === 1 || relationship === 'direct_confirmed')))
+    const referencesUnit = (/\b(essa|esse|dessa|desse|dela|dele|entrada|parcelas?|parcelar|parcelamento|parcelad[oa]s?|reforcos?|chaves|juros|correcao|pagamento|total|desconto|condicao|preco|valor|quanto|custa|cuesta|price|how much)\b/.test(normalizeText(latest)) || (continuesPriceConversation && (named.length === 1 || relationship === 'direct_confirmed')))
       && !/\b(outr[oa]s?|opcoes|alternativas|mais barat[oa]|mais car[oa])\b/.test(normalizeText(latest));
     const unitCode = latestUnits[0] || (enterprise && referencesUnit ? unitInCurrentConversation(lead, history, enterprise) : '');
 

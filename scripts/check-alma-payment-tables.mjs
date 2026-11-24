@@ -76,6 +76,10 @@ assert.match(approvedDirectPurchaseInformation(genericContext,generic),/40, 60 o
 assert.doesNotMatch(approvedDirectPurchaseInformation(genericContext,generic),/36|48/);
 const firstPayment=[message('Posso parcelar?')];
 assert.match(approvedDirectPurchaseInformation(await loadNaraCommercialTurnContext(client,'org',lead,firstPayment),firstPayment),/40, 60 ou 80/);
+const unitContinuation=[message('Não tenho corretor. Qual o preço à vista do 1002 do Alma?'),message('E parcelado?')];
+const unitContinuationContext=await loadNaraCommercialTurnContext(client,'org',lead,unitContinuation);
+assert.equal(unitContinuationContext.calls[0].name,'consultar_apartamento');
+assert.match(approvedDirectPurchaseInformation(unitContinuationContext,unitContinuation),/40, 60 ou 80/);
 const invalidHistory=[message('Qual o valor do 1002 do Alma em 36x?')];
 assert.equal(approvedPaymentTableInquiry(await loadNaraCommercialTurnContext(client,'org',lead,invalidHistory),invalidHistory),null);
 for(const mode of ['cash','months40','months60','current']){
