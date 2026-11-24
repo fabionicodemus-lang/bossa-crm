@@ -15,6 +15,7 @@
     "typecheck": "tsc --noEmit",
     "check-env": "node scripts/check-env.mjs",
     "test:meta-referral": "node scripts/check-meta-referral.mjs",
+    "test:site-analytics": "node --experimental-strip-types scripts/check-site-analytics.mjs",
     "test:alma-table": "node scripts/check-alma-sales-table.mjs",
     "test:flow-table": "node scripts/check-flow-sales-table.mjs",
     "test:premium-sales-print": "node --experimental-strip-types scripts/check-premium-sales-print.mjs",
