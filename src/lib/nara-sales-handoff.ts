@@ -2,7 +2,7 @@ import type { AiTurn } from './ai';
 import { enterpriseInFocus, explicitHumanRequest, financialNegotiationIntent, normalizeSignalText, refusesHandoff } from './nara-conversation-signals';
 import { naraConversationLanguage } from './nara-language';
 import { naraApprovedLocationReply } from './nara-approved-locations';
-import { approvedPaymentTableInquiry } from './nara-commercial-guard';
+import { approvedDirectPurchaseInformation, approvedPaymentTableInquiry } from './nara-commercial-guard';
 import type { NaraCommercialTurnContext } from './nara-unit-queries';
 
 type ChatMessage = { role: 'user' | 'assistant'; content: string };
@@ -14,6 +14,16 @@ type ChatMessage = { role: 'user' | 'assistant'; content: string };
  */
 export function applyNaraFinancialHandoff(turn: AiTurn, history: ChatMessage[], commercial?: NaraCommercialTurnContext | null): boolean {
   const latest = [...history].reverse().find((item) => item.role === 'user')?.content ?? '';
+  const information = !explicitHumanRequest(latest) ? approvedDirectPurchaseInformation(commercial, history) : null;
+  if (information) {
+    turn.reply = information;
+    turn.handoff = false;
+    turn.stage = 'ia';
+    if (turn.classification === 'quente' || turn.classification === 'agendamento') turn.classification = 'morno';
+    turn.score = Math.min(turn.score, 59);
+    turn.next_action = 'Informar somente a condição consultada. Confirmar intermediação quando necessário; qualquer proposta ou desconto adicional segue para o comercial.';
+    return true;
+  }
   if (!financialNegotiationIntent(latest, history)) return false;
   const approvedQuote = approvedPaymentTableInquiry(commercial, history);
 

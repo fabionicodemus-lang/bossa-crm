@@ -2,6 +2,7 @@ import type { NaraCommercialTurnContext, NaraDevelopmentRange, NaraUnitOffer } f
 import { enterpriseInFocus, financialNegotiationIntent, withoutPhysicalEntranceTerms } from './nara-conversation-signals';
 import { naraConversationLanguage, type NaraLanguage } from './nara-language';
 import { isCompletePaymentQuote, PAYMENT_TABLE_LABELS, type PaymentTableId, type PaymentTableQuote } from './unit-payment-tables';
+import { directPurchaseCents, isPurchaseRelationshipAnswer } from './nara-direct-purchase';
 
 type ChatMessage = { role: 'user' | 'assistant'; content: string };
 
@@ -157,6 +158,10 @@ function validOffer(value: NaraUnitOffer, now: number, consulted: number): boole
   if (!value || typeof value !== 'object' || !cleanLabel(value.empreendimento) || !projectKey(value.empreendimento)) return false;
   if (!cleanLabel(value.unidade, 20) || !/^[\p{L}\p{N}][\p{L}\p{N}./-]*$/u.test(value.unidade)) return false;
   if (!positiveMoney(value.valor)) return false;
+  if (value.compra_direta && (!['direct_confirmed', 'unknown', 'intermediated'].includes(value.compra_direta.relationship)
+    || value.compra_direta.discount_bps !== 400 || !positiveMoney(value.compra_direta.original_value)
+    || Math.round(value.valor * 100) !== (value.compra_direta.relationship === 'direct_confirmed'
+      ? directPurchaseCents(Math.round(value.compra_direta.original_value * 100)) : Math.round(value.compra_direta.original_value * 100)))) return false;
   if (value.modalidade === 'cash' && !value.tabelas_pagamento?.some((q) => q.id === 'cash'
     && isCompletePaymentQuote(q) && q.totalCents === Math.round(value.valor * 100))) return false;
   const expiry = validUntil(value.validade_tabela);
@@ -171,6 +176,10 @@ function validOffer(value: NaraUnitOffer, now: number, consulted: number): boole
 function validRange(value: NaraDevelopmentRange, now: number): boolean {
   if (!value || typeof value !== 'object' || !cleanLabel(value.empreendimento) || !projectKey(value.empreendimento)) return false;
   if (!positiveMoney(value.valor_minimo) || !positiveMoney(value.valor_maximo) || value.valor_maximo < value.valor_minimo) return false;
+  if (value.compra_direta && (value.compra_direta.discount_bps !== 400 || !positiveMoney(value.compra_direta.original_value)
+    || !['direct_confirmed', 'unknown', 'intermediated'].includes(value.compra_direta.relationship)
+    || Math.round(value.valor_minimo * 100) !== (value.compra_direta.relationship === 'direct_confirmed'
+      ? directPurchaseCents(Math.round(value.compra_direta.original_value * 100)) : Math.round(value.compra_direta.original_value * 100)))) return false;
   if (!Number.isSafeInteger(value.qtd_disponiveis) || value.qtd_disponiveis < 1) return false;
   const expiry = validUntil(value.validade_tabela);
   return expiry === null || (Number.isFinite(expiry) && expiry >= now);
@@ -403,10 +412,15 @@ function brl(value: number): string {
 
 function approvedTableLines(offer: NaraUnitOffer, quote: PaymentTableQuote, language: NaraLanguage): string {
   const cashLabel = language === 'en' ? 'Cash price, paid in full' : language === 'es' ? 'Al contado, pago integral' : 'À vista, pagamento integral';
-  if (quote.id === 'cash') return `${offer.empreendimento} · ${offer.unidade}: ${brl(quote.totalCents / 100)} — ${cashLabel}.`;
+  const direct = offer.compra_direta?.relationship === 'direct_confirmed';
+  if (quote.id === 'cash') return direct
+    ? language === 'en' ? `Buying directly, unit ${offer.unidade} at ${offer.empreendimento} is ${brl(quote.totalCents / 100)} paid in full.`
+      : language === 'es' ? `En compra directa, la unidad ${offer.unidade} de ${offer.empreendimento} queda en ${brl(quote.totalCents / 100)} al contado.`
+        : `Na compra direta, a unidade ${offer.unidade} do ${offer.empreendimento} fica em ${brl(quote.totalCents / 100)} à vista.`
+    : `${offer.empreendimento} · ${offer.unidade}: ${brl(quote.totalCents / 100)} — ${cashLabel}.`;
   const title = language === 'en' ? `Current base price (${quote.installmentCount} monthly installments)`
     : language === 'es' ? `Precio base (${quote.installmentCount} cuotas mensuales)` : PAYMENT_TABLE_LABELS[quote.id];
-  const lines = [`${offer.empreendimento} · ${offer.unidade} — ${title}: ${brl(quote.totalCents / 100)}.`];
+  const lines = [`${offer.empreendimento} · ${offer.unidade} — ${title}${direct ? language === 'en' ? ' · direct purchase' : language === 'es' ? ' · compra directa' : ' · compra direta' : ''}: ${brl(quote.totalCents / 100)}.`];
   if (!quote.complete) return [...lines, language === 'en' ? 'The CRM payment breakdown needs confirmation before quoting installments.'
     : language === 'es' ? 'La composición registrada necesita confirmación antes de informar cuotas.' : 'A composição cadastrada no CRM precisa de conferência antes de informar as parcelas.'].join('\n');
   if (!isCompletePaymentQuote(quote)) return '';
@@ -444,7 +458,25 @@ function requestedApprovedTables(text: string): PaymentTableId[] {
 
 function approvedTablesReply(validation: NaraCommercialValidation, history: ChatMessage[], language: NaraLanguage): string | null {
   if (!validation.valid) return null;
-  const ids = requestedApprovedTables(lastUserText(history));
+  const directPolicy = [...validation.offers, ...validation.ranges].some((item) => item.compra_direta && item.compra_direta.relationship !== 'intermediated');
+  const latest = lastUserText(history);
+  const relationshipAnswer = directPolicy && isPurchaseRelationshipAnswer(history);
+  let requested = relationshipAnswer && !asksForQuote(latest) && !requestedApprovedTables(latest).length
+    ? [...history].reverse().filter((m) => m.role === 'user').slice(1).find((m) => asksForQuote(m.content) || requestedApprovedTables(m.content).length)?.content ?? latest : latest;
+  if (directPolicy && /^(?:36|48|60)[.! ]*$/.test(norm(latest))
+    && /36, 48 (?:ou|or|o) 60/.test(norm([...history].reverse().find((m) => m.role === 'assistant')?.content))) requested = `${norm(latest).replace(/[.! ]/g, '')}x`;
+  const ids = requestedApprovedTables(requested);
+  if (!ids.length && directPolicy && /\b(?:parcelad[oa]|parcelamento|parcelar|planos de pagamento)\b/.test(norm(requested))
+    && !moneyMatches(requested).length && !/\d+\s*(?:%|x|parcelas|vezes)|\b(?:aceit\w*|aprov\w*|proposta|negoci\w*|desconto|sem juros|sem correcao)\b/.test(norm(requested))) {
+    const hasUnknown = [...validation.offers, ...validation.ranges].some((item) => item.compra_direta?.relationship === 'unknown');
+    return language === 'en'
+      ? `The installment price depends on the selected plan. We have options over 36, 48 or 60 months.${hasUnknown ? ' Are you already working with a real estate broker on this purchase?' : ' Which term would suit you best?'}`
+      : language === 'es'
+        ? `El precio a plazos depende del plan elegido. Tenemos opciones de 36, 48 o 60 meses.${hasUnknown ? ' ¿Ya te está atendiendo un agente inmobiliario en esta compra?' : ' ¿Qué plazo te conviene más?'}`
+        : `O valor parcelado depende do plano escolhido. Temos opções em 36, 48 ou 60 meses.${hasUnknown ? ' Você já está sendo atendido por algum corretor nesta compra?' : ' Qual desses prazos combina melhor com você?'}`;
+  }
+  if (!ids.length && directPolicy && (asksForQuote(requested) || relationshipAnswer || /\bcompra direta\b/.test(norm(requested)))
+    && !moneyMatches(requested).length && !/\d+\s*%|\b(?:aceit\w*|aprov\w*|autoriz\w*|garant\w*|proposta|contraproposta|negoci\w*|permuta|desconto adicional|mais desconto|sem juros|sem correcao)\b/.test(norm(requested))) ids.push('cash');
   if (!ids.length) return null;
   const lines = validation.offers.flatMap((offer) => ids.flatMap((id) => {
     const quote = offer.tabelas_pagamento?.find((q) => q.id === id);
@@ -452,12 +484,28 @@ function approvedTablesReply(validation: NaraCommercialValidation, history: Chat
     return [approvedTableLines(offer, quote, language)];
   })).filter(Boolean);
   if (!lines.length && ids.length === 1 && ids[0] === 'cash') {
-    for (const range of validation.ranges.filter((r) => r.modalidade === 'cash')) lines.push(language === 'en'
+    for (const range of validation.ranges.filter((r) => r.modalidade === 'cash')) lines.push(range.compra_direta?.relationship === 'direct_confirmed'
+      ? language === 'en' ? `At ${range.empreendimento}, direct purchase options start at ${brl(range.valor_minimo)} paid in full.`
+        : language === 'es' ? `En ${range.empreendimento}, tenemos opciones de compra directa desde ${brl(range.valor_minimo)} al contado.`
+          : `No ${range.empreendimento}, temos opções à vista a partir de ${brl(range.valor_minimo)} na compra direta.`
+      : language === 'en'
       ? `${range.empreendimento}: cash prices from ${brl(range.valor_minimo)}, paid in full.`
       : language === 'es' ? `${range.empreendimento}: desde ${brl(range.valor_minimo)} al contado, pago integral.`
         : `${range.empreendimento}: a partir de ${brl(range.valor_minimo)} à vista, com pagamento integral.`);
   }
+  if (lines.length && [...validation.offers, ...validation.ranges].some((item) => item.compra_direta?.relationship === 'unknown')) lines.push(language === 'en'
+    ? 'There is a special direct-purchase condition. Are you already working with a real estate broker on this purchase?'
+    : language === 'es' ? 'Tenemos una condición especial para compra directa. ¿Ya te está atendiendo un agente inmobiliario en esta compra?'
+      : 'Temos uma condição especial para compra direta. Você já está sendo atendido por algum corretor nesta compra?');
   return lines.length ? lines.join('\n\n') : null;
+}
+
+/** Approved information can stay with Nara; a proposal or request for a person cannot. */
+export function approvedDirectPurchaseInformation(commercial: NaraCommercialTurnContext | null | undefined, history: ChatMessage[]): string | null {
+  const validation = validateNaraCommercialContext(commercial, history);
+  if (![...validation.offers, ...validation.ranges].some((item) => item.compra_direta && item.compra_direta.relationship !== 'intermediated')) return null;
+  if (/\b(?:quero comprar|vou comprar|reserv\w*|fech\w*|proposta|contraproposta|mais desconto|desconto adicional)\b/.test(norm(lastUserText(history)))) return null;
+  return approvedTablesReply(validation, history, naraConversationLanguage(history));
 }
 
 /** Only a current structured quote can accompany the existing human financial handoff. */
