@@ -1,6 +1,7 @@
 import type { NaraCommercialTurnContext, NaraDevelopmentRange, NaraUnitOffer } from './nara-unit-queries';
 import { enterpriseInFocus, financialNegotiationIntent, withoutPhysicalEntranceTerms } from './nara-conversation-signals';
 import { naraConversationLanguage, type NaraLanguage } from './nara-language';
+import { isCompletePaymentQuote, PAYMENT_TABLE_LABELS, type PaymentTableId, type PaymentTableQuote } from './unit-payment-tables';
 
 type ChatMessage = { role: 'user' | 'assistant'; content: string };
 
@@ -156,6 +157,8 @@ function validOffer(value: NaraUnitOffer, now: number, consulted: number): boole
   if (!value || typeof value !== 'object' || !cleanLabel(value.empreendimento) || !projectKey(value.empreendimento)) return false;
   if (!cleanLabel(value.unidade, 20) || !/^[\p{L}\p{N}][\p{L}\p{N}./-]*$/u.test(value.unidade)) return false;
   if (!positiveMoney(value.valor)) return false;
+  if (value.modalidade === 'cash' && !value.tabelas_pagamento?.some((q) => q.id === 'cash'
+    && isCompletePaymentQuote(q) && q.totalCents === Math.round(value.valor * 100))) return false;
   const expiry = validUntil(value.validade_tabela);
   if (expiry !== null && (!Number.isFinite(expiry) || expiry < now)) return false;
   if (value.preco_atualizado_em) {
@@ -398,6 +401,71 @@ function brl(value: number): string {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
 }
 
+function approvedTableLines(offer: NaraUnitOffer, quote: PaymentTableQuote, language: NaraLanguage): string {
+  const cashLabel = language === 'en' ? 'Cash price, paid in full' : language === 'es' ? 'Al contado, pago integral' : 'À vista, pagamento integral';
+  if (quote.id === 'cash') return `${offer.empreendimento} · ${offer.unidade}: ${brl(quote.totalCents / 100)} — ${cashLabel}.`;
+  const title = language === 'en' ? `Current base price (${quote.installmentCount} monthly installments)`
+    : language === 'es' ? `Precio base (${quote.installmentCount} cuotas mensuales)` : PAYMENT_TABLE_LABELS[quote.id];
+  const lines = [`${offer.empreendimento} · ${offer.unidade} — ${title}: ${brl(quote.totalCents / 100)}.`];
+  if (!quote.complete) return [...lines, language === 'en' ? 'The CRM payment breakdown needs confirmation before quoting installments.'
+    : language === 'es' ? 'La composición registrada necesita confirmación antes de informar cuotas.' : 'A composição cadastrada no CRM precisa de conferência antes de informar as parcelas.'].join('\n');
+  if (!isCompletePaymentQuote(quote)) return '';
+  const labels = language === 'en' ? ['Down payment', 'Monthly installments', 'Last installment', 'Annual payments', 'At handover']
+    : language === 'es' ? ['Entrada', 'Cuotas mensuales', 'Última cuota', 'Refuerzos anuales', 'A la entrega']
+      : ['Entrada', 'Mensais', 'Última mensal', 'Reforços anuais', 'Nas chaves'];
+  lines.push(`${labels[0]}: ${brl(quote.entryCents / 100)}.`, `${labels[1]}: ${quote.installmentCount} × ${brl(quote.installmentCents / 100)}.`);
+  if (quote.lastInstallmentCents !== quote.installmentCents) lines.push(`${labels[2]}: ${brl(quote.lastInstallmentCents / 100)}.`);
+  if (quote.reinforcementCount) lines.push(`${labels[3]}: ${quote.reinforcementCount} × ${brl(quote.reinforcementCents / 100)}.`);
+  if (quote.keysCents) lines.push(`${labels[4]}: ${brl(quote.keysCents / 100)}.`);
+  lines.push(language === 'en' ? 'Base amounts: adjusted by CUB during construction; after handover, IPCA plus 0.59% per month. First monthly payment in 30 days; annual payments every 12 months.'
+    : language === 'es' ? 'Importes base: ajuste por CUB durante la obra; después de la entrega, IPCA + 0,59% mensual. Primera cuota en 30 días y refuerzos cada 12 meses.'
+      : 'Valores-base: CUB durante as obras; após as chaves, IPCA + 0,59% ao mês. Primeira mensal em 30 dias e reforços a cada 12 meses.');
+  return lines.join('\n');
+}
+
+function requestedApprovedTables(text: string): PaymentTableId[] {
+  const value = norm(text);
+  // Quotes are not approval of a customer-supplied amount or alternative terms.
+  if (moneyMatches(text).length || /\b(?:aceit\w*|aprov\w*|autoriz\w*|garant\w*|proposta|contraproposta|negoci\w*|permuta|desconto adicional|mais desconto|se eu der|sem juros|sem correcao)\b/.test(value)) return [];
+  const all = /\b(?:quatro|4|todas as)\s+(?:tabelas|condicoes|modalidades)\b/.test(value);
+  const ids: PaymentTableId[] = all ? ['cash', 'months36', 'months48', 'current'] : [];
+  if (/\ba vista\b(?!\s+(?:do mar|para o mar|da janela))|\bal contado\b|\bcash price\b|\bin cash\b/.test(value)) ids.push('cash');
+  for (const [count, id] of [[36, 'months36'], [48, 'months48'], [60, 'current']] as const) {
+    if (new RegExp(`\\b${count}\\s*(?:x|vezes|parcelas|mensais|meses|cuotas|months|installments)\\b`).test(value)) ids.push(id);
+  }
+  if (/\btabela atual\b/.test(value)) ids.push('current');
+  const percentages = [...value.matchAll(/\b(\d+(?:[.,]\d+)?)\s*%/g)].map((m) => Number(m[1].replace(',', '.')));
+  if (percentages.some((n) => ![10, 20, 30].includes(n))) return [];
+  if (ids.includes('months36') && percentages.some((n) => n !== 30)) return [];
+  if (ids.includes('months48') && percentages.some((n) => ![10, 30].includes(n))) return [];
+  if (ids.includes('current') && !all && percentages.some((n) => n !== 20)) return [];
+  return [...new Set(ids)];
+}
+
+function approvedTablesReply(validation: NaraCommercialValidation, history: ChatMessage[], language: NaraLanguage): string | null {
+  if (!validation.valid) return null;
+  const ids = requestedApprovedTables(lastUserText(history));
+  if (!ids.length) return null;
+  const lines = validation.offers.flatMap((offer) => ids.flatMap((id) => {
+    const quote = offer.tabelas_pagamento?.find((q) => q.id === id);
+    if (!quote || quote.totalCents <= 0 || (!quote.complete && id !== 'current')) return [];
+    return [approvedTableLines(offer, quote, language)];
+  })).filter(Boolean);
+  if (!lines.length && ids.length === 1 && ids[0] === 'cash') {
+    for (const range of validation.ranges.filter((r) => r.modalidade === 'cash')) lines.push(language === 'en'
+      ? `${range.empreendimento}: cash prices from ${brl(range.valor_minimo)}, paid in full.`
+      : language === 'es' ? `${range.empreendimento}: desde ${brl(range.valor_minimo)} al contado, pago integral.`
+        : `${range.empreendimento}: a partir de ${brl(range.valor_minimo)} à vista, com pagamento integral.`);
+  }
+  return lines.length ? lines.join('\n\n') : null;
+}
+
+/** Only a current structured quote can accompany the existing human financial handoff. */
+export function approvedPaymentTableInquiry(commercial: NaraCommercialTurnContext | null | undefined, history: ChatMessage[], options: NaraCommercialGuardOptions = {}): string | null {
+  return approvedTablesReply(validateNaraCommercialContext(commercial, history, options), history,
+    options.language ?? naraConversationLanguage(history));
+}
+
 function paymentLines(offer: NaraUnitOffer, language: NaraLanguage): string[] {
   const plan = offer.plano_pagamento;
   const partial = language === 'en' ? 'The full payment schedule, adjustments and interest need confirmation before presenting an installment offer.'
@@ -494,6 +562,10 @@ function unitOrRangeClarification(validation: NaraCommercialValidation, history:
   const matching = validation.offers.filter((offer) => projectKey(offer.empreendimento) === projects[0] && norm(offer.unidade) === units[0]);
   if (matching.length !== 1) return null;
   const offer = matching[0];
+  if (offer.modalidade === 'cash') {
+    const cash = offer.tabelas_pagamento?.find((q) => q.id === 'cash' && isCompletePaymentQuote(q));
+    if (cash) return approvedTableLines(offer, cash, language);
+  }
   // A historical amount is never rendered or used to authorize the offer. A
   // single differing amount only prevents silently ratifying an old value.
   const differs = previousAmounts[0] !== Math.round(offer.valor * 100);
@@ -511,6 +583,8 @@ function unitOrRangeClarification(validation: NaraCommercialValidation, history:
 
 function renderValidatedReply(validation: NaraCommercialValidation, history: ChatMessage[], original: string, language: NaraLanguage): string {
   const latest = lastUserText(history);
+  const tableInquiry = approvedTablesReply(validation, history, language);
+  if (tableInquiry) return tableInquiry;
   // Quando o cliente pediu preço + localização, não deixe o modelo acrescentar
   // espontaneamente um plano de pagamento que ele não solicitou. Em diálogos
   // só financeiros, preserva-se a auditoria do plano estruturado já existente.
@@ -526,19 +600,21 @@ function renderValidatedReply(validation: NaraCommercialValidation, history: Cha
       ? [validation.offers.reduce((a, b) => a.valor <= b.valor ? a : b)]
       : validation.offers;
     for (const offer of offers) {
-      const price = language === 'en' ? `At ${offer.empreendimento}, the current list price of unit ${offer.unidade} is ${brl(offer.valor)}.`
+      const cashQuote = offer.modalidade === 'cash' ? offer.tabelas_pagamento?.find((q) => q.id === 'cash') : null;
+      const price = cashQuote ? approvedTableLines(offer, cashQuote, language) : language === 'en' ? `At ${offer.empreendimento}, the current list price of unit ${offer.unidade} is ${brl(offer.valor)}.`
         : language === 'es' ? `En ${offer.empreendimento}, el precio de tabla vigente de la unidad ${offer.unidade} es ${brl(offer.valor)}.`
           : `No ${offer.empreendimento}, o valor de tabela vigente da unidade ${offer.unidade} é ${brl(offer.valor)}.`;
-      sections.push([price, ...(payment ? paymentLines(offer, language) : [])].join('\n'));
+      sections.push([price, ...(payment && !cashQuote ? paymentLines(offer, language) : [])].join('\n'));
     }
   } else {
     const showRange = /\b(faixa|variacao|variam|compar|compare|comparison|range|rango|diferenca|difference)\w*/.test(norm(latest));
     const showMaximum = !showRange && /\b(maximo|mais car[oa]|maior (?:preco|valor)|maximum|highest|mas car[oa]|mayor (?:precio|valor))\b/.test(norm(latest));
     for (const range of validation.ranges) {
       const prices = showRange ? `${brl(range.valor_minimo)} ${language === 'en' ? 'to' : 'a'} ${brl(range.valor_maximo)}` : brl(showMaximum ? range.valor_maximo : range.valor_minimo);
-      sections.push(language === 'en' ? `${range.empreendimento}: ${showRange ? 'current list price range' : showMaximum ? 'highest current list price' : 'current list prices from'} ${prices}.`
+      sections.push((language === 'en' ? `${range.empreendimento}: ${showRange ? 'current list price range' : showMaximum ? 'highest current list price' : 'current list prices from'} ${prices}.`
         : language === 'es' ? `${range.empreendimento}: ${showRange ? 'rango de precios vigente' : showMaximum ? 'mayor precio de tabla vigente' : 'precios de tabla desde'} ${prices}.`
-          : `${range.empreendimento}: ${showRange ? 'faixa de valores na tabela atual' : showMaximum ? 'maior valor na tabela atual' : 'valores de tabela a partir de'} ${prices}.`);
+          : `${range.empreendimento}: ${showRange ? 'faixa de valores na tabela atual' : showMaximum ? 'maior valor na tabela atual' : 'valores de tabela a partir de'} ${prices}.`)
+        + (range.modalidade === 'cash' ? language === 'en' ? ' Cash price, paid in full.' : language === 'es' ? ' Al contado, pago integral.' : ' À vista, com pagamento integral.' : ''));
     }
     if (payment) sections.push(language === 'en' ? 'The payment terms depend on the selected unit and need a specific quote.'
       : language === 'es' ? 'Las condiciones de pago dependen de la unidad elegida y necesitan una consulta específica.'

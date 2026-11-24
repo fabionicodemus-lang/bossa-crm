@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import { UnitPaymentTables } from './UnitPaymentTables';
 
 type DevelopmentStatus = 'planejamento' | 'lancamento' | 'em_construcao' | 'entregue' | 'pausado' | 'arquivado' | 'ativo';
 type UnitStatus = 'disponivel' | 'reservado' | 'em_contrato' | 'vendido' | 'oculto' | 'bloqueado';
@@ -654,8 +655,9 @@ export function DevelopmentsManager({
             </div>
           </section>}
 
+          <UnitPaymentTables key={selected.id} development={selected} units={selectedUnits} />
           <section className="card" style={{ marginBottom: 14 }}>
-            <div className="card-head"><h3>Tabela de vendas</h3><span className="chip">{selectedUnits.length} unidades</span></div>
+            <div className="card-head"><h3>Tabela de vendas · cadastro original</h3><span className="chip">{selectedUnits.length} unidades</span></div>
             <div className="table-wrap" style={{ overflowX: 'auto' }}>
               <table>
                 <thead><tr><th>Unidade</th><th>Andar</th><th>Tipologia</th><th>Área m²</th><th>Status</th><th>Valor</th><th>Entrada</th><th>Parcelas</th><th>Valor parcela</th><th>Reforços</th><th>Valor reforço</th><th>Chaves</th><th>Observação</th><th></th></tr></thead>

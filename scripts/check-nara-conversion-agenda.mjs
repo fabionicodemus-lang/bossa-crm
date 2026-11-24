@@ -366,7 +366,7 @@ await check('Webhook usa resultado da agenda e preserva falha/handoff, sem confi
   assert.match(webhook, /turn\.handoff = appointment\.status === 'needs_details' && appointment\.requiresHuman === true/);
   assert.doesNotMatch(webhook, /turn\.reply = `Sua visita ficou marcada/);
   const refresh = webhook.indexOf('const checked = protectNaraCommercialReply(reply, history');
-  const financialBoundary = webhook.indexOf('if (applyNaraFinancialHandoff(turn, history))', refresh);
+  const financialBoundary = webhook.indexOf('if (applyNaraFinancialHandoff(turn, history, context.commercial))', refresh);
   const audit = webhook.indexOf('let offerAuditIds:', refresh);
   const send = webhook.indexOf('result = await provider.sendText(', refresh);
   assert.ok(refresh >= 0 && financialBoundary > refresh && audit > financialBoundary && send > audit);

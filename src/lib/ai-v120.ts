@@ -231,14 +231,14 @@ function outsideBuyerDestination(history: ChatMessage[]): 'plantao' | 'pos_venda
   return null;
 }
 
-function finishTurn(turn: AiTurn, history: ChatMessage[]): AiTurn {
+function finishTurn(turn: AiTurn, history: ChatMessage[], context: AiTrainingContext = {}): AiTurn {
   turn.reply = ensureFirstReplyIdentity(turn.reply, history);
   const latest = lastUserText(history);
   if (outsideBuyerDestination(history)) {
     turn.handoff = true;
     return turn;
   }
-  if (applyNaraFinancialHandoff(turn, history)) return turn;
+  if (applyNaraFinancialHandoff(turn, history, context.commercial)) return turn;
   if (shouldHandleAgendaTurn(history, latest) && !requiresHumanHandoff(latest)) {
     turn.handoff = false;
   }
@@ -910,7 +910,7 @@ export async function generateAiTurn(
 ): Promise<AiTurn | null> {
   const turn = await generateCoreAiTurn(lead, history, context);
   if (!turn || lead.kind !== 'cliente') return turn;
-  const processed = finishTurn(postProcessNaraTurn(turn, history, context), history);
+  const processed = finishTurn(postProcessNaraTurn(turn, history, context), history, context);
   replaceGenericHelpWithPortfolio(processed, history, context, lead);
   attachFirstPortfolioFacades(processed, history, context);
   return enforceNaraReplyGuardrails(processed, lead, history, context);
@@ -928,6 +928,6 @@ export async function generateSupervisedAiTurn(
 ): Promise<AiTurn | null> {
   const turn = await generateCoreAiTurn(lead, history, context);
   if (!turn || lead.kind !== 'cliente') return turn;
-  const processed = finishTurn(turn, history);
+  const processed = finishTurn(turn, history, context);
   return enforceNaraReplyGuardrails(processed, lead, history, context);
 }

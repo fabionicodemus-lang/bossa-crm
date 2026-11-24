@@ -2,6 +2,8 @@ import type { AiTurn } from './ai';
 import { enterpriseInFocus, explicitHumanRequest, financialNegotiationIntent, normalizeSignalText, refusesHandoff } from './nara-conversation-signals';
 import { naraConversationLanguage } from './nara-language';
 import { naraApprovedLocationReply } from './nara-approved-locations';
+import { approvedPaymentTableInquiry } from './nara-commercial-guard';
+import type { NaraCommercialTurnContext } from './nara-unit-queries';
 
 type ChatMessage = { role: 'user' | 'assistant'; content: string };
 
@@ -10,9 +12,10 @@ type ChatMessage = { role: 'user' | 'assistant'; content: string };
  * No database/network work happens here: the normal hybrid workflow persists
  * the pending handoff after this turn. Never describe that action as completed.
  */
-export function applyNaraFinancialHandoff(turn: AiTurn, history: ChatMessage[]): boolean {
+export function applyNaraFinancialHandoff(turn: AiTurn, history: ChatMessage[], commercial?: NaraCommercialTurnContext | null): boolean {
   const latest = [...history].reverse().find((item) => item.role === 'user')?.content ?? '';
   if (!financialNegotiationIntent(latest, history)) return false;
+  const approvedQuote = approvedPaymentTableInquiry(commercial, history);
 
   const language = naraConversationLanguage(history);
   const focus = enterpriseInFocus(history);
@@ -34,6 +37,7 @@ export function applyNaraFinancialHandoff(turn: AiTurn, history: ChatMessage[]):
         ? 'Understood—we can keep chatting without transferring you. The down payment and payment terms need confirmation from our sales team; I cannot approve them here. I can still help with information about the development.'
         : 'Entendido, seguimos por mensagem sem te encaminhar. Entrada e condições de pagamento precisam de confirmação do comercial; não consigo aprová-las por aqui. Posso continuar te ajudando com as informações do empreendimento.';
     if (locationReply) turn.reply = `${turn.reply}\n\n${locationReply}`;
+    if (approvedQuote) turn.reply = `${approvedQuote}\n\n${turn.reply}`;
     turn.next_action = 'Respeitar a recusa de atendimento humano; não negociar nem aprovar condições. Continuar apenas com informações gerais solicitadas.';
     return true;
   }
@@ -52,6 +56,7 @@ export function applyNaraFinancialHandoff(turn: AiTurn, history: ChatMessage[]):
   // Rebuild only from approved facts so repeated final guards cannot erase a
   // mixed question or retain an unsafe approval from the model's earlier text.
   if (locationReply) turn.reply = `${turn.reply}\n\n${locationReply}`;
+  if (approvedQuote) turn.reply = `${approvedQuote}\n\n${turn.reply}`;
   // Rebuild the briefing only from the client's messages. Never recycle a
   // model-generated summary or an older assistant offer as commercial evidence.
   // A bounded source-based rebuild is also idempotent across repeated gates.

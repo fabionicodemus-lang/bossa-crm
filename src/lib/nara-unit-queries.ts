@@ -3,6 +3,7 @@ import type { Lead } from './types';
 import { isAssistedSaleSignal, isBrokerRoutingSignal, isCurrentCustomerSignal } from './nara-contact-routing';
 import { adDevelopment } from './nara-first-message';
 import { isNaraAlternativePaymentProposal, isNaraArchitecturalEntranceQuestion, isNaraMarketInformationQuestion } from './nara-commercial-guard';
+import { cashPriceCents, PAYMENT_TABLE_LABELS, PAYMENT_TABLE_TERMS, readPaymentTablePolicy, unitPaymentTables, type PaymentTableQuote } from './unit-payment-tables';
 
 type ChatMessage = { role: 'user' | 'assistant'; content: string };
 type JsonRecord = Record<string, unknown>;
@@ -13,6 +14,7 @@ type DevelopmentRow = {
   slug: string;
   code: string | null;
   delivery_date: string | null;
+  default_payment_plan?: JsonRecord | null;
 };
 
 type TypologyRow = {
@@ -59,6 +61,9 @@ export type NaraPaymentPlan = {
 };
 
 export type NaraUnitOffer = {
+  modalidade?: 'cash';
+  valor_tabela_parcelada?: number;
+  tabelas_pagamento?: PaymentTableQuote[];
   empreendimento_id?: string;
   unidade_id?: string;
   moeda?: 'BRL';
@@ -78,6 +83,7 @@ export type NaraUnitOffer = {
 };
 
 export type NaraDevelopmentRange = {
+  modalidade?: 'cash';
   empreendimento_id?: string;
   empreendimento: string;
   valor_minimo: number;
@@ -268,7 +274,7 @@ async function activeDevelopments(
 ): Promise<DevelopmentRow[]> {
   const { data, error } = await client
     .from('developments')
-    .select('id,name,slug,code,delivery_date')
+    .select('id,name,slug,code,delivery_date,default_payment_plan')
     .eq('organization_id', organizationId)
     .eq('active', true)
     .order('name');
@@ -337,7 +343,10 @@ function toOffer(
   typology: TypologyRow | undefined,
 ): NaraUnitOffer {
   const plan = planForUnit(unit);
-  const terms = paymentPlan(unit, plan);
+  const terms = paymentPlan(unit, { ...development.default_payment_plan, ...plan });
+  const policy = readPaymentTablePolicy(development.default_payment_plan);
+  const tables = policy ? unitPaymentTables(unit, policy) : [];
+  const cash = tables.find((item) => item.id === 'cash' && item.complete);
   return {
     empreendimento_id: development.id,
     unidade_id: unit.id,
@@ -346,16 +355,17 @@ function toOffer(
     unidade: unit.unit_code,
     andar: unit.floor,
     tipologia: typology?.name || typology?.code || 'Não informada',
-    valor: (moneyCents(unit.list_price) ?? 0) / 100,
-    entrada: (moneyCents(unit.entry_amount) ?? 0) / 100,
-    parcela_media: (validCount(unit.installment_count) ?? 0) > 0 && moneyCents(unit.installment_amount) !== null
+    ...(cash ? { modalidade: 'cash' as const, valor_tabela_parcelada: (moneyCents(unit.list_price) ?? 0) / 100, tabelas_pagamento: tables } : {}),
+    valor: cash ? cash.totalCents / 100 : (moneyCents(unit.list_price) ?? 0) / 100,
+    entrada: cash ? cash.totalCents / 100 : (moneyCents(unit.entry_amount) ?? 0) / 100,
+    parcela_media: !cash && (validCount(unit.installment_count) ?? 0) > 0 && moneyCents(unit.installment_amount) !== null
       ? moneyCents(unit.installment_amount)! / 100 : null,
-    quantidade_parcelas: validCount(unit.installment_count) ?? 0,
-    indice_correcao: terms.indice_correcao,
+    quantidade_parcelas: cash ? 0 : validCount(unit.installment_count) ?? 0,
+    indice_correcao: cash ? 'Não se aplica ao pagamento integral à vista' : terms.indice_correcao,
     validade_tabela: tableValidUntil(plan),
     referencia_tabela: optionalText(plan, ['table_reference', 'referencia_tabela']),
     preco_atualizado_em: unit.price_updated_at,
-    plano_pagamento: terms,
+    plano_pagamento: cash ? { status: 'complete', componentes: [{ tipo: 'entrada', quantidade: 1, valor_unitario_centavos: cash.totalCents, total_centavos: cash.totalCents }], total_composto_centavos: cash.totalCents, diferenca_centavos: 0, indice_correcao: 'Não se aplica ao pagamento integral à vista', juros: 'Não se aplica ao pagamento integral à vista' } : terms,
   };
 }
 
@@ -398,8 +408,9 @@ export async function faixaEmpreendimento(
       'As unidades consultadas não têm preço válido e vigente comprovado. Não reutilize valores anteriores; a tabela precisa ser confirmada.');
     return null;
   }
-  const prices = rows.map((row) => moneyCents(row.list_price)! / 100);
-  const entries = rows.map((row) => (moneyCents(row.entry_amount) ?? 0) / 100).filter((value) => value > 0);
+  const policy = readPaymentTablePolicy(development.default_payment_plan);
+  const prices = rows.map((row) => (policy ? cashPriceCents(row, policy)! : moneyCents(row.list_price)!) / 100);
+  const entries = policy ? prices : rows.map((row) => (moneyCents(row.entry_amount) ?? 0) / 100).filter((value) => value > 0);
   const validity = rows.map((row) => tableValidUntil(planForUnit(row)))
     .filter((value): value is string => Boolean(value))
     .sort((a, b) => validityTimestamp(a)! - validityTimestamp(b)!)[0] ?? null;
@@ -407,6 +418,7 @@ export async function faixaEmpreendimento(
   return {
     empreendimento_id: development.id,
     empreendimento: development.name,
+    ...(policy ? { modalidade: 'cash' as const } : {}),
     valor_minimo: Math.min(...prices),
     valor_maximo: Math.max(...prices),
     entrada_minima: entries.length ? Math.min(...entries) : 0,
@@ -422,6 +434,7 @@ export async function buscarApartamentos(
 ): Promise<NaraUnitOffer[]> {
   const development = await resolveDevelopment(client, organizationId, filters.empreendimento);
   if (!development) return [];
+  const policy = readPaymentTablePolicy(development.default_payment_plan);
 
   const typologies = await developmentTypologies(client, organizationId, development.id);
   const matchingTypologyIds = filters.tipologia
@@ -439,8 +452,8 @@ export async function buscarApartamentos(
   if (matchingTypologyIds.length) query = query.in('typology_id', matchingTypologyIds);
   if (Number.isFinite(filters.andar_min)) query = query.gte('floor', Number(filters.andar_min));
   if (Number.isFinite(filters.andar_max)) query = query.lte('floor', Number(filters.andar_max));
-  if (Number.isFinite(filters.valor_max)) query = query.lte('list_price', Number(filters.valor_max));
-  if (Number.isFinite(filters.entrada_max)) query = query.lte('entry_amount', Number(filters.entrada_max));
+  if (!policy && Number.isFinite(filters.valor_max)) query = query.lte('list_price', Number(filters.valor_max));
+  if (!policy && Number.isFinite(filters.entrada_max)) query = query.lte('entry_amount', Number(filters.entrada_max));
 
   const { data, error } = await query
     .order('list_price', { ascending: true })
@@ -450,8 +463,14 @@ export async function buscarApartamentos(
   if (error) throw error;
   const allRows = (data ?? []) as UnitRow[];
   const now = Date.now();
-  const rows = allRows.filter((row) => priceRowIsCurrent(row, now)).slice(0, 3);
-  if (allRows.length && !rows.length) throw new NaraCommercialQueryIssue('error', 'invalid_or_expired_price_table',
+  const currentRows = allRows.filter((row) => priceRowIsCurrent(row, now));
+  const rows = currentRows.filter((row) => {
+    if (!policy) return true;
+    const cash = cashPriceCents(row, policy);
+    return cash !== null && (!Number.isFinite(filters.valor_max) || cash <= Number(filters.valor_max) * 100)
+      && (!Number.isFinite(filters.entrada_max) || cash <= Number(filters.entrada_max) * 100);
+  }).slice(0, 3);
+  if (allRows.length && !currentRows.length) throw new NaraCommercialQueryIssue('error', 'invalid_or_expired_price_table',
     'As opções encontradas precisam de confirmação da tabela vigente. Não informe esses valores nem use ofertas antigas.');
   return offersFromRows(client, organizationId, development, rows);
 }
@@ -485,6 +504,7 @@ function formatRange(result: NaraDevelopmentRange | null): string {
   if (!result) return 'resultado vazio';
   return [
     `empreendimento=${result.empreendimento}`,
+    ...(result.modalidade === 'cash' ? ['natureza_valor=pagamento integral à vista; não é valor parcelado'] : []),
     `valor_minimo=${formatBrl(result.valor_minimo)}`,
     `valor_maximo=${formatBrl(result.valor_maximo)}`,
     `entrada_minima=${formatBrl(result.entrada_minima)}`,
@@ -505,7 +525,10 @@ function formatOffer(result: NaraUnitOffer): string {
     `andar=${result.andar ?? 'não informado'}`,
     `tipologia=${result.tipologia}`,
     `valor=${formatBrl(result.valor)}`,
-    'natureza_valor=preço de tabela; não autoriza preço à vista, desconto ou proposta negociada',
+    result.modalidade === 'cash' ? 'natureza_valor=preço à vista aprovado para pagamento integral; não aplicar a parcelas nem conceder outro desconto' : 'natureza_valor=preço de tabela; não autoriza preço à vista, desconto ou proposta negociada',
+    ...(result.tabelas_pagamento ? result.tabelas_pagamento.map((q) => q.complete
+      ? `modalidade=${PAYMENT_TABLE_LABELS[q.id]}; total_base=${formatBrl(q.totalCents / 100)}; entrada=${formatBrl(q.entryCents / 100)}; mensais=${q.installmentCount} x ${formatBrl(q.installmentCents / 100)}; ultima_mensal=${formatBrl(q.lastInstallmentCents / 100)}; reforcos=${q.reinforcementCount} x ${formatBrl(q.reinforcementCents / 100)}; chaves=${formatBrl(q.keysCents / 100)}${q.id === 'cash' ? '' : `; ${PAYMENT_TABLE_TERMS}`}`
+      : `modalidade=${PAYMENT_TABLE_LABELS[q.id]}; total_base=${q.totalCents > 0 ? formatBrl(q.totalCents / 100) : 'não confirmado'}; composição não confirmada: não oferecer entrada, mensais, reforços ou chaves`) : []),
     complete ? `plano_de_pagamento=completo; entrada=${formatBrl(result.entrada)}` : 'plano_de_pagamento=parcial ou inconsistente; confirmar composição completa antes de apresentar entrada, parcelas, reforços e chaves',
     ...(installments ? [`parcela_media=${formatBrl(installments.valor_unitario_centavos / 100)}`, `quantidade_parcelas=${installments.quantidade}`] : []),
     ...(reinforcements ? [`reforcos=${reinforcements.quantidade} x ${formatBrl(reinforcements.valor_unitario_centavos / 100)}`] : []),

@@ -53,6 +53,8 @@ jobs:
         run: npm run test:alma-table
       - name: Test Flow sales table
         run: npm run test:flow-table
+      - name: Test payment tables and approved Nara quotes
+        run: npm run test:payment-tables
       - name: Test AI files commercial access
         run: npm run test:ai-files-commercial
       - name: Test Nara conversation policy
