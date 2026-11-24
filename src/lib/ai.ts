@@ -988,7 +988,7 @@ export async function enforceNaraReplyGuardrails(
     turn.next_action = agendaGuard.nextAction;
   }
   if (lead.kind === 'cliente' && !routeOutsideBuyerProfile(history) && !asksAlmaReservationGuarantee) {
-    const financialHandoff = applyNaraFinancialHandoff(turn, history);
+    const financialHandoff = applyNaraFinancialHandoff(turn, history, context.commercial);
     if (!financialHandoff && !lead.opt_out && turn.classification !== 'sem_interesse'
       && turn.agenda_confirmed !== true && hasConsentedAgendaInterest(history)) {
       // Wanting a presentation/visit is concrete engagement even without a
@@ -1043,7 +1043,7 @@ export function enforceNaraTriage(turn: AiTurn, lead: Lead, history: ChatMessage
     return turn;
   }
   const routed = routeOutsideBuyerProfile(history);
-  if (!routed && applyNaraFinancialHandoff(turn, history)) {
+  if (!routed && applyNaraFinancialHandoff(turn, history, context.commercial)) {
     turn.reply = ensureFirstTurnIntroduction(turn.reply, history, context);
     return turn;
   }

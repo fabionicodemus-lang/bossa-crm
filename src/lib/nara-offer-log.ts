@@ -123,6 +123,26 @@ export function buildNaraOfferAuditRecords(
     }
 
     for (const offer of offerList(call.result)) {
+      for (const table of offer.tabelas_pagamento ?? []) {
+        if (table.id === 'cash' || table.totalCents <= 0) continue;
+        const value = cited(citations, table.totalCents / 100);
+        const entry = table.complete ? cited(citations, table.entryCents / 100) : null;
+        const installment = table.complete ? cited(citations, table.installmentCents / 100) : null;
+        const quoted = [value && { ...value, field: `payment_table_${table.id}_total` },
+          entry && { ...entry, field: `payment_table_${table.id}_entry` },
+          installment && { ...installment, field: `payment_table_${table.id}_monthly` },
+          ...(table.complete ? [['last', table.lastInstallmentCents], ['annual', table.reinforcementCents], ['keys', table.keysCents]].map(([field, cents]) => {
+            const citation = cited(citations, Number(cents) / 100);
+            return citation && { ...citation, field: `payment_table_${table.id}_${field}` };
+          }) : []),
+        ].filter(Boolean) as MoneyCitation[];
+        if (!quoted.length) continue;
+        quoted.forEach((item) => matched.add(item.amount));
+        records.push({ scope: 'unit', source_call: `${call.name}:${table.id}`, development_name: offer.empreendimento,
+          unit_code: offer.unidade, offered_value: value ? table.totalCents / 100 : null,
+          entry_amount: entry ? table.entryCents / 100 : null, installment_amount: installment ? table.installmentCents / 100 : null,
+          range_min: null, range_max: null, range_entry_min: null, quoted_amounts: quoted });
+      }
       const value = cited(citations, offer.valor);
       const entry = cited(citations, offer.entrada);
       const installment = cited(citations, offer.parcela_media);

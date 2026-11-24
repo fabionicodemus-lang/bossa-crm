@@ -1,4 +1,5 @@
 import type { DevelopmentTypology, DevelopmentUnit } from '../components/DevelopmentsManager';
+import { PAYMENT_TABLE_LABELS, PAYMENT_TABLE_TERMS, unitPaymentTables, type PaymentTableId, type PaymentTablePolicy } from './unit-payment-tables';
 
 export type PremiumPrintTheme = 'flow' | 'alma';
 type Status = 'disponivel' | 'reservado' | 'em_contrato' | 'vendido';
@@ -72,7 +73,8 @@ function priceCell(amount: number, count: number, showCount: boolean, suffix = '
 
 /** A4 portrait: fixed presentation pages plus a live CRM commercial page. */
 export function buildPremiumSalesPrintHtml({
-  theme, name, units, typologies, assetBaseUrl, printedAt = new Date(), autoPrint = true,
+  theme, name, units: sourceUnits, typologies, assetBaseUrl, printedAt = new Date(), autoPrint = true,
+  paymentTableId = 'current', paymentTablePolicy,
 }: {
   theme: PremiumPrintTheme;
   name: string;
@@ -81,7 +83,22 @@ export function buildPremiumSalesPrintHtml({
   assetBaseUrl: string;
   printedAt?: Date;
   autoPrint?: boolean;
+  paymentTableId?: PaymentTableId;
+  paymentTablePolicy?: PaymentTablePolicy | null;
 }) {
+  const alternative = paymentTableId !== 'current';
+  if (alternative && !paymentTablePolicy) throw new Error('Esta modalidade não possui uma regra comercial aprovada.');
+  const quotes = new Map(sourceUnits.filter((u) => u.status === 'disponivel').map((u) => [u.id,
+    paymentTablePolicy ? unitPaymentTables(u, paymentTablePolicy).find((q) => q.id === paymentTableId) : undefined]));
+  const units = sourceUnits.map((unit) => {
+    if (!alternative || unit.status !== 'disponivel') return unit;
+    const quote = quotes.get(unit.id);
+    if (!quote?.complete) throw new Error(`Unidade ${unit.unit_code}: ${quote?.issue ?? 'condição não confirmada'}`);
+    return { ...unit, list_price: quote.totalCents / 100, entry_amount: quote.entryCents / 100,
+      installment_count: quote.installmentCount, installment_amount: quote.installmentCents / 100,
+      reinforcement_count: quote.reinforcementCount, reinforcement_amount: quote.reinforcementCents / 100,
+      keys_amount: quote.keysCents / 100 };
+  });
   const included = units.map((unit) => ({ unit, status: statusOf(unit, theme) }))
     .filter((item): item is Entry => item.status !== null);
   const counts = included.reduce<Record<Status, number>>((a, item) => {
@@ -90,7 +107,7 @@ export function buildPremiumSalesPrintHtml({
   }, { disponivel: 0, reservado: 0, em_contrato: 0, vendido: 0 });
   // Alma's supplied model shows only available prices and lists reservations separately.
   // Flow's model prints values for all unsold commercial statuses.
-  const priced = included.filter((item) => theme === 'flow' ? item.status !== 'vendido' : item.status === 'disponivel');
+  const priced = included.filter((item) => alternative ? item.status === 'disponivel' : theme === 'flow' ? item.status !== 'vendido' : item.status === 'disponivel');
   const secondary = included.filter((item) => theme === 'flow' ? item.status === 'vendido' : item.status === 'reservado');
   const groups = groupUnits(priced, typologies);
   const otherGroups = groupUnits(secondary, typologies);
@@ -98,10 +115,12 @@ export function buildPremiumSalesPrintHtml({
   const reinforcementCounts = [...new Set(priced.map(({ unit }) => numeric(unit.reinforcement_count)).filter(Boolean))];
   const sameInstallments = installmentCounts.length === 1;
   const sameReinforcements = reinforcementCounts.length === 1;
-  const mismatches = priced.filter(({ unit }) => hasDifference(unit)).map(({ unit }) => unit.unit_code);
-  const missingPlans = priced.some(({ unit }) => [unit.entry_amount, unit.installment_amount, unit.reinforcement_amount, unit.keys_amount]
+  const mismatches = alternative ? [] : priced.filter(({ unit }) => hasDifference(unit)).map(({ unit }) => unit.unit_code);
+  const missingPlans = !alternative && priced.some(({ unit }) => [unit.entry_amount, unit.installment_amount, unit.reinforcement_amount, unit.keys_amount]
     .some((amount) => numeric(amount) <= 0));
   const notes = [
+    paymentTablePolicy ? (paymentTableId === 'cash' ? 'Pagamento integral à vista.' : PAYMENT_TABLE_TERMS) : '',
+    alternative && paymentTablePolicy ? `Base de cálculo: ${paymentTablePolicy.valuation_date.split('-').reverse().join('/')}. Chaves previstas: ${paymentTablePolicy.handover_month.split('-').reverse().join('/')}.` : '',
     mismatches.length ? `* A composição das unidades ${mismatches.join(', ')} difere do valor total. Condições preservadas do CRM; confirmar com a Bossa.` : '',
     missingPlans ? 'Traço: condição de pagamento não cadastrada no CRM. Consulte a Bossa.' : '',
   ].filter(Boolean);
@@ -130,7 +149,7 @@ export function buildPremiumSalesPrintHtml({
       const alternate = stripe++ % 2 ? ' alternate' : '';
       return `<tr class="price-row${alternate}"><td class="unit"><strong>${escapeHtml(unit.unit_code)}${flagged ? '*' : ''}</strong>${statusTag ? `<small>${statusTag}</small>` : ''}</td>
         <td class="total">${escapeHtml(money(unit.list_price))}</td><td>${escapeHtml(money(unit.entry_amount))}</td>
-        <td>${priceCell(unit.installment_amount, unit.installment_count, !sameInstallments, ' / mês')}</td>
+        <td>${priceCell(unit.installment_amount, unit.installment_count, !sameInstallments, ' / mês')}${paymentTablePolicy && quotes.get(unit.id)?.complete && quotes.get(unit.id)?.lastInstallmentCents !== quotes.get(unit.id)?.installmentCents ? `<small>Última: ${escapeHtml(money((quotes.get(unit.id)?.lastInstallmentCents ?? 0) / 100))}</small>` : ''}</td>
         <td>${priceCell(unit.reinforcement_amount, unit.reinforcement_count, !sameReinforcements)}</td>
         <td>${escapeHtml(money(unit.keys_amount))}</td></tr>`;
     }).join('');
@@ -198,7 +217,7 @@ tr{break-inside:avoid;page-break-inside:avoid}
 <header class="masthead"><img class="project-logo" src="${root}/${theme}-logo.png" alt="${escapeHtml(name)}" /><img class="bossa-logo" src="${root}/bossa-logo.png" alt="Bossa Empreendimentos" />
 ${heading}<div class="month">${escapeHtml(monthHeader)}</div></header>
 <div class="status-bar">${stats}</div>
-<div class="section-heading"><span>${isFlow && (counts.reservado || counts.em_contrato) ? 'UNIDADES COM VALORES' : 'UNIDADES DISPONÍVEIS'}</span><span>VALORES EM REAIS (R$)</span></div>
+<div class="section-heading"><span>${paymentTablePolicy ? escapeHtml(PAYMENT_TABLE_LABELS[paymentTableId]) : isFlow && (counts.reservado || counts.em_contrato) ? 'UNIDADES COM VALORES' : 'UNIDADES DISPONÍVEIS'}</span><span>VALORES EM REAIS (R$)</span></div>
 <div class="table-area"><table><colgroup><col class="unit"/><col class="total"/><col class="entry"/><col class="installment"/><col class="reinforcement"/><col class="keys"/></colgroup>
 <thead><tr><th>UNIDADE</th><th>VALOR TOTAL</th><th>ENTRADA</th><th>PARCELAS<small>${sameInstallments ? `(${installmentCounts[0]}× / mês)` : '(por mês)'}</small></th>
 <th>REFORÇO ANUAL<small>${sameReinforcements ? `(${reinforcementCounts[0]}×)` : '(por unidade)'}</small></th><th>CHAVES</th></tr></thead>

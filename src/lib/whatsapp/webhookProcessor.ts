@@ -949,7 +949,7 @@ export async function processConversation(args: {
   // this wording prospective; assignment is not proof a person has answered.
   if (lead.kind === 'cliente' && !outsideBuyerProfile) {
     turn.reply = reply;
-    if (applyNaraFinancialHandoff(turn, history)) {
+    if (applyNaraFinancialHandoff(turn, history, context.commercial)) {
       reply = ensureFirstTurnIntroduction(turn.reply, history, context);
       turn.reply = reply;
     }

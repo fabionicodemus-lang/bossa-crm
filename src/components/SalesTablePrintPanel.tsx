@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react';
 import { buildPremiumSalesPrintHtml, type PremiumPrintTheme } from '@/lib/premium-sales-table-print';
 import { createClient } from '@/lib/supabase/client';
+import { PAYMENT_TABLE_LABELS, readPaymentTablePolicy, type PaymentTableId } from '@/lib/unit-payment-tables';
 import type { DevelopmentTypology, DevelopmentUnit } from './DevelopmentsManager';
 
 export type SalesTablePrintDevelopment = {
@@ -11,6 +12,7 @@ export type SalesTablePrintDevelopment = {
   slug: string;
   logo_path: string | null;
   active: boolean;
+  default_payment_plan?: Record<string, unknown>;
 };
 
 function themeFor(development: SalesTablePrintDevelopment): PremiumPrintTheme | null {
@@ -42,6 +44,7 @@ export function SalesTablePrintPanel({
   const supabase = useMemo(() => createClient(), []);
   const [printingId, setPrintingId] = useState('');
   const [error, setError] = useState('');
+  const [modes, setModes] = useState<Record<string, PaymentTableId>>({});
   const targets = developments.filter((development) => development.active && themeFor(development))
     .sort((a, b) => Number(themeFor(a) !== 'flow') - Number(themeFor(b) !== 'flow'));
 
@@ -61,14 +64,15 @@ export function SalesTablePrintPanel({
     try {
       // Requery on every click: another CRM user (or the manager above) may have
       // changed a price or unit status since this page was first loaded.
-      const [unitsResult, typologiesResult] = await Promise.all([
+      const [unitsResult, typologiesResult, developmentResult] = await Promise.all([
         supabase.from('development_units').select('*').eq('organization_id', organizationId)
           .eq('development_id', development.id),
         supabase.from('development_typologies').select('*').eq('organization_id', organizationId)
           .eq('development_id', development.id),
+        supabase.from('developments').select('default_payment_plan').eq('organization_id', organizationId).eq('id', development.id).single(),
       ]);
-      if (unitsResult.error || typologiesResult.error) {
-        throw unitsResult.error ?? typologiesResult.error ?? new Error('Não foi possível atualizar a tabela.');
+      if (unitsResult.error || typologiesResult.error || developmentResult.error) {
+        throw unitsResult.error ?? typologiesResult.error ?? developmentResult.error ?? new Error('Não foi possível atualizar a tabela.');
       }
       const currentUnits = (unitsResult.data ?? []) as DevelopmentUnit[];
       if (!currentUnits.some(isPrintable)) throw new Error(`O ${development.name} ainda não possui unidades comerciais para impressão.`);
@@ -76,6 +80,8 @@ export function SalesTablePrintPanel({
         theme, name: development.name, units: currentUnits,
         typologies: (typologiesResult.data ?? []) as DevelopmentTypology[],
         assetBaseUrl: window.location.origin,
+        paymentTableId: modes[development.id] ?? 'current',
+        paymentTablePolicy: readPaymentTablePolicy(developmentResult.data?.default_payment_plan),
       });
       popup.document.open();
       popup.document.write(html);
@@ -108,6 +114,11 @@ export function SalesTablePrintPanel({
             <div className="card-body" style={{ display: 'grid', gap: 8 }}>
               <strong>{development.name}</strong>
               <small className="muted">{printable} unidades cadastradas · 3 páginas no padrão premium</small>
+              {readPaymentTablePolicy(development.default_payment_plan) && <label className="field">Condição de pagamento
+                <select className="select" value={modes[development.id] ?? 'current'} onChange={(event) => setModes((current) => ({ ...current, [development.id]: event.target.value as PaymentTableId }))}>
+                  {(Object.keys(PAYMENT_TABLE_LABELS) as PaymentTableId[]).map((id) => <option key={id} value={id}>{PAYMENT_TABLE_LABELS[id]}</option>)}
+                </select>
+              </label>}
               <button type="button" className="btn btn-primary" disabled={Boolean(printingId)}
                 onClick={() => void printDevelopment(development)}>
                 {printingId === development.id ? 'Preparando impressão…' : `🖨️ Imprimir ${development.name}`}
