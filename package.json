@@ -21,6 +21,7 @@
     "test:flow-table": "node scripts/check-flow-sales-table.mjs",
     "test:premium-sales-print": "node --experimental-strip-types --experimental-loader ./scripts/ts-extension-loader.mjs scripts/check-premium-sales-print.mjs",
     "test:payment-tables": "node --experimental-strip-types --experimental-loader ./scripts/ts-extension-loader.mjs scripts/check-unit-payment-tables.mjs",
+    "test:nara-direct-purchase": "node --experimental-strip-types --experimental-loader ./scripts/ts-extension-loader.mjs scripts/check-nara-direct-purchase.mjs",
     "test:ai-files-commercial": "node scripts/check-ai-files-commercial-access.mjs",
     "test:nara-prompt": "node --experimental-strip-types --experimental-loader ./scripts/ts-extension-loader.mjs scripts/check-nara-prompt-contract.mjs",
     "test:ai-model-routing": "node scripts/check-ai-model-routing.mjs",

@@ -108,7 +108,7 @@ export function buildNaraOfferAuditRecords(
         quoted.forEach((item) => matched.add(item.amount));
         records.push({
           scope: 'range',
-          source_call: call.name,
+          source_call: `${call.name}${range.compra_direta?.relationship === 'direct_confirmed' ? ':direct_purchase' : ''}`,
           development_name: range.empreendimento,
           unit_code: null,
           offered_value: null,
@@ -138,7 +138,7 @@ export function buildNaraOfferAuditRecords(
         ].filter(Boolean) as MoneyCitation[];
         if (!quoted.length) continue;
         quoted.forEach((item) => matched.add(item.amount));
-        records.push({ scope: 'unit', source_call: `${call.name}:${table.id}`, development_name: offer.empreendimento,
+        records.push({ scope: 'unit', source_call: `${call.name}:${table.id}${offer.compra_direta?.relationship === 'direct_confirmed' ? ':direct_purchase' : ''}`, development_name: offer.empreendimento,
           unit_code: offer.unidade, offered_value: value ? table.totalCents / 100 : null,
           entry_amount: entry ? table.entryCents / 100 : null, installment_amount: installment ? table.installmentCents / 100 : null,
           range_min: null, range_max: null, range_entry_min: null, quoted_amounts: quoted });
@@ -155,7 +155,7 @@ export function buildNaraOfferAuditRecords(
       quoted.forEach((item) => matched.add(item.amount));
       records.push({
         scope: 'unit',
-        source_call: call.name,
+        source_call: `${call.name}${offer.compra_direta?.relationship === 'direct_confirmed' ? ':direct_purchase' : ''}`,
         development_name: offer.empreendimento,
         unit_code: offer.unidade,
         offered_value: value ? offer.valor : null,

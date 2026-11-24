@@ -4,6 +4,7 @@ import { isAssistedSaleSignal, isBrokerRoutingSignal, isCurrentCustomerSignal } 
 import { adDevelopment } from './nara-first-message';
 import { isNaraAlternativePaymentProposal, isNaraArchitecturalEntranceQuestion, isNaraMarketInformationQuestion } from './nara-commercial-guard';
 import { cashPriceCents, PAYMENT_TABLE_LABELS, PAYMENT_TABLE_TERMS, readPaymentTablePolicy, unitPaymentTables, type PaymentTableQuote } from './unit-payment-tables';
+import { directPurchaseCents, directPurchaseQuote, hasDirectPurchasePolicy, purchaseRelationship, type DirectPurchaseCondition, type PurchaseRelationship } from './nara-direct-purchase';
 
 type ChatMessage = { role: 'user' | 'assistant'; content: string };
 type JsonRecord = Record<string, unknown>;
@@ -61,6 +62,7 @@ export type NaraPaymentPlan = {
 };
 
 export type NaraUnitOffer = {
+  compra_direta?: DirectPurchaseCondition;
   modalidade?: 'cash';
   valor_tabela_parcelada?: number;
   tabelas_pagamento?: PaymentTableQuote[];
@@ -83,6 +85,7 @@ export type NaraUnitOffer = {
 };
 
 export type NaraDevelopmentRange = {
+  compra_direta?: DirectPurchaseCondition;
   modalidade?: 'cash';
   empreendimento_id?: string;
   empreendimento: string;
@@ -341,11 +344,14 @@ function toOffer(
   development: DevelopmentRow,
   unit: UnitRow,
   typology: TypologyRow | undefined,
+  relationship: PurchaseRelationship = 'unknown',
 ): NaraUnitOffer {
   const plan = planForUnit(unit);
   const terms = paymentPlan(unit, { ...development.default_payment_plan, ...plan });
   const policy = readPaymentTablePolicy(development.default_payment_plan);
-  const tables = policy ? unitPaymentTables(unit, policy) : [];
+  const originalTables = policy ? unitPaymentTables(unit, policy) : [];
+  const directPolicy = Boolean(policy && hasDirectPurchasePolicy(development.default_payment_plan));
+  const tables = directPolicy && relationship === 'direct_confirmed' ? originalTables.map(directPurchaseQuote) : originalTables;
   const cash = tables.find((item) => item.id === 'cash' && item.complete);
   return {
     empreendimento_id: development.id,
@@ -355,6 +361,7 @@ function toOffer(
     unidade: unit.unit_code,
     andar: unit.floor,
     tipologia: typology?.name || typology?.code || 'Não informada',
+    ...(directPolicy && cash ? { compra_direta: { relationship, discount_bps: 400 as const, original_value: originalTables[0].totalCents / 100 } } : {}),
     ...(cash ? { modalidade: 'cash' as const, valor_tabela_parcelada: (moneyCents(unit.list_price) ?? 0) / 100, tabelas_pagamento: tables } : {}),
     valor: cash ? cash.totalCents / 100 : (moneyCents(unit.list_price) ?? 0) / 100,
     entrada: cash ? cash.totalCents / 100 : (moneyCents(unit.entry_amount) ?? 0) / 100,
@@ -374,6 +381,7 @@ async function offersFromRows(
   organizationId: string,
   development: DevelopmentRow,
   rows: UnitRow[],
+  relationship: PurchaseRelationship = 'unknown',
 ): Promise<NaraUnitOffer[]> {
   const typologies = await developmentTypologies(client, organizationId, development.id);
   const byId = new Map(typologies.map((row) => [row.id, row]));
@@ -381,6 +389,7 @@ async function offersFromRows(
     development,
     row,
     row.typology_id ? byId.get(row.typology_id) : undefined,
+    relationship,
   ));
 }
 
@@ -388,6 +397,7 @@ export async function faixaEmpreendimento(
   client: SupabaseClient,
   organizationId: string,
   empreendimento: string,
+  relationship: PurchaseRelationship = 'unknown',
 ): Promise<NaraDevelopmentRange | null> {
   const development = await resolveDevelopment(client, organizationId, empreendimento);
   if (!development) return null;
@@ -409,7 +419,9 @@ export async function faixaEmpreendimento(
     return null;
   }
   const policy = readPaymentTablePolicy(development.default_payment_plan);
-  const prices = rows.map((row) => (policy ? cashPriceCents(row, policy)! : moneyCents(row.list_price)!) / 100);
+  const directPolicy = Boolean(policy && hasDirectPurchasePolicy(development.default_payment_plan));
+  const originalPrices = rows.map((row) => policy ? cashPriceCents(row, policy)! : moneyCents(row.list_price)!);
+  const prices = originalPrices.map((cents) => (directPolicy && relationship === 'direct_confirmed' ? directPurchaseCents(cents) : cents) / 100);
   const entries = policy ? prices : rows.map((row) => (moneyCents(row.entry_amount) ?? 0) / 100).filter((value) => value > 0);
   const validity = rows.map((row) => tableValidUntil(planForUnit(row)))
     .filter((value): value is string => Boolean(value))
@@ -418,6 +430,7 @@ export async function faixaEmpreendimento(
   return {
     empreendimento_id: development.id,
     empreendimento: development.name,
+    ...(directPolicy ? { compra_direta: { relationship, discount_bps: 400 as const, original_value: Math.min(...originalPrices) / 100 } } : {}),
     ...(policy ? { modalidade: 'cash' as const } : {}),
     valor_minimo: Math.min(...prices),
     valor_maximo: Math.max(...prices),
@@ -431,6 +444,7 @@ export async function buscarApartamentos(
   client: SupabaseClient,
   organizationId: string,
   filters: NaraApartmentFilters,
+  relationship: PurchaseRelationship = 'unknown',
 ): Promise<NaraUnitOffer[]> {
   const development = await resolveDevelopment(client, organizationId, filters.empreendimento);
   if (!development) return [];
@@ -466,13 +480,15 @@ export async function buscarApartamentos(
   const currentRows = allRows.filter((row) => priceRowIsCurrent(row, now));
   const rows = currentRows.filter((row) => {
     if (!policy) return true;
-    const cash = cashPriceCents(row, policy);
+    const baseCash = cashPriceCents(row, policy);
+    const cash = baseCash !== null && relationship === 'direct_confirmed' && hasDirectPurchasePolicy(development.default_payment_plan)
+      ? directPurchaseCents(baseCash) : baseCash;
     return cash !== null && (!Number.isFinite(filters.valor_max) || cash <= Number(filters.valor_max) * 100)
       && (!Number.isFinite(filters.entrada_max) || cash <= Number(filters.entrada_max) * 100);
   }).slice(0, 3);
   if (allRows.length && !currentRows.length) throw new NaraCommercialQueryIssue('error', 'invalid_or_expired_price_table',
     'As opções encontradas precisam de confirmação da tabela vigente. Não informe esses valores nem use ofertas antigas.');
-  return offersFromRows(client, organizationId, development, rows);
+  return offersFromRows(client, organizationId, development, rows, relationship);
 }
 
 export async function consultarApartamento(
@@ -480,6 +496,7 @@ export async function consultarApartamento(
   organizationId: string,
   empreendimento: string,
   unidade: string,
+  relationship: PurchaseRelationship = 'unknown',
 ): Promise<NaraUnitOffer | null> {
   const development = await resolveDevelopment(client, organizationId, empreendimento);
   if (!development) return null;
@@ -496,7 +513,7 @@ export async function consultarApartamento(
   if (!data) return null;
   if (!priceRowIsCurrent(data as UnitRow)) throw new NaraCommercialQueryIssue('error', 'invalid_or_expired_price_table',
     'A tabela desta unidade está vencida ou inconsistente. Não apresente um valor anterior como atual; confirme a condição vigente.');
-  const offers = await offersFromRows(client, organizationId, development, [data as UnitRow]);
+  const offers = await offersFromRows(client, organizationId, development, [data as UnitRow], relationship);
   return offers[0] ?? null;
 }
 
@@ -504,6 +521,7 @@ function formatRange(result: NaraDevelopmentRange | null): string {
   if (!result) return 'resultado vazio';
   return [
     `empreendimento=${result.empreendimento}`,
+    ...directPurchaseSource(result.compra_direta),
     ...(result.modalidade === 'cash' ? ['natureza_valor=pagamento integral à vista; não é valor parcelado'] : []),
     `valor_minimo=${formatBrl(result.valor_minimo)}`,
     `valor_maximo=${formatBrl(result.valor_maximo)}`,
@@ -521,6 +539,7 @@ function formatOffer(result: NaraUnitOffer): string {
   const keys = complete ? plan.componentes.find((item) => item.tipo === 'chaves') : null;
   return [
     `empreendimento=${result.empreendimento}`,
+    ...directPurchaseSource(result.compra_direta),
     `unidade=${result.unidade}`,
     `andar=${result.andar ?? 'não informado'}`,
     `tipologia=${result.tipologia}`,
@@ -539,6 +558,14 @@ function formatOffer(result: NaraUnitOffer): string {
     `referencia_tabela=${result.referencia_tabela ?? 'não informada'}`,
     `preco_atualizado_em=${result.preco_atualizado_em ?? 'não informado'}`,
   ].join('; ');
+}
+
+function directPurchaseSource(condition?: DirectPurchaseCondition): string[] {
+  if (!condition) return [];
+  if (condition.relationship === 'intermediated') return ['condição aplicável=atendimento com intermediação; preservar a tabela consultada, sem benefício de compra direta'];
+  return condition.relationship === 'direct_confirmed'
+    ? ['condição aplicável=compra direta confirmada. Os valores estruturados JÁ incluem integralmente o benefício aprovado. Apresente o preço final como condição especial de compra direta, sem abrir a composição de comissão e sem subtrair novamente. O parcelamento tem preço próprio: consulte a modalidade pedida. Não afirme que o benefício já aplicado existe também como novo desconto.']
+    : ['condição aplicável=origem ainda não confirmada. Apresente o preço de tabela consultado e mencione condição especial de compra direta, sem prometer o benefício ou calcular outro valor. Pergunte: Você já está sendo atendido por algum corretor nesta compra? Receber contato do site, Google, anúncio ou WhatsApp não confirma ausência de intermediação.'];
 }
 
 function sourceText(calls: NaraCommercialCall[]): string {
@@ -769,6 +796,7 @@ export async function loadNaraCommercialTurnContext(
   const consultedAt = new Date().toISOString();
   const blockedReason = blockedCommercialProfile(lead, history);
   if (blockedReason) return blockedCommercialContext(blockedReason, consultedAt);
+  const relationship = purchaseRelationship(lead, history);
   if (isNaraArchitecturalEntranceQuestion(latest) || isNaraAlternativePaymentProposal(latest)
     || isNaraMarketInformationQuestion(latest)) return null;
   const latestUnits = unitCodesFromMessage(latest);
@@ -790,12 +818,12 @@ export async function loadNaraCommercialTurnContext(
     // Uma comparação explícita recebe faixas distintas, sem escolher um empreendimento silenciosamente.
     if (named.length > 1) {
       for (const name of named) {
-        const result = await faixaEmpreendimento(client, organizationId, name);
+        const result = await faixaEmpreendimento(client, organizationId, name, relationship);
         calls.push({ name: 'faixa_empreendimento', arguments: { empreendimento: name }, result });
       }
     }
     const enterprise = named.length > 1 ? '' : inferredEnterprise(lead, history);
-    const referencesUnit = (/\b(essa|esse|dessa|desse|dela|dele|entrada|parcelas?|reforcos?|chaves|juros|correcao|pagamento|total|desconto|condicao|preco|valor|quanto|custa|cuesta|price|how much)\b/.test(normalizeText(latest)) || (continuesPriceConversation && named.length === 1))
+    const referencesUnit = (/\b(essa|esse|dessa|desse|dela|dele|entrada|parcelas?|reforcos?|chaves|juros|correcao|pagamento|total|desconto|condicao|preco|valor|quanto|custa|cuesta|price|how much)\b/.test(normalizeText(latest)) || (continuesPriceConversation && (named.length === 1 || relationship === 'direct_confirmed')))
       && !/\b(outr[oa]s?|opcoes|alternativas|mais barat[oa]|mais car[oa])\b/.test(normalizeText(latest));
     const unitCode = latestUnits[0] || (enterprise && referencesUnit ? unitInCurrentConversation(lead, history, enterprise) : '');
 
@@ -812,7 +840,7 @@ export async function loadNaraCommercialTurnContext(
           source_text: 'A mensagem menciona uma unidade, mas não identifica o empreendimento. Não informe preço ou disponibilidade dessa unidade; pergunte de qual empreendimento é.',
         };
       }
-      const result = await consultarApartamento(client, organizationId, enterprise, unitCode);
+      const result = await consultarApartamento(client, organizationId, enterprise, unitCode, relationship);
       calls.push({
         name: 'consultar_apartamento',
         arguments: { empreendimento: enterprise, unidade: unitCode },
@@ -821,10 +849,10 @@ export async function loadNaraCommercialTurnContext(
     } else if (enterprise && !continuesPriceConversation && (asksForSpecificOptions(latest)
       || filtersFromMessage(enterprise, latest).valor_max !== null)) {
       const filters = filtersFromConversation(enterprise, history);
-      const result = await buscarApartamentos(client, organizationId, filters);
+      const result = await buscarApartamentos(client, organizationId, filters, relationship);
       calls.push({ name: 'buscar_apartamentos', arguments: filters, result });
     } else if (enterprise) {
-      const result = await faixaEmpreendimento(client, organizationId, enterprise);
+      const result = await faixaEmpreendimento(client, organizationId, enterprise, relationship);
       calls.push({
         name: 'faixa_empreendimento',
         arguments: { empreendimento: enterprise },
@@ -835,7 +863,7 @@ export async function loadNaraCommercialTurnContext(
     } else {
       const developments = await activeDevelopments(client, organizationId);
       for (const development of developments) {
-        const result = await faixaEmpreendimento(client, organizationId, development.name);
+        const result = await faixaEmpreendimento(client, organizationId, development.name, relationship);
         calls.push({
           name: 'faixa_empreendimento',
           arguments: { empreendimento: development.name },

@@ -23,3 +23,15 @@ As novas tabelas resolvem simultaneamente o total e a entrada percentual, manten
 O mesmo motor atende a tela de empreendimentos, as quatro versões de impressão e as consultas estruturadas da Nara. A consulta normal identifica explicitamente o valor à vista. Consultas às modalidades aprovadas podem acompanhar o encaminhamento financeiro existente; propostas do contato e descontos adicionais não recebem aprovação automática. A consulta é refeita antes do envio e as quantias são auditadas com a modalidade de origem.
 
 Verificação: `npm run test:payment-tables` cobre fluxo descontado, centavos, reforços, configuração inválida, estoque e organização, impressão, HTML da tela, auditoria e o motor real da Nara com transporte simulado, sem envio de WhatsApp ou chamadas externas.
+
+## Compra direta sem comissão
+
+Em 24/11/2026 o gestor confirmou que as quatro tabelas incluem comissão de 5% e autorizou um benefício de **4% sobre o total de cada condição** em compras diretas sem comissão. A configuração específica fica em `default_payment_plan.direct_purchase`: `version:1`, `approved:true`, `discount_bps:400`, `table_commission_bps:500`. Ela não modifica as tabelas originais, impressões, propostas ou preços das unidades, nem estende a regra a outro empreendimento.
+
+A Nara consulta os valores novamente a cada turno e aplica 96% uma única vez a cada componente do plano selecionado, conciliando centavos na última mensal. No 1802: à vista R$ 720.000; 36x R$ 861.483,95; 48x R$ 893.213,79; tabela atual R$ 947.126,40. Os reajustes contratuais permanecem. Os reforços das tabelas originais são preservados; na condição direta também recebem o benefício proporcional.
+
+Origem de anúncio, site, Google ou WhatsApp não comprova ausência de intermediação. Sem confirmação, informa-se a tabela original e pergunta-se se já existe corretor na compra. Declaração explícita de ausência de corretor ou resposta negativa à pergunta confirma a condição, desde que não haja vínculo/indicação de corretor no cadastro ou histórico. Evidência de intermediação prevalece sobre afirmação posterior de compra direta. O Plantão continua consultando os preços originais.
+
+Comunicação: “condição especial de compra direta”, apresentando o preço final e sempre distinguindo à vista de parcelado. Não abrir espontaneamente a composição da comissão, nem anunciar os 4% como desconto extra sobre o preço já reduzido. Consultas às modalidades já aprovadas seguem com a Nara; pedidos de humano, proposta, reserva, fechamento ou desconto adicional seguem para o comercial. A auditoria identifica `:direct_purchase` e conserva os resultados estruturados consultados.
+
+`npm run test:nara-direct-purchase` verifica elegibilidade, origem desconhecida, indicação de corretor, benefício único, orçamento, indisponibilidade/organização, quatro fluxos exatos, auditoria, resposta posterior à confirmação e o caminho completo da Nara com transporte simulado.

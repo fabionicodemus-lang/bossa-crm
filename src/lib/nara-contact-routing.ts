@@ -16,7 +16,7 @@ function withoutNegatedBrokerIdentity(value: string): string {
 }
 
 export function isAssistedSaleSignal(value: string): boolean {
-  const text = normalizeNaraRoutingText(value);
+  const text = normalizeNaraRoutingText(value).replace(/\bnao (?:vim|cheguei|fui indicad[oa])\b.{0,20}\b(?:corretor[a]?|imobiliaria)\b/g, ' ');
   return /\b(?:meu|minha|o|a|um|uma)\s+(?:corretor|corretora|imobiliaria)\b.{0,50}\b(?:me indicou|me mandou|me apresentou|me encaminhou|passou meu contato|indicou voces)\b/.test(text)
     || /\b(?:vim|cheguei|fui indicado|recebi indicacao)\b.{0,40}\b(?:corretor|corretora|imobiliaria)\b/.test(text)
     || /\b(?:corretor|corretora|imobiliaria)\b.{0,40}\b(?:me indicou|me mandou|me apresentou|me encaminhou)\b/.test(text);
@@ -34,7 +34,7 @@ export function isExplicitBrokerSignal(value: string): boolean {
 
 export function hasStrongBrokerVocabulary(value: string): boolean {
   if (isAssistedSaleSignal(value)) return false;
-  const text = withoutNegatedBrokerIdentity(value);
+  const text = withoutNegatedBrokerIdentity(value).replace(/\b(?:sem|nao (?:pago|tem|ha)) comissao\b/g, ' ');
   return /\b(?:espelho(?: de vendas)?|comissionamento|comissao|vgv|pool de vendas|tabela de comissao|parceria com imobiliaria|parceria imobiliaria|meu cliente|tenho (?:um )?cliente|cliente interessado)\b/.test(text)
     || /\bcreci\s*[-:]?\s*\d+/i.test(text);
 }
@@ -49,7 +49,7 @@ export function hasPostSaleCorrection(value: string): boolean {
 }
 
 export function isCurrentCustomerSignal(value: string): boolean {
-  const text = normalizeNaraRoutingText(value);
+  const text = normalizeNaraRoutingText(value).replace(/\bsou (?:um |uma )?cliente diret[oa]\b/g, ' ');
   if (hasPostSaleCorrection(text)) return false;
   // "Aceitam meu apartamento como parte do pagamento?" describes a purchase
   // proposal, not ownership of a Bossa unit or a post-sale service request.
