@@ -1,5 +1,5 @@
 import type { DevelopmentTypology, DevelopmentUnit } from '../components/DevelopmentsManager';
-import { PAYMENT_TABLE_LABELS, PAYMENT_TABLE_TERMS, unitPaymentTables, type PaymentTableId, type PaymentTablePolicy } from './unit-payment-tables';
+import { paymentTableOptions, PAYMENT_TABLE_TERMS, unitPaymentTables, type PaymentTableId, type PaymentTablePolicy } from './unit-payment-tables';
 
 export type PremiumPrintTheme = 'flow' | 'alma';
 type Status = 'disponivel' | 'reservado' | 'em_contrato' | 'vendido';
@@ -88,6 +88,8 @@ export function buildPremiumSalesPrintHtml({
 }) {
   const alternative = paymentTableId !== 'current';
   if (alternative && !paymentTablePolicy) throw new Error('Esta modalidade não possui uma regra comercial aprovada.');
+  const selectedOption = paymentTablePolicy ? paymentTableOptions(paymentTablePolicy).find((option) => option.id === paymentTableId) : null;
+  if (paymentTablePolicy && !selectedOption) throw new Error('Esta modalidade não está aprovada para este empreendimento.');
   const quotes = new Map(sourceUnits.filter((u) => u.status === 'disponivel').map((u) => [u.id,
     paymentTablePolicy ? unitPaymentTables(u, paymentTablePolicy).find((q) => q.id === paymentTableId) : undefined]));
   const units = sourceUnits.map((unit) => {
@@ -217,7 +219,7 @@ tr{break-inside:avoid;page-break-inside:avoid}
 <header class="masthead"><img class="project-logo" src="${root}/${theme}-logo.png" alt="${escapeHtml(name)}" /><img class="bossa-logo" src="${root}/bossa-logo.png" alt="Bossa Empreendimentos" />
 ${heading}<div class="month">${escapeHtml(monthHeader)}</div></header>
 <div class="status-bar">${stats}</div>
-<div class="section-heading"><span>${paymentTablePolicy ? escapeHtml(PAYMENT_TABLE_LABELS[paymentTableId]) : isFlow && (counts.reservado || counts.em_contrato) ? 'UNIDADES COM VALORES' : 'UNIDADES DISPONÍVEIS'}</span><span>VALORES EM REAIS (R$)</span></div>
+<div class="section-heading"><span>${selectedOption ? escapeHtml(selectedOption.label) : isFlow && (counts.reservado || counts.em_contrato) ? 'UNIDADES COM VALORES' : 'UNIDADES DISPONÍVEIS'}</span><span>VALORES EM REAIS (R$)</span></div>
 <div class="table-area"><table><colgroup><col class="unit"/><col class="total"/><col class="entry"/><col class="installment"/><col class="reinforcement"/><col class="keys"/></colgroup>
 <thead><tr><th>UNIDADE</th><th>VALOR TOTAL</th><th>ENTRADA</th><th>PARCELAS<small>${sameInstallments ? `(${installmentCounts[0]}× / mês)` : '(por mês)'}</small></th>
 <th>REFORÇO ANUAL<small>${sameReinforcements ? `(${reinforcementCounts[0]}×)` : '(por unidade)'}</small></th><th>CHAVES</th></tr></thead>

@@ -3,9 +3,26 @@ export const PAYMENT_TABLE_LABELS = {
   cash: 'À vista',
   months36: '30% + 36x + 3 reforços',
   months48: '30% + 48x + 4 reforços + 10% nas chaves',
-  current: 'Tabela atual do CRM · 60x',
+  months40: '25% + 40x + 3 reforços',
+  months60: '20% + 60x + 4 reforços + 10% nas chaves',
+  current: 'Tabela atual do CRM',
 } as const;
 export type PaymentTableId = keyof typeof PAYMENT_TABLE_LABELS;
+export type PaymentTablePlan = {
+  id: Exclude<PaymentTableId, 'cash' | 'current'>;
+  months: number;
+  entry_bps: number;
+  reinforcement_count: number;
+  keys_bps: number;
+};
+export type PaymentTableOption = {
+  id: PaymentTableId;
+  label: string;
+  installmentCount: number;
+  reinforcementCount: number;
+  entryPercent: number;
+  keysPercent: number;
+};
 export type PaymentTableQuote = {
   id: PaymentTableId;
   totalCents: number;
@@ -44,6 +61,8 @@ export type PaymentTablePolicy = {
   reference_keys_cents: number;
   /** Only explicit unit exceptions approved by the manager; never infer missing reinforcements. */
   reinforcement_overrides_cents?: Record<string, number>;
+  /** Omitted on the original Flow rule; explicit variants belong only to this development. */
+  installment_plans?: PaymentTablePlan[];
 };
 export const PAYMENT_TABLE_TERMS = 'Valores-base: CUB durante as obras; após as chaves, IPCA + 0,59% ao mês. Entrada no ato, primeira mensal em 30 dias e reforços a cada 12 meses.';
 
@@ -76,7 +95,39 @@ export function readPaymentTablePolicy(plan: unknown): PaymentTablePolicy | null
   if (!Number.isSafeInteger(sum) || Math.abs(sum - p.list_basis_cents) > 100 || monthsUntilHandover(p) < 1) return null;
   if (p.reinforcement_overrides_cents && (typeof p.reinforcement_overrides_cents !== 'object'
     || !Object.values(p.reinforcement_overrides_cents).every((n) => integer(n) && n > 0))) return null;
+  if (p.installment_plans !== undefined && (!Array.isArray(p.installment_plans) || p.installment_plans.length !== 2
+    || new Set(p.installment_plans.map((plan) => plan?.id)).size !== 2
+    || p.installment_plans.some((plan) => !plan || !['months36', 'months40', 'months48', 'months60'].includes(plan.id)
+      || !integer(plan.months) || plan.id !== `months${plan.months}`
+      || !integer(plan.entry_bps) || plan.entry_bps <= 0 || !integer(plan.keys_bps) || plan.entry_bps + plan.keys_bps >= 10000
+      || !integer(plan.reinforcement_count) || plan.reinforcement_count < 1 || plan.reinforcement_count > Math.floor(plan.months / 12)))) return null;
   return p;
+}
+
+function installmentPlans(policy: PaymentTablePolicy): PaymentTablePlan[] {
+  return policy.installment_plans ?? [
+    { id: 'months36', months: 36, entry_bps: 3000, reinforcement_count: 3, keys_bps: 0 },
+    { id: 'months48', months: 48, entry_bps: 3000, reinforcement_count: 4, keys_bps: 1000 },
+  ];
+}
+
+export function paymentTableOptions(policy: PaymentTablePolicy): PaymentTableOption[] {
+  return [
+    { id: 'cash', label: 'À vista', installmentCount: 0, reinforcementCount: 0, entryPercent: 100, keysPercent: 0 },
+    ...installmentPlans(policy).map((p) => ({ id: p.id,
+      label: `${p.entry_bps / 100}% + ${p.months}x + ${p.reinforcement_count} reforços${p.keys_bps ? ` + ${p.keys_bps / 100}% nas chaves` : ''}`,
+      installmentCount: p.months, reinforcementCount: p.reinforcement_count, entryPercent: p.entry_bps / 100, keysPercent: p.keys_bps / 100 })),
+    { id: 'current', label: `Tabela atual do CRM · ${policy.reference_installment_count}x`, installmentCount: policy.reference_installment_count,
+      reinforcementCount: policy.reference_reinforcement_count, entryPercent: Math.round(policy.reference_entry_cents / policy.list_basis_cents * 100),
+      keysPercent: Math.round(policy.reference_keys_cents / policy.list_basis_cents * 100) },
+  ];
+}
+
+export function paymentQuoteLabel(quote: PaymentTableQuote): string {
+  if (quote.id === 'current') return `Plano em ${quote.installmentCount} meses`;
+  if (quote.id === 'cash') return 'À vista';
+  if (!quote.complete) return PAYMENT_TABLE_LABELS[quote.id];
+  return `${Math.round(quote.entryCents / quote.totalCents * 100)}% + ${quote.installmentCount}x + ${quote.reinforcementCount} reforços${quote.keysCents ? ` + ${Math.round(quote.keysCents / quote.totalCents * 100)}% nas chaves` : ''}`;
 }
 
 export function monthsUntilHandover(policy: PaymentTablePolicy): number {
@@ -146,9 +197,10 @@ export function unitPaymentTables(unit: PaymentTableUnit, policy: PaymentTablePo
   const reinforcement = recordedReinforcement && recordedReinforcement > 0 ? recordedReinforcement
     : policy.reinforcement_overrides_cents?.[unit.unit_code] ?? null;
   const quotes: PaymentTableQuote[] = [base];
-  for (const [id, months, count, keysPercent] of [
-    ['months36', 36, 3, 0], ['months48', 48, 4, 0.1],
-  ] as const) {
+  for (const p of installmentPlans(policy)) {
+    const { id, months, reinforcement_count: count } = p;
+    const entryPercent = p.entry_bps / 10000;
+    const keysPercent = p.keys_bps / 10000;
     if (reinforcement === null) {
       quotes.push({ ...base, id, totalCents: 0, entryCents: 0, installmentCount: months,
         reinforcementCount: count, complete: false, issue: 'Valor do reforço não cadastrado. Confirmar com o gestor.' });
@@ -158,8 +210,8 @@ export function unitPaymentTables(unit: PaymentTableUnit, policy: PaymentTablePo
     const reinforcementDiscount = discountedAnnual(rate, count);
     const keysDiscount = (1 + rate) ** -monthsUntilHandover(policy);
     const total = Math.round((cash - reinforcement * (reinforcementDiscount - count * averageDiscount))
-      / (0.3 + (0.7 - keysPercent) * averageDiscount + keysPercent * keysDiscount));
-    const entry = Math.round(total * 0.3);
+      / (entryPercent + (1 - entryPercent - keysPercent) * averageDiscount + keysPercent * keysDiscount));
+    const entry = Math.round(total * entryPercent);
     const keys = Math.round(total * keysPercent);
     const balance = total - entry - keys - count * reinforcement;
     const monthly = Math.round(balance / months);
