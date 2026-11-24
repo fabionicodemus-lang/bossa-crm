@@ -57,6 +57,8 @@ jobs:
         run: npm run test:payment-tables
       - name: Test direct purchase pricing and broker boundaries
         run: npm run test:nara-direct-purchase
+      - name: Test Alma payment variants and Nara project separation
+        run: npm run test:alma-payment-tables
       - name: Test AI files commercial access
         run: npm run test:ai-files-commercial
       - name: Test Nara conversation policy

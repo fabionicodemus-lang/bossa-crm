@@ -8,7 +8,7 @@ Regras definidas pelo gestor em 24/11/2026 para as unidades disponíveis do Flow
 - Tabela atual: preservar o cadastro do CRM. Um resíduo de arredondamento de até R$ 1 é conciliado exclusivamente na última mensal, sem gravar na unidade; divergências maiores impedem uma oferta completa.
 - Cada reforço mantém o valor em reais registrado na unidade. Nas unidades 501, 1503 e 1603, o gestor autorizou 6% do preço atual, respectivamente R$ 81.540, R$ 85.740 e R$ 88.140.
 
-A configuração aprovada fica em `developments.default_payment_plan.payment_tables`, somente no Flow. O motor não ativa preços alternativos por nome de empreendimento ou com base em texto livre. Não há alteração automática de preços em `development_units` ou propostas existentes. O Alma mantém suas condições comerciais.
+A configuração aprovada fica em `developments.default_payment_plan.payment_tables` do Flow. O motor não ativa preços alternativos por nome de empreendimento ou com base em texto livre. Não há alteração automática de preços em `development_units` ou propostas existentes. O Alma possui política própria, documentada em `alma-payment-tables.md`, e não herda os prazos nem o desconto de referência do Flow.
 
 ## Cálculo
 

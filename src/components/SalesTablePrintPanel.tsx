@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react';
 import { buildPremiumSalesPrintHtml, type PremiumPrintTheme } from '@/lib/premium-sales-table-print';
 import { createClient } from '@/lib/supabase/client';
-import { PAYMENT_TABLE_LABELS, readPaymentTablePolicy, type PaymentTableId } from '@/lib/unit-payment-tables';
+import { paymentTableOptions, readPaymentTablePolicy, type PaymentTableId } from '@/lib/unit-payment-tables';
 import type { DevelopmentTypology, DevelopmentUnit } from './DevelopmentsManager';
 
 export type SalesTablePrintDevelopment = {
@@ -109,14 +109,15 @@ export function SalesTablePrintPanel({
       </div>
       <div className="grid grid-2">
         {targets.map((development) => {
+          const policy = readPaymentTablePolicy(development.default_payment_plan);
           const printable = units.filter((unit) => unit.development_id === development.id && isPrintable(unit)).length;
           return <div className="card" key={development.id} style={{ boxShadow: 'none' }}>
             <div className="card-body" style={{ display: 'grid', gap: 8 }}>
               <strong>{development.name}</strong>
               <small className="muted">{printable} unidades cadastradas · 3 páginas no padrão premium</small>
-              {readPaymentTablePolicy(development.default_payment_plan) && <label className="field">Condição de pagamento
+              {policy && <label className="field">Condição de pagamento
                 <select className="select" value={modes[development.id] ?? 'current'} onChange={(event) => setModes((current) => ({ ...current, [development.id]: event.target.value as PaymentTableId }))}>
-                  {(Object.keys(PAYMENT_TABLE_LABELS) as PaymentTableId[]).map((id) => <option key={id} value={id}>{PAYMENT_TABLE_LABELS[id]}</option>)}
+                  {paymentTableOptions(policy).map(({ id, label }) => <option key={id} value={id}>{label}</option>)}
                 </select>
               </label>}
               <button type="button" className="btn btn-primary" disabled={Boolean(printingId)}

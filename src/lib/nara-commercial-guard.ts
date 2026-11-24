@@ -1,7 +1,7 @@
 import type { NaraCommercialTurnContext, NaraDevelopmentRange, NaraUnitOffer } from './nara-unit-queries';
 import { enterpriseInFocus, financialNegotiationIntent, withoutPhysicalEntranceTerms } from './nara-conversation-signals';
 import { naraConversationLanguage, type NaraLanguage } from './nara-language';
-import { isCompletePaymentQuote, PAYMENT_TABLE_LABELS, type PaymentTableId, type PaymentTableQuote } from './unit-payment-tables';
+import { isCompletePaymentQuote, paymentQuoteLabel, type PaymentTableId, type PaymentTableQuote, type PaymentTableOption } from './unit-payment-tables';
 import { directPurchaseCents, isPurchaseRelationshipAnswer } from './nara-direct-purchase';
 
 type ChatMessage = { role: 'user' | 'assistant'; content: string };
@@ -420,7 +420,7 @@ function approvedTableLines(offer: NaraUnitOffer, quote: PaymentTableQuote, lang
     : `${offer.empreendimento} · ${offer.unidade}: ${brl(quote.totalCents / 100)} — ${cashLabel}.`;
   const title = language === 'en' ? `Current base price (${quote.installmentCount} monthly installments)`
     : language === 'es' ? `Precio base (${quote.installmentCount} cuotas mensuales)`
-      : quote.id === 'current' ? 'Plano em 60 meses' : PAYMENT_TABLE_LABELS[quote.id];
+      : paymentQuoteLabel(quote);
   const lines = [`${offer.empreendimento} · ${offer.unidade} — ${title}${direct ? language === 'en' ? ' · direct purchase' : language === 'es' ? ' · compra directa' : ' · compra direta' : ''}: ${brl(quote.totalCents / 100)}.`];
   if (!quote.complete) return [...lines, language === 'en' ? 'The CRM payment breakdown needs confirmation before quoting installments.'
     : language === 'es' ? 'La composición registrada necesita confirmación antes de informar cuotas.' : 'A composição cadastrada no CRM precisa de conferência antes de informar as parcelas.'].join('\n');
@@ -438,46 +438,65 @@ function approvedTableLines(offer: NaraUnitOffer, quote: PaymentTableQuote, lang
   return lines.join('\n');
 }
 
-function requestedApprovedTables(text: string): PaymentTableId[] {
+function requestedApprovedTables(text: string, options: PaymentTableOption[]): PaymentTableId[] {
   const value = norm(text);
   // Quotes are not approval of a customer-supplied amount or alternative terms.
   if (moneyMatches(text).length || /\b(?:aceit\w*|aprov\w*|autoriz\w*|garant\w*|proposta|contraproposta|negoci\w*|permuta|desconto adicional|mais desconto|se eu der|sem juros|sem correcao)\b/.test(value)) return [];
   const all = /\b(?:quatro|4|todas as)\s+(?:tabelas|condicoes|modalidades)\b/.test(value);
-  const ids: PaymentTableId[] = all ? ['cash', 'months36', 'months48', 'current'] : [];
+  const ids: PaymentTableId[] = all ? options.map((option) => option.id) : [];
   if (/\ba vista\b(?!\s+(?:do mar|para o mar|da janela))|\bal contado\b|\bcash price\b|\bin cash\b/.test(value)) ids.push('cash');
-  for (const [count, id] of [[36, 'months36'], [48, 'months48'], [60, 'current']] as const) {
-    if (new RegExp(`\\b${count}\\s*(?:x|vezes|parcelas|mensais|meses|cuotas|months|installments)\\b`).test(value)) ids.push(id);
+  const requestedCounts = [...value.matchAll(/\b(\d+)\s*(?:x|vezes|parcelas|mensais|meses|cuotas|months|installments)\b/g)].map((m) => Number(m[1]));
+  if (requestedCounts.some((count) => !options.some((option) => option.installmentCount === count))) return [];
+  for (const option of options.filter((o) => o.installmentCount > 0)) {
+    if (requestedCounts.includes(option.installmentCount)) ids.push(option.id);
   }
   if (/\btabela atual\b/.test(value)) ids.push('current');
   const percentages = [...value.matchAll(/\b(\d+(?:[.,]\d+)?)\s*%/g)].map((m) => Number(m[1].replace(',', '.')));
-  if (percentages.some((n) => ![10, 20, 30].includes(n))) return [];
-  if (ids.includes('months36') && percentages.some((n) => n !== 30)) return [];
-  if (ids.includes('months48') && percentages.some((n) => ![10, 30].includes(n))) return [];
-  if (ids.includes('current') && !all && percentages.some((n) => n !== 20)) return [];
-  return [...new Set(ids)];
+  const selected = options.filter((option) => ids.includes(option.id));
+  if (percentages.some((n) => !selected.some((option) => n === option.entryPercent || (option.keysPercent > 0 && n === option.keysPercent)))) return [];
+  return [...new Set(ids)].filter((id) => options.some((option) => option.id === id));
+}
+
+function availableTableOptions(validation: NaraCommercialValidation): PaymentTableOption[] {
+  const options = new Map<PaymentTableId, PaymentTableOption>();
+  for (const item of [...validation.offers, ...validation.ranges]) {
+    const tables = 'tabelas_pagamento' in item ? item.tabelas_pagamento ?? [] : [];
+    for (const option of item.modalidades_pagamento ?? []) options.set(option.id, option);
+    for (const q of tables) if (!options.has(q.id)) options.set(q.id, { id: q.id, label: paymentQuoteLabel(q),
+      installmentCount: q.installmentCount, reinforcementCount: q.reinforcementCount,
+      entryPercent: q.totalCents ? Math.round(q.entryCents / q.totalCents * 100) : 0, keysPercent: q.totalCents ? Math.round(q.keysCents / q.totalCents * 100) : 0 });
+  }
+  // Legacy range fixtures have no variant catalogue and may still quote their cash price.
+  if (!options.size && validation.ranges.some((r) => r.modalidade === 'cash')) options.set('cash', { id: 'cash', label: 'À vista', installmentCount: 0, reinforcementCount: 0, entryPercent: 100, keysPercent: 0 });
+  return [...options.values()];
 }
 
 function approvedTablesReply(validation: NaraCommercialValidation, history: ChatMessage[], language: NaraLanguage): string | null {
   if (!validation.valid) return null;
+  const options = availableTableOptions(validation);
   const directPolicy = [...validation.offers, ...validation.ranges].some((item) => item.compra_direta && item.compra_direta.relationship !== 'intermediated');
   const latest = lastUserText(history);
   const relationshipAnswer = directPolicy && isPurchaseRelationshipAnswer(history);
-  let requested = relationshipAnswer && !asksForQuote(latest) && !requestedApprovedTables(latest).length
-    ? [...history].reverse().filter((m) => m.role === 'user').slice(1).find((m) => asksForQuote(m.content) || requestedApprovedTables(m.content).length)?.content ?? latest : latest;
-  if (directPolicy && /^(?:36|48|60)[.! ]*$/.test(norm(latest))
-    && /36, 48 (?:ou|or|o) 60/.test(norm([...history].reverse().find((m) => m.role === 'assistant')?.content))) requested = `${norm(latest).replace(/[.! ]/g, '')}x`;
-  const ids = requestedApprovedTables(requested);
+  let requested = relationshipAnswer && !asksForQuote(latest) && !requestedApprovedTables(latest, options).length
+    ? [...history].reverse().filter((m) => m.role === 'user').slice(1).find((m) => asksForQuote(m.content) || requestedApprovedTables(m.content, options).length)?.content ?? latest : latest;
+  const counts = [...new Set(options.map((option) => option.installmentCount).filter((n) => n > 0))];
+  const previous = norm([...history].reverse().find((m) => m.role === 'assistant')?.content);
+  if (directPolicy && /^\d{2,3}[.! ]*$/.test(norm(latest)) && counts.includes(Number(norm(latest).replace(/[.! ]/g, '')))
+    && /\b(?:prazos|term|plazo)\b/.test(previous) && counts.every((count) => new RegExp(`\\b${count}\\b`).test(previous))) requested = `${norm(latest).replace(/[.! ]/g, '')}x`;
+  const ids = requestedApprovedTables(requested, options);
   if (!ids.length && directPolicy && /\b(?:parcelad[oa]|parcelamento|parcelar|planos de pagamento)\b/.test(norm(requested))
     && !moneyMatches(requested).length && !/\d+\s*(?:%|x|parcelas|vezes)|\b(?:aceit\w*|aprov\w*|proposta|negoci\w*|desconto|sem juros|sem correcao)\b/.test(norm(requested))) {
     const hasUnknown = [...validation.offers, ...validation.ranges].some((item) => item.compra_direta?.relationship === 'unknown');
+    const terms = new Intl.ListFormat(language === 'en' ? 'en' : language === 'es' ? 'es' : 'pt-BR', { type: 'disjunction' }).format(counts.map(String));
+    if (!counts.length) return null;
     return language === 'en'
-      ? `The installment price depends on the selected plan. We have options over 36, 48 or 60 months.${hasUnknown ? ' Are you already working with a real estate broker on this purchase?' : ' Which term would suit you best?'}`
+      ? `The installment price depends on the selected plan. We have options over ${terms} months.${hasUnknown ? ' Are you already working with a real estate broker on this purchase?' : ' Which term would suit you best?'}`
       : language === 'es'
-        ? `El precio a plazos depende del plan elegido. Tenemos opciones de 36, 48 o 60 meses.${hasUnknown ? ' ¿Ya te está atendiendo un agente inmobiliario en esta compra?' : ' ¿Qué plazo te conviene más?'}`
-        : `O valor parcelado depende do plano escolhido. Temos opções em 36, 48 ou 60 meses.${hasUnknown ? ' Você já está sendo atendido por algum corretor nesta compra?' : ' Qual desses prazos combina melhor com você?'}`;
+        ? `El precio a plazos depende del plan elegido. Tenemos opciones de ${terms} meses.${hasUnknown ? ' ¿Ya te está atendiendo un agente inmobiliario en esta compra?' : ' ¿Qué plazo te conviene más?'}`
+        : `O valor parcelado depende do plano escolhido. Temos opções em ${terms} meses.${hasUnknown ? ' Você já está sendo atendido por algum corretor nesta compra?' : ' Qual desses prazos combina melhor com você?'}`;
   }
   if (!ids.length && directPolicy && (asksForQuote(requested) || relationshipAnswer || /\bcompra direta\b/.test(norm(requested)))
-    && !moneyMatches(requested).length && !/\d+\s*%|\b(?:aceit\w*|aprov\w*|autoriz\w*|garant\w*|proposta|contraproposta|negoci\w*|permuta|desconto adicional|mais desconto|sem juros|sem correcao)\b/.test(norm(requested))) ids.push('cash');
+    && !moneyMatches(requested).length && !/\d+\s*(?:%|x|vezes|parcelas|meses)|\b(?:aceit\w*|aprov\w*|autoriz\w*|garant\w*|proposta|contraproposta|negoci\w*|permuta|desconto adicional|mais desconto|sem juros|sem correcao)\b/.test(norm(requested))) ids.push('cash');
   if (!ids.length) return null;
   const lines = validation.offers.flatMap((offer) => ids.flatMap((id) => {
     const quote = offer.tabelas_pagamento?.find((q) => q.id === id);

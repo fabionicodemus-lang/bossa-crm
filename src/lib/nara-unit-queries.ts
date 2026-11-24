@@ -3,7 +3,7 @@ import type { Lead } from './types';
 import { isAssistedSaleSignal, isBrokerRoutingSignal, isCurrentCustomerSignal } from './nara-contact-routing';
 import { adDevelopment } from './nara-first-message';
 import { isNaraAlternativePaymentProposal, isNaraArchitecturalEntranceQuestion, isNaraMarketInformationQuestion } from './nara-commercial-guard';
-import { cashPriceCents, PAYMENT_TABLE_LABELS, PAYMENT_TABLE_TERMS, readPaymentTablePolicy, unitPaymentTables, type PaymentTableQuote } from './unit-payment-tables';
+import { cashPriceCents, paymentQuoteLabel, paymentTableOptions, PAYMENT_TABLE_TERMS, readPaymentTablePolicy, unitPaymentTables, type PaymentTableQuote, type PaymentTableOption } from './unit-payment-tables';
 import { directPurchaseCents, directPurchaseQuote, hasDirectPurchasePolicy, purchaseRelationship, type DirectPurchaseCondition, type PurchaseRelationship } from './nara-direct-purchase';
 
 type ChatMessage = { role: 'user' | 'assistant'; content: string };
@@ -62,6 +62,7 @@ export type NaraPaymentPlan = {
 };
 
 export type NaraUnitOffer = {
+  modalidades_pagamento?: PaymentTableOption[];
   compra_direta?: DirectPurchaseCondition;
   modalidade?: 'cash';
   valor_tabela_parcelada?: number;
@@ -85,6 +86,7 @@ export type NaraUnitOffer = {
 };
 
 export type NaraDevelopmentRange = {
+  modalidades_pagamento?: PaymentTableOption[];
   compra_direta?: DirectPurchaseCondition;
   modalidade?: 'cash';
   empreendimento_id?: string;
@@ -362,7 +364,7 @@ function toOffer(
     andar: unit.floor,
     tipologia: typology?.name || typology?.code || 'Não informada',
     ...(directPolicy && cash ? { compra_direta: { relationship, discount_bps: 400 as const, original_value: originalTables[0].totalCents / 100 } } : {}),
-    ...(cash ? { modalidade: 'cash' as const, valor_tabela_parcelada: (moneyCents(unit.list_price) ?? 0) / 100, tabelas_pagamento: tables } : {}),
+    ...(cash ? { modalidade: 'cash' as const, valor_tabela_parcelada: (moneyCents(unit.list_price) ?? 0) / 100, tabelas_pagamento: tables, modalidades_pagamento: paymentTableOptions(policy!) } : {}),
     valor: cash ? cash.totalCents / 100 : (moneyCents(unit.list_price) ?? 0) / 100,
     entrada: cash ? cash.totalCents / 100 : (moneyCents(unit.entry_amount) ?? 0) / 100,
     parcela_media: !cash && (validCount(unit.installment_count) ?? 0) > 0 && moneyCents(unit.installment_amount) !== null
@@ -431,7 +433,7 @@ export async function faixaEmpreendimento(
     empreendimento_id: development.id,
     empreendimento: development.name,
     ...(directPolicy ? { compra_direta: { relationship, discount_bps: 400 as const, original_value: Math.min(...originalPrices) / 100 } } : {}),
-    ...(policy ? { modalidade: 'cash' as const } : {}),
+    ...(policy ? { modalidade: 'cash' as const, modalidades_pagamento: paymentTableOptions(policy) } : {}),
     valor_minimo: Math.min(...prices),
     valor_maximo: Math.max(...prices),
     entrada_minima: entries.length ? Math.min(...entries) : 0,
@@ -523,6 +525,7 @@ function formatRange(result: NaraDevelopmentRange | null): string {
     `empreendimento=${result.empreendimento}`,
     ...directPurchaseSource(result.compra_direta),
     ...(result.modalidade === 'cash' ? ['natureza_valor=pagamento integral à vista; não é valor parcelado'] : []),
+    ...(result.modalidades_pagamento ? [`modalidades_aprovadas=${result.modalidades_pagamento.map((option) => option.label).join(' | ')}`] : []),
     `valor_minimo=${formatBrl(result.valor_minimo)}`,
     `valor_maximo=${formatBrl(result.valor_maximo)}`,
     `entrada_minima=${formatBrl(result.entrada_minima)}`,
@@ -546,8 +549,8 @@ function formatOffer(result: NaraUnitOffer): string {
     `valor=${formatBrl(result.valor)}`,
     result.modalidade === 'cash' ? 'natureza_valor=preço à vista aprovado para pagamento integral; não aplicar a parcelas nem conceder outro desconto' : 'natureza_valor=preço de tabela; não autoriza preço à vista, desconto ou proposta negociada',
     ...(result.tabelas_pagamento ? result.tabelas_pagamento.map((q) => q.complete
-      ? `modalidade=${PAYMENT_TABLE_LABELS[q.id]}; total_base=${formatBrl(q.totalCents / 100)}; entrada=${formatBrl(q.entryCents / 100)}; mensais=${q.installmentCount} x ${formatBrl(q.installmentCents / 100)}; ultima_mensal=${formatBrl(q.lastInstallmentCents / 100)}; reforcos=${q.reinforcementCount} x ${formatBrl(q.reinforcementCents / 100)}; chaves=${formatBrl(q.keysCents / 100)}${q.id === 'cash' ? '' : `; ${PAYMENT_TABLE_TERMS}`}`
-      : `modalidade=${PAYMENT_TABLE_LABELS[q.id]}; total_base=${q.totalCents > 0 ? formatBrl(q.totalCents / 100) : 'não confirmado'}; composição não confirmada: não oferecer entrada, mensais, reforços ou chaves`) : []),
+      ? `modalidade=${paymentQuoteLabel(q)}; total_base=${formatBrl(q.totalCents / 100)}; entrada=${formatBrl(q.entryCents / 100)}; mensais=${q.installmentCount} x ${formatBrl(q.installmentCents / 100)}; ultima_mensal=${formatBrl(q.lastInstallmentCents / 100)}; reforcos=${q.reinforcementCount} x ${formatBrl(q.reinforcementCents / 100)}; chaves=${formatBrl(q.keysCents / 100)}${q.id === 'cash' ? '' : `; ${PAYMENT_TABLE_TERMS}`}`
+      : `modalidade=${paymentQuoteLabel(q)}; total_base=${q.totalCents > 0 ? formatBrl(q.totalCents / 100) : 'não confirmado'}; composição não confirmada: não oferecer entrada, mensais, reforços ou chaves`) : []),
     complete ? `plano_de_pagamento=completo; entrada=${formatBrl(result.entrada)}` : 'plano_de_pagamento=parcial ou inconsistente; confirmar composição completa antes de apresentar entrada, parcelas, reforços e chaves',
     ...(installments ? [`parcela_media=${formatBrl(installments.valor_unitario_centavos / 100)}`, `quantidade_parcelas=${installments.quantidade}`] : []),
     ...(reinforcements ? [`reforcos=${reinforcements.quantidade} x ${formatBrl(reinforcements.valor_unitario_centavos / 100)}`] : []),
@@ -716,6 +719,7 @@ function filtersFromConversation(enterprise: string, history: ChatMessage[]): Na
 }
 
 function hasCommercialSignal(message: string): boolean {
+  if (/\b(?:parcelar|parcelad[oa]s?|parcelamento|pagar|formas? de pagamento|condicoes? de pagamento)\b/.test(normalizeText(message))) return true;
   return /\b(precos?|prices?|precio|cuanto cuesta|how much|valor(?:es)?|quanto custa|quanto fica|quanto (?:ta|sai|e|esta|da)|(?:comeca|fica|sai|custa) (?:em |por )?quanto|cabe no bolso|valor total|o total|mais barat[oa]|orcamento|ate (?:r\$\s*)?\d|tenho (?:r\$\s*)?\d|faixa|a partir de|tabela|disponibilidade|disponive(?:l|is)|unidade|apto|apartamento|entrada|parcelas?|reforcos?|chaves|juros|correcao|desconto|pagamento|andar|suites?|quartos?|duplex|dolar|usd|euro|eur|moeda)\b/.test(normalizeText(message));
 }
 
