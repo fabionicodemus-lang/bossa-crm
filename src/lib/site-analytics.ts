@@ -13,6 +13,55 @@ type EventoSite = {
 type Origem = { nome: string; canal: string };
 type Fonte = { nome: string; tipo: 'busca' | 'social' | 'mensagens' | 'ia' };
 
+export const AMBIENTES_SITE = [
+  { k: 'oficial', t: 'Site oficial' },
+  { k: 'testes', t: 'Testes' },
+  { k: 'historico', t: 'Histórico sem identificação' },
+  { k: 'todos', t: 'Todos' },
+] as const;
+export type AmbienteSite = (typeof AMBIENTES_SITE)[number]['k'];
+
+export function ambienteDoSite(host: string | null): Exclude<AmbienteSite, 'todos'> {
+  const nome = host?.toLowerCase().replace(/\.$/, '') ?? '';
+  if (nome === 'bossaempreendimentos.com.br' || nome === 'www.bossaempreendimentos.com.br') return 'oficial';
+  return nome ? 'testes' : 'historico';
+}
+
+export function noAmbiente(host: string | null, ambiente: AmbienteSite): boolean {
+  return ambiente === 'todos' || ambienteDoSite(host) === ambiente;
+}
+
+const REGIOES_BR: Record<string, string> = {
+  AC: 'Acre', AL: 'Alagoas', AP: 'Amapá', AM: 'Amazonas', BA: 'Bahia', CE: 'Ceará', DF: 'Distrito Federal',
+  ES: 'Espírito Santo', GO: 'Goiás', MA: 'Maranhão', MT: 'Mato Grosso', MS: 'Mato Grosso do Sul',
+  MG: 'Minas Gerais', PA: 'Pará', PB: 'Paraíba', PR: 'Paraná', PE: 'Pernambuco', PI: 'Piauí',
+  RJ: 'Rio de Janeiro', RN: 'Rio Grande do Norte', RS: 'Rio Grande do Sul', RO: 'Rondônia',
+  RR: 'Roraima', SC: 'Santa Catarina', SP: 'São Paulo', SE: 'Sergipe', TO: 'Tocantins',
+};
+const nomesPaises = new Intl.DisplayNames(['pt-BR'], { type: 'region' });
+
+export function localizacaoDaSessao(s: { city: string | null; region: string | null; country: string | null }) {
+  const cidade = s.city?.trim() || null;
+  const codigoRegiao = s.region?.trim().replace(/^BR-/, '').toUpperCase();
+  const brasil = !s.country || s.country.trim().toUpperCase() === 'BR' || s.country.trim().toLowerCase() === 'brasil';
+  const estado = codigoRegiao ? ((brasil ? REGIOES_BR[codigoRegiao] : null) ?? s.region?.trim() ?? null) : null;
+  let pais = s.country?.trim() || null;
+  if (pais && /^[A-Z]{2}$/.test(pais)) {
+    try { pais = nomesPaises.of(pais) ?? pais; } catch { /* mantém o código recebido */ }
+  }
+  return { cidade, estado, pais };
+}
+
+export const NOMES_EVENTOS_SITE: Record<string, string> = {
+  page_view: 'Páginas vistas', view_project: 'Viu um empreendimento', view_floorplan: 'Viu planta', switch_floorplan: 'Trocou de planta',
+  floorplan_zoom: 'Ampliou planta', gallery_interact: 'Galeria / vista por andar', video_play: 'Assistiu vídeo', view_location: 'Viu localização',
+  click_route: 'Abriu rota', view_construction: 'Viu a obra', view_engineering: 'Viu engenharia', faq_open: 'Abriu pergunta', view_price: 'Viu condições',
+  download_material: 'Pediu material', view_bossa_way: 'Viu Jeito Bossa', view_history: 'Viu história', return_visit: 'Voltou ao site',
+  click_whatsapp: 'Clicou no WhatsApp', form_start: 'Começou formulário', lead_submit: 'Enviou formulário', request_visit: 'Pediu visita',
+  scroll_depth: 'Rolagem', open_virtual_tour: 'Abriu passeio 3D', simulate_payment: 'Simulou pagamento',
+  request_material: 'Solicitou material', language_switch: 'Trocou idioma',
+};
+
 const normalizar = (valor: string) => valor.trim().toLowerCase()
   .normalize('NFD').replace(/\p{Diacritic}/gu, '');
 const chave = (valor: string) => normalizar(valor).replace(/[^a-z0-9]/g, '');

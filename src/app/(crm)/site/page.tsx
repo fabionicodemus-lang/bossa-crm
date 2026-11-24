@@ -5,7 +5,7 @@ import { getCurrentContext } from '@/lib/auth';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { formatDateTime } from '@/lib/format';
 import { stageLabel } from '@/lib/stages';
-import { empreendimentoDoPasseio, resumirOrigens, resumirPasseios } from '@/lib/site-analytics';
+import { AMBIENTES_SITE as AMBIENTES, noAmbiente, localizacaoDaSessao, NOMES_EVENTOS_SITE as NOME_EVENTO, empreendimentoDoPasseio, resumirOrigens, resumirPasseios, type AmbienteSite as Ambiente } from '@/lib/site-analytics';
 import type { LeadKind } from '@/lib/types';
 
 // Painel de medição do site (bossa-site, pasta site/ do repositório).
@@ -24,33 +24,9 @@ type Comportamento = {
 
 const DAY = 86_400_000;
 const PERIODOS = [{ k: '7', t: '7 dias' }, { k: '30', t: '30 dias' }, { k: '90', t: '90 dias' }, { k: '365', t: '12 meses' }];
-const AMBIENTES = [
-  { k: 'oficial', t: 'Site oficial' },
-  { k: 'testes', t: 'Testes' },
-  { k: 'historico', t: 'Histórico sem identificação' },
-  { k: 'todos', t: 'Todos' },
-] as const;
-type Ambiente = (typeof AMBIENTES)[number]['k'];
 type SessaoHistorica = Pick<Sessao, 'visitor_code' | 'hostname' | 'started_at'>;
-
-function noAmbiente(host: string | null, ambiente: Ambiente): boolean {
-  if (ambiente === 'todos') return true;
-  const nome = host?.toLowerCase().replace(/\.$/, '') ?? '';
-  const oficial = nome === 'bossaempreendimentos.com.br' || nome === 'www.bossaempreendimentos.com.br';
-  if (ambiente === 'oficial') return oficial;
-  if (ambiente === 'testes') return Boolean(nome) && !oficial;
-  return !nome; // histórico registrado antes de coletarmos o domínio
-}
 const EMP: Record<string, string> = { 'alma-seahouses': 'Alma', 'flow-aptos': 'Flow', 'soul-residence': 'Soul', 'jazz-residence': 'Jazz' };
 const METODO: Record<string, string> = { whatsapp: 'WhatsApp', formulario: 'Formulário', manual: 'Manual', provavel: 'Provável' };
-const NOME_EVENTO: Record<string, string> = {
-  page_view: 'Páginas vistas', view_project: 'Viu um empreendimento', view_floorplan: 'Viu planta', switch_floorplan: 'Trocou de planta',
-  floorplan_zoom: 'Ampliou planta', gallery_interact: 'Galeria / vista por andar', video_play: 'Assistiu vídeo', view_location: 'Viu localização',
-  click_route: 'Abriu rota', view_construction: 'Viu a obra', view_engineering: 'Viu engenharia', faq_open: 'Abriu pergunta', view_price: 'Viu condições',
-  download_material: 'Pediu material', view_bossa_way: 'Viu Jeito Bossa', view_history: 'Viu história', return_visit: 'Voltou ao site',
-  click_whatsapp: 'Clicou no WhatsApp', form_start: 'Começou formulário', lead_submit: 'Enviou formulário', request_visit: 'Pediu visita', scroll_depth: 'Rolagem',
-  open_virtual_tour: 'Abriu passeio 3D',
-};
 
 async function todas<T>(consulta: (de: number, ate: number) => PromiseLike<{ data: T[] | null; error: unknown }>, limite = 60_000): Promise<T[]> {
   const out: T[] = [];
@@ -88,21 +64,8 @@ function ComparativoHistorico({ atual, referencia, percentual = false }: { atual
   );
 }
 
-const REGIOES_BR: Record<string, string> = {
-  AC: 'Acre', AL: 'Alagoas', AP: 'Amapá', AM: 'Amazonas', BA: 'Bahia', CE: 'Ceará', DF: 'Distrito Federal',
-  ES: 'Espírito Santo', GO: 'Goiás', MA: 'Maranhão', MT: 'Mato Grosso', MS: 'Mato Grosso do Sul',
-  MG: 'Minas Gerais', PA: 'Pará', PB: 'Paraíba', PR: 'Paraná', PE: 'Pernambuco', PI: 'Piauí',
-  RJ: 'Rio de Janeiro', RN: 'Rio Grande do Norte', RS: 'Rio Grande do Sul', RO: 'Rondônia',
-  RR: 'Roraima', SC: 'Santa Catarina', SP: 'São Paulo', SE: 'Sergipe', TO: 'Tocantins',
-};
 function localizacao(s: Sessao): string {
-  const cidade = s.city?.trim();
-  const codigoRegiao = s.region?.trim().replace(/^BR-/, '').toUpperCase();
-  const estado = codigoRegiao ? (REGIOES_BR[codigoRegiao] ?? s.region?.trim()) : null;
-  let pais = s.country?.trim() ?? null;
-  if (pais && /^[A-Z]{2}$/.test(pais)) {
-    try { pais = new Intl.DisplayNames(['pt-BR'], { type: 'region' }).of(pais) ?? pais; } catch { /* mantém o código recebido */ }
-  }
+  const { cidade, estado, pais } = localizacaoDaSessao(s);
   return [cidade, estado, pais].filter(Boolean).join(' · ') || 'Localização não identificada';
 }
 
@@ -276,6 +239,7 @@ export default async function SitePage({ searchParams }: { searchParams: Promise
       <PageTopbar title="Site" subtitle="O que acontece no site e quanto ele ajuda a vender" actions={
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
           {PERIODOS.map((p) => <Link key={p.k} href={`/site?dias=${p.k}&ambiente=${ambiente}`} className={`btn btn-sm ${Number(p.k) === dias ? 'btn-primary' : 'btn-ghost'}`}>{p.t}</Link>)}
+          <Link href={`/site/bi?dias=${dias}&ambiente=${ambiente}`} className="btn btn-sm btn-primary">Explorar dados</Link>
         </div>
       } />
       <div className="page-content">

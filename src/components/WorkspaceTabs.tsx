@@ -13,6 +13,10 @@ const groups = [
     { href: "/propostas", label: "Propostas" },
   ],
   [
+    { href: "/site", label: "Estatísticas", edit: true },
+    { href: "/site/bi", label: "Análise de dados", edit: true },
+  ],
+  [
     { href: "/conversas", label: "Conversas" },
     { href: "/ia", label: "Atendimento IA" },
     { href: "/mensagens-corretores", label: "WhatsApp Comercial", admin: true },
