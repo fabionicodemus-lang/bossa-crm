@@ -419,7 +419,8 @@ function approvedTableLines(offer: NaraUnitOffer, quote: PaymentTableQuote, lang
         : `Na compra direta, a unidade ${offer.unidade} do ${offer.empreendimento} fica em ${brl(quote.totalCents / 100)} à vista.`
     : `${offer.empreendimento} · ${offer.unidade}: ${brl(quote.totalCents / 100)} — ${cashLabel}.`;
   const title = language === 'en' ? `Current base price (${quote.installmentCount} monthly installments)`
-    : language === 'es' ? `Precio base (${quote.installmentCount} cuotas mensuales)` : PAYMENT_TABLE_LABELS[quote.id];
+    : language === 'es' ? `Precio base (${quote.installmentCount} cuotas mensuales)`
+      : quote.id === 'current' ? 'Plano em 60 meses' : PAYMENT_TABLE_LABELS[quote.id];
   const lines = [`${offer.empreendimento} · ${offer.unidade} — ${title}${direct ? language === 'en' ? ' · direct purchase' : language === 'es' ? ' · compra directa' : ' · compra direta' : ''}: ${brl(quote.totalCents / 100)}.`];
   if (!quote.complete) return [...lines, language === 'en' ? 'The CRM payment breakdown needs confirmation before quoting installments.'
     : language === 'es' ? 'La composición registrada necesita confirmación antes de informar cuotas.' : 'A composição cadastrada no CRM precisa de conferência antes de informar as parcelas.'].join('\n');
