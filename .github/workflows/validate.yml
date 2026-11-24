@@ -45,6 +45,8 @@ jobs:
         run: npm run test:hoje-ui
       - name: Test Meta referral attribution
         run: npm run test:meta-referral
+      - name: Test site traffic and virtual tour statistics
+        run: npm run test:site-analytics
       - name: Test Alma sales table
         run: npm run test:alma-table
       - name: Test Flow sales table

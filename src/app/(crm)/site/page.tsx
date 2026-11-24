@@ -5,6 +5,7 @@ import { getCurrentContext } from '@/lib/auth';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { formatDateTime } from '@/lib/format';
 import { stageLabel } from '@/lib/stages';
+import { empreendimentoDoPasseio, resumirOrigens, resumirPasseios } from '@/lib/site-analytics';
 import type { LeadKind } from '@/lib/types';
 
 // Painel de medição do site (bossa-site, pasta site/ do repositório).
@@ -48,6 +49,7 @@ const NOME_EVENTO: Record<string, string> = {
   click_route: 'Abriu rota', view_construction: 'Viu a obra', view_engineering: 'Viu engenharia', faq_open: 'Abriu pergunta', view_price: 'Viu condições',
   download_material: 'Pediu material', view_bossa_way: 'Viu Jeito Bossa', view_history: 'Viu história', return_visit: 'Voltou ao site',
   click_whatsapp: 'Clicou no WhatsApp', form_start: 'Começou formulário', lead_submit: 'Enviou formulário', request_visit: 'Pediu visita', scroll_depth: 'Rolagem',
+  open_virtual_tour: 'Abriu passeio 3D',
 };
 
 async function todas<T>(consulta: (de: number, ate: number) => PromiseLike<{ data: T[] | null; error: unknown }>, limite = 60_000): Promise<T[]> {
@@ -84,23 +86,6 @@ function ComparativoHistorico({ atual, referencia, percentual = false }: { atual
       </span>
     </div>
   );
-}
-
-function origem(s: Sessao): string {
-  const u = s.utm ?? {};
-  if (u.utm_source) return `${u.utm_source}${u.utm_medium ? ` / ${u.utm_medium}` : ''}`;
-  if (u.gclid) return 'google / anúncio';
-  if (u.fbclid) return 'meta / anúncio';
-  const r = (s.referrer ?? '').trim();
-  if (!r) return 'Direto';
-  try {
-    const host = new URL(r).hostname.replace(/^www\./, '');
-    if (/google\./.test(host)) return 'Google (orgânico)';
-    if (/instagram|facebook|fb\.|l\.instagram/.test(host)) return 'Instagram / Facebook';
-    if (/chatgpt|openai|perplexity|claude|gemini|copilot/.test(host)) return `IA · ${host}`;
-    if (/bossaempreendimentos/.test(host)) return 'Direto';
-    return host;
-  } catch { return 'Direto'; }
 }
 
 const REGIOES_BR: Record<string, string> = {
@@ -183,9 +168,10 @@ export default async function SitePage({ searchParams }: { searchParams: Promise
   const porEvento = new Map<string, Set<string>>();
   const totalEvento = new Map<string, number>();
   for (const e of eventos) {
-    if (!porEvento.has(e.name)) porEvento.set(e.name, new Set());
-    porEvento.get(e.name)!.add(e.visitor_code);
-    totalEvento.set(e.name, (totalEvento.get(e.name) ?? 0) + 1);
+    const nome = empreendimentoDoPasseio(e) ? 'open_virtual_tour' : e.name;
+    if (!porEvento.has(nome)) porEvento.set(nome, new Set());
+    porEvento.get(nome)!.add(e.visitor_code);
+    totalEvento.set(nome, (totalEvento.get(nome) ?? 0) + 1);
   }
   const quem = (n: string) => porEvento.get(n)?.size ?? 0;
   const contato = new Set([...(porEvento.get('click_whatsapp') ?? []), ...(porEvento.get('lead_submit') ?? [])]);
@@ -250,14 +236,8 @@ export default async function SitePage({ searchParams }: { searchParams: Promise
 
   // Origem
   const visitantesLigados = new Set(ligacoes.map((l) => l.visitor_code));
-  const origens = new Map<string, { v: Set<string>; l: Set<string> }>();
-  for (const s of sessoes) {
-    const o = origem(s);
-    if (!origens.has(o)) origens.set(o, { v: new Set(), l: new Set() });
-    origens.get(o)!.v.add(s.visitor_code);
-    if (visitantesLigados.has(s.visitor_code)) origens.get(o)!.l.add(s.visitor_code);
-  }
-  const listaOrigens = [...origens.entries()].map(([o, x]) => ({ o, v: x.v.size, l: x.l.size })).sort((a, b) => b.v - a.v).slice(0, 10);
+  const listaOrigens = resumirOrigens(sessoes, visitantesLigados);
+  const passeios = resumirPasseios(eventos);
   const porLocal = new Map<string, { acessos: number; visitantes: Set<string> }>();
   for (const s of sessoes) {
     const nome = localizacao(s);
@@ -284,7 +264,7 @@ export default async function SitePage({ searchParams }: { searchParams: Promise
     if (!projetos.has(k)) projetos.set(k, new Set());
     projetos.get(k)!.add(e.visitor_code);
   }
-  const acoes = ['click_whatsapp', 'lead_submit', 'request_visit', 'view_floorplan', 'switch_floorplan', 'gallery_interact', 'video_play', 'view_construction', 'view_engineering', 'view_price', 'view_location', 'click_route', 'faq_open', 'return_visit']
+  const acoes = ['click_whatsapp', 'lead_submit', 'request_visit', 'view_floorplan', 'switch_floorplan', 'open_virtual_tour', 'gallery_interact', 'video_play', 'view_construction', 'view_engineering', 'view_price', 'view_location', 'click_route', 'faq_open', 'return_visit']
     .map((n) => ({ n, pessoas: quem(n), total: totalEvento.get(n) ?? 0 })).sort((a, b) => b.pessoas - a.pessoas);
   const maxAcao = Math.max(1, ...acoes.map((a) => a.pessoas));
 
@@ -326,6 +306,58 @@ export default async function SitePage({ searchParams }: { searchParams: Promise
         </div>
 
         <section className="card" style={{ marginBottom: 14 }}>
+          <div className="card-head"><h3>Passeios 3D</h3><span className="muted">{periodoTxt}</span></div>
+          <div className="card-body">
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(165px, 1fr))', gap: 12 }}>
+              <div className="kpi">
+                <div className="kpi-label">Total · visitantes únicos</div>
+                <div className="kpi-value">{num(passeios.visitantes)}</div>
+                <div className="kpi-note">{num(passeios.aberturas)} aberturas</div>
+              </div>
+              {passeios.projetos.map((p) => (
+                <div key={p.slug} className="kpi">
+                  <div className="kpi-label">{p.nome}</div>
+                  <div className="kpi-value">{num(p.visitantes)}</div>
+                  <div className="kpi-note">visitantes únicos · {num(p.aberturas)} aberturas</div>
+                </div>
+              ))}
+            </div>
+            <div className="muted" style={{ marginTop: 12, fontSize: 11 }}>
+              Aberturas iniciadas pelo site, inclusive no celular e em outra aba. Cada código de visita conta uma vez por passeio e uma vez no total do período.
+            </div>
+          </div>
+        </section>
+
+        <section className="card" style={{ marginBottom: 14 }}>
+          <div className="card-head"><h3>Como chegaram ao site</h3><span className="muted">{num(sessoes.length)} visitas · {periodoTxt}</span></div>
+          <div className="card-body">
+            {listaOrigens.length === 0 ? <div className="muted">Sem visitas no período.</div> : (
+              <div className="table-wrap"><table>
+                <thead><tr><th>Origem</th><th>Canal</th><th style={{ textAlign: 'right' }}>Visitantes únicos</th><th style={{ textAlign: 'right' }}>Visitas</th><th>Participação</th><th style={{ textAlign: 'right' }}>Vinculados a leads</th></tr></thead>
+                <tbody>{listaOrigens.map((o) => (
+                  <tr key={o.id}>
+                    <td style={{ fontWeight: 600, overflowWrap: 'anywhere' }}>{o.nome}</td>
+                    <td className="muted">{o.canal}</td>
+                    <td style={{ textAlign: 'right' }}>{num(o.visitantes)}</td>
+                    <td style={{ textAlign: 'right' }}>{num(o.visitas)}</td>
+                    <td style={{ minWidth: 110 }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 50px', alignItems: 'center', gap: 8 }}>
+                        <Barra valor={o.visitas} max={sessoes.length} cor="var(--blue)" />
+                        <span style={{ textAlign: 'right' }}>{pct(o.visitas, sessoes.length)}</span>
+                      </div>
+                    </td>
+                    <td style={{ textAlign: 'right' }}>{num(o.ligados)} <span className="muted">({pct(o.ligados, o.visitantes)})</span></td>
+                  </tr>
+                ))}</tbody>
+              </table></div>
+            )}
+            <div className="muted" style={{ marginTop: 12, fontSize: 11 }}>
+              Classificação pelo domínio de referência e pelas tags das campanhas (UTM). A participação é calculada sobre as visitas; um visitante pode chegar por canais diferentes. Acesso direto inclui visitas sem referência disponível.
+            </div>
+          </div>
+        </section>
+
+        <section className="card" style={{ marginBottom: 14 }}>
           <div className="card-head"><h3>Do clique à venda · {periodoTxt}</h3></div>
           <div className="card-body">
             <div style={{ display: 'grid', gap: 10 }}>
@@ -353,32 +385,19 @@ export default async function SitePage({ searchParams }: { searchParams: Promise
           </div>
         </section>
 
-        <div className="grid grid-2" style={{ marginBottom: 14 }}>
-          <section className="card">
-            <div className="card-head"><h3>De onde vêm</h3><span className="muted">{periodoTxt}</span></div>
-            <div className="card-body">
-              {listaOrigens.length === 0 ? <div className="muted">Sem visitas no período.</div> : (
-                <div className="table-wrap"><table>
-                  <thead><tr><th>Origem</th><th style={{ textAlign: 'right' }}>Visitantes</th><th style={{ textAlign: 'right' }}>Viraram lead</th></tr></thead>
-                  <tbody>{listaOrigens.map((o) => <tr key={o.o}><td>{o.o}</td><td style={{ textAlign: 'right' }}>{num(o.v)}</td><td style={{ textAlign: 'right' }}>{num(o.l)} <span className="muted">({pct(o.l, o.v)})</span></td></tr>)}</tbody>
-                </table></div>
-              )}
+        <section className="card" style={{ marginBottom: 14 }}>
+          <div className="card-head"><h3>Empreendimentos e plantas</h3><span className="muted">{periodoTxt}</span></div>
+          <div className="card-body">
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 14 }}>
+              {Object.entries(EMP).map(([slug, nome]) => <div key={slug} className="kpi" style={{ padding: '10px 14px', flex: '1 1 110px' }}><div className="kpi-label">{nome}</div><div className="kpi-value" style={{ fontSize: 20 }}>{num(projetos.get(slug)?.size ?? 0)}</div><div className="kpi-note">visitantes</div></div>)}
             </div>
-          </section>
-          <section className="card">
-            <div className="card-head"><h3>Empreendimentos e plantas</h3><span className="muted">{periodoTxt}</span></div>
-            <div className="card-body">
-              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 14 }}>
-                {Object.entries(EMP).map(([slug, nome]) => <div key={slug} className="kpi" style={{ padding: '10px 14px', flex: '1 1 110px' }}><div className="kpi-label">{nome}</div><div className="kpi-value" style={{ fontSize: 20 }}>{num(projetos.get(slug)?.size ?? 0)}</div><div className="kpi-note">visitantes</div></div>)}
+            {listaPlantas.length === 0 ? <div className="muted">Nenhuma planta vista no período.</div> : (
+              <div style={{ display: 'grid', gap: 8 }}>
+                {listaPlantas.map(([k, n]) => <div key={k} style={{ display: 'grid', gridTemplateColumns: '1fr 120px 40px', gap: 10, alignItems: 'center', fontSize: 12 }}><span style={{ textTransform: 'capitalize' }}>{k}</span><Barra valor={n} max={listaPlantas[0][1]} /><strong style={{ textAlign: 'right' }}>{n}</strong></div>)}
               </div>
-              {listaPlantas.length === 0 ? <div className="muted">Nenhuma planta vista no período.</div> : (
-                <div style={{ display: 'grid', gap: 8 }}>
-                  {listaPlantas.map(([k, n]) => <div key={k} style={{ display: 'grid', gridTemplateColumns: '1fr 120px 40px', gap: 10, alignItems: 'center', fontSize: 12 }}><span style={{ textTransform: 'capitalize' }}>{k}</span><Barra valor={n} max={listaPlantas[0][1]} /><strong style={{ textAlign: 'right' }}>{n}</strong></div>)}
-                </div>
-              )}
-            </div>
-          </section>
-        </div>
+            )}
+          </div>
+        </section>
 
         <section className="card" style={{ marginBottom: 14 }}>
           <div className="card-head"><h3>Acessos por localização</h3><span className="muted">{periodoTxt}</span></div>
