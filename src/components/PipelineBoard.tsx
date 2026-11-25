@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import type { Lead, LeadKind } from '@/lib/types';
 import { defaultStage, isAiStage, isHumanStage, stagesFor } from '@/lib/stages';
 import { displayPhone, normalizePhone } from '@/lib/format';
+import { phoneMatchVariants } from '@/lib/whatsapp/utils';
 import { createClient } from '@/lib/supabase/client';
 import { usePipelineLeadsFeed } from '@/lib/use-pipeline-leads-feed';
 import { dedupePipelineLeads } from '@/lib/pipeline-lead-select';
@@ -276,9 +277,10 @@ export function PipelineBoard({ initialLeads, kind, organizationId, canEdit }: {
 
   async function createLead(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!canEdit) return;
+    if (!canEdit || saving) return;
     setSaving(true);
     setError('');
+    setNotice('');
     const form = new FormData(event.currentTarget);
     const name = String(form.get('name') || '').trim();
     const phone = normalizePhone(form.get('phone'));
@@ -300,14 +302,65 @@ export function PipelineBoard({ initialLeads, kind, organizationId, canEdit }: {
       priority_class: null,
       metadata: {},
     };
-    const { data, error: insertError } = await supabase.from('leads').insert(payload).select('*').single();
-    if (insertError) setError(insertError.message);
-    else {
-      setLeads((items) => [data as Lead, ...items]);
-      setShowNew(false);
-      router.refresh();
+    try {
+      const { data, error: insertError } = await supabase.from('leads').insert(payload).select('*').single();
+      if (!insertError) {
+        setLeads((items) => dedupePipelineLeads([data as Lead, ...items]));
+        setShowNew(false);
+        router.refresh();
+        return;
+      }
+
+      // The database remains the authority for unique active phone identities.
+      // Recover the original contact across pipelines, including WhatsApp's
+      // Brazilian mobile variants, rather than creating a second identity.
+      if (phone && insertError.code === '23505' && insertError.message.includes('leads_org_active_phone_uidx')) {
+        const variants = phoneMatchVariants(phone);
+        const { data: matches, error: lookupError } = await supabase.from('leads')
+          .select('id,name,kind')
+          .eq('organization_id', organizationId)
+          .is('archived_at', null)
+          .in('phone', variants)
+          .limit(2);
+        const existing = !lookupError && matches?.length === 1 ? matches[0] : null;
+        if (!existing) {
+          setError('Este WhatsApp já pertence a um contato ativo. Procure pelo telefone em Leads antes de continuar; nenhum cadastro foi duplicado.');
+          return;
+        }
+
+        if (existing.kind === 'geral' && kind === 'cliente' &&
+            window.confirm('O WhatsApp já está cadastrado em Geral como "' + existing.name + '". Confirmar que é cliente direto e transferir o cadastro existente para Clientes, preservando o histórico?')) {
+          const response = await fetch('/api/leads/' + existing.id + '/kind', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ kind: 'cliente' }),
+          });
+          const result = await response.json().catch(() => ({})) as { lead?: Lead; error?: string };
+          if (!response.ok || result.lead?.kind !== 'cliente') {
+            setError(result.error || 'Não foi possível classificar o contato. O cadastro original foi preservado.');
+            return;
+          }
+          const updated = result.lead;
+          setLeads((items) => dedupePipelineLeads([updated, ...items.filter((item) => item.id !== updated.id)]));
+          setShowNew(false);
+          setNotice(existing.name + ' foi transferido para Clientes. Você já pode criar uma proposta.');
+          router.refresh();
+          ui.openLead(existing.id, 'dados');
+          return;
+        }
+
+        const pipeline = existing.kind === 'cliente' ? 'Clientes' : existing.kind === 'corretor' ? 'Corretores' : 'Geral';
+        setShowNew(false);
+        setNotice('Este WhatsApp já pertence a "' + existing.name + '" no pipeline ' + pipeline + '. O cadastro existente foi aberto, sem duplicar o contato.');
+        ui.openLead(existing.id, 'dados');
+        return;
+      }
+      setError(insertError.message);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Não foi possível concluir o cadastro.');
+    } finally {
+      setSaving(false);
     }
-    setSaving(false);
   }
 
   async function exportXlsx() {
