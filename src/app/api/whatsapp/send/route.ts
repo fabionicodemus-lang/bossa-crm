@@ -1,3 +1,4 @@
+import { PLANTAO_HUMAN_PAUSE_MS } from '@/lib/whatsapp/plantaoHumanPause';
 import { after, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
@@ -102,6 +103,7 @@ export async function POST(request: Request) {
         owner_mode: 'human',
         ai_enabled: false,
         automation_paused: true,
+        ...(isBroker ? { plantao_human_pause_until: new Date(Date.now() + PLANTAO_HUMAN_PAUSE_MS).toISOString() } : {}),
         metadata: takeoverMetadata,
         updated_at: takeoverAt,
       }).eq('id', lead.id);

@@ -1,3 +1,4 @@
+import { plantaoResumedAfterHumanPause } from './whatsapp/plantaoHumanPause';
 import type { AiTurn } from './ai';
 import type { Lead, LeadKind } from './types';
 import { explicitHumanRequest, financialNegotiationIntent, purchaseIntent, refusesHandoff, withoutNegatedRequests } from './nara-conversation-signals';
@@ -103,7 +104,7 @@ function priorityFromTurn(turn: AiTurn, text: string, kind: LeadKind): PriorityC
 }
 
 export function aiCanReply(lead: Lead): boolean {
-  return Boolean(lead.ai_enabled && !lead.opt_out && !lead.automation_paused && currentOwnerMode(lead) === 'ai' && AI_STAGES.has(leadStage(lead)));
+  return Boolean(lead.ai_enabled && !lead.opt_out && !lead.automation_paused && currentOwnerMode(lead) === 'ai' && (AI_STAGES.has(leadStage(lead)) || plantaoResumedAfterHumanPause(lead)));
 }
 
 export function deriveHybridDecision({ lead, turn, lastUserMessage, now = new Date() }: {
@@ -116,7 +117,8 @@ export function deriveHybridDecision({ lead, turn, lastUserMessage, now = new Da
   const isOptOut = optOutSignal(lastUserMessage);
   // Fechamento automático só é aceito durante uma negociação humana já aberta.
   const won = lead.kind === 'cliente' && currentStage === 'proposta_negociacao' && ownerMode === 'human' && closedWonSignal(lastUserMessage);
-  const alreadyHuman = ownerMode === 'human' || HUMAN_STAGES.has(currentStage);
+  const resumedPlantao = plantaoResumedAfterHumanPause(lead, now.getTime());
+  const alreadyHuman = ownerMode === 'human' || (HUMAN_STAGES.has(currentStage) && !resumedPlantao);
   const future = futureSignal(lastUserMessage);
   const handoffRequired = !isOptOut && !won && (Boolean(highIntentReason) || turn.handoff || turn.agenda_confirmed === true || (lead.kind === 'corretor' && ['negociando', 'parceiro'].includes(turn.classification)));
 
@@ -174,6 +176,11 @@ export function deriveHybridDecision({ lead, turn, lastUserMessage, now = new Da
     nextActionDueAt = priorityClass === 'A2' ? minutesFrom(now, 30) : priorityClass === 'C' ? daysFrom(now, 7) : minutesFrom(now, 24 * 60);
     nextActionType = 'qualificar_nutrir'; taskTitle = 'Próxima ação da Nara/Plantão'; taskDescription = nextAction;
     taskPriority = priorityClass === 'A2' ? 'high' : 'normal'; taskDueAt = nextActionDueAt; taskDedupeKey = `ai:${stage}`;
+  }
+
+  // Resuming WhatsApp replies must not move a visit or negotiation backwards.
+  if (resumedPlantao && HUMAN_STAGES.has(currentStage) && stage !== 'encerrado') {
+    stage = currentStage;
   }
 
   const handoffReason = highIntentReason || (handoffRequired ? turn.next_action || turn.summary : '');

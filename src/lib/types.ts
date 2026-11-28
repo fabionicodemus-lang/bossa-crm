@@ -58,6 +58,7 @@ export interface Lead {
   loss_reason?: string | null;
   opt_out?: boolean | null;
   automation_paused?: boolean | null;
+  plantao_human_pause_until?: string | null;
   archived_at?: string | null;
   archived_by?: string | null;
   archived_reason?: string | null;

@@ -154,6 +154,7 @@ export async function handleAiFailure(args: FailureArgs) {
   const { error: leadError } = await args.admin.from('leads').update({
     ai_enabled: false,
     automation_paused: true,
+    plantao_human_pause_until: null,
     owner_mode: 'human',
     stage: 'passagem_pendente',
     next_action: windowOpen
