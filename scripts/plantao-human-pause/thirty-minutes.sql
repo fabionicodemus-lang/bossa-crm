@@ -55,6 +55,9 @@ begin
     update public.ai_agent_configs set active=false where organization_id=ch.organization_id and agent='plantao';
     if public.resume_plantao_after_human_pause(target) then raise exception 'Ignored inactive schedule'; end if;
     update public.ai_agent_configs set active=true where organization_id=ch.organization_id and agent='plantao';
+    update public.leads set next_action_type='falha_ia' where id=target;
+    if public.resume_plantao_after_human_pause(target) then raise exception 'Technical failure must not resume automatically'; end if;
+    update public.leads set next_action_type='followup_humano' where id=target;
     update public.leads set opt_out=true where id=target;
     if public.resume_plantao_after_human_pause(target) then raise exception 'Ignored opt-out'; end if;
     update public.leads set opt_out=false,stage='encerrado' where id=target;
