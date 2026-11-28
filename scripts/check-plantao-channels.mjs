@@ -60,6 +60,14 @@ for (const mode of ['mixed_plantao', 'direct_role']) {
   assert.equal(sent.length, 1);
 }
 
+for (const mode of ['mixed_plantao', 'direct_role']) {
+  const takeover = fixture(mode, 'Sou corretor', { metadata: { whatsapp_manual_takeover: true } });
+  takeover.tables.leads[0].automation_paused = true;
+  assert.equal((await takeover.run()).handled, true);
+  assert.equal(takeover.tables.leads[0].kind, 'geral');
+  assert.equal(sent.length, 0);
+}
+
 const november = { category: 'tabela', version_label: 'Novembro', valid_from: '2026-11-01T03:00:00Z', valid_until: '2026-12-01T02:59:59Z' };
 const testDate = Date.parse('2026-11-23T22:00:00Z');
 assert.equal(isCurrentBrokerPriceTable(november, testDate), true);

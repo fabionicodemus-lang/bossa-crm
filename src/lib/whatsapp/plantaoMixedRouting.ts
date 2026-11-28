@@ -378,6 +378,9 @@ export async function handleMixedPlantaoConversation(args: {
   if (args.channel.role !== 'corretor') {
     return { handled: false };
   }
+  if (args.lead.automation_paused && args.lead.metadata?.whatsapp_manual_takeover === true) {
+    return { handled: true };
+  }
   const activeNow = await plantaoCanReplyNow(args.admin, args.channel.organization_id);
   if (!activeNow) return { handled: true };
   if (args.channel.routing_mode === 'direct_role' && args.lead.kind !== 'geral') return { handled: false };
