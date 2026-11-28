@@ -67,3 +67,49 @@ await resumed.run();
 Object.assign(resumed.tables.leads[0], { ai_enabled: true, automation_paused: false, owner_mode: 'ai', metadata: { whatsapp_manual_takeover: false } });
 await resumed.run();
 assert.equal(resumed.tables.leads[0].automation_paused, false, 'completed echo replay must not undo explicit resume');
+
+const { plantaoResumedAfterHumanPause, PLANTAO_HUMAN_PAUSE_MS } = await import('../../src/lib/whatsapp/plantaoHumanPause.ts');
+const { aiCanReply, deriveHybridDecision } = await import('../../src/lib/hybrid.ts');
+const { recoverPlantaoHumanPauses } = await import('../../src/lib/whatsapp/plantaoPauseRecovery.ts');
+const clock = Date.now();
+const resumedBroker = { id: 'lead', kind: 'corretor', stage: 'proposta_negociacao', owner_mode: 'ai',
+  ai_enabled: true, automation_paused: false, opt_out: false,
+  plantao_human_pause_until: new Date(clock).toISOString() };
+assert.equal(plantaoResumedAfterHumanPause(resumedBroker, clock - 1), false);
+assert.equal(plantaoResumedAfterHumanPause(resumedBroker, clock), true);
+assert.equal(aiCanReply(resumedBroker), true);
+const decision = deriveHybridDecision({ lead: resumedBroker, now: new Date(clock),
+  lastUserMessage: 'Obrigado, preciso da planta', turn: { score: 50, classification: 'ativo', handoff: false,
+    next_action: 'Enviar planta', summary: 'Pedido de planta' } });
+assert.equal(decision.stage, 'proposta_negociacao');
+assert.equal(decision.aiEnabled, true);
+for (const extra of [{ kind: 'cliente' }, { automation_paused: true }, { opt_out: true },
+  { owner_mode: 'human' }, { stage: 'encerrado' }, { plantao_human_pause_until: null },
+  { plantao_human_pause_until: new Date(clock + PLANTAO_HUMAN_PAUSE_MS).toISOString() }]) {
+  assert.equal(plantaoResumedAfterHumanPause({ ...resumedBroker, ...extra }, clock), false);
+}
+function recoveryFixture({ answered = false, repaused = false, off = false } = {}) {
+  globalThis.PAUSE_PROCESSED = [];
+  globalThis.TEST_CHANNEL = { id: 'channel', organization_id: 'org', role: 'corretor' };
+  const tables = {
+    leads: [{ ...resumedBroker, organization_id: 'org',
+      plantao_human_pause_until: new Date(clock - 60_000).toISOString(), automation_paused: repaused }],
+    ai_agent_configs: [{ organization_id: 'org', agent: 'plantao', active: !off }],
+    messages: [{ id: 'pending', lead_id: 'lead', direction: 'in', sender_kind: 'lead',
+      created_at: new Date(clock - 120_000).toISOString(), whatsapp_conversation_id: 'conversation', whatsapp_channel_id: 'channel' }],
+    whatsapp_conversations: [{ id: 'conversation', lead_id: 'lead', channel_id: 'channel', window_expires_at: new Date(clock + 3600000).toISOString() }],
+  };
+  if (answered) tables.messages.push({ id: 'answered', direction: 'out', created_at: new Date(clock - 60000).toISOString(), whatsapp_conversation_id: 'conversation' });
+  const admin = makeDb(tables);
+  admin.rpc = async (fn) => ({ data: fn === 'plantao_human_pause_candidates' ? [{ lead_id: 'lead' }] : false, error: null });
+  return { tables, run: () => recoverPlantaoHumanPauses(admin) };
+}
+const pending = recoveryFixture();
+assert.equal((await pending.run()).attempted, 1);
+assert.deepEqual(globalThis.PAUSE_PROCESSED, ['pending']);
+for (const options of [{ answered: true }, { repaused: true }, { off: true }]) {
+  const fixture = recoveryFixture(options);
+  assert.equal((await fixture.run()).attempted, 0);
+  assert.deepEqual(globalThis.PAUSE_PROCESSED, []);
+}
+console.log('Thirty-minute boundary, renewed pause, negotiation stage, pending reply and off-hours recovery passed.');

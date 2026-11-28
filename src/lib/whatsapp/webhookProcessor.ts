@@ -440,6 +440,10 @@ export async function processConversation(args: {
   leadId: string;
   sourceMessageId: string;
 }) {
+  if (args.channel.role === 'corretor') {
+    const { error } = await args.admin.rpc('resume_plantao_after_human_pause', { p_lead_id: args.leadId });
+    if (error) throw error;
+  }
   const { data: leadData } = await args.admin
     .from('leads')
     .select('*')
