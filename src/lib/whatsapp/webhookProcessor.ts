@@ -294,6 +294,7 @@ async function sendSelectedFiles(args: {
   lead: Lead;
   files: AiFileOption[];
   attachmentIds: string[];
+  sourceMessageId: string;
 }): Promise<{ sentIds: string[]; failedTitles: string[] }> {
   const selected = args.attachmentIds
     .map((id) => args.files.find((file) => file.id === id))
@@ -320,6 +321,11 @@ async function sendSelectedFiles(args: {
       const preferredType = whatsappMediaType(file);
       let sentType: WhatsAppMediaType = preferredType;
       let result: Awaited<ReturnType<typeof provider.sendMedia>>;
+      const canSend = () => whatsappCanStillReply({
+        admin: args.admin, leadId: args.lead.id, conversationId: args.conversation.id,
+        sourceId: args.sourceMessageId,
+      });
+      if (!await canSend()) break;
       try {
         result = await provider.sendMedia({
           phoneNumberId,
@@ -332,6 +338,7 @@ async function sendSelectedFiles(args: {
         });
       } catch (preferredError) {
         if (preferredType === 'document') throw preferredError;
+        if (!await canSend()) break;
         sentType = 'document';
         result = await provider.sendMedia({
           phoneNumberId,
@@ -897,6 +904,7 @@ export async function processConversation(args: {
       lead,
       files: context.files ?? [],
       attachmentIds: turn.attachment_ids,
+      sourceMessageId: args.sourceMessageId,
     });
     reply = replyAfterAttachmentDelivery(
       reply,
@@ -980,6 +988,12 @@ export async function processConversation(args: {
 
   const { provider, accessToken, phoneNumberId } = channelAccess(args.channel);
   let result: Awaited<ReturnType<typeof provider.sendText>>;
+  // Attachments and the price refresh can take time. A human intervention
+  // during either operation must still win immediately before the text send.
+  if (!await whatsappCanStillReply({
+    admin: args.admin, leadId: lead.id, conversationId: args.conversation.id,
+    sourceId: args.sourceMessageId, allowDisabledLead: forceBroadcastReply,
+  })) return;
   try {
     result = await provider.sendText({
       phoneNumberId,

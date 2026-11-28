@@ -28,6 +28,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const update = enabled ? {
     ai_enabled: true,
     automation_paused: false,
+    metadata: { ...(lead.metadata || {}), whatsapp_manual_takeover: false },
     owner_mode: 'ai',
     owner_id: null,
     stage: isAiStage(lead.stage) ? lead.stage : 'nutricao_ativa',
@@ -37,7 +38,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     updated_at: now,
   } : {
     ai_enabled: false,
-    automation_paused: false,
+    automation_paused: true,
+    metadata: { ...(lead.metadata || {}), whatsapp_manual_takeover: true, whatsapp_manual_takeover_at: now },
     owner_mode: 'human',
     owner_id: lead.owner_id || user.id,
     stage: isHumanStage(lead.stage) ? lead.stage : 'humano_ativo',

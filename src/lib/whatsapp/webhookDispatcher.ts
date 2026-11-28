@@ -173,7 +173,7 @@ async function updateOriginalMessage(args: {
   ]);
 }
 
-async function processEcho(args: {
+export async function processEcho(args: {
   admin: AdminClient;
   channel: WhatsAppChannelRecord;
   echo: LooseMessage;
@@ -265,7 +265,14 @@ async function processEcho(args: {
     if (error && error.code !== 'PGRST202' && error.code !== '42883') throw error;
     campaignEcho = data === true;
   }
-  if (!stored) return;
+  // A replay must finish the CRM mirror and takeover after a partial failure.
+  // API-originated messages are not human takeovers.
+  if (!stored) {
+    const { data: existing, error } = await args.admin.from('whatsapp_messages')
+      .select('payload').eq('wamid', wamid).maybeSingle();
+    if (error) throw error;
+    if (existing?.payload?.source !== 'whatsapp_business_app' || existing.payload.takeover_applied === true) return;
+  }
 
   const { error: messageError } = await args.admin.from('messages').upsert({
     organization_id: args.channel.organization_id,
@@ -278,7 +285,7 @@ async function processEcho(args: {
     body: `📱 WhatsApp Business: ${body}`,
     status: 'sent',
     whatsapp_message_id: wamid,
-    raw_payload: payload,
+    raw_payload: { ...payload, browser_campaign_echo: campaignEcho },
     created_at: sentAt,
   }, { onConflict: 'whatsapp_message_id', ignoreDuplicates: true });
   if (messageError) throw messageError;
@@ -293,8 +300,10 @@ async function processEcho(args: {
     whatsapp_conversation_id: conversation.id,
     whatsapp_last_source: 'whatsapp_business_app',
     whatsapp_last_app_activity_at: sentAt,
+    whatsapp_manual_takeover: true,
+    whatsapp_manual_takeover_at: sentAt,
   };
-  await args.admin.from('leads').update({
+  const { error: takeoverError } = await args.admin.from('leads').update({
     ai_enabled: false,
     automation_paused: true,
     owner_mode: 'human',
@@ -302,6 +311,11 @@ async function processEcho(args: {
     last_human_activity_at: sentAt,
     metadata,
   }).eq('id', lead.id);
+  if (takeoverError) throw takeoverError;
+  const { error: completionError } = await args.admin.from('whatsapp_messages')
+    .update({ payload: { ...payload, takeover_applied: true } }).eq('wamid', wamid);
+  if (completionError) throw completionError;
+  if (!stored) return; // Do not duplicate the activity on successful replays.
 
   await args.admin.from('activities').insert({
     organization_id: args.channel.organization_id,
